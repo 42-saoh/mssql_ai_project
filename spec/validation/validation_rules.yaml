@@ -1,0 +1,44 @@
+version: 0.1.0
+rules:
+  - id: artifact.evidence.required
+    severity: error
+    appliesTo:
+      - SP_ANALYSIS_DOC
+      - DEPENDENCY_REPORT
+      - MAPPER_XML
+      - SERVICE_DRAFT
+      - DTO_DRAFT
+    description: Every generated artifact must contain evidence refs or explicit review-required markers.
+
+  - id: workflow.approval.before_publish
+    severity: error
+    appliesTo:
+      - artifact-workflow
+    description: Publish is not allowed unless the artifact has a passed validation report and an approval record.
+
+  - id: mcp.read_only.boundary
+    severity: error
+    appliesTo:
+      - mssql-mcp
+    description: Metadata tool surfaces must remain read-only and must not expose row-data retrieval or SQL write actions.
+
+  - id: generator.uncertainty.marker
+    severity: warning
+    appliesTo:
+      - SP_ANALYSIS_DOC
+      - DDL_DRAFT
+      - DTO_DRAFT
+    description: Inferred or ambiguous sections should be marked REVIEW_REQUIRED.
+
+  - id: repo.schema.versioned_file_only
+    severity: error
+    appliesTo:
+      - repository-workflow
+    description: DB schema changes must be represented as versioned SQL files under db/schema and are never auto-applied by repo tooling.
+
+  - id: repo.test.execution.dockerized
+    severity: warning
+    appliesTo:
+      - repository-workflow
+    description: Automated verification commands should provide a dockerized execution path.
+

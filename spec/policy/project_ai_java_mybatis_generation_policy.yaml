@@ -1,0 +1,347 @@
+policyVersion: 1.0.0
+policyName: project-ai-java-mybatis-draft-generation
+documentTitle: 프로젝트용 AI Java/MyBatis 코드 초안 생성 기준
+documentDate: 2026-04-17
+
+priority:
+  - user_request
+  - project_policy
+  - java_standard
+  - operational_supplement
+
+mode:
+  generation: draft_only
+  evidence_required: true
+  review_required: true
+  approval_required: true
+
+forbidden:
+  - auto_ddl_execution
+  - direct_deployment_automation
+  - unreviewed_auto_apply
+  - actual_data_read_write
+  - unsupported_framework_assumptions
+  - inventing_columns_joins_business_rules
+
+scope:
+  include:
+    - java_mybatis_draft_generation
+    - dto_vo_model_draft_generation
+    - mapper_interface_generation
+    - mapper_xml_generation
+    - optional_controller_generation
+    - message_example_generation
+    - application_yml_example_generation
+    - evidence_summary
+  exclude:
+    - auto_ddl_execution
+    - direct_deployment_automation
+    - unreviewed_auto_apply
+    - actual_data_access_execution
+
+generationModes:
+  metadataCrud:
+    description: table/column metadata is sufficient for CRUD-style draft generation
+    defaultOutputs:
+      - dto
+      - service
+      - mapper_interface
+      - mapper_xml
+      - evidence_summary
+      - todo
+  spWrapper:
+    description: SP call is preserved because rebuild evidence is insufficient
+    defaultOutputs:
+      - dto
+      - service
+      - mapper_interface
+      - mapper_xml_sp_wrapper
+      - evidence_summary
+      - todo
+  spRebuild:
+    description: SP logic can be rebuilt into SQL based on sufficiently analyzed evidence
+    defaultOutputs:
+      - dto
+      - service
+      - mapper_interface
+      - mapper_xml_sql_rebuild
+      - evidence_summary
+      - todo
+  metadataObject:
+    description: object model generation only
+    defaultOutputs:
+      - dto_or_vo_or_model
+      - field_mapping_summary
+      - todo
+
+requiredInput:
+  - systemCode
+  - subSystemCode
+  - businessCodeLv1
+  - businessCodeLv2
+  - entityName
+  - resourceName
+  - description
+  - generationMode
+  - evidence
+
+recommendedInput:
+  - tableName
+  - spName
+  - pkColumns
+  - columns
+  - inputParams
+  - resultShape
+  - apiExposure
+  - serviceInterfaceRequired
+  - commonFramework
+  - authorId
+  - profile
+  - messagePrefix
+  - useLombok
+  - javaTimePreferred
+
+defaults:
+  basePackage: com.pec
+  controllerLayer: web
+  controllerSuffix: Web
+  apiControllerSuffix: Api
+  serviceInterfaceRequired: false
+  objectType: DTO
+  useLombok: unknown
+
+naming:
+  charset: [a-z, A-Z, 0-9]
+  maxLength: 64
+  packagePattern: com.pec.{systemCodeLower}.{businessCodeLv1}.{businessCodeLv2}.{layer}
+  classStyle: PascalCase
+  variableStyle: lowerCamelCase
+  constantStyle: UPPER_SNAKE_CASE
+
+layers:
+  allowed:
+    - web
+    - api
+    - service
+    - model
+    - impl
+    - mapper
+    - repository
+  notes:
+    repository: use_only_if_architecture_confirms
+    api: use_if_rest_controller_layer_is_explicit
+    web: default_controller_layer
+
+classNames:
+  controller: "{EntityName}Web"
+  apiController: "{EntityName}Api"
+  service: "{EntityName}Service"
+  serviceImpl: "{EntityName}ServiceImpl"
+  dto: "{EntityName}DTO"
+  vo: "{EntityName}VO"
+  model: "{EntityName}Model"
+  mapper: "{EntityName}Mapper"
+
+methodPrefixes:
+  mapper:
+    select: select
+    insert: insert
+    update: update
+    delete: delete
+  serviceController:
+    retrieve: retrieve
+    create: create
+    modify: modify
+    remove: remove
+    save: save
+    confirm: confirm
+    sendback: sendback
+    call: call
+    send: send
+    receive: receive
+    transfer: transfer
+    cancel: cancel
+    preProc: preProc
+    postProc: postProc
+    request: request
+    calc: calc
+    check: check
+    booleanCheck:
+      - is
+      - has
+    get: get
+
+methodPatterns:
+  listRetrieve: retrieve{EntityName}List
+  detailRetrieve: retrieve{EntityName}
+  create: create{EntityName}
+  modify: modify{EntityName}
+  remove: remove{EntityName}
+  mapperSelect: select{EntityName}List
+  mapperInsert: insert{EntityName}
+  mapperUpdate: update{EntityName}
+  mapperDelete: delete{EntityName}
+  conditional: "{BaseMethod}By{Condition}"
+
+mybatis:
+  configFile: mybatis-config-{systemCodeLower}.xml
+  configPath: src/main/resources/mybatis/{systemCodeLower}/mybatis-config-{systemCodeLower}.xml
+  mapperXmlPath: src/main/resources/mybatis/{systemCodeLower}/mappers/{businessCodeLv1}/{businessCodeLv2}/{EntityName}MapperSQL.xml
+  mapperInterfaceToXml: one_to_one
+  namespaceRule: full_mapper_interface_name
+  sqlIdRule: same_as_mapper_method_name
+  sqlCommentPattern: "/* {Mapper}.{method} {authorId} */"
+
+messages:
+  keyCase: lower
+  keyNoKorean: true
+  keyNoSpaces: true
+  valueKoreanAllowed: true
+  types:
+    - info
+    - error
+    - warn
+    - confirm
+    - etc
+  patterns:
+    system: sys.{messageType}.{value}.{seq}
+    business: biz.{messageType}.{value}.{seq}
+    button: button.{value}.label
+    label: "{value}"
+
+applicationYml:
+  rootNode: "{systemCodeLower}"
+  dashAllowed: true
+
+comments:
+  hangul: composed_korean
+  requiredOn:
+    - file_header
+    - class
+    - method
+    - important_variable
+  methodTags:
+    - param
+    - return
+    - throws
+
+rest:
+  get: prohibited
+  patch: prohibited
+  post:
+    use: [retrieve, create]
+    contentType: json
+  put:
+    use: [modify]
+    note: can_be_replaced_by_post_if_architecture_requires
+  delete:
+    use: [remove]
+    parameterStyle: querystring
+    note: can_be_replaced_by_post_if_architecture_requires
+
+spDecision:
+  simpleCrud:
+    serviceController:
+      query: retrieve
+      insert: create
+      update: modify
+      delete: remove
+    mapper:
+      query: select
+      insert: insert
+      update: update
+      delete: delete
+  businessOperation:
+    allowedPrefixes:
+      - confirm
+      - cancel
+      - send
+      - receive
+      - transfer
+      - request
+      - calc
+      - preProc
+      - postProc
+      - check
+      - call
+  transaction:
+    annotateOnlyIfEvidenceConfirms: true
+    otherwise: mark_todo
+  exceptions:
+    use_generic_system_error_if_business_codes_unknown: true
+
+fieldMapping:
+  nameTransform:
+    rule: underscore_to_lowerCamel
+    examples:
+      CUS_ID: cusId
+      USE_YN: useYn
+      REG_DT: regDt
+      MOD_USER_ID: modUserId
+  typeMappingDefaults:
+    char: String
+    varchar: String
+    nchar: String
+    nvarchar: String
+    text: String
+    ntext: String
+    tinyint: Integer
+    smallint: Integer
+    int: Integer
+    bigint: Long
+    decimal: BigDecimal
+    numeric: BigDecimal
+    money: BigDecimal
+    smallmoney: BigDecimal
+    bit: Boolean
+    date: LocalDate
+    datetime: LocalDateTime
+    datetime2: LocalDateTime
+    smalldatetime: LocalDateTime
+    time: LocalTime
+    uniqueidentifier: String
+    binary: byte[]
+    varbinary: byte[]
+    image: byte[]
+  caveats:
+    - prefer_existing_module_convention_over_default_mapping
+    - use_String_for_code_or_yn_columns_if_existing_system_does_so
+    - mark_todo_if_date_time_type_strategy_is_unclear
+
+frameworkHandling:
+  baseApi: use_only_if_confirmed
+  baseService: use_only_if_confirmed
+  validationGroups: use_only_if_confirmed
+  customAnnotations: use_only_if_confirmed
+  fallback: plain_spring_mybatis_plus_todo
+
+outputStructure:
+  - input_interpretation
+  - generation_mode
+  - evidence_summary
+  - package_structure
+  - generated_files
+  - code_draft
+  - message_and_config_examples
+  - assumptions_and_todo
+  - review_checklist
+
+todoRules:
+  mustMarkUnknown:
+    - pk_columns
+    - transaction_boundary
+    - validation_group_usage
+    - base_framework_usage
+    - exact_exception_message_codes
+    - controller_need
+    - dto_vo_model_final_choice
+    - sp_rebuild_feasibility
+
+reviewChecklist:
+  - naming_rules_applied
+  - package_pattern_applied
+  - mapper_xml_namespace_matches_interface
+  - sql_id_matches_mapper_method
+  - evidence_included
+  - assumptions_disclosed
+  - project_exclusions_respected

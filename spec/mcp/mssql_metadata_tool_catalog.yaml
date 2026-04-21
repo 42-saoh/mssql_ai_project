@@ -1,0 +1,71 @@
+version: 0.1.0
+service: mssqlMetadata
+readOnly: true
+tools:
+  - name: get_procedure_definition
+    description: Return stored procedure definition metadata.
+    input:
+      type: object
+      required: [dbProfileId, schema, procedureName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        procedureName: { type: string }
+        snapshotMode: { type: string, enum: [LATEST, PINNED] }
+        snapshotId: { type: string }
+    output:
+      type: object
+      properties:
+        snapshotId: { type: string }
+        collectedAt: { type: string, format: date-time }
+        definition: { type: string }
+        evidenceRefs:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string }
+              objectRef: { type: string }
+              locator: { type: string }
+
+  - name: get_table_schema
+    description: Return columns and data types for a table.
+    input:
+      type: object
+      required: [dbProfileId, schema, tableName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        tableName: { type: string }
+
+  - name: search_tables
+    description: Search tables by name, description, or column structure.
+    input:
+      type: object
+      required: [dbProfileId]
+      properties:
+        dbProfileId: { type: string }
+        physicalName: { type: string }
+        logicalName: { type: string }
+        description: { type: string }
+        columns:
+          type: array
+          items: { type: string }
+        topK: { type: integer, default: 5 }
+
+  - name: find_similar_tables
+    description: Recommend similar tables using metadata similarity signals.
+    input:
+      type: object
+      required: [dbProfileId, columns]
+      properties:
+        dbProfileId: { type: string }
+        description: { type: string }
+        columns:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              type: { type: string }
+        topK: { type: integer, default: 5 }

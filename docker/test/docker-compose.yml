@@ -1,0 +1,32 @@
+services:
+  python-test:
+    build:
+      context: ${WORKTREE_PATH:-../..}
+      dockerfile: docker/test/Dockerfile.python
+    working_dir: /workspace
+    volumes:
+      - type: bind
+        source: ${WORKTREE_PATH:-../..}
+        target: /workspace
+      - pip-cache:/root/.cache/pip
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+  web-test:
+    build:
+      context: ${WORKTREE_PATH:-../..}
+      dockerfile: docker/test/Dockerfile.web
+    working_dir: /workspace
+    volumes:
+      - type: bind
+        source: ${WORKTREE_PATH:-../..}
+        target: /workspace
+      - pnpm-store:/pnpm/store
+    environment:
+      CI: "1"
+      PNPM_STORE_DIR: /pnpm/store
+
+volumes:
+  pip-cache:
+  pnpm-store:

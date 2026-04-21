@@ -1,0 +1,13 @@
+CREATE PROCEDURE dbo.usp_OrderSelect
+    @ORDER_ID BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        ORDER_ID,
+        CUSTOMER_ID,
+        ORDER_DATE
+    FROM dbo.TB_ORDER
+    WHERE ORDER_ID = @ORDER_ID;
+END

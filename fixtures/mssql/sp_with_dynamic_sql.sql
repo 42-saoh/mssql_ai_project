@@ -1,0 +1,8 @@
+CREATE PROCEDURE dbo.usp_OrderSearchDynamic
+    @TABLE_NAME SYSNAME
+AS
+BEGIN
+    DECLARE @SQL NVARCHAR(MAX);
+    SET @SQL = N'SELECT TOP 10 * FROM ' + QUOTENAME(@TABLE_NAME);
+    EXEC sp_executesql @SQL;
+END

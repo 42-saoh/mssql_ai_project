@@ -1,0 +1,495 @@
+{
+  "document_name": "Platform DB Standardization Rules for AI",
+  "version": "1.0",
+  "language": "ko-KR",
+  "project": "MSSQL 분석·문서화·전환코드 생성 Agent 구축",
+  "scope": [
+    "platform_db_schema_create",
+    "platform_db_schema_change",
+    "schema_metadata_response",
+    "standard_name_canonicalization",
+    "ddl_draft_generation"
+  ],
+  "priority_order": [
+    "current_user_request",
+    "project_source_documents",
+    "this_rule_document",
+    "legacy_physical_schema"
+  ],
+  "global_rules": {
+    "physical_name_case": "UPPER_SNAKE_CASE",
+    "allow_hangul_in_physical_name": false,
+    "allow_spaces_in_physical_name": false,
+    "allow_camel_case": false,
+    "approved_abbreviation_only": true,
+    "same_meaning_same_standard_name": true,
+    "same_standard_name_same_standard_type": true,
+    "require_table_logical_name": true,
+    "require_column_logical_name": true,
+    "metadata_canonical_first": true,
+    "read_only_metadata_access_only": true,
+    "auto_execute_ddl": false,
+    "change_field_composition_without_explicit_request": false,
+    "change_pk_fk_structure_without_explicit_request": false
+  },
+  "table_naming": {
+    "format": "[PREFIX]_[SUBJECT]_[DETAIL?]_[ROLE]",
+    "default_platform_prefix": "PPM",
+    "approved_prefixes": [
+      "PEM",
+      "PPE",
+      "PEI",
+      "PPN",
+      "PCS",
+      "PEX",
+      "PCO",
+      "PAD",
+      "PPM",
+      "PDM",
+      "PMA",
+      "PEQ"
+    ],
+    "approved_roles": [
+      "MST",
+      "DTL",
+      "HIS",
+      "REQ",
+      "RSLT",
+      "MGMT",
+      "MAP",
+      "IF",
+      "LOG",
+      "TMP",
+      "BASE",
+      "LST"
+    ],
+    "normalize_role_aliases": {
+      "HIST": "HIS",
+      "MAPP": "MAP"
+    },
+    "forbidden_patterns": [
+      "CamelCase",
+      "plural_english_name",
+      "_TEST",
+      "_BACKUP",
+      "date_suffix",
+      "meaningless_generic_noun_only"
+    ]
+  },
+  "column_naming": {
+    "format": "[QUALIFIER?]_[TERM]_[CLASS_WORD]",
+    "qualifiers": [
+      "CUR",
+      "PREV",
+      "NEXT",
+      "FR",
+      "TO",
+      "SRC",
+      "TRGT",
+      "CRE",
+      "UPD",
+      "PBLC",
+      "REQR",
+      "RVWR",
+      "ACTR",
+      "GRT",
+      "ANLS",
+      "VLDT",
+      "APRV",
+      "AUDT",
+      "META",
+      "OBJ",
+      "SCHM",
+      "EVDC",
+      "PAYLD",
+      "OPTN"
+    ],
+    "class_words": {
+      "ID": {
+        "meaning": "internal_identifier",
+        "standard_type": "UNIQUEIDENTIFIER",
+        "rule": "platform_internal_pk_fk_default"
+      },
+      "REF_ID": {
+        "meaning": "external_reference_identifier",
+        "standard_type": "VARCHAR(200)"
+      },
+      "CD": {
+        "meaning": "code",
+        "standard_type": "VARCHAR(20)"
+      },
+      "TP_CD": {
+        "meaning": "type_code",
+        "standard_type": "VARCHAR(30)"
+      },
+      "STAT_CD": {
+        "meaning": "status_code",
+        "standard_type": "VARCHAR(30)"
+      },
+      "NM": {
+        "meaning": "name",
+        "standard_type": "VARCHAR(100)",
+        "extension_rule": "150_to_300_allowed_when_needed"
+      },
+      "DESC": {
+        "meaning": "description",
+        "standard_type": "VARCHAR(500)"
+      },
+      "CNTNT": {
+        "meaning": "content",
+        "standard_type": "VARCHAR(2000)",
+        "extension_rule": "VARCHAR(MAX)_for_long_text"
+      },
+      "JSON": {
+        "meaning": "json_string",
+        "standard_type": "VARCHAR(MAX)"
+      },
+      "DT": {
+        "meaning": "date",
+        "standard_type": "VARCHAR(8)",
+        "format": "YYYYMMDD"
+      },
+      "DTM": {
+        "meaning": "datetime",
+        "standard_type": "DATETIME2"
+      },
+      "YN": {
+        "meaning": "yes_no",
+        "standard_type": "VARCHAR(1)",
+        "allowed_values": [
+          "Y",
+          "N"
+        ]
+      },
+      "NO": {
+        "meaning": "business_number",
+        "standard_type": "VARCHAR(50)"
+      },
+      "SEQ": {
+        "meaning": "sequence",
+        "standard_type": "INT"
+      },
+      "SEQ_NO": {
+        "meaning": "serial_sequence_number",
+        "standard_type": "INT"
+      },
+      "CNT": {
+        "meaning": "count",
+        "standard_type": "INT"
+      },
+      "AMT": {
+        "meaning": "amount",
+        "standard_type": "NUMERIC(18,3)"
+      },
+      "UNC": {
+        "meaning": "unit_cost",
+        "standard_type": "NUMERIC(18,4)"
+      },
+      "RT": {
+        "meaning": "rate",
+        "standard_type": "NUMERIC(5,2)"
+      },
+      "QTY": {
+        "meaning": "quantity",
+        "standard_type": "NUMERIC(18,5)"
+      },
+      "TXT": {
+        "meaning": "free_text",
+        "standard_type": "VARCHAR(1000)",
+        "usage": "only_when_nm_desc_cntnt_not_fit"
+      },
+      "VAL": {
+        "meaning": "value",
+        "standard_type": "VARCHAR(500)",
+        "usage": "only_when_no_better_class_word"
+      }
+    }
+  },
+  "platform_overrides": {
+    "internal_pk_fk_id_type": "UNIQUEIDENTIFIER",
+    "login_identifier_column": "LGN_ID",
+    "login_identifier_type": "VARCHAR(100)",
+    "user_pk_reference_suffix": "USR_ID",
+    "user_pk_reference_type": "UNIQUEIDENTIFIER",
+    "json_column_suffix": "JSON",
+    "json_column_type": "VARCHAR(MAX)",
+    "long_text_column_suffixes": [
+      "CNTNT",
+      "DESC"
+    ],
+    "external_reference_suffix_priority": "REF_ID"
+  },
+  "type_normalization": {
+    "default_character_type": "VARCHAR",
+    "allow_nvarchar_only_if_explicit": true,
+    "normalize_datetime_to": "DATETIME2",
+    "normalize_char1_flag_to": "VARCHAR(1)",
+    "normalize_varchar_minus_1_to": "VARCHAR(MAX)",
+    "interpret_nvarchar_zero_as_actual_type": "NVARCHAR(MAX)",
+    "propose_platform_standard_for_unbounded_text": "VARCHAR(MAX)",
+    "normalize_varbinary_no_length_to": "VARBINARY(MAX)",
+    "keep_actual_and_standard_type_when_different": true
+  },
+  "common_columns": {
+    "required_for_new_tables": [
+      {
+        "name": "CRE_USR_ID",
+        "type": "UNIQUEIDENTIFIER"
+      },
+      {
+        "name": "CRE_DTM",
+        "type": "DATETIME2"
+      },
+      {
+        "name": "UPD_USR_ID",
+        "type": "UNIQUEIDENTIFIER"
+      },
+      {
+        "name": "UPD_DTM",
+        "type": "DATETIME2"
+      }
+    ],
+    "optional": [
+      "DEL_YN",
+      "USE_YN",
+      "PBLC_YN",
+      "REM_CNTNT"
+    ],
+    "for_existing_schema_standardization": {
+      "add_common_columns_without_explicit_request": false
+    }
+  },
+  "description_rules": {
+    "require_table_description": true,
+    "require_column_description": true,
+    "logical_name_language": "ko",
+    "source_priority": [
+      "MS_Description",
+      "existing_metadata_dictionary",
+      "ai_inference_from_standard_name"
+    ],
+    "mark_inferred_description_status": "INFERRED_DESCRIPTION"
+  },
+  "metadata_usage": {
+    "manage_actual_and_standard_pair": true,
+    "actual_fields": [
+      "actual_name",
+      "actual_type"
+    ],
+    "standard_fields": [
+      "standard_name",
+      "standard_type"
+    ],
+    "response_required_fields": [
+      "schema_name",
+      "table_actual_name",
+      "table_standard_name",
+      "table_logical_name",
+      "column_actual_name",
+      "column_standard_name",
+      "column_logical_name",
+      "actual_type",
+      "standard_type",
+      "length_precision_scale",
+      "nullable",
+      "key_type",
+      "reference_target",
+      "default_value",
+      "description",
+      "standardization_status"
+    ],
+    "status_values": [
+      "STANDARD",
+      "LEGACY_ALIAS",
+      "TYPE_NORMALIZED",
+      "INFERRED_DESCRIPTION",
+      "REVIEW_REQUIRED"
+    ],
+    "search_rules": {
+      "normalize_user_input_by_abbreviation_dictionary": true,
+      "group_same_meaning_columns_by_standard_name": true,
+      "show_legacy_to_standard_mapping_when_nonstandard_exists": true,
+      "never_auto_confirm_missing_description": true,
+      "sort_by_standard_name_first": true
+    }
+  },
+  "schema_generation_rules": {
+    "new_platform_table_prefix": "PPM",
+    "role_suffix_required": true,
+    "approved_class_word_required": true,
+    "internal_entity_pk_fk_guid_based": true,
+    "json_storage_type": "VARCHAR(MAX)",
+    "reuse_existing_platform_standard_name_when_same_meaning_exists": true,
+    "do_not_invent_new_abbreviation": true,
+    "mark_unresolved_as": "REVIEW_REQUIRED",
+    "keep_field_composition_if_scope_is_name_type_only": true,
+    "do_not_rename_constraints_or_indexes_without_explicit_request": true
+  },
+  "preferred_term_columns": {
+    "USR_ID": "UNIQUEIDENTIFIER",
+    "LGN_ID": "VARCHAR(100)",
+    "USR_NM": "VARCHAR(200)",
+    "EML_ADR": "VARCHAR(512)",
+    "DB_NM": "VARCHAR(255)",
+    "HOST_NM": "VARCHAR(255)",
+    "SCHM_NM": "VARCHAR(128)",
+    "OBJ_NM": "VARCHAR(128)",
+    "PORT_NO": "INT",
+    "TRC_ID": "VARCHAR(100)",
+    "SCRT_REF_ID": "VARCHAR(255)",
+    "WRKR_REF_ID": "VARCHAR(200)",
+    "CNTNT_REF_ID": "VARCHAR(500)",
+    "CHK_SUM_SHA256_VAL": "VARCHAR(64)",
+    "SRC_HASH_VAL": "VARCHAR(128)",
+    "ERR_CD": "VARCHAR(100)",
+    "ERR_CNTNT": "VARCHAR(2000)",
+    "LGC_NM": "VARCHAR(255)",
+    "TITL": "VARCHAR(300)"
+  },
+  "approved_abbreviations": {
+    "common": {
+      "VNDR": "vendor",
+      "CTRT": "contract",
+      "PJT": "project",
+      "REQ": "request",
+      "RSLT": "result",
+      "APRV": "approval",
+      "ATTC": "attach",
+      "FIL": "file",
+      "EE": "employee",
+      "PIC": "person_in_charge",
+      "EV": "evaluation",
+      "PFMC": "performance",
+      "INSP": "inspection",
+      "MTRL": "material",
+      "OVS": "overseas",
+      "DOM": "domestic",
+      "GUAR": "guarantee",
+      "MGMT": "management",
+      "DESC": "description",
+      "CNTNT": "content"
+    },
+    "platform": {
+      "AUTH": "authorization",
+      "USR": "user",
+      "GRP": "group",
+      "DB": "database",
+      "DBMS": "dbms",
+      "PRFL": "profile",
+      "SCHM": "schema",
+      "WRK": "work",
+      "JOB": "job",
+      "STEP": "step",
+      "META": "metadata",
+      "OBJ": "object",
+      "SNAP": "snapshot",
+      "DEPD": "dependency",
+      "RGST": "registry",
+      "ITEM": "item",
+      "VER": "version",
+      "ARTF": "artifact",
+      "ANLS": "analysis",
+      "EVDC": "evidence",
+      "VLDT": "validation",
+      "AUDT": "audit",
+      "TRGT": "target",
+      "PAYLD": "payload",
+      "OPTN": "option",
+      "RVWR": "reviewer",
+      "CNFDN": "confidentiality",
+      "TRC": "trace",
+      "WRKR": "worker",
+      "LGN": "login",
+      "PBLC": "publish",
+      "GRT": "grant",
+      "ACTR": "actor",
+      "DCISN": "decision",
+      "CHKLST": "checklist"
+    }
+  },
+  "normalization_rules": {
+    "Vendor": "VNDR",
+    "Vndr": "VNDR",
+    "User": "USR",
+    "Member": "USR",
+    "Account": "context_dependent:USR_or_LGN_or_AUTH",
+    "Role": "AUTH_GRP",
+    "Schema": "SCHM",
+    "Profile": "PRFL",
+    "Request": "REQ",
+    "Job": "JOB",
+    "Step": "STEP",
+    "Snapshot": "SNAP",
+    "Artifact": "ARTF",
+    "Registry": "RGST",
+    "Analysis": "ANLS",
+    "Evidence": "EVDC",
+    "Validation": "VLDT",
+    "Approval": "APRV",
+    "Audit": "AUDT",
+    "Dependency": "DEPD",
+    "Result": "RSLT",
+    "Payload": "PAYLD",
+    "Option": "OPTN",
+    "Reviewer": "RVWR",
+    "Trace": "TRC",
+    "Secret": "SCRT"
+  },
+  "ai_decision_flow": [
+    "identify_request_scope",
+    "check_if_field_composition_change_is_explicitly_allowed",
+    "determine_if_target_is_platform_internal_schema",
+    "search_existing_metadata_for_same_meaning_standard_name",
+    "reuse_existing_standard_name_and_type_if_found",
+    "compose_name_by_approved_abbreviation_and_class_word_if_not_found",
+    "resolve_type_by_class_word_and_preferred_term_column_rules",
+    "resolve_description_by_MS_Description_then_existing_metadata_then_ai_inference",
+    "keep_actual_and_standard_pair_when_different",
+    "mark_unresolved_or_new_abbreviation_as_REVIEW_REQUIRED"
+  ],
+  "output_contract": {
+    "ddl_generation_order": [
+      "OBJECT_SCOPE",
+      "STANDARD_NAME_MAPPING",
+      "STANDARD_TYPE_MAPPING",
+      "DDL_DRAFT",
+      "METADATA_COMMENT_DRAFT",
+      "REVIEW_REQUIRED"
+    ],
+    "metadata_response_fields": [
+      "schema_name",
+      "table_actual_name",
+      "table_standard_name",
+      "table_logical_name",
+      "column_actual_name",
+      "column_standard_name",
+      "column_logical_name",
+      "actual_type",
+      "standard_type",
+      "nullable",
+      "key_type",
+      "default_value",
+      "reference_target",
+      "description",
+      "standardization_status"
+    ],
+    "apply_state_messages": [
+      "STANDARD_APPLIED",
+      "LEGACY_NAME_RETAINED",
+      "TYPE_NORMALIZED",
+      "DESCRIPTION_INFERRED",
+      "REVIEW_REQUIRED"
+    ]
+  },
+  "forbidden_actions": [
+    "invent_unapproved_abbreviation",
+    "generate_camel_case_physical_name",
+    "mix_actual_type_and_standard_type_without_distinction",
+    "add_or_remove_columns_when_scope_is_name_type_standardization_only",
+    "change_pk_fk_structure_without_explicit_request",
+    "change_constraint_or_index_structure_without_explicit_request",
+    "assert_missing_description_as_confirmed_fact",
+    "auto_execute_ddl",
+    "query_or_modify_actual_business_data"
+  ]
+}

@@ -1,0 +1,143 @@
+plan_id: codex-parallel-local-v1
+project: MSSQL 분석·문서화·전환코드 생성 Agent 구축
+mode: local-codex-cli-worktrees
+profiles:
+  coordinator: safe-explore
+  worker: dev-edit
+  reviewer: review
+waves:
+  - wave: W0
+    description: baseline freeze and shared contract setup
+    tracks:
+      - id: P00
+        branch: feat/p00-baseline
+        worktree: ../wt/p00-baseline
+        prompt: prompts/00_coordinator_baseline.md
+        role: architect
+        skills: [repo-bootstrap, contract-to-code]
+        target_paths:
+          - AGENTS.md
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - TOOLS.md
+          - POLICY.md
+          - EVAL_SPEC.md
+          - TASK_TEMPLATE.md
+          - .codex/
+          - .agents/
+          - Makefile
+          - pyproject.toml
+          - package.json
+          - packages/domain/
+          - db/schema/
+          - spec/openapi/
+          - docs/adr/
+          - docker/test/
+          - scripts/compose_project_name.sh
+        verify:
+          - python -m compileall apps services packages tests
+          - make test
+          - make test-web-smoke
+  - wave: W1
+    description: parallel independent implementation tracks
+    tracks:
+      - id: P01
+        branch: feat/p01-mssql-mcp
+        worktree: ../wt/p01-mssql-mcp
+        prompt: prompts/01_mssql_mcp.md
+        role: mcp_engineer
+        skills: [mcp-tooling-design]
+        depends_on: [P00]
+        target_paths:
+          - services/mssql-mcp/
+          - spec/mcp/
+          - tests/contract/mcp/
+          - tests/unit/mcp/
+          - fixtures/mcp/
+        verify:
+          - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp"
+      - id: P02
+        branch: feat/p02-domain-analysis
+        worktree: ../wt/p02-domain-analysis
+        prompt: prompts/02_domain_analysis.md
+        role: template_engineer
+        skills: [contract-to-code]
+        depends_on: [P00]
+        target_paths:
+          - packages/analysis/
+          - tests/unit/analysis/
+          - fixtures/analysis/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/analysis"
+      - id: P03
+        branch: feat/p03-generation-validation
+        worktree: ../wt/p03-generation-validation
+        prompt: prompts/03_generation_validation.md
+        role: template_engineer
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P00]
+        target_paths:
+          - packages/generation/
+          - packages/validation/
+          - spec/validation/
+          - tests/unit/generation/
+          - tests/unit/validation/
+          - fixtures/generation/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/generation tests/unit/validation"
+      - id: P04
+        branch: feat/p04-web-shell
+        worktree: ../wt/p04-web-shell
+        prompt: prompts/04_web_shell.md
+        role: platform_worker
+        skills: [contract-to-code]
+        depends_on: [P00]
+        target_paths:
+          - apps/web/
+          - tests/unit/web/
+        verify:
+          - make test-web-smoke
+  - wave: W2
+    description: API and workflow integration
+    tracks:
+      - id: P05
+        branch: feat/p05-api-workflow
+        worktree: ../wt/p05-api-workflow
+        prompt: prompts/05_api_workflow.md
+        role: platform_worker
+        skills: [contract-to-code]
+        depends_on: [P01, P02, P03]
+        target_paths:
+          - apps/api/
+          - tests/integration/api/
+          - tests/unit/api/
+        verify:
+          - make test PYTEST_ARGS="tests/integration/api tests/unit/api"
+  - wave: W3
+    description: integration hardening, docs sync, final review
+    tracks:
+      - id: P06
+        branch: feat/p06-integration-eval
+        worktree: ../wt/p06-integration-eval
+        prompt: prompts/06_integration_eval_docs.md
+        role: docs_curator
+        skills: [eval-fixture-authoring, docs-sync]
+        depends_on: [P04, P05]
+        target_paths:
+          - tests/e2e/
+          - tests/eval/
+          - fixtures/eval/
+          - docs/
+        verify:
+          - make test PYTEST_ARGS="tests/e2e tests/eval"
+      - id: P07
+        branch: feat/p07-final-review
+        worktree: ../wt/p07-final-review
+        prompt: prompts/07_final_review.md
+        role: reviewer
+        skills: [quality-gate-review]
+        depends_on: [P06]
+        target_paths: []
+        verify:
+          - read-only review only
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07]

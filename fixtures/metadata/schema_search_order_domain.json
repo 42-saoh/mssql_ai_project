@@ -1,0 +1,13 @@
+{
+  "query": {
+    "logicalName": "주문",
+    "description": "주문 헤더",
+    "columns": ["ORDER_ID", "CUSTOMER_ID", "ORDER_DATE"]
+  },
+  "expectedCandidates": [
+    {
+      "schema": "dbo",
+      "name": "TB_ORDER"
+    }
+  ]
+}
