@@ -1,6 +1,13 @@
-from fastapi import FastAPI
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import FastAPI, Response
 
 from mssql_mcp_app.catalog import TOOL_CATALOG
+from mssql_mcp_app.live_connection import MetadataConnectionError, probe_profile_connection
+from mssql_mcp_app.profiles import get_default_profile, load_db_profiles
+from mssql_mcp_app.settings import load_live_metadata_settings
 
 app = FastAPI(
     title="MSSQL Metadata MCP Starter",
@@ -10,8 +17,68 @@ app = FastAPI(
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "mssql-mcp", "mode": "read-only"}
+def health() -> dict[str, Any]:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings)
+    default_profile = get_default_profile(profiles)
+    return {
+        "status": "ok",
+        "service": "mssql-mcp",
+        "mode": "read-only",
+        "liveMetadataEnabled": settings.live_metadata_enabled,
+        "defaultProfileId": default_profile.id,
+    }
+
+
+@app.get("/health/ready")
+def ready(response: Response) -> dict[str, Any]:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings)
+    default_profile = get_default_profile(profiles)
+
+    if not settings.live_metadata_enabled:
+        return {
+            "status": "ok",
+            "service": "mssql-mcp",
+            "mode": "read-only",
+            "liveMetadataEnabled": False,
+            "connection": "skipped",
+            "profileId": default_profile.id,
+            "database": default_profile.database,
+        }
+
+    try:
+        probe = probe_profile_connection(default_profile, settings)
+    except MetadataConnectionError as exc:
+        response.status_code = 503
+        return {
+            "status": "not-ready",
+            "service": "mssql-mcp",
+            "mode": "read-only",
+            "liveMetadataEnabled": True,
+            "profileId": default_profile.id,
+            "database": default_profile.database,
+            "error": str(exc),
+        }
+
+    return {
+        "status": "ok",
+        "service": "mssql-mcp",
+        "mode": "read-only",
+        "liveMetadataEnabled": True,
+        **probe,
+    }
+
+
+@app.get("/config/db-profiles")
+def list_db_profiles() -> dict[str, Any]:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings)
+    default_profile = get_default_profile(profiles)
+    return {
+        "defaultProfileId": default_profile.id,
+        "profiles": [profile.to_public_dict() for profile in profiles],
+    }
 
 
 @app.get("/catalog/tools")

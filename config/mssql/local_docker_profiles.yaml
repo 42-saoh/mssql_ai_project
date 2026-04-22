@@ -1,0 +1,15 @@
+# Local SQL Server profile registry for dbProfileId -> database mapping.
+# This keeps credentials out of source control while giving Codex workers a stable
+# shared set of database profile ids. Add more profiles under the same shape when needed.
+
+defaultProfileId: pfl
+profiles:
+  - id: pfl
+    label: Platform DB (PFL)
+    database: PFL
+    purpose: platform
+
+  - id: master
+    label: Server metadata (master)
+    database: master
+    purpose: server

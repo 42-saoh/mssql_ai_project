@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.pec.pem.order.request.mapper.OrderRequestMapper">
+
+  <!-- OrderRequestMapper.selectOrderRequestList AI -->
+  <select id="selectOrderRequestList"
+          parameterType="com.pec.pem.order.request.model.OrderRequestDTO"
+          resultType="com.pec.pem.order.request.model.OrderRequestDTO">
+    EXEC dbo.USP_ORDER_REQUEST_LIST
+      @CUS_ID = #{cusId},
+      @REQ_STAT_CD = #{reqStatCd}
+  </select>
+
+</mapper>

@@ -1,0 +1,65 @@
+sampleId: golden-java-mybatis-sp-wrapper-order-request-v1
+request:
+  systemCode: PEM
+  subSystemCode: ORD
+  businessCodeLv1: order
+  businessCodeLv2: request
+  entityName: OrderRequest
+  resourceName: order-request
+  description: 주문 요청 목록 조회용 Java/MyBatis SP wrapper 초안
+  generationMode: spWrapper
+  tableName: dbo.ORD_REQ
+  spName: dbo.USP_ORDER_REQUEST_LIST
+  pkColumns:
+    - ORD_REQ_ID
+  columns:
+    - name: ORD_REQ_ID
+      dbType: bigint
+      nullable: false
+      description: 주문요청ID
+    - name: CUS_ID
+      dbType: varchar(20)
+      nullable: false
+      description: 고객ID
+    - name: REQ_STAT_CD
+      dbType: varchar(20)
+      nullable: false
+      description: 요청상태코드
+    - name: REQ_DTM
+      dbType: datetime2
+      nullable: false
+      description: 요청일시
+    - name: CRE_USR_ID
+      dbType: uniqueidentifier
+      nullable: false
+      description: 등록사용자ID
+  inputParams:
+    - name: CUS_ID
+      dbType: varchar(20)
+      required: false
+    - name: REQ_STAT_CD
+      dbType: varchar(20)
+      required: false
+  resultShape:
+    - ORD_REQ_ID
+    - CUS_ID
+    - REQ_STAT_CD
+    - REQ_DTM
+    - CRE_USR_ID
+  serviceInterfaceRequired: true
+  commonFramework: spring-mybatis
+  authorId: AI
+  messagePrefix: order.request
+  useLombok: false
+  javaTimePreferred: true
+evidence:
+  sources:
+    - type: storedProcedure
+      name: dbo.USP_ORDER_REQUEST_LIST
+      reason: 조회 SQL 재구성 근거가 부족하므로 SP wrapper 유지
+    - type: table
+      name: dbo.ORD_REQ
+      reason: DTO 필드 정의 및 컬럼 타입 근거
+  assumptions:
+    - 페이징 정책은 아직 미확정이므로 TODO 로 남긴다.
+    - 정렬 규칙은 SP 내부 기본 정렬을 그대로 유지한다.

@@ -1,0 +1,14 @@
+sampleId: golden-java-mybatis-sp-wrapper-order-request-v1
+generationMode: spWrapper
+expectedFiles:
+  - src/main/java/com/pec/pem/order/request/model/OrderRequestDTO.java
+  - src/main/java/com/pec/pem/order/request/service/OrderRequestService.java
+  - src/main/java/com/pec/pem/order/request/mapper/OrderRequestMapper.java
+  - src/main/resources/mybatis/pem/mappers/order/request/OrderRequestMapperSQL.xml
+checks:
+  - output_structure_headings_present
+  - evidence_summary_present
+  - assumptions_and_todo_present
+  - review_checklist_present
+  - mapper_xml_namespace_matches_interface
+  - sql_id_matches_mapper_method

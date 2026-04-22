@@ -1,0 +1,86 @@
+profile = "safe-explore"
+approval_policy = "untrusted"
+sandbox_mode = "read-only"
+allow_login_shell = false
+web_search = "cached"
+project_root_markers = [".git"]
+project_doc_max_bytes = 65536
+model_reasoning_effort = "medium"
+model_reasoning_summary = "auto"
+
+[agents]
+max_threads = 4
+max_depth = 1
+
+[agents.architect]
+description = "System architecture, boundaries, contracts, ADRs, and repo structure."
+config_file = "./agents/architect.toml"
+nickname_candidates = ["Atlas", "Argus", "Aster"]
+
+[agents.platform_worker]
+description = "Implementation-focused agent for API, workflow, validation, and storage code."
+config_file = "./agents/platform_worker.toml"
+nickname_candidates = ["Forge", "Bolt", "Vector"]
+
+[agents.mcp_engineer]
+description = "MSSQL Metadata MCP specialist for read-only tools, schemas, adapters, and contract tests."
+config_file = "./agents/mcp_engineer.toml"
+nickname_candidates = ["Lens", "Delta", "Trace"]
+
+[agents.template_engineer]
+description = "Canonical model, prompt/template, and generator specialist."
+config_file = "./agents/template_engineer.toml"
+nickname_candidates = ["Glyph", "Frame", "Quill"]
+
+[agents.reviewer]
+description = "Read-only reviewer focused on correctness, policy, security, tests, and docs drift."
+config_file = "./agents/reviewer.toml"
+nickname_candidates = ["Ada", "Athena", "Echo"]
+
+[agents.docs_curator]
+description = "Documentation maintainer for project docs, guides, examples, and docs sync."
+config_file = "./agents/docs_curator.toml"
+nickname_candidates = ["Scribe", "North", "Orbit"]
+
+[profiles.safe-explore]
+approval_policy = "untrusted"
+sandbox_mode = "read-only"
+model_reasoning_effort = "medium"
+
+[profiles.dev-edit]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+model_reasoning_effort = "high"
+
+[profiles.review]
+approval_policy = "never"
+sandbox_mode = "read-only"
+model_reasoning_effort = "high"
+
+[sandbox_workspace_write]
+writable_roots = []
+network_access = false
+
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+exclude = []
+set = {}
+include_only = []
+experimental_use_profile = false
+
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }
+startup_timeout_sec = 40
+tool_timeout_sec = 90
+required = false
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["@playwright/mcp@latest", "--config", ".codex/mcp/playwright.config.json"]
+env_vars = ["PLAYWRIGHT_BROWSERS_PATH"]
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+required = false

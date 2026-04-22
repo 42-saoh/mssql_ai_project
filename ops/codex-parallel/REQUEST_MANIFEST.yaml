@@ -5,6 +5,25 @@ profiles:
   coordinator: safe-explore
   worker: dev-edit
   reviewer: review
+preflight:
+  - corepack enable
+  - corepack use pnpm@10.0.0
+  - pnpm install  # generate and commit pnpm-lock.yaml once from coordinator worktree
+  - cp .env.example .env
+  - make test-build
+  - make dev-ports
+dev_port_strategy:
+  script: scripts/resolve_dev_ports.sh
+  app_base: 8000
+  mcp_base: 8100
+  web_base: 3000
+  rule: pNN-* worktree uses base+NN, otherwise path-hash slot is used unless WORKTREE_PORT_SLOT is set
+reproducibility:
+  python_lock: requirements/lock/py311-dev.txt
+  metadata_profile_registry: config/mssql/local_docker_profiles.yaml
+  web_lock: pnpm-lock.yaml
+  python_install_script: scripts/install_python_locked.sh
+  web_install_script: scripts/install_web_workspace.sh
 waves:
   - wave: W0
     description: baseline freeze and shared contract setup
@@ -26,6 +45,8 @@ waves:
           - .codex/
           - .agents/
           - Makefile
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
           - pyproject.toml
           - package.json
           - packages/domain/
@@ -33,7 +54,11 @@ waves:
           - spec/openapi/
           - docs/adr/
           - docker/test/
+          - requirements/lock/
           - scripts/compose_project_name.sh
+          - scripts/resolve_dev_ports.sh
+          - scripts/install_python_locked.sh
+          - scripts/install_web_workspace.sh
         verify:
           - python -m compileall apps services packages tests
           - make test
