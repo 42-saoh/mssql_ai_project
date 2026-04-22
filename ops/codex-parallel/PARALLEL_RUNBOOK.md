@@ -42,7 +42,7 @@ git worktree add ../wt/p06-integration-eval -b feat/p06-integration-eval
 
 ```bash
 corepack enable
-corepack use pnpm@10.0.0
+corepack use pnpm@10.33.0
 pnpm install            # pnpm-lock.yaml 생성 및 커밋
 make test-build
 make dev-ports

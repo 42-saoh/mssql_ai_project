@@ -24,7 +24,7 @@ def test_dev_port_and_repro_assets_exist() -> None:
     assert (ROOT / "requirements" / "lock" / "py311-dev.txt").exists()
 
     web_package = yaml.safe_load((ROOT / "apps" / "web" / "package.json").read_text(encoding="utf-8"))
-    assert web_package["packageManager"] == "pnpm@10.0.0"
+    assert web_package["packageManager"] == "pnpm@10.33.0"
 
     runbook = (ROOT / "ops" / "codex-parallel" / "PARALLEL_RUNBOOK.md").read_text(encoding="utf-8")
     assert "make dev-ports" in runbook

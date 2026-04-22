@@ -21,7 +21,7 @@ cat >&2 <<'EOF'
 pnpm-lock.yaml is missing.
 For reproducible parallel Codex runs, generate and commit the lockfile once from the coordinator worktree:
   corepack enable
-  corepack use pnpm@10.0.0
+  corepack use pnpm@10.33.0
   pnpm install
 Then rerun the command.
 To bypass temporarily, set ALLOW_UNLOCKED_PNPM_INSTALL=1.
