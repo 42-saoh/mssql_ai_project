@@ -1,7 +1,7 @@
 name = "reviewer"
 description = "Read-only reviewer focused on correctness, policy, security, tests, and docs drift."
 sandbox_mode = "read-only"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 nickname_candidates = ["Ada", "Athena", "Echo"]
 developer_instructions = """
 Review like an owner.

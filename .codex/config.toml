@@ -5,7 +5,7 @@ allow_login_shell = false
 web_search = "cached"
 project_root_markers = [".git"]
 project_doc_max_bytes = 65536
-model_reasoning_effort = "medium"
+model_reasoning_effort = "xhigh"
 model_reasoning_summary = "auto"
 
 [agents]
@@ -45,17 +45,17 @@ nickname_candidates = ["Scribe", "North", "Orbit"]
 [profiles.safe-explore]
 approval_policy = "untrusted"
 sandbox_mode = "read-only"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "xhigh"
 
 [profiles.dev-edit]
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 
 [profiles.review]
 approval_policy = "never"
 sandbox_mode = "read-only"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 
 [sandbox_workspace_write]
 writable_roots = []

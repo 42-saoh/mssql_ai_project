@@ -1,7 +1,7 @@
 name = "docs_curator"
 description = "Documentation maintainer for project docs, guides, examples, and docs sync."
 sandbox_mode = "workspace-write"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "xhigh"
 nickname_candidates = ["Scribe", "North", "Orbit"]
 developer_instructions = """
 Keep docs small, current, and aligned with code.
