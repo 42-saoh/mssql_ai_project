@@ -1,17 +1,34 @@
-plan_id: codex-parallel-local-v1
+plan_id: codex-parallel-local-v2
 project: MSSQL 분석·문서화·전환코드 생성 Agent 구축
 mode: local-codex-cli-worktrees
+basis:
+  - PROJECT.md
+  - AGENTS.md
+  - ARCHITECTURE.md
+  - TOOLS.md
+  - POLICY.md
+  - EVAL_SPEC.md
+  - spec/openapi/ai_agent_platform_openapi_v1.yaml
+  - spec/mcp/mssql_metadata_tool_catalog.yaml
+  - spec/validation/validation_rules.yaml
+  - spec/policy/project_ai_java_mybatis_generation_policy.yaml
+  - spec/policy/platform_db_standardization_rules_for_ai.json
+  - .env.sample
+  - pnpm-lock.yaml
 profiles:
   coordinator: safe-explore
   worker: dev-edit
   reviewer: review
 preflight:
+  - git status --short
   - corepack enable
   - corepack use pnpm@10.33.0
-  - pnpm install  # generate and commit pnpm-lock.yaml once from coordinator worktree
-  - cp .env.example .env
-  - make test-build
+  - pnpm install --frozen-lockfile
+  - cp .env.sample .env  # local only; fill secrets manually and never commit .env
+  - make docker-project-name
   - make dev-ports
+  - make test-build
+  - python -m compileall apps services packages tests
 dev_port_strategy:
   script: scripts/resolve_dev_ports.sh
   app_base: 8000
@@ -24,16 +41,32 @@ reproducibility:
   web_lock: pnpm-lock.yaml
   python_install_script: scripts/install_python_locked.sh
   web_install_script: scripts/install_web_workspace.sh
+  env_sample: .env.sample
+shared_read_only_after_p00:
+  - AGENTS.md
+  - PROJECT.md
+  - ARCHITECTURE.md
+  - TOOLS.md
+  - POLICY.md
+  - EVAL_SPEC.md
+  - TASK_TEMPLATE.md
+  - packages/domain/
+  - spec/openapi/
+  - spec/policy/
+  - db/schema/
+  - docker/test/
+  - requirements/lock/
+  - pnpm-lock.yaml
 waves:
   - wave: W0
-    description: baseline freeze and shared contract setup
+    description: baseline freeze and shared contract drift check
     tracks:
       - id: P00
         branch: feat/p00-baseline
         worktree: ../wt/p00-baseline
         prompt: prompts/00_coordinator_baseline.md
         role: architect
-        skills: [repo-bootstrap, contract-to-code]
+        skills: [repo-bootstrap, contract-to-code, docs-sync]
         target_paths:
           - AGENTS.md
           - PROJECT.md
@@ -45,21 +78,26 @@ waves:
           - .codex/
           - .agents/
           - Makefile
-          - .env.example
+          - .env.sample
           - config/mssql/local_docker_profiles.yaml
           - pyproject.toml
           - package.json
+          - apps/web/package.json
           - packages/domain/
           - db/schema/
           - spec/openapi/
+          - spec/mcp/
+          - spec/validation/
+          - spec/policy/
           - docs/adr/
           - docker/test/
           - requirements/lock/
-          - scripts/compose_project_name.sh
-          - scripts/resolve_dev_ports.sh
-          - scripts/install_python_locked.sh
-          - scripts/install_web_workspace.sh
+          - scripts/
+          - ops/codex-parallel/
+          - tests/contract/
         verify:
+          - make docker-project-name
+          - make dev-ports
           - python -m compileall apps services packages tests
           - make test
           - make test-web-smoke
@@ -71,27 +109,35 @@ waves:
         worktree: ../wt/p01-mssql-mcp
         prompt: prompts/01_mssql_mcp.md
         role: mcp_engineer
-        skills: [mcp-tooling-design]
+        skills: [mcp-tooling-design, contract-to-code]
         depends_on: [P00]
         target_paths:
           - services/mssql-mcp/
           - spec/mcp/
           - tests/contract/mcp/
           - tests/unit/mcp/
+          - tests/unit/test_mcp_catalog.py
+          - tests/unit/test_mssql_mcp_live_config.py
+          - tests/contract/test_local_mssql_connection_assets.py
           - fixtures/mcp/
         verify:
-          - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp"
+          - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/unit/test_mssql_mcp_live_config.py"
       - id: P02
         branch: feat/p02-domain-analysis
         worktree: ../wt/p02-domain-analysis
         prompt: prompts/02_domain_analysis.md
         role: template_engineer
-        skills: [contract-to-code]
+        skills: [contract-to-code, eval-fixture-authoring]
         depends_on: [P00]
         target_paths:
           - packages/analysis/
           - tests/unit/analysis/
           - fixtures/analysis/
+        readonly_paths:
+          - packages/domain/
+          - fixtures/mssql/
+          - fixtures/metadata/
+          - spec/policy/platform_db_standardization_rules_for_ai.json
         verify:
           - make test PYTEST_ARGS="tests/unit/analysis"
       - id: P03
@@ -99,7 +145,7 @@ waves:
         worktree: ../wt/p03-generation-validation
         prompt: prompts/03_generation_validation.md
         role: template_engineer
-        skills: [contract-to-code, quality-gate-review]
+        skills: [contract-to-code, quality-gate-review, eval-fixture-authoring]
         depends_on: [P00]
         target_paths:
           - packages/generation/
@@ -108,6 +154,11 @@ waves:
           - tests/unit/generation/
           - tests/unit/validation/
           - fixtures/generation/
+        readonly_paths:
+          - packages/domain/
+          - spec/openapi/
+          - spec/policy/
+          - db/schema/
         verify:
           - make test PYTEST_ARGS="tests/unit/generation tests/unit/validation"
       - id: P04
@@ -115,11 +166,14 @@ waves:
         worktree: ../wt/p04-web-shell
         prompt: prompts/04_web_shell.md
         role: platform_worker
-        skills: [contract-to-code]
+        skills: [contract-to-code, browser-automation-smoke]
         depends_on: [P00]
         target_paths:
           - apps/web/
           - tests/unit/web/
+        readonly_paths:
+          - spec/openapi/
+          - .env.sample
         verify:
           - make test-web-smoke
   - wave: W2
@@ -130,12 +184,22 @@ waves:
         worktree: ../wt/p05-api-workflow
         prompt: prompts/05_api_workflow.md
         role: platform_worker
-        skills: [contract-to-code]
+        skills: [contract-to-code, quality-gate-review]
         depends_on: [P01, P02, P03]
         target_paths:
           - apps/api/
           - tests/integration/api/
           - tests/unit/api/
+        readonly_paths:
+          - packages/domain/
+          - packages/analysis/
+          - packages/generation/
+          - packages/validation/
+          - services/mssql-mcp/
+          - spec/openapi/
+          - spec/mcp/
+          - spec/validation/
+          - db/schema/
         verify:
           - make test PYTEST_ARGS="tests/integration/api tests/unit/api"
   - wave: W3
@@ -146,15 +210,24 @@ waves:
         worktree: ../wt/p06-integration-eval
         prompt: prompts/06_integration_eval_docs.md
         role: docs_curator
-        skills: [eval-fixture-authoring, docs-sync]
+        skills: [eval-fixture-authoring, docs-sync, browser-automation-smoke, quality-gate-review]
         depends_on: [P04, P05]
         target_paths:
           - tests/e2e/
           - tests/eval/
           - fixtures/eval/
           - docs/
+        readonly_paths:
+          - apps/
+          - services/
+          - packages/
+          - spec/
+          - db/schema/
+          - ops/codex-parallel/
+          - .env.sample
         verify:
           - make test PYTEST_ARGS="tests/e2e tests/eval"
+          - make test-web-smoke
       - id: P07
         branch: feat/p07-final-review
         worktree: ../wt/p07-final-review
@@ -165,4 +238,7 @@ waves:
         target_paths: []
         verify:
           - read-only review only
+          - make dev-ports
+          - make test
+          - make test-web-smoke
 merge_order: [P00, P01, P02, P03, P04, P05, P06, P07]
