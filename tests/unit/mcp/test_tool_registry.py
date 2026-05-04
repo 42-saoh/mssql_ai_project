@@ -18,7 +18,7 @@ def test_fixture_repository_returns_table_schema() -> None:
 
     payload = registry.invoke_payload(
         "get_table_schema",
-        {"arguments": {"dbProfileId": "pfl", "schema": "dbo", "tableName": "TB_ORDER"}},
+        {"arguments": {"dbProfileId": "master", "schema": "dbo", "tableName": "TB_ORDER"}},
     )
 
     assert payload["ok"] is True
@@ -35,7 +35,7 @@ def test_tool_invocation_rejects_free_form_sql_argument(monkeypatch) -> None:
         "/tools/get_table_schema/invoke",
         json={
             "arguments": {
-                "dbProfileId": "pfl",
+                "dbProfileId": "master",
                 "schema": "dbo",
                 "tableName": "TB_ORDER",
                 "sql": "SELECT * FROM dbo.TB_ORDER",
@@ -57,7 +57,7 @@ def test_extended_properties_support_column_object_name(monkeypatch) -> None:
         "/tools/get_extended_properties/invoke",
         json={
             "arguments": {
-                "dbProfileId": "pfl",
+                "dbProfileId": "master",
                 "schema": "dbo",
                 "objectName": "TB_ORDER.ORDER_ID",
                 "objectType": "COLUMN",
@@ -76,7 +76,7 @@ def test_tool_invocation_rejects_unknown_tool(monkeypatch) -> None:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     client = TestClient(app)
 
-    response = client.post("/tools/run_sql/invoke", json={"arguments": {"dbProfileId": "pfl"}})
+    response = client.post("/tools/run_sql/invoke", json={"arguments": {"dbProfileId": "master"}})
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "UNKNOWN_TOOL"
@@ -88,7 +88,7 @@ def test_tool_invocation_rejects_missing_required_argument(monkeypatch) -> None:
 
     response = client.post(
         "/tools/get_table_schema/invoke",
-        json={"arguments": {"dbProfileId": "pfl", "schema": "dbo"}},
+        json={"arguments": {"dbProfileId": "master", "schema": "dbo"}},
     )
 
     assert response.status_code == 400
@@ -104,7 +104,7 @@ def test_tool_invocation_validation_error_does_not_echo_secret_like_values(monke
     response = client.post(
         "/tools/get_table_schema/invoke",
         json={
-            "arguments": {"dbProfileId": "pfl", "schema": "dbo", "tableName": "TB_ORDER"},
+            "arguments": {"dbProfileId": "master", "schema": "dbo", "tableName": "TB_ORDER"},
             "password": "do-not-echo",
         },
     )
@@ -120,7 +120,7 @@ def test_tool_invocation_rejects_unknown_profile_id(monkeypatch) -> None:
 
     response = client.post(
         "/tools/get_table_schema/invoke",
-        json={"arguments": {"dbProfileId": "PFL", "schema": "dbo", "tableName": "TB_ORDER"}},
+        json={"arguments": {"dbProfileId": "PLF", "schema": "dbo", "tableName": "TB_ORDER"}},
     )
 
     assert response.status_code == 404
@@ -135,7 +135,7 @@ def test_live_tool_execution_stays_behind_env_gated_boundary(monkeypatch) -> Non
 
     response = client.post(
         "/tools/get_table_schema/invoke",
-        json={"arguments": {"dbProfileId": "pfl", "schema": "dbo", "tableName": "TB_ORDER"}},
+        json={"arguments": {"dbProfileId": "master", "schema": "dbo", "tableName": "TB_ORDER"}},
     )
 
     assert response.status_code == 503

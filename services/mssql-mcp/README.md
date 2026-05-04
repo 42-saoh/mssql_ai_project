@@ -20,8 +20,10 @@ MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog
 - host-run (`make run-mcp`, 로컬 uvicorn): `MSSQL_METADATA_HOST=127.0.0.1`
 - `docker/test` 컨테이너 내부: `MSSQL_METADATA_DOCKER_HOST=host.docker.internal`
 - profile registry: `config/mssql/local_docker_profiles.yaml`
-- 기본 profile id: master
-- 기본 platform DB name: `master`
+- 기본 metadata profile id: `master`
+- 기본 metadata DB name: `master`
+- platform DB profile id: `plf`
+- 기본 platform DB name: `PLF`
 
 여러 DB 를 같은 SQL Server 인스턴스에서 함께 쓰는 경우에는 `config/mssql/local_docker_profiles.yaml` 에 profile 을 추가해서 `dbProfileId -> database` 매핑을 늘린다.
 
@@ -48,7 +50,7 @@ MVP tool execution uses structured arguments only:
 ```json
 {
   "arguments": {
-    "dbProfileId": "pfl",
+    "dbProfileId": "master",
     "schema": "dbo",
     "tableName": "TB_ORDER"
   }
@@ -59,7 +61,8 @@ The response always carries `snapshotId`, `collectedAt`, `evidenceRefs`, and eit
 `data` or a documented `error.code`. The default execution path is fixture-backed
 metadata from `fixtures/mcp/metadata_snapshot.json`, so tests do not require a live
 SQL Server. When `MSSQL_ENABLE_LIVE_METADATA=1`, readiness uses the live connection
-probe and tool execution is routed to the live adapter boundary.
+probe; live tool query execution remains an optional adapter-bound follow-up and is
+not documented as a completed metadata query implementation.
 
 ## 다음 구현 우선순위
 

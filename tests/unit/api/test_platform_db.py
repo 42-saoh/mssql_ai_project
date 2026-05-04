@@ -40,7 +40,7 @@ def test_platform_db_repository_builds_from_env_without_connecting(
     monkeypatch.setenv("PLATFORM_DB_PORT", "1433")
     monkeypatch.setenv("PLATFORM_DB_USER", "sa")
     monkeypatch.setenv("PLATFORM_DB_PASSWORD", "do-not-echo")
-    monkeypatch.setenv("PLATFORM_DB_NAME", "PFL")
+    monkeypatch.setenv("PLATFORM_DB_NAME", "PLF")
 
     settings = load_platform_db_settings()
     repository = build_platform_repository()
@@ -55,7 +55,7 @@ def test_platform_db_safe_summary_never_contains_password() -> None:
         port=1433,
         user="sa",
         password="do-not-echo",
-        database="PFL",
+        database="PLF",
         requester_login="codex-api-local",
     )
 
@@ -81,7 +81,7 @@ def test_workflow_repository_contract_records_state_changes() -> None:
     repository = MemoryWorkflowRepository()
 
     request = repository.create_request(
-        db_profile_id="pfl",
+        db_profile_id="plf",
         target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
         outputs=("SP_ANALYSIS_DOCUMENT",),
         options={"includeEvidenceRefs": True},

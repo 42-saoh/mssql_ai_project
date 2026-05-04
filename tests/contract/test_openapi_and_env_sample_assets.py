@@ -108,7 +108,7 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "Leave APP/MCP/WEB port empty" in text
     assert "PLATFORM_DB_PASSWORD=\n" in text
     assert "MSSQL_METADATA_PASSWORD=\n" in text
-    assert "MSSQL_METADATA_DEFAULT_PROFILE_ID=pfl" in text
+    assert "MSSQL_METADATA_DEFAULT_PROFILE_ID=master" in text
     assert "TPsaoh" not in text
 
 

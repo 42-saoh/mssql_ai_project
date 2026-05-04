@@ -1,0 +1,142 @@
+{
+  "sampleId": "p06-fixture-workflow-master-order-summary-v1",
+  "target_contract": "CanonicalAnalysisModel",
+  "status": "REVIEW_REQUIRED",
+  "blockers": [
+    {
+      "code": "DOMAIN_CONTRACT_MISSING",
+      "message": "Full CanonicalAnalysisModel expansion remains a follow-up; this fixture records a compatible local candidate only.",
+      "target_path": "packages/domain/src/ai_agent_domain/models.py",
+      "status": "REVIEW_REQUIRED"
+    }
+  ],
+  "analysis_local": {
+    "analysis_version": "analysis-local-v0.1",
+    "contract_target": "CanonicalAnalysisModel-compatible-local-v0.1",
+    "source_name": "fixtures/mcp/metadata_snapshot.json#/procedures/0",
+    "source_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "procedure": {
+      "identifier": {
+        "schema_name": "dbo",
+        "procedure_name": "usp_GetOrderSummary",
+        "full_name": "dbo.usp_GetOrderSummary"
+      },
+      "parameters": [
+        {
+          "name": "@OrderId",
+          "data_type": "INT",
+          "direction": "INPUT",
+          "evidence": [
+            {
+              "source": "fixtures/mcp/metadata_snapshot.json",
+              "line": null,
+              "snippet": "/procedures/0/parameters/0",
+              "status": "OBSERVED"
+            }
+          ]
+        },
+        {
+          "name": "@IncludeLines",
+          "data_type": "BIT",
+          "default": "0",
+          "direction": "INPUT",
+          "evidence": [
+            {
+              "source": "fixtures/mcp/metadata_snapshot.json",
+              "line": null,
+              "snippet": "/procedures/0/parameters/1",
+              "status": "OBSERVED"
+            }
+          ]
+        }
+      ]
+    },
+    "dependencies": {
+      "table_references": [
+        {
+          "schema_name": "dbo",
+          "object_name": "TB_ORDER",
+          "full_name": "dbo.TB_ORDER",
+          "object_type": "TABLE",
+          "operation": "READ",
+          "status": "OBSERVED",
+          "evidence": [
+            {
+              "source": "fixtures/mcp/metadata_snapshot.json",
+              "line": null,
+              "snippet": "/procedures/0/dependencies/0",
+              "status": "OBSERVED"
+            }
+          ]
+        },
+        {
+          "schema_name": "dbo",
+          "object_name": "TB_ORDER_LINE",
+          "full_name": "dbo.TB_ORDER_LINE",
+          "object_type": "TABLE",
+          "operation": "READ",
+          "status": "REVIEW_REQUIRED",
+          "evidence": [
+            {
+              "source": "fixtures/mcp/metadata_snapshot.json",
+              "line": null,
+              "snippet": "/procedures/0/dependencies/1",
+              "status": "REVIEW_REQUIRED"
+            }
+          ]
+        }
+      ],
+      "called_procedures": [],
+      "temp_tables": []
+    },
+    "patterns": {
+      "transaction": {
+        "name": "transaction",
+        "detected": false,
+        "status": "OBSERVED",
+        "evidence": []
+      },
+      "try_catch": {
+        "name": "try_catch",
+        "detected": false,
+        "status": "OBSERVED",
+        "evidence": []
+      },
+      "dynamic_sql": {
+        "name": "dynamic_sql",
+        "detected": false,
+        "status": "OBSERVED",
+        "evidence": []
+      },
+      "temp_table": {
+        "name": "temp_table",
+        "detected": false,
+        "status": "OBSERVED",
+        "evidence": []
+      }
+    },
+    "review_markers": [
+      {
+        "code": "AMBIGUOUS_ORDER_LINE_DEPENDENCY",
+        "message": "TB_ORDER_LINE is marked ambiguous in the fixture dependency metadata and remains review-required.",
+        "status": "REVIEW_REQUIRED",
+        "evidence": [
+          {
+            "source": "fixtures/mcp/metadata_snapshot.json",
+            "line": null,
+            "snippet": "/procedures/0/dependencies/1",
+            "status": "REVIEW_REQUIRED"
+          }
+        ]
+      }
+    ],
+    "canonical_conversion_blockers": [
+      {
+        "code": "DOMAIN_CONTRACT_MISSING",
+        "message": "Full CanonicalAnalysisModel is not implemented in this slice.",
+        "target_path": "packages/domain/src/ai_agent_domain/models.py",
+        "status": "REVIEW_REQUIRED"
+      }
+    ]
+  }
+}

@@ -41,8 +41,8 @@ def load_live_metadata_settings() -> LiveMetadataSettings:
         metadata_port=_env_int("MSSQL_METADATA_PORT", 1433),
         metadata_user=os.getenv("MSSQL_METADATA_USER", "").strip(),
         metadata_password=os.getenv("MSSQL_METADATA_PASSWORD", ""),
-        metadata_db_fallback=os.getenv("MSSQL_METADATA_DB", "PFL").strip() or "PFL",
-        default_profile_id=os.getenv("MSSQL_METADATA_DEFAULT_PROFILE_ID", "pfl").strip() or "pfl",
+        metadata_db_fallback=os.getenv("MSSQL_METADATA_DB", "PLF").strip() or "PLF",
+        default_profile_id=os.getenv("MSSQL_METADATA_DEFAULT_PROFILE_ID", "plf").strip() or "plf",
         profile_file=(
             os.getenv("MSSQL_METADATA_PROFILE_FILE", "config/mssql/local_docker_profiles.yaml").strip()
             or "config/mssql/local_docker_profiles.yaml"

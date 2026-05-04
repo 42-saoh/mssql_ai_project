@@ -1,0 +1,79 @@
+{
+  "sampleId": "p06-fixture-workflow-master-order-summary-v1",
+  "source": "Expected stable summary for fixture-backed WorkflowService output.",
+  "workflow": {
+    "jobStatus": "REVIEW_PENDING",
+    "currentStep": "VALIDATE",
+    "latestValidationStatus": "REVIEW_REQUIRED",
+    "artifactTypes": [
+      "SP_ANALYSIS_DOC",
+      "DEPENDENCY_REPORT",
+      "DTO_DRAFT",
+      "SERVICE_DRAFT",
+      "MAPPER_INTERFACE",
+      "MAPPER_XML"
+    ]
+  },
+  "artifactExpectations": [
+    {
+      "type": "SP_ANALYSIS_DOC",
+      "status": "REVIEW_PENDING",
+      "latestValidationStatus": "REVIEW_REQUIRED",
+      "minimumEvidenceRefs": 2,
+      "requiredContent": [
+        "## evidence_summary",
+        "dbo.usp_GetOrderSummary",
+        "dbo.TB_ORDER",
+        "REVIEW_REQUIRED"
+      ]
+    },
+    {
+      "type": "DEPENDENCY_REPORT",
+      "status": "REVIEW_PENDING",
+      "latestValidationStatus": "REVIEW_REQUIRED",
+      "minimumEvidenceRefs": 2,
+      "requiredContent": [
+        "## dependency_table",
+        "dbo.usp_GetOrderSummary",
+        "dbo.TB_ORDER",
+        "REVIEW_REQUIRED"
+      ]
+    },
+    {
+      "type": "DTO_DRAFT",
+      "status": "REVIEW_PENDING",
+      "latestValidationStatus": "REVIEW_REQUIRED",
+      "minimumEvidenceRefs": 0,
+      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+    },
+    {
+      "type": "SERVICE_DRAFT",
+      "status": "REVIEW_PENDING",
+      "latestValidationStatus": "REVIEW_REQUIRED",
+      "minimumEvidenceRefs": 0,
+      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+    },
+    {
+      "type": "MAPPER_INTERFACE",
+      "status": "REVIEW_PENDING",
+      "latestValidationStatus": "REVIEW_REQUIRED",
+      "minimumEvidenceRefs": 0,
+      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+    },
+    {
+      "type": "MAPPER_XML",
+      "status": "REVIEW_PENDING",
+      "latestValidationStatus": "REVIEW_REQUIRED",
+      "minimumEvidenceRefs": 0,
+      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+    }
+  ],
+  "forbiddenStates": [
+    "PUBLISHED"
+  ],
+  "forbiddenOperations": [
+    "auto_ddl_execution",
+    "row_data_access",
+    "automatic_publish"
+  ]
+}

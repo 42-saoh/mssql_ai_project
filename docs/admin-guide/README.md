@@ -1,22 +1,30 @@
-# 관리자 가이드 초안
+# 관리자 가이드
 
-## 관리 대상
+## 현재 관리 대상
 - DB profiles
 - prompt / template / model versions
 - user roles
 - approval policy
 - audit log
 
+## 현재 구현 상태
+
+- implemented: API route surface, workflow state 기록, validation report 저장, approval decision 기록, audit event 기록.
+- fixture-first: metadata collection 과 e2e/eval 기본 경로.
+- stub/skeleton: Platform DB adapter, auth/RBAC, publish route, full registry admin.
+- optional live: MSSQL MCP readiness probe. live metadata query execution 은 아직 completed feature 가 아니다.
+- follow-up: published version 승격 UI/API, 운영 권한 모델, live read-only metadata adapter.
+
 ## 기본 운영 절차
-1. DB profile 등록
-2. model / prompt / template version 등록
-3. 운영용 published version 승격
-4. user / role 권한 부여
-5. validation / approval 운영 점검
+1. `.env.example` 을 기준으로 `.env` 를 만들고 비밀값은 커밋하지 않는다.
+2. `config/mssql/local_docker_profiles.yaml` 에서 metadata 기본 profile `master` 와 platform profile `plf` 을 확인한다.
+3. schema 변경이 필요하면 `db/schema/` 에 versioned SQL 만 추가하고 실제 DB 적용은 외부 운영자가 수동 수행한다.
+4. 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 과 필요한 경우 `make test`, `make test-web-smoke` 로 수행한다.
+5. approval decision 은 현재 기록 기능이며 publish 나 배포를 자동 수행하지 않는다.
 
 ## 스키마 변경 운영
 
 - 플랫폼 DB 구조 변경이 필요하면 `db/schema/` 에 versioned SQL 파일을 추가한다.
 - 실제 DB 적용은 관리자/운영자가 외부 DB 환경에 수동으로 수행한다.
 - 저장소의 Makefile/Codex 작업은 DB apply 를 수행하지 않는다.
-
+- SQL Server lifecycle, schema apply, row-data 조회/수정은 저장소 책임이 아니다.

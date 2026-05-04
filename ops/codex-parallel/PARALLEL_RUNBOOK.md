@@ -61,7 +61,7 @@ python -m compileall apps services packages tests
 - `.env.example` 은 비밀값 없는 샘플이다. 실제 credential 은 `.env`, `.env.local`, OS keychain 등 저장소 밖/비커밋 경로에 둔다.
 - 로컬 Docker MSSQL 을 붙일 때는 `.env` 를 만들고 `PLATFORM_DB_*`, `MSSQL_METADATA_*` 를 채운다.
 - metadata profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 공유 기준으로 사용한다.
-- 기본 profile id 는 `pfl` 이며, 같은 SQL Server 인스턴스의 `PFL`, `master` 등 DB 는 profile 로 분리한다.
+- 기본 profile id 는 `plf` 이며, 같은 SQL Server 인스턴스의 `PLF`, `master` 등 DB 는 profile 로 분리한다.
 - host-run 은 `127.0.0.1`, `docker/test` 내부 연결은 `host.docker.internal` 기본값을 사용한다.
 - `.env.example` 이 있더라도 새 작업의 기본 복사 원본은 비밀값 없는 `.env.example` 로 둔다.
 

@@ -24,8 +24,8 @@ const metadataProfiles: MetadataProfile[] = [
     readOnly: true,
   },
   {
-    id: "pfl",
-    database: "PFL",
+    id: "plf",
+    database: "PLF",
     description: "Sample platform database profile for portal shell previews.",
     readOnly: true,
   },

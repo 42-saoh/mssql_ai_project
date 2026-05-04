@@ -54,7 +54,7 @@ def list_safe_metadata_tools() -> list[MetadataToolSummary]:
 def _profiles_from_yaml() -> tuple[str, list[MetadataProfile]]:
     path = repo_root() / "config" / "mssql" / "local_docker_profiles.yaml"
     payload: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    default_profile_id = str(payload.get("defaultProfileId", "pfl"))
+    default_profile_id = str(payload.get("defaultProfileId", "plf"))
     profiles = [
         MetadataProfile(
             id=str(item["id"]),

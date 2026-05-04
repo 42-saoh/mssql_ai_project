@@ -10,7 +10,7 @@ from tests.unit.api.fake_repository import MemoryWorkflowRepository
 def _request(outputs: list[str] | None = None) -> SPAnalysisRequest:
     return SPAnalysisRequest.model_validate(
         {
-            "dbProfileId": "pfl",
+            "dbProfileId": "master",
             "target": {
                 "type": "PROCEDURE",
                 "schema": "dbo",
@@ -30,7 +30,7 @@ def _request(outputs: list[str] | None = None) -> SPAnalysisRequest:
 def _fixture_request(outputs: list[str] | None = None) -> SPAnalysisRequest:
     return SPAnalysisRequest.model_validate(
         {
-            "dbProfileId": "pfl",
+            "dbProfileId": "master",
             "target": {
                 "type": "PROCEDURE",
                 "schema": "dbo",

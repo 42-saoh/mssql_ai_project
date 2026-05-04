@@ -2,11 +2,11 @@
 # This keeps credentials out of source control while giving Codex workers a stable
 # shared set of database profile ids. Add more profiles under the same shape when needed.
 
-defaultProfileId: pfl
+defaultProfileId: master
 profiles:
-  - id: pfl
-    label: Platform DB (PFL)
-    database: PFL
+  - id: plf
+    label: Platform DB (PLF)
+    database: PLF
     purpose: platform
 
   - id: master

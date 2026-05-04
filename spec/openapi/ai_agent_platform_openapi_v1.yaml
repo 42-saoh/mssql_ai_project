@@ -75,7 +75,7 @@ paths:
             examples:
               spWrapper:
                 value:
-                  dbProfileId: pfl
+                  dbProfileId: plf
                   target:
                     type: PROCEDURE
                     schema: dbo
@@ -312,7 +312,7 @@ components:
       properties:
         dbProfileId:
           type: string
-          description: Metadata profile identifier, for example pfl or master.
+          description: Metadata profile identifier, for example plf or master.
         target:
           $ref: "#/components/schemas/TargetObject"
         outputs:
@@ -468,7 +468,7 @@ components:
           enum: [MSSQL_METADATA, STATIC_ANALYSIS, POLICY, TEMPLATE, USER_INPUT]
         objectRef:
           type: string
-          examples: [pfl.dbo.usp_OrderRequest_Select]
+          examples: [plf.dbo.usp_OrderRequest_Select]
         locator:
           type: string
         snapshotId:

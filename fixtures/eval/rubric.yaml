@@ -1,0 +1,22 @@
+version: 0.1.0
+suite: p06-fixture-workflow-eval
+fixture: p06-fixture-workflow-master-order-summary-v1
+mode: fixture-first
+thresholds:
+  required_files_present: true
+  job_status: REVIEW_PENDING
+  current_step: VALIDATE
+  artifact_type_exact_match: true
+  review_required_marker_required: true
+  evidence_required_for_markdown_artifacts: true
+  forbidden_state_count: 0
+  secret_like_value_count: 0
+reviewRequired:
+  allowed:
+    - ambiguous dependency metadata
+    - draft Java/MyBatis file bundle
+    - incomplete full CanonicalAnalysisModel contract
+forbidden:
+  - automatic publish
+  - row data access
+  - automatic DDL execution
