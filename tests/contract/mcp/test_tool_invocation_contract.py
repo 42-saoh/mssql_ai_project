@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+from fastapi.testclient import TestClient
+
+from mssql_mcp_app.main import app
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
+    "get_procedure_definition": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "procedureName": "usp_GetOrderSummary",
+    },
+    "get_procedure_parameters": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "procedureName": "usp_GetOrderSummary",
+    },
+    "get_procedure_dependencies": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "procedureName": "usp_GetOrderSummary",
+    },
+    "get_related_db_objects": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "objectName": "usp_GetOrderSummary",
+        "objectType": "PROCEDURE",
+        "topK": 5,
+    },
+    "get_table_schema": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "tableName": "TB_ORDER",
+    },
+    "get_table_constraints": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "tableName": "TB_ORDER",
+    },
+    "get_table_indexes": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "tableName": "TB_ORDER",
+    },
+    "get_extended_properties": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "objectName": "TB_ORDER",
+        "objectType": "TABLE",
+    },
+    "get_view_definition": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "viewName": "VW_ORDER_SUMMARY",
+    },
+    "get_function_definition": {
+        "dbProfileId": "pfl",
+        "schema": "dbo",
+        "functionName": "fn_NormalizeOrderStatus",
+    },
+    "search_tables": {
+        "dbProfileId": "pfl",
+        "physicalName": "ORDER",
+        "columns": ["ORDER_ID", "CUSTOMER_ID"],
+        "topK": 3,
+    },
+    "search_columns": {
+        "dbProfileId": "pfl",
+        "physicalName": "ORDER_ID",
+        "topK": 3,
+    },
+    "find_similar_tables": {
+        "dbProfileId": "pfl",
+        "description": "order",
+        "columns": [
+            {"name": "ORDER_ID", "type": "INT"},
+            {"name": "CUSTOMER_ID", "type": "INT"},
+        ],
+        "topK": 3,
+    },
+}
+
+
+def test_catalog_contract_declares_all_active_tool_invocations() -> None:
+    payload = yaml.safe_load(
+        (REPO_ROOT / "spec" / "mcp" / "mssql_metadata_tool_catalog.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert payload["service"] == "mssqlMetadata"
+    assert payload["readOnly"] is True
+    assert {tool["name"] for tool in payload["tools"]} == set(TOOL_INVOCATIONS)
+    assert all(tool["active"] is True and tool["readOnly"] is True for tool in payload["tools"])
+
+
+@pytest.mark.parametrize("tool_name, arguments", TOOL_INVOCATIONS.items())
+def test_fixture_backed_tool_contract(
+    tool_name: str,
+    arguments: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(f"/tools/{tool_name}/invoke", json={"arguments": arguments})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["toolName"] == tool_name
+    assert payload["dbProfileId"] == "pfl"
+    assert payload["snapshotId"] == "mcp-fixture-snapshot-0001"
+    assert payload["collectedAt"] == "2026-01-15T00:00:00Z"
+    assert payload["evidenceRefs"]
+    assert payload["data"]
+    assert "error" not in payload
+    for evidence_ref in payload["evidenceRefs"]:
+        assert evidence_ref["source"] == "fixture"
+        assert evidence_ref["path"].startswith("fixtures/mcp/")
+
+
+def test_tool_error_response_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/get_table_schema/invoke",
+        json={"arguments": {"dbProfileId": "pfl", "schema": "dbo", "tableName": "NOPE"}},
+    )
+
+    assert response.status_code == 404
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["toolName"] == "get_table_schema"
+    assert payload["dbProfileId"] == "pfl"
+    assert payload["error"]["code"] == "OBJECT_NOT_FOUND"
+    assert "data" not in payload

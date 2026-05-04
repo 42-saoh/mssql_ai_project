@@ -39,13 +39,33 @@ MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog
 - `GET /health/ready`
 - `GET /config/db-profiles`
 - `GET /catalog/tools`
+- `POST /tools/{toolName}/invoke`
+
+## Tool invocation
+
+MVP tool execution uses structured arguments only:
+
+```json
+{
+  "arguments": {
+    "dbProfileId": "pfl",
+    "schema": "dbo",
+    "tableName": "TB_ORDER"
+  }
+}
+```
+
+The response always carries `snapshotId`, `collectedAt`, `evidenceRefs`, and either
+`data` or a documented `error.code`. The default execution path is fixture-backed
+metadata from `fixtures/mcp/metadata_snapshot.json`, so tests do not require a live
+SQL Server. When `MSSQL_ENABLE_LIVE_METADATA=1`, readiness uses the live connection
+probe and tool execution is routed to the live adapter boundary.
 
 ## 다음 구현 우선순위
 
-1. tool schema 를 `spec/mcp/mssql_metadata_tool_catalog.yaml` 와 동기화
-2. adapter layer 에 metadata read-only query 구현
-3. contract tests 추가
-4. 실제 MCP transport 연결
+1. live adapter 에 metadata read-only query 구현
+2. 실제 MCP transport 연결
+3. fixture set 확장과 optional integration smoke 추가
 
 ## 외부 DB 연결 주의
 

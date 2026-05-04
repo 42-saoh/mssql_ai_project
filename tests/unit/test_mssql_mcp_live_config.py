@@ -62,3 +62,7 @@ def test_db_profiles_endpoint_returns_public_registry() -> None:
     payload = response.json()
     assert payload["defaultProfileId"] == "pfl"
     assert any(profile["database"] == "PFL" for profile in payload["profiles"])
+    for profile in payload["profiles"]:
+        assert "password" not in profile
+        assert "connectionString" not in profile
+        assert "metadata_password" not in profile
