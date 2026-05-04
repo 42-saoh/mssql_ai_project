@@ -2,6 +2,12 @@
 # This keeps credentials out of source control while giving Codex workers a stable
 # shared set of database profile ids. Add more profiles under the same shape when needed.
 
+# DB role convention:
+# - master: server-level metadata profile
+# - plf: platform DB profile (PLF)
+# - ppm: pilot analysis target DB profile (PPM)
+# Do not substitute PLF when PPM is missing or inaccessible.
+
 defaultProfileId: master
 profiles:
   - id: plf
@@ -13,3 +19,8 @@ profiles:
     label: Server metadata (master)
     database: master
     purpose: server
+
+  - id: ppm
+    label: Pilot Analysis Target DB (PPM)
+    database: PPM
+    purpose: pilot-analysis-target

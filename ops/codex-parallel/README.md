@@ -30,3 +30,23 @@
 - 병렬 worker 검증은 기본적으로 저장소의 도커 테스트 명령을 사용한다.
 - 외부 DB 가 필요하면 worktree 별 `.env` 또는 승인된 환경변수만 주입하고, repo 차원의 DB up/down 을 추가하지 않는다.
 - `pnpm-lock.yaml` 과 `requirements/lock/py311-dev.txt` 를 재현성 기준으로 삼는다.
+
+
+## P07 이후 Productization Prompt Pack
+
+P08A~P16은 기존 P00~P07 starter/MVP 병렬 개발 철학을 유지하면서 productization으로 전환하기 위한 후속 prompt pack이다.
+
+추가 프롬프트:
+
+- `prompts/08a_ppm_pilot_object_discovery_selection.md`
+- `prompts/08_product_architecture_release_backlog.md`
+- `prompts/09_api_workflow_productization.md`
+- `prompts/10_mssql_mcp_productization.md`
+- `prompts/11_sp_analysis_evidence_engine.md`
+- `prompts/12_java_mybatis_generation_factory.md`
+- `prompts/13_validation_approval_audit.md`
+- `prompts/14_web_product_ui.md`
+- `prompts/15_eval_observability_security_ops.md`
+- `prompts/16_pilot_release_readiness.md`
+
+DB 역할은 `PLF = platform DB`, `PPM = pilot analysis target DB` 로 고정한다. PPM이 없거나 live metadata 권한이 없으면 PLF로 대체하지 않고 blocker로 보고한다. P08A가 만든 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 은 이후 worker가 공통으로 참조한다. 이 manifest가 `template_only` 상태이면 worker는 실제 object 이름을 임의로 만들지 않는다.

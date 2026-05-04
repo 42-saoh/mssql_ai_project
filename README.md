@@ -1,7 +1,7 @@
 # MSSQL Analysis Agent Platform Starter
 
 MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생성, 검증/승인 흐름을 위한 중앙 Agent 플랫폼 starter 저장소다.
-현재 코드는 병렬 구현 트랙이 병합된 초기 통합 상태이며, 기본 검증은 fixture/stub 기반으로 동작한다.
+현재 코드는 병렬 구현 트랙이 병합된 초기 통합 상태이며, 기본 검증은 fixture/stub 기반으로 동작한다. P07 이후 productization wave 는 `ops/codex-parallel` 의 P08A~P16 prompt pack 기준으로 이어간다.
 
 ## 포함 항목
 
@@ -92,7 +92,7 @@ MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생�
 - 플랫폼 DB 와 메타데이터 소스 DB 는 저장소 밖의 외부 환경에서 관리한다.
 - 저장소는 DB 기동/중지 자동화를 제공하지 않는다.
 - 스키마 변경이 필요하면 `db/schema/` 아래에 버전 업 SQL 파일을 추가하고, 실제 적용은 사용자가 수동으로 수행한다.
-- 기본 metadata profile id 는 `master` 이며 `config/mssql/local_docker_profiles.yaml` 의 `master -> master`, `plf -> PLF` 매핑을 사용한다.
+- 기본 metadata profile id 는 `master` 이며 `config/mssql/local_docker_profiles.yaml` 의 `master -> master`, `plf -> PLF`, `ppm -> PPM` 매핑을 사용한다. `PLF` 는 platform DB, `PPM` 은 pilot analysis target DB 이며, PPM 이 없거나 접근 불가하면 PLF로 임의 대체하지 않는다.
 - 기본 e2e/eval 경로는 `fixtures/mcp/metadata_snapshot.json` 기반이므로 live MSSQL 이 필요하지 않다.
 
 ## Docker 기반 검증

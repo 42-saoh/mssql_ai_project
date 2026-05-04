@@ -61,7 +61,7 @@ python -m compileall apps services packages tests
 - `.env.example` 은 비밀값 없는 샘플이다. 실제 credential 은 `.env`, `.env.local`, OS keychain 등 저장소 밖/비커밋 경로에 둔다.
 - 로컬 Docker MSSQL 을 붙일 때는 `.env` 를 만들고 `PLATFORM_DB_*`, `MSSQL_METADATA_*` 를 채운다.
 - metadata profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 공유 기준으로 사용한다.
-- 기본 profile id 는 `plf` 이며, 같은 SQL Server 인스턴스의 `PLF`, `master` 등 DB 는 profile 로 분리한다.
+- 기본 metadata profile id 는 `master`, platform profile id 는 `plf`(`PLF`), pilot analysis target profile id 는 `ppm`(`PPM`) 이다. 같은 SQL Server 인스턴스의 DB는 profile 로 분리한다. PPM 이 없거나 접근 불가하면 PLF로 대체하지 않고 blocker 로 보고한다.
 - host-run 은 `127.0.0.1`, `docker/test` 내부 연결은 `host.docker.internal` 기본값을 사용한다.
 - `.env.example` 이 있더라도 새 작업의 기본 복사 원본은 비밀값 없는 `.env.example` 로 둔다.
 
@@ -158,3 +158,46 @@ make test-web-smoke
 - 가능한 기본 검증은 `make test` 와 `make test-web-smoke` 를 사용한다.
 - 외부 DB 가 필요한 경우 각 worktree 에 환경변수만 주입하고, 저장소 차원의 DB up/down 절차는 만들지 않는다.
 - Web 테스트는 `pnpm-lock.yaml` 이 커밋된 상태를 기본으로 삼고, 잠금 없는 설치는 예외 상황에서만 허용한다.
+
+
+## 13. P07 이후 Productization Wave 운영
+
+P00~P07은 starter/MVP 통합을 위한 기존 기준선으로 유지한다. P08A~P16은 같은 worktree/Docker/read-only metadata/draft-only/approval-gated 철학을 유지하면서 productization target으로 전환하는 후속 wave다.
+
+### DB 역할 기준
+
+- `PLF`: platform DB. workflow/artifact/approval/audit 저장소 기준이다.
+- `PPM`: pilot analysis target DB. 대표 SP/Table/View/Function 후보 선정 및 이후 eval/demo/golden 후보 기준이다.
+- `PPM`이 같은 로컬 MSSQL 인스턴스에 없거나 접근 권한이 없으면 PLF로 대체하지 않는다. `PPM_DB_NOT_FOUND`, `PPM_DB_ACCESS_DENIED`, `LIVE_METADATA_UNAVAILABLE` 등 blocker로 보고한다.
+- `config/mssql/local_docker_profiles.yaml` 의 `ppm -> PPM`, `plf -> PLF`, `master -> master` profile 구분을 사용한다.
+
+### Productization worktree 예시
+
+```bash
+git worktree add ../wt/p08a-ppm-pilot-object-selection -b feat/p08a-ppm-pilot-object-selection
+git worktree add ../wt/p08-product-architecture-backlog -b feat/p08-product-architecture-backlog
+git worktree add ../wt/p09-api-workflow-productization -b feat/p09-api-workflow-productization
+git worktree add ../wt/p10-mssql-mcp-productization -b feat/p10-mssql-mcp-productization
+git worktree add ../wt/p11-sp-analysis-evidence -b feat/p11-sp-analysis-evidence
+git worktree add ../wt/p12-java-mybatis-generation-factory -b feat/p12-java-mybatis-generation-factory
+git worktree add ../wt/p13-validation-approval-audit -b feat/p13-validation-approval-audit
+git worktree add ../wt/p14-web-product-ui -b feat/p14-web-product-ui
+git worktree add ../wt/p15-eval-observability-security-ops -b feat/p15-eval-observability-security-ops
+git worktree add ../wt/p16-pilot-release-readiness -b feat/p16-pilot-release-readiness
+```
+
+### Productization 실행 순서
+
+1. `P08A` — PPM pilot object selection. live metadata 가능 시 실제 metadata 기반 선정, 불가 시 template-only와 blocker 기록.
+2. `P08` — product architecture, release backlog, acceptance criteria.
+3. `P09`~`P12` — API/MCP/analysis/generation productization 병렬 또는 의존성 순차 구현.
+4. `P13`~`P15` — validation/approval/audit, Web UI, eval/observability/security/ops 고도화.
+5. `P16` — pilot release readiness, handoff package, go/no-go 판정.
+
+### Productization 공통 규칙
+
+- `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 은 P08A 이후 worker가 공통으로 읽는 pilot 기준이다.
+- selected object manifest가 `selection_mode: template_only`이면 worker는 실제 object 이름을 임의 생성하지 않는다.
+- shared contract/policy/common 파일(`packages/domain`, `spec/openapi`, `spec/policy`, `db/schema`, 루트 정책 문서 등) 변경이 필요하면 worker가 직접 수정하지 않고 coordinator에게 blocker로 보고한다.
+- Java/MyBatis 생성물은 계속 draft-only이며 사람이 최종 검토/승인한다.
+- metadata-only 경계는 유지한다. 실제 row data 조회, procedure 실행, 자동 DDL, 운영 DB 직접 변경은 금지한다.

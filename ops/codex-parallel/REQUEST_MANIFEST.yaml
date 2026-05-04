@@ -1,4 +1,4 @@
-plan_id: codex-parallel-local-v2
+plan_id: codex-parallel-local-v3-productization
 project: MSSQL 분석·문서화·전환코드 생성 Agent 구축
 mode: local-codex-cli-worktrees
 basis:
@@ -15,6 +15,8 @@ basis:
   - spec/policy/platform_db_standardization_rules_for_ai.json
   - .env.example
   - pnpm-lock.yaml
+  - config/mssql/local_docker_profiles.yaml
+  - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
 profiles:
   coordinator: safe-explore
   worker: dev-edit
@@ -58,6 +60,17 @@ shared_read_only_after_p00:
   - docker/test/
   - requirements/lock/
   - pnpm-lock.yaml
+  - config/mssql/local_docker_profiles.yaml
+productization_read_only_after_p08a:
+  - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+  - fixtures/pilot/ppm_object_selection_v1/candidate_inventory_template.yaml
+  - PROJECT.md
+  - ARCHITECTURE.md
+  - POLICY.md
+  - EVAL_SPEC.md
+  - spec/openapi/
+  - spec/policy/
+  - db/schema/
 waves:
   - wave: W0
     description: baseline freeze and shared contract drift check
@@ -242,4 +255,249 @@ waves:
           - make dev-ports
           - make test
           - make test-web-smoke
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07]
+
+  - wave: W4
+    description: productization wave foundation and pilot object selection
+    tracks:
+      - id: P08A
+        branch: feat/p08a-ppm-pilot-object-selection
+        worktree: ../wt/p08a-ppm-pilot-object-selection
+        prompt: prompts/08a_ppm_pilot_object_discovery_selection.md
+        role: mcp_engineer
+        skills: [mcp-tooling-design, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P07]
+        target_paths:
+          - fixtures/pilot/ppm_object_selection_v1/
+          - tests/contract/test_ppm_pilot_object_selection_assets.py
+        readonly_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - EVAL_SPEC.md
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+          - services/mssql-mcp/
+          - spec/mcp/
+        verify:
+          - python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py
+          - python -m compileall tests
+      - id: P08
+        branch: feat/p08-product-architecture-backlog
+        worktree: ../wt/p08-product-architecture-backlog
+        prompt: prompts/08_product_architecture_release_backlog.md
+        role: architect
+        skills: [repo-bootstrap, docs-sync, quality-gate-review]
+        depends_on: [P08A]
+        target_paths:
+          - docs/
+          - ops/codex-parallel/
+          - fixtures/eval/
+          - tests/contract/test_codex_productization_prompt_pack_assets.py
+        readonly_paths:
+          - apps/
+          - services/
+          - packages/
+          - spec/openapi/
+          - spec/mcp/
+          - spec/validation/
+          - spec/policy/
+          - db/schema/
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - python -m pytest tests/contract/test_codex_productization_prompt_pack_assets.py tests/contract/test_ppm_pilot_object_selection_assets.py
+  - wave: W5
+    description: productization implementation tracks by bounded domain
+    tracks:
+      - id: P09
+        branch: feat/p09-api-workflow-productization
+        worktree: ../wt/p09-api-workflow-productization
+        prompt: prompts/09_api_workflow_productization.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P08]
+        target_paths:
+          - apps/api/
+          - tests/integration/api/
+          - tests/unit/api/
+          - fixtures/eval/
+        readonly_paths:
+          - packages/
+          - services/mssql-mcp/
+          - spec/
+          - db/schema/
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/integration/api tests/unit/api"
+          - python -m compileall apps/api tests/integration/api tests/unit/api
+      - id: P10
+        branch: feat/p10-mssql-mcp-productization
+        worktree: ../wt/p10-mssql-mcp-productization
+        prompt: prompts/10_mssql_mcp_productization.md
+        role: mcp_engineer
+        skills: [mcp-tooling-design, contract-to-code, quality-gate-review]
+        depends_on: [P08A]
+        target_paths:
+          - services/mssql-mcp/
+          - spec/mcp/
+          - tests/contract/mcp/
+          - tests/unit/mcp/
+          - tests/unit/test_mcp_catalog.py
+          - tests/unit/test_mssql_mcp_live_config.py
+          - tests/contract/test_local_mssql_connection_assets.py
+          - fixtures/mcp/
+        readonly_paths:
+          - apps/
+          - packages/domain/
+          - spec/openapi/
+          - spec/policy/
+          - db/schema/
+          - .env.example
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/unit/test_mssql_mcp_live_config.py tests/contract/test_local_mssql_connection_assets.py"
+          - python -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp
+      - id: P11
+        branch: feat/p11-sp-analysis-evidence
+        worktree: ../wt/p11-sp-analysis-evidence
+        prompt: prompts/11_sp_analysis_evidence_engine.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P08A, P10]
+        target_paths:
+          - packages/analysis/
+          - tests/unit/analysis/
+          - fixtures/analysis/
+          - fixtures/eval/
+        readonly_paths:
+          - packages/domain/
+          - services/mssql-mcp/
+          - spec/
+          - db/schema/
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/analysis"
+          - python -m compileall packages/analysis tests/unit/analysis
+      - id: P12
+        branch: feat/p12-java-mybatis-generation-factory
+        worktree: ../wt/p12-java-mybatis-generation-factory
+        prompt: prompts/12_java_mybatis_generation_factory.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P08A, P11]
+        target_paths:
+          - packages/generation/
+          - tests/unit/generation/
+          - fixtures/generation/
+          - packages/templates/
+        readonly_paths:
+          - packages/domain/
+          - packages/analysis/
+          - packages/validation/
+          - spec/
+          - db/schema/
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/generation tests/contract/test_generation_goldens_and_repro_assets.py"
+          - python -m compileall packages/generation tests/unit/generation
+  - wave: W6
+    description: validation, web, evaluation, observability, security, ops productization
+    tracks:
+      - id: P13
+        branch: feat/p13-validation-approval-audit
+        worktree: ../wt/p13-validation-approval-audit
+        prompt: prompts/13_validation_approval_audit.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P09, P11, P12]
+        target_paths:
+          - packages/validation/
+          - tests/unit/validation/
+          - fixtures/eval/
+          - apps/api/
+          - tests/unit/api/
+          - tests/integration/api/
+        readonly_paths:
+          - packages/domain/
+          - packages/analysis/
+          - packages/generation/
+          - services/mssql-mcp/
+          - spec/
+          - db/schema/
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/validation tests/unit/api tests/integration/api"
+          - python -m compileall packages/validation apps/api tests/unit/validation tests/unit/api tests/integration/api
+      - id: P14
+        branch: feat/p14-web-product-ui
+        worktree: ../wt/p14-web-product-ui
+        prompt: prompts/14_web_product_ui.md
+        role: platform_worker
+        skills: [contract-to-code, browser-automation-smoke]
+        depends_on: [P09]
+        target_paths:
+          - apps/web/
+          - tests/unit/web/
+        readonly_paths:
+          - apps/api/
+          - services/
+          - packages/
+          - spec/
+          - db/schema/
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test-web-smoke
+      - id: P15
+        branch: feat/p15-eval-observability-security-ops
+        worktree: ../wt/p15-eval-observability-security-ops
+        prompt: prompts/15_eval_observability_security_ops.md
+        role: docs_curator
+        skills: [eval-fixture-authoring, docs-sync, quality-gate-review]
+        depends_on: [P13, P14]
+        target_paths:
+          - fixtures/eval/
+          - tests/eval/
+          - tests/e2e/
+          - docs/
+          - ops/codex-parallel/
+          - docker/test/
+        readonly_paths:
+          - apps/
+          - services/
+          - packages/
+          - spec/
+          - db/schema/
+          - .env.example
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/e2e tests/eval"
+          - python -m compileall tests
+  - wave: W7
+    description: pilot release readiness and handoff
+    tracks:
+      - id: P16
+        branch: feat/p16-pilot-release-readiness
+        worktree: ../wt/p16-pilot-release-readiness
+        prompt: prompts/16_pilot_release_readiness.md
+        role: reviewer
+        skills: [quality-gate-review, docs-sync]
+        depends_on: [P15]
+        target_paths:
+          - docs/
+          - fixtures/eval/
+          - ops/codex-parallel/
+          - tests/eval/
+        readonly_paths:
+          - apps/
+          - services/
+          - packages/
+          - spec/
+          - db/schema/
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test
+          - make test-web-smoke
+          - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+          - python -m compileall apps services packages tests
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16]

@@ -14,6 +14,7 @@ def test_local_docker_profile_registry_exists() -> None:
     assert payload["defaultProfileId"] == "master"
     assert any(profile["database"] == "master" for profile in payload["profiles"])
     assert any(profile["database"] == "PLF" for profile in payload["profiles"])
+    assert any(profile["id"] == "ppm" and profile["database"] == "PPM" for profile in payload["profiles"])
 
 
 
