@@ -14,6 +14,12 @@ def test_parallel_docker_assets_exist() -> None:
     compose = (root / "docker" / "test" / "docker-compose.yml").read_text(encoding="utf-8")
     assert "WORKTREE_PATH" in compose
     assert "type: bind" in compose
+    assert "PNPM_STORE_DIR: /pnpm/store" in compose
+    assert "NPM_CONFIG_STORE_DIR: /pnpm/store" in compose
+
+    web_install = (root / "scripts" / "install_web_workspace.sh").read_text(encoding="utf-8")
+    assert "--store-dir" in web_install
+    assert ".pnpm-store" not in web_install
 
     runbook = (root / "ops" / "codex-parallel" / "PARALLEL_RUNBOOK.md").read_text(encoding="utf-8")
     assert "make docker-project-name" in runbook

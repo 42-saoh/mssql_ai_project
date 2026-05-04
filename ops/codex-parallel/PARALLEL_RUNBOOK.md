@@ -55,6 +55,7 @@ make test-build
 python -m compileall apps services packages tests
 ```
 
+- 호스트에 `python` alias 가 없으면 `python3 -m compileall apps services packages tests` 로 같은 compile-only 검증을 수행한다.
 - `pnpm-lock.yaml` 은 현재 기준 저장소에 존재한다. coordinator 는 잠금 파일을 임의 재생성하지 말고 필요 시 명시적인 dependency 변경 작업에서만 갱신한다.
 - Python 의존성은 `requirements/lock/py311-dev.txt` 와 `scripts/install_python_locked.sh` 기준으로 맞춘다.
 - `.env.example` 은 비밀값 없는 샘플이다. 실제 credential 은 `.env`, `.env.local`, OS keychain 등 저장소 밖/비커밋 경로에 둔다.
@@ -103,6 +104,7 @@ codex --profile dev-edit
 - 슬롯을 사람이 고정하고 싶으면 `WORKTREE_PORT_SLOT=21 make dev-ports` 처럼 override 한다.
 - API/MCP/Web worker 는 하드코딩된 8000/8100/3000 을 전제로 하지 말고 `make run-api`, `make run-mcp`, `make run-web` 를 사용한다.
 - `.env.example` 의 `APP_PORT`, `MCP_PORT`, `WEB_PORT` 는 비워 두는 것이 기본이다. 그래야 Makefile 이 worktree 기준 포트를 계산한다.
+- `.env.example` 의 password/token 값도 비워 둔다. worker 는 실제 credential 을 공유 계약 파일에 기록하지 않는다.
 
 ## 8. 운영 규칙
 

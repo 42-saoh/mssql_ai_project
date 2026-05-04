@@ -5,16 +5,31 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 PNPM_BIN=${PNPM:-pnpm}
 LOCK_FILE="$REPO_ROOT/pnpm-lock.yaml"
+STORE_DIR=${PNPM_STORE_DIR:-${NPM_CONFIG_STORE_DIR:-}}
+
+install_with_lockfile() {
+  if [ -n "$STORE_DIR" ]; then
+    exec "$PNPM_BIN" install --frozen-lockfile --store-dir "$STORE_DIR"
+  fi
+  exec "$PNPM_BIN" install --frozen-lockfile
+}
+
+install_without_lockfile() {
+  if [ -n "$STORE_DIR" ]; then
+    exec "$PNPM_BIN" install --no-frozen-lockfile --store-dir "$STORE_DIR"
+  fi
+  exec "$PNPM_BIN" install --no-frozen-lockfile
+}
 
 cd "$REPO_ROOT"
 
 if [ -f "$LOCK_FILE" ]; then
-  exec "$PNPM_BIN" install --frozen-lockfile
+  install_with_lockfile
 fi
 
 if [ "${ALLOW_UNLOCKED_PNPM_INSTALL:-0}" = "1" ]; then
   echo "WARN: pnpm-lock.yaml missing; proceeding with unlocked install because ALLOW_UNLOCKED_PNPM_INSTALL=1" >&2
-  exec "$PNPM_BIN" install --no-frozen-lockfile
+  install_without_lockfile
 fi
 
 cat >&2 <<'EOF'

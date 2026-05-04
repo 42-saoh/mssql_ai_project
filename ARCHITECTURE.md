@@ -216,6 +216,12 @@ packages/templates
 
 - OpenAPI 초안: `spec/openapi/ai_agent_platform_openapi_v1.yaml`
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
+- Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
+- MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- Validation rules: `spec/validation/validation_rules.yaml`
+- Policy assets: `spec/policy/`
+
+DDL v2 의 persisted enum 이름을 storage 기준으로 삼고, OpenAPI 의 요청 `outputs` 는 사용자-facing 그룹(`RequestedOutputType`)으로 유지한다. 요청 output 은 domain 의 mapping 을 통해 하나 이상의 persisted `ArtifactType` 으로 연결한다.
 
 ## 아키텍처 결정 체크리스트
 

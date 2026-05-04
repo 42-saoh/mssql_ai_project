@@ -137,8 +137,15 @@ repo/
 
 - OpenAPI 초안: `spec/openapi/ai_agent_platform_openapi_v1.yaml`
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
+- Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
+- MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- Validation rules: `spec/validation/validation_rules.yaml`
+- Machine-readable policy assets: `spec/policy/`
+- Environment sample: `.env.example`
+- Dockerized test runner: `docker/test/docker-compose.yml`
+- Reproducibility locks: `requirements/lock/py311-dev.txt`, `pnpm-lock.yaml`
 
-이 두 파일은 현재 아키텍처 설계의 출발점이다. 구현이 바뀌면 문서와 함께 갱신한다.
+이 파일들은 현재 병렬 개발의 공유 기준선이다. Wave 0 이후 worker 는 `packages/domain`, `spec/openapi`, `db/schema`, `spec/policy`, `docker/test`, 루트 문서를 읽기 전용 기준으로 사용하고, 변경이 필요하면 코디네이터에게 blocker 로 올린다.
 
 ## 병합 starter 추가 디렉터리
 
@@ -171,3 +178,4 @@ repo/
 - 기본 검증은 `docker/test/` 아래 테스트 러너를 통해 수행한다.
 - 외부 DB 가 필요한 테스트는 환경변수로 연결하되, 저장소가 DB lifecycle 을 관리하지는 않는다.
 - Web 계열은 전용 자동화가 자리잡기 전까지 컨테이너 기반 build smoke 와 Playwright MCP smoke 를 병행할 수 있다.
+- 호스트에 `python` 명령이 없으면 `PYTHON=python3` 또는 `python3 -m compileall ...` 로 동일 검증을 수행한다.

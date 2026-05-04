@@ -13,20 +13,42 @@ tools:
         procedureName: { type: string }
         snapshotMode: { type: string, enum: [LATEST, PINNED] }
         snapshotId: { type: string }
-    output:
+
+  - name: get_procedure_parameters
+    description: Return stored procedure parameter metadata.
+    input:
       type: object
+      required: [dbProfileId, schema, procedureName]
       properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        procedureName: { type: string }
+        snapshotMode: { type: string, enum: [LATEST, PINNED] }
         snapshotId: { type: string }
-        collectedAt: { type: string, format: date-time }
-        definition: { type: string }
-        evidenceRefs:
-          type: array
-          items:
-            type: object
-            properties:
-              type: { type: string }
-              objectRef: { type: string }
-              locator: { type: string }
+
+  - name: get_procedure_dependencies
+    description: Return stored procedure dependency metadata.
+    input:
+      type: object
+      required: [dbProfileId, schema, procedureName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        procedureName: { type: string }
+        snapshotMode: { type: string, enum: [LATEST, PINNED] }
+        snapshotId: { type: string }
+
+  - name: get_related_db_objects
+    description: Return related table/view/function objects.
+    input:
+      type: object
+      required: [dbProfileId, schema, objectName, objectType]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        objectName: { type: string }
+        objectType: { type: string, enum: [PROCEDURE, TABLE, VIEW, FUNCTION] }
+        topK: { type: integer, default: 20 }
 
   - name: get_table_schema
     description: Return columns and data types for a table.
@@ -37,6 +59,61 @@ tools:
         dbProfileId: { type: string }
         schema: { type: string }
         tableName: { type: string }
+
+  - name: get_table_constraints
+    description: Return PK/FK/UQ/CHECK constraints for a table.
+    input:
+      type: object
+      required: [dbProfileId, schema, tableName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        tableName: { type: string }
+
+  - name: get_table_indexes
+    description: Return index metadata for a table.
+    input:
+      type: object
+      required: [dbProfileId, schema, tableName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        tableName: { type: string }
+
+  - name: get_extended_properties
+    description: Return descriptions and logical names.
+    input:
+      type: object
+      required: [dbProfileId, schema, objectName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        objectName: { type: string }
+        objectType: { type: string, enum: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION] }
+
+  - name: get_view_definition
+    description: Return view definition metadata.
+    input:
+      type: object
+      required: [dbProfileId, schema, viewName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        viewName: { type: string }
+        snapshotMode: { type: string, enum: [LATEST, PINNED] }
+        snapshotId: { type: string }
+
+  - name: get_function_definition
+    description: Return function definition metadata.
+    input:
+      type: object
+      required: [dbProfileId, schema, functionName]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        functionName: { type: string }
+        snapshotMode: { type: string, enum: [LATEST, PINNED] }
+        snapshotId: { type: string }
 
   - name: search_tables
     description: Search tables by name, description, or column structure.
@@ -53,8 +130,21 @@ tools:
           items: { type: string }
         topK: { type: integer, default: 5 }
 
+  - name: search_columns
+    description: Search columns by physical/logical name or description.
+    input:
+      type: object
+      required: [dbProfileId]
+      properties:
+        dbProfileId: { type: string }
+        physicalName: { type: string }
+        logicalName: { type: string }
+        description: { type: string }
+        tableName: { type: string }
+        topK: { type: integer, default: 5 }
+
   - name: find_similar_tables
-    description: Recommend similar tables using metadata similarity signals.
+    description: Recommend similar tables using metadata signals.
     input:
       type: object
       required: [dbProfileId, columns]
@@ -65,6 +155,7 @@ tools:
           type: array
           items:
             type: object
+            required: [name]
             properties:
               name: { type: string }
               type: { type: string }

@@ -93,9 +93,12 @@
 ## 환경 파일 규칙
 
 - `.env.example` 를 항상 유지한다.
+- `.env.example` 은 비밀값 없는 샘플이며 password/token 값은 비워 둔다.
 - 실제 비밀 값은 `.env.local` 또는 OS keychain 에 둔다.
 - 비밀 값은 테스트 fixture, snapshot, log, docs 에 넣지 않는다.
 - MCP/DB 연결 문자열은 로컬 개발용 프로필과 분리한다.
+- 기본 platform profile id 는 `plf` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
+- 기본 metadata profile id 는 `master` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
 
 ## 로그와 추적
 
@@ -134,5 +137,6 @@
 - `docker/test/docker-compose.yml` 이 기본 테스트 러너 정의를 가진다.
 - `make test` 는 파이썬 테스트를 컨테이너 안에서 실행한다.
 - `make test-web-smoke` 는 현재 web 자동 테스트 공백을 보완하는 컨테이너 기반 build smoke 다.
+- `scripts/install_web_workspace.sh` 는 docker/test 에서 `/pnpm/store` volume 을 pnpm store 로 사용해 worktree 안에 `.pnpm-store` 를 만들지 않는다.
 - 새 테스트 스위트를 추가할 때는 가능하면 도커 실행 경로를 함께 제공한다.
 - 외부 DB 연결이 필요한 경우 환경변수로 주입하되, 테스트 명령이 DB lifecycle 을 대신 관리하지는 않는다.

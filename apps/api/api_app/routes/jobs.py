@@ -7,7 +7,7 @@ _JOBS = {
         "jobId": "job_demo_001",
         "status": "REVIEW_PENDING",
         "requestId": "req_demo_001",
-        "currentStep": "VALIDATING",
+        "currentStep": "VALIDATE",
     }
 }
 

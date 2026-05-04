@@ -14,6 +14,40 @@ class JobStatus(StrEnum):
     REJECTED = "REJECTED"
     PUBLISHED = "PUBLISHED"
     FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+
+class WorkflowStepType(StrEnum):
+    COLLECT_METADATA = "COLLECT_METADATA"
+    ANALYZE = "ANALYZE"
+    GENERATE = "GENERATE"
+    VALIDATE = "VALIDATE"
+    REVIEW = "REVIEW"
+    PUBLISH = "PUBLISH"
+
+
+class JobStepStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
+class ArtifactType(StrEnum):
+    SP_ANALYSIS_DOC = "SP_ANALYSIS_DOC"
+    DEPENDENCY_REPORT = "DEPENDENCY_REPORT"
+    METADATA_QUERY_RESULT = "METADATA_QUERY_RESULT"
+    SCHEMA_ENRICHMENT_RESULT = "SCHEMA_ENRICHMENT_RESULT"
+    MAPPER_XML = "MAPPER_XML"
+    MAPPER_INTERFACE = "MAPPER_INTERFACE"
+    SERVICE_DRAFT = "SERVICE_DRAFT"
+    DTO_DRAFT = "DTO_DRAFT"
+    VO_DRAFT = "VO_DRAFT"
+    MODEL_DRAFT = "MODEL_DRAFT"
+    DDL_DRAFT = "DDL_DRAFT"
+    VALIDATION_REPORT = "VALIDATION_REPORT"
+    APPROVAL_LOG = "APPROVAL_LOG"
 
 
 class ArtifactStatus(StrEnum):
@@ -23,6 +57,34 @@ class ArtifactStatus(StrEnum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     PUBLISHED = "PUBLISHED"
+    ARCHIVED = "ARCHIVED"
+
+
+class RequestedOutputType(StrEnum):
+    SP_ANALYSIS_DOCUMENT = "SP_ANALYSIS_DOCUMENT"
+    DEPENDENCY_REPORT = "DEPENDENCY_REPORT"
+    TABLE_COLUMN_METADATA = "TABLE_COLUMN_METADATA"
+    JAVA_MYBATIS_DRAFT = "JAVA_MYBATIS_DRAFT"
+    DTO_MODEL_DRAFT = "DTO_MODEL_DRAFT"
+    DDL_DRAFT = "DDL_DRAFT"
+
+
+REQUESTED_OUTPUT_ARTIFACT_TYPES: dict[RequestedOutputType, tuple[ArtifactType, ...]] = {
+    RequestedOutputType.SP_ANALYSIS_DOCUMENT: (ArtifactType.SP_ANALYSIS_DOC,),
+    RequestedOutputType.DEPENDENCY_REPORT: (ArtifactType.DEPENDENCY_REPORT,),
+    RequestedOutputType.TABLE_COLUMN_METADATA: (ArtifactType.METADATA_QUERY_RESULT,),
+    RequestedOutputType.JAVA_MYBATIS_DRAFT: (
+        ArtifactType.MAPPER_XML,
+        ArtifactType.MAPPER_INTERFACE,
+        ArtifactType.SERVICE_DRAFT,
+    ),
+    RequestedOutputType.DTO_MODEL_DRAFT: (
+        ArtifactType.DTO_DRAFT,
+        ArtifactType.VO_DRAFT,
+        ArtifactType.MODEL_DRAFT,
+    ),
+    RequestedOutputType.DDL_DRAFT: (ArtifactType.DDL_DRAFT,),
+}
 
 
 class JobSummary(BaseModel):

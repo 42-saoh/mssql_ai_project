@@ -41,6 +41,7 @@ reproducibility:
   web_lock: pnpm-lock.yaml
   python_install_script: scripts/install_python_locked.sh
   web_install_script: scripts/install_web_workspace.sh
+  env_sample: .env.example
   env_example: .env.example
 shared_read_only_after_p00:
   - AGENTS.md
