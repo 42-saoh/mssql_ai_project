@@ -1,5 +1,4 @@
 from ai_agent_generation.artifact_types import (
-    JAVA_MYBATIS_DTO_MAPPING_BLOCKER,
     JAVA_MYBATIS_POLICY_ARTIFACT_TYPES,
     REQUESTED_OUTPUT_ALIASES,
     expand_requested_output_type,
@@ -27,7 +26,6 @@ __all__ = [
     "EvidenceRef",
     "EvidenceSource",
     "GenerationContext",
-    "JAVA_MYBATIS_DTO_MAPPING_BLOCKER",
     "JAVA_MYBATIS_POLICY_ARTIFACT_TYPES",
     "JavaMyBatisSpWrapperRenderer",
     "REQUESTED_OUTPUT_ALIASES",

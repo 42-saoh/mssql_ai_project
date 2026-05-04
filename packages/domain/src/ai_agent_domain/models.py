@@ -74,9 +74,10 @@ REQUESTED_OUTPUT_ARTIFACT_TYPES: dict[RequestedOutputType, tuple[ArtifactType, .
     RequestedOutputType.DEPENDENCY_REPORT: (ArtifactType.DEPENDENCY_REPORT,),
     RequestedOutputType.TABLE_COLUMN_METADATA: (ArtifactType.METADATA_QUERY_RESULT,),
     RequestedOutputType.JAVA_MYBATIS_DRAFT: (
-        ArtifactType.MAPPER_XML,
-        ArtifactType.MAPPER_INTERFACE,
+        ArtifactType.DTO_DRAFT,
         ArtifactType.SERVICE_DRAFT,
+        ArtifactType.MAPPER_INTERFACE,
+        ArtifactType.MAPPER_XML,
     ),
     RequestedOutputType.DTO_MODEL_DRAFT: (
         ArtifactType.DTO_DRAFT,

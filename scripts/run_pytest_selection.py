@@ -12,7 +12,7 @@ def expand_targets(raw_targets: list[str]) -> list[str]:
     for target in targets:
         path = Path(target)
         if not path.exists():
-            continue
+            raise FileNotFoundError(f"Pytest target does not exist: {target}")
         if path.is_dir():
             for item in sorted(path.rglob("test_*.py")):
                 if item.is_file():
@@ -29,10 +29,14 @@ def expand_targets(raw_targets: list[str]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    selected = expand_targets(argv[1:])
+    try:
+        selected = expand_targets(argv[1:])
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if not selected:
-        print("No matching pytest files found; skipping.")
-        return 0
+        print("No matching pytest files found.", file=sys.stderr)
+        return 2
     cmd = [sys.executable, "-m", "pytest", "-q", *selected]
     print("Running:", " ".join(cmd))
     return subprocess.call(cmd)

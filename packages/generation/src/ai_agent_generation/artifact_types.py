@@ -22,14 +22,6 @@ REQUESTED_OUTPUT_ALIASES: dict[str, tuple[ArtifactType, ...]] = {
     RequestedOutputType.DDL_DRAFT.value: (ArtifactType.DDL_DRAFT,),
 }
 
-JAVA_MYBATIS_DTO_MAPPING_BLOCKER = (
-    "Policy spWrapper defaultOutputs includes dto, while the shared domain "
-    "REQUESTED_OUTPUT_ARTIFACT_TYPES[JAVA_MYBATIS_DRAFT] omits DTO_DRAFT. "
-    "The renderer emits DTO as draft-only policy output without changing the "
-    "read-only domain/OpenAPI contract."
-)
-
-
 def expand_requested_output_type(requested_output_type: str) -> tuple[ArtifactType, ...]:
     try:
         return REQUESTED_OUTPUT_ALIASES[requested_output_type]

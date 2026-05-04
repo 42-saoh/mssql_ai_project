@@ -5,7 +5,6 @@ from pathlib import Path
 import yaml
 
 from ai_agent_generation import (
-    JAVA_MYBATIS_DTO_MAPPING_BLOCKER,
     GenerationContext,
     JavaMyBatisSpWrapperRenderer,
     expand_requested_output_type,
@@ -45,7 +44,7 @@ def test_java_mybatis_sp_wrapper_matches_golden_manifest_and_files() -> None:
         ArtifactType.MAPPER_INTERFACE.value,
         ArtifactType.MAPPER_XML.value,
     )
-    assert bundle.blockers == (JAVA_MYBATIS_DTO_MAPPING_BLOCKER,)
+    assert bundle.blockers == ()
     assert bundle.manifest.review_required is True
     assert "REVIEW_REQUIRED" in bundle.manifest.content
 

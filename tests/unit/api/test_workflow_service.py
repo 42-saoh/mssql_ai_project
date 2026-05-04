@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from ai_agent_domain import ArtifactType, JobStatus
 from api_app.schemas import SPAnalysisRequest
 from api_app.workflow import WorkflowService
@@ -103,26 +104,43 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     assert "OrderId" in contents
 
 
-def test_publish_gate_fails_without_passed_validation_even_after_approval() -> None:
+def test_approve_requires_latest_passed_validation_report() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
     artifact = next(iter(repository.artifacts.values()))
 
-    approval = service.record_approval_decision(
-        artifact_id=artifact.artifact_id,
-        decision="APPROVE",
-        reviewer="reviewer@example.com",
-        comment="record only",
-        validation_report_id=artifact.latest_validation_report_id,
-    )
+    with pytest.raises(ValueError, match="PASSED"):
+        service.record_approval_decision(
+            artifact_id=artifact.artifact_id,
+            decision="APPROVE",
+            reviewer="reviewer@example.com",
+            comment="record only",
+            validation_report_id=artifact.latest_validation_report_id,
+        )
+
     gate_report = service.evaluate_publish_gate(artifact.artifact_id)
 
-    assert approval.decision == "APPROVE"
-    assert approval.storage_decision == "APPROVED"
+    assert repository.artifacts[artifact.artifact_id].status.value == "REVIEW_PENDING"
     assert gate_report.status == "FAILED"
     assert gate_report.storage_result == "FAIL"
     assert gate_report.checks[0]["ruleId"] == "workflow.approval.before_publish"
+
+
+def test_approve_rejects_non_latest_validation_report_id() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"]))
+    artifacts = list(repository.artifacts.values())
+
+    with pytest.raises(ValueError, match="latest artifact validation"):
+        service.record_approval_decision(
+            artifact_id=artifacts[0].artifact_id,
+            decision="APPROVE",
+            reviewer="reviewer@example.com",
+            comment="wrong validation id",
+            validation_report_id=artifacts[1].latest_validation_report_id,
+        )
 
 
 def test_request_changes_decision_maps_to_storage_rejected_without_closing_review() -> None:
