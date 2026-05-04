@@ -46,6 +46,7 @@ pem:
 ```
 
 ## assumptions_and_todo
+- REVIEW_REQUIRED: 모든 파일은 draft-only 이며 수동 검토 전 실제 프로젝트 반영 금지
 - TODO: 페이징 조건 파라미터 유무 확인
 - TODO: transaction boundary 확인 후 서비스 계층 주석 보강
 - TODO: controller 필요 여부 확인
