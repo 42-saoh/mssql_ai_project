@@ -17,6 +17,12 @@ def test_mcp_health_and_catalog() -> None:
     names = {tool["name"] for tool in catalog.json()["tools"]}
     assert "get_procedure_definition" in names
     assert "find_similar_tables" in names
+    for tool in catalog.json()["tools"]:
+        assert tool["readOnly"] is True
+        assert tool["active"] is True
+        assert "input" in tool
+        assert "password" not in tool
+        assert "connectionString" not in tool
 
 
 def test_mcp_yaml_catalog_matches_service_catalog() -> None:
@@ -29,4 +35,32 @@ def test_mcp_yaml_catalog_matches_service_catalog() -> None:
 
     assert payload["service"] == "mssqlMetadata"
     assert payload["readOnly"] is True
+    assert payload["errorCodes"] == [
+        "UNKNOWN_TOOL",
+        "INVALID_ARGUMENTS",
+        "PROFILE_NOT_FOUND",
+        "OBJECT_NOT_FOUND",
+        "READ_ONLY_VIOLATION",
+        "LIVE_METADATA_UNAVAILABLE",
+        "INTERNAL_ERROR",
+    ]
     assert yaml_names == service_names
+
+
+def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
+    catalog_path = "spec/mcp/mssql_metadata_tool_catalog.yaml"
+    with open(catalog_path, encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle)
+
+    assert payload["response"]["success"]["required"] == [
+        "ok",
+        "toolName",
+        "dbProfileId",
+        "snapshotId",
+        "collectedAt",
+        "evidenceRefs",
+        "data",
+    ]
+    for tool in payload["tools"]:
+        assert tool["active"] is True
+        assert tool["readOnly"] is True

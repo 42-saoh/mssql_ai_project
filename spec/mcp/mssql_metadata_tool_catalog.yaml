@@ -1,8 +1,57 @@
 version: 0.1.0
 service: mssqlMetadata
 readOnly: true
+response:
+  success:
+    required: [ok, toolName, dbProfileId, snapshotId, collectedAt, evidenceRefs, data]
+    properties:
+      ok: { type: boolean }
+      toolName: { type: string }
+      dbProfileId: { type: string }
+      snapshotId: { type: string }
+      collectedAt: { type: string, format: date-time }
+      evidenceRefs:
+        type: array
+        items:
+          type: object
+          required: [id, source, path]
+          properties:
+            id: { type: string }
+            source: { type: string }
+            path: { type: string }
+            objectType: { type: string }
+            objectName: { type: string }
+      data: { type: object }
+  error:
+    required: [ok, toolName, error]
+    properties:
+      ok: { type: boolean }
+      toolName: { type: string }
+      dbProfileId: { type: string }
+      snapshotId: { type: string }
+      collectedAt: { type: string, format: date-time }
+      evidenceRefs:
+        type: array
+        items: { type: object }
+      error:
+        type: object
+        required: [code, message]
+        properties:
+          code: { type: string }
+          message: { type: string }
+          details: { type: object }
+errorCodes:
+  - UNKNOWN_TOOL
+  - INVALID_ARGUMENTS
+  - PROFILE_NOT_FOUND
+  - OBJECT_NOT_FOUND
+  - READ_ONLY_VIOLATION
+  - LIVE_METADATA_UNAVAILABLE
+  - INTERNAL_ERROR
 tools:
   - name: get_procedure_definition
+    active: true
+    readOnly: true
     description: Return stored procedure definition metadata.
     input:
       type: object
@@ -15,6 +64,8 @@ tools:
         snapshotId: { type: string }
 
   - name: get_procedure_parameters
+    active: true
+    readOnly: true
     description: Return stored procedure parameter metadata.
     input:
       type: object
@@ -27,6 +78,8 @@ tools:
         snapshotId: { type: string }
 
   - name: get_procedure_dependencies
+    active: true
+    readOnly: true
     description: Return stored procedure dependency metadata.
     input:
       type: object
@@ -39,6 +92,8 @@ tools:
         snapshotId: { type: string }
 
   - name: get_related_db_objects
+    active: true
+    readOnly: true
     description: Return related table/view/function objects.
     input:
       type: object
@@ -51,6 +106,8 @@ tools:
         topK: { type: integer, default: 20 }
 
   - name: get_table_schema
+    active: true
+    readOnly: true
     description: Return columns and data types for a table.
     input:
       type: object
@@ -61,6 +118,8 @@ tools:
         tableName: { type: string }
 
   - name: get_table_constraints
+    active: true
+    readOnly: true
     description: Return PK/FK/UQ/CHECK constraints for a table.
     input:
       type: object
@@ -71,6 +130,8 @@ tools:
         tableName: { type: string }
 
   - name: get_table_indexes
+    active: true
+    readOnly: true
     description: Return index metadata for a table.
     input:
       type: object
@@ -81,6 +142,8 @@ tools:
         tableName: { type: string }
 
   - name: get_extended_properties
+    active: true
+    readOnly: true
     description: Return descriptions and logical names.
     input:
       type: object
@@ -92,6 +155,8 @@ tools:
         objectType: { type: string, enum: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION] }
 
   - name: get_view_definition
+    active: true
+    readOnly: true
     description: Return view definition metadata.
     input:
       type: object
@@ -104,6 +169,8 @@ tools:
         snapshotId: { type: string }
 
   - name: get_function_definition
+    active: true
+    readOnly: true
     description: Return function definition metadata.
     input:
       type: object
@@ -116,6 +183,8 @@ tools:
         snapshotId: { type: string }
 
   - name: search_tables
+    active: true
+    readOnly: true
     description: Search tables by name, description, or column structure.
     input:
       type: object
@@ -131,6 +200,8 @@ tools:
         topK: { type: integer, default: 5 }
 
   - name: search_columns
+    active: true
+    readOnly: true
     description: Search columns by physical/logical name or description.
     input:
       type: object
@@ -144,6 +215,8 @@ tools:
         topK: { type: integer, default: 5 }
 
   - name: find_similar_tables
+    active: true
+    readOnly: true
     description: Recommend similar tables using metadata signals.
     input:
       type: object

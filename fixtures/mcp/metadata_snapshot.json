@@ -1,0 +1,333 @@
+{
+  "snapshotId": "mcp-fixture-snapshot-0001",
+  "collectedAt": "2026-01-15T00:00:00Z",
+  "source": "synthetic-fixture",
+  "procedures": [
+    {
+      "schema": "dbo",
+      "name": "usp_GetOrderSummary",
+      "isEncrypted": false,
+      "definition": "CREATE PROCEDURE dbo.usp_GetOrderSummary @OrderId INT, @IncludeLines BIT = 0 AS BEGIN SET NOCOUNT ON; SELECT o.ORDER_ID, o.CUSTOMER_ID, o.ORDER_DATE, o.STATUS_CD FROM dbo.TB_ORDER AS o WHERE o.ORDER_ID = @OrderId; END",
+      "parameters": [
+        {
+          "name": "@OrderId",
+          "dataType": "INT",
+          "direction": "IN",
+          "ordinal": 1,
+          "isNullable": false,
+          "hasDefault": false
+        },
+        {
+          "name": "@IncludeLines",
+          "dataType": "BIT",
+          "direction": "IN",
+          "ordinal": 2,
+          "isNullable": false,
+          "hasDefault": true,
+          "defaultValue": "0"
+        }
+      ],
+      "dependencies": [
+        {
+          "objectType": "TABLE",
+          "schema": "dbo",
+          "name": "TB_ORDER",
+          "dependencyType": "READ",
+          "isAmbiguous": false,
+          "reviewStatus": "CONFIRMED"
+        },
+        {
+          "objectType": "TABLE",
+          "schema": "dbo",
+          "name": "TB_ORDER_LINE",
+          "dependencyType": "READ",
+          "isAmbiguous": true,
+          "reviewStatus": "REVIEW_REQUIRED"
+        }
+      ],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Returns synthetic order header metadata for analysis fixtures.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "schema": "dbo",
+      "name": "TB_ORDER",
+      "logicalName": "Order header",
+      "description": "Synthetic order header table used for metadata-only MCP tests.",
+      "descriptionStatus": "CONFIRMED",
+      "columns": [
+        {
+          "name": "ORDER_ID",
+          "logicalName": "Order identifier",
+          "description": "Synthetic primary key for an order.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "INT",
+          "ordinal": 1,
+          "isNullable": false,
+          "isIdentity": true,
+          "isPrimaryKey": true
+        },
+        {
+          "name": "CUSTOMER_ID",
+          "logicalName": "Customer identifier",
+          "description": "Synthetic customer reference.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "INT",
+          "ordinal": 2,
+          "isNullable": false,
+          "isIdentity": false,
+          "isPrimaryKey": false
+        },
+        {
+          "name": "ORDER_DATE",
+          "logicalName": "Order date",
+          "description": "Date when the synthetic order was placed.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "DATE",
+          "ordinal": 3,
+          "isNullable": false,
+          "isIdentity": false,
+          "isPrimaryKey": false
+        },
+        {
+          "name": "STATUS_CD",
+          "logicalName": "Status code",
+          "description": "Status code description is inferred from naming and needs review.",
+          "descriptionStatus": "REVIEW_REQUIRED",
+          "dataType": "VARCHAR(30)",
+          "ordinal": 4,
+          "isNullable": false,
+          "isIdentity": false,
+          "isPrimaryKey": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "PK_TB_ORDER",
+          "constraintType": "PK",
+          "columns": ["ORDER_ID"],
+          "referencedObject": null
+        },
+        {
+          "name": "FK_TB_ORDER_CUSTOMER",
+          "constraintType": "FK",
+          "columns": ["CUSTOMER_ID"],
+          "referencedObject": {
+            "schema": "dbo",
+            "tableName": "TB_CUSTOMER",
+            "columns": ["CUSTOMER_ID"]
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "IX_TB_ORDER_CUSTOMER",
+          "isUnique": false,
+          "indexType": "NONCLUSTERED",
+          "keyColumns": ["CUSTOMER_ID"],
+          "includedColumns": ["ORDER_DATE", "STATUS_CD"]
+        }
+      ],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic order header table used for metadata-only MCP tests.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    },
+    {
+      "schema": "dbo",
+      "name": "TB_ORDER_LINE",
+      "logicalName": "Order line",
+      "description": "Synthetic order detail table.",
+      "descriptionStatus": "CONFIRMED",
+      "columns": [
+        {
+          "name": "ORDER_LINE_ID",
+          "logicalName": "Order line identifier",
+          "description": "Synthetic primary key for an order line.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "INT",
+          "ordinal": 1,
+          "isNullable": false,
+          "isIdentity": true,
+          "isPrimaryKey": true
+        },
+        {
+          "name": "ORDER_ID",
+          "logicalName": "Order identifier",
+          "description": "Synthetic order header reference.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "INT",
+          "ordinal": 2,
+          "isNullable": false,
+          "isIdentity": false,
+          "isPrimaryKey": false
+        },
+        {
+          "name": "ITEM_CD",
+          "logicalName": "Item code",
+          "description": "Synthetic item code.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "VARCHAR(30)",
+          "ordinal": 3,
+          "isNullable": false,
+          "isIdentity": false,
+          "isPrimaryKey": false
+        },
+        {
+          "name": "ORDER_QTY",
+          "logicalName": "Order quantity",
+          "description": "Synthetic quantity.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "NUMERIC(18,5)",
+          "ordinal": 4,
+          "isNullable": false,
+          "isIdentity": false,
+          "isPrimaryKey": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "PK_TB_ORDER_LINE",
+          "constraintType": "PK",
+          "columns": ["ORDER_LINE_ID"],
+          "referencedObject": null
+        },
+        {
+          "name": "FK_TB_ORDER_LINE_ORDER",
+          "constraintType": "FK",
+          "columns": ["ORDER_ID"],
+          "referencedObject": {
+            "schema": "dbo",
+            "tableName": "TB_ORDER",
+            "columns": ["ORDER_ID"]
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "IX_TB_ORDER_LINE_ORDER",
+          "isUnique": false,
+          "indexType": "NONCLUSTERED",
+          "keyColumns": ["ORDER_ID"],
+          "includedColumns": ["ITEM_CD"]
+        }
+      ],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic order detail table.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    },
+    {
+      "schema": "dbo",
+      "name": "TB_CUSTOMER",
+      "logicalName": "Customer",
+      "description": "Synthetic customer table.",
+      "descriptionStatus": "CONFIRMED",
+      "columns": [
+        {
+          "name": "CUSTOMER_ID",
+          "logicalName": "Customer identifier",
+          "description": "Synthetic primary key for a customer.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "INT",
+          "ordinal": 1,
+          "isNullable": false,
+          "isIdentity": true,
+          "isPrimaryKey": true
+        },
+        {
+          "name": "CUSTOMER_NM",
+          "logicalName": "Customer name",
+          "description": "Synthetic customer display name.",
+          "descriptionStatus": "CONFIRMED",
+          "dataType": "VARCHAR(100)",
+          "ordinal": 2,
+          "isNullable": false,
+          "isIdentity": false,
+          "isPrimaryKey": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "PK_TB_CUSTOMER",
+          "constraintType": "PK",
+          "columns": ["CUSTOMER_ID"],
+          "referencedObject": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "UX_TB_CUSTOMER_NM",
+          "isUnique": true,
+          "indexType": "NONCLUSTERED",
+          "keyColumns": ["CUSTOMER_NM"],
+          "includedColumns": []
+        }
+      ],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic customer table.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "schema": "dbo",
+      "name": "VW_ORDER_SUMMARY",
+      "definition": "CREATE VIEW dbo.VW_ORDER_SUMMARY AS SELECT o.ORDER_ID, o.CUSTOMER_ID, o.ORDER_DATE, o.STATUS_CD FROM dbo.TB_ORDER AS o",
+      "dependencies": [
+        {
+          "objectType": "TABLE",
+          "schema": "dbo",
+          "name": "TB_ORDER",
+          "dependencyType": "READ",
+          "isAmbiguous": false,
+          "reviewStatus": "CONFIRMED"
+        }
+      ],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic order summary view.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "schema": "dbo",
+      "name": "fn_NormalizeOrderStatus",
+      "definition": "CREATE FUNCTION dbo.fn_NormalizeOrderStatus (@StatusCd VARCHAR(30)) RETURNS VARCHAR(30) AS BEGIN RETURN UPPER(@StatusCd); END",
+      "dependencies": [],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic scalar function for status normalization metadata.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    }
+  ]
+}
