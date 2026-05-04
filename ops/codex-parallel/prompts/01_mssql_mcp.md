@@ -64,7 +64,7 @@ Constraints:
 - 실제 MSSQL 연결이 없더라도 테스트 가능한 구조로 작성
 - local DB up/down 전제를 만들지 않음
 - `MSSQL_METADATA_PASSWORD` 등 비밀값을 응답, 로그, fixture, 문서에 넣지 않음
-- `dbProfileId` 는 profile registry 의 id(`plf`, `master` 등)를 사용하고 database 이름과 분리해 다룬다.
+- `dbProfileId` 는 profile registry 의 id(`master`, `plf`, `ppm` 등)를 사용하고 database 이름과 분리해 다룬다.
 - 확정 불가능한 metadata description 은 추론 표시 또는 review-required 성격으로 반환할 수 있게 한다.
 
 Expected Deliverables:

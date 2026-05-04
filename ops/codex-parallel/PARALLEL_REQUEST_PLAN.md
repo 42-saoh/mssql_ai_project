@@ -258,3 +258,84 @@
 ## Open Risks / Blockers
 - ...
 ```
+
+
+---
+
+## P07 이후 Productization Wave
+
+P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이다. P08A~P16은 같은 병렬 worktree 방식과 Docker 테스트 격리, read-only metadata, draft-only generation, validation/approval/audit 원칙을 유지하면서 productization target으로 전환한다.
+
+### Productization 고정 DB 역할
+
+- `PLF` = platform DB
+- `PPM` = pilot analysis target DB
+- `PPM`이 없거나 접근 불가하면 PLF로 대체하지 않는다. 이 경우 pilot object selection은 blocker-dependent 또는 template-only로 유지한다.
+
+### P08A — PPM Pilot Object Discovery & Selection
+
+- 소유 경로: `fixtures/pilot/ppm_object_selection_v1/**`, 관련 contract test
+- 목적: PPM DB에서 representative SP/Table/View/Function 후보를 metadata-only 방식으로 선정한다.
+- live metadata 가능 시 `selected_objects.yaml` 을 `selection_mode: live_metadata`로 갱신한다.
+- live metadata 불가 시 실제 object 이름을 만들지 않고 blocker 후보를 남긴다.
+
+### P08 — Product Architecture & Release Backlog
+
+- starter/MVP 상태를 production target gap matrix로 전환한다.
+- skeleton/stub/fixture-first/optional-live/production-ready 상태를 구분한다.
+- PPM pilot object set을 product milestone/eval 기준에 연결한다.
+
+### P09 — API & Workflow Productization
+
+- request/job/artifact/validation/approval/audit lifecycle을 product API 흐름으로 정리한다.
+- idempotency, error model, pagination, status model, API consistency를 점검한다.
+- PPM pilot object set 기반 request/job/artifact fixture를 설계한다.
+
+### P10 — MSSQL Metadata MCP Productionization
+
+- metadata tool coverage를 procedure/table/search 중심에서 dependency/index/constraint/extended property/view/function evidence까지 확장한다.
+- read-only query guard, profile handling, fixture/live separation, timeout/retry/error handling을 강화한다.
+- PPM pilot object set을 integration/eval 기준으로 사용한다.
+
+### P11 — SP Analysis & Evidence Engine
+
+- SP definition, parameter, result-set hint, dependency, call graph, transaction/exception/dynamic SQL/temp table pattern을 evidence-first로 분석한다.
+- confidence/review_required/TODO/evidenceRefs 표준화를 강화한다.
+- PPM pilot SP를 simple/medium/complex fixture 기준으로 사용한다.
+
+### P12 — Java/MyBatis Generation Factory
+
+- Mapper XML, Mapper Interface, Service, DTO/VO/Model 초안 생성을 policy/template registry 기반 factory로 정리한다.
+- generation manifest, golden sample, diff/review checklist를 확장한다.
+- 생성물은 draft-only이며 사람이 최종 검토/승인한다.
+
+### P13 — Validation, Approval & Audit Productization
+
+- validation result, reviewer checklist, approval decision log, audit event model을 제품 workflow로 정리한다.
+- 재현 가능한 실행 기록과 evidence coverage를 강화한다.
+- PPM pilot artifacts 기준 validation/review scenario를 설계한다.
+
+### P14 — Web Product UI
+
+- 중앙 통합형 단일 플랫폼 UI로 request, metadata search, job status, artifact preview, validation result, approval/review 화면을 정리한다.
+- mock-first + API adapter 구조를 유지한다.
+- PPM pilot object set을 demo/search/sample request fixture로 활용한다.
+
+### P15 — Evaluation, Observability, Security & Ops
+
+- eval fixtures, quality metrics, latency budget, logging/monitoring/audit, secret handling, read-only permission checks, Docker/test reproducibility를 정리한다.
+- PPM pilot object set 기반 smoke/eval scenario를 정의한다.
+
+### P16 — Pilot Release Readiness
+
+- PPM 대표 SP/Table 대상 시범 적용 준비 상태를 점검한다.
+- 산출물 품질 보고서, release checklist, admin/user guide, handoff package를 만든다.
+- selected object manifest가 template-only이면 live pilot release는 blocker-dependent로 판정한다.
+
+## Productization merge order
+
+1. `P08A`
+2. `P08`
+3. `P09`, `P10`, `P11`, `P12`는 manifest 의존성 기준으로 병렬/순차 실행
+4. `P13`, `P14`, `P15`
+5. `P16`

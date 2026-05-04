@@ -97,9 +97,9 @@
 - 실제 비밀 값은 gitignore 된 `.env`, `.env.local` 또는 OS keychain 에 둔다.
 - 비밀 값은 테스트 fixture, snapshot, log, docs 에 넣지 않는다.
 - MCP/DB 연결 문자열은 로컬 개발용 프로필과 분리한다.
-- 기본 platform profile id 는 `plf` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
+- 기본 metadata profile id 는 `master`, platform profile id 는 `plf`, pilot analysis target profile id 는 `ppm` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
 - 기본 metadata profile id 는 `master` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
-- 현재 local registry 의 `master` profile 은 metadata source 의 `master` database 를, `plf` profile 은 platform DB `PLF` 을 가리킨다.
+- 현재 local registry 의 `master` profile 은 metadata source 의 `master` database 를, `plf` profile 은 platform DB `PLF` 를, `ppm` profile 은 pilot analysis target DB `PPM` 을 가리킨다. PPM 이 없거나 접근 불가하면 PLF로 임의 대체하지 않는다.
 
 ## 로그와 추적
 

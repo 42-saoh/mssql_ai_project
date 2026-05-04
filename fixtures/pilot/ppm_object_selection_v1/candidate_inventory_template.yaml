@@ -1,0 +1,122 @@
+inventory_version: ppm_object_selection_v1
+source_db: PPM
+platform_db_context: PLF
+inventory_mode: template
+metadata_only: true
+generated_at: null
+connection_profile_used:
+  profile_id: ppm
+  database: PPM
+  live_connection_verified: false
+metadata_sources_allowed:
+  - sys.databases
+  - PPM.sys.procedures
+  - PPM.sys.sql_modules
+  - PPM.sys.parameters
+  - PPM.sys.sql_expression_dependencies
+  - PPM.sys.tables
+  - PPM.sys.columns
+  - PPM.sys.types
+  - PPM.sys.indexes
+  - PPM.sys.index_columns
+  - PPM.sys.key_constraints
+  - PPM.sys.foreign_keys
+  - PPM.sys.extended_properties
+  - PPM.INFORMATION_SCHEMA
+metadata_sources_forbidden:
+  - user_table_row_data
+  - procedure_execution
+  - ddl_dml_execution
+  - secrets_or_credentials
+selection_rules:
+  stored_procedures:
+    minimum_recommended: 3
+    complexity_buckets:
+      simple:
+        evidence_patterns:
+          - low_parameter_count
+          - low_dependency_count
+          - single_primary_table
+          - simple_dml_or_select
+      medium:
+        evidence_patterns:
+          - joins_or_branching
+          - multiple_table_dependencies
+          - transaction_boundary_or_multi_step_flow
+      complex:
+        evidence_patterns:
+          - dynamic_sql
+          - temp_table
+          - try_catch
+          - cursor
+          - nested_procedure_call
+          - multiple_result_sets
+          - complex_dependency_graph
+  tables:
+    minimum_recommended: 3
+    preferred_features:
+      - pk_fk_index_constraint
+      - extended_property_or_column_description
+      - dto_vo_model_friendly_columns
+      - related_to_selected_procedures
+  views:
+    minimum_recommended_if_available: 1
+    not_available_is_blocker: false
+  functions:
+    minimum_recommended_if_available: 1
+    not_available_is_blocker: false
+candidate_stored_procedures:
+  simple: []
+  medium: []
+  complex: []
+candidate_tables: []
+candidate_views: []
+candidate_functions: []
+field_templates:
+  stored_procedure:
+    schema: null
+    name: null
+    complexity: null
+    selection_reason: []
+    metadata_evidence:
+      definition_length: null
+      parameter_count: null
+      dependency_count: null
+      detected_patterns: []
+      has_definition_access: null
+    dependency_summary:
+      tables: []
+      views: []
+      functions: []
+      procedures: []
+      unresolved: []
+    review_required: true
+  table:
+    schema: null
+    name: null
+    selection_reason: []
+    key_features:
+      primary_key: null
+      foreign_keys: []
+      indexes: []
+      constraints: []
+      extended_properties: []
+      column_count: null
+    related_procedures: []
+    review_required: true
+  view:
+    schema: null
+    name: null
+    selection_reason: []
+    related_objects: []
+    review_required: true
+  function:
+    schema: null
+    name: null
+    selection_reason: []
+    related_objects: []
+    review_required: true
+blocker_candidates: []
+notes:
+  - Do not record row data, sample values, credentials, tokens, or real passwords.
+  - If PPM is unavailable, leave candidates empty and update blocker_candidates instead of inventing object names.

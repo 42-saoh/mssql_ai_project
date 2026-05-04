@@ -1,0 +1,48 @@
+selection_version: ppm_object_selection_v1
+source_db: PPM
+platform_db_context: PLF
+selection_mode: template_only
+generated_at: '2026-05-04T00:00:00+09:00'
+connection_profile_used:
+  profile_id: ppm
+  database: PPM
+  host: 127.0.0.1
+  port: 1433
+  sql_server: MSSQL 2017 Docker
+  container: mssql-2017
+  collation: Korean_Wansung_CI_AS
+  timezone: Asia/Seoul
+  live_connection_verified: false
+  credential_policy: secrets_must_not_be_committed
+metadata_access_policy:
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  ddl_dml_allowed: false
+stored_procedures: []
+tables: []
+views: []
+functions: []
+known_limitations:
+  - code: TEMPLATE_ONLY
+    description: Live PPM metadata was not available in this execution environment, so no real object identifiers were selected.
+  - code: NO_ROW_DATA
+    description: This manifest intentionally contains only metadata and object identity fields; row data samples are forbidden.
+blocker_candidates:
+  - code: PPM_DB_NOT_FOUND
+    when: sys.databases lookup cannot find database name PPM on the configured local SQL Server instance.
+  - code: PPM_DB_ACCESS_DENIED
+    when: the metadata user cannot access the PPM database catalog.
+  - code: METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+    when: sys catalog views required for object, column, dependency, index, constraint, or extended-property discovery are denied.
+  - code: SP_DEFINITION_ACCESS_DENIED
+    when: sys.sql_modules.definition or equivalent procedure definition metadata cannot be read.
+  - code: DEPENDENCY_METADATA_INCOMPLETE
+    when: dependency metadata is unavailable or too incomplete to justify representative object selection.
+  - code: PPM_PLF_ROLE_CONFLICT
+    when: project files or local configuration imply PPM and PLF roles differently from PPM=pilot target and PLF=platform DB.
+  - code: LIVE_METADATA_UNAVAILABLE
+    when: live MSSQL connection cannot be established from the worker environment.
+review_notes:
+  - P08A must not invent stored procedure, table, view, or function names when selection_mode remains template_only.
+  - Later workers must treat this file as read-only unless they own P08A or receive coordinator approval.

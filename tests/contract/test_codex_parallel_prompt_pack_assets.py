@@ -46,9 +46,11 @@ def test_parallel_manifest_uses_env_sample_and_current_lockfiles() -> None:
     manifest_path = ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml"
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
-    assert manifest["plan_id"] == "codex-parallel-local-v2"
+    assert manifest["plan_id"] == "codex-parallel-local-v3-productization"
     assert ".env.example" in manifest["basis"]
     assert "pnpm-lock.yaml" in manifest["basis"]
+    assert "config/mssql/local_docker_profiles.yaml" in manifest["basis"]
+    assert "fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml" in manifest["basis"]
     assert "cp .env.example .env" in manifest["preflight"]
     assert manifest["reproducibility"]["env_sample"] == ".env.example"
 
