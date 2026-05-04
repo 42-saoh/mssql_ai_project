@@ -1,20 +1,20 @@
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from api_app.dependencies import get_repository
+from api_app.presenters import present_job
+from api_app.repositories import WorkflowRepository
+from api_app.schemas import Job
+from fastapi import APIRouter, Depends, HTTPException
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
-_JOBS = {
-    "job_demo_001": {
-        "jobId": "job_demo_001",
-        "status": "REVIEW_PENDING",
-        "requestId": "req_demo_001",
-        "currentStep": "VALIDATE",
-    }
-}
 
-
-@router.get("/{job_id}")
-def get_job(job_id: str) -> dict:
-    job = _JOBS.get(job_id)
+@router.get("/{jobId}", response_model=Job)
+def get_job(
+    jobId: str,
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> Job:
+    job = repository.get_job(jobId)
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
-    return job
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jobId}")
+    return present_job(job)

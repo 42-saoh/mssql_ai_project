@@ -1,33 +1,33 @@
-from uuid import uuid4
+from typing import Annotated
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from api_app.dependencies import get_workflow_service
+from api_app.schemas import SPAnalysisRequest, SubmitRequestResponse
+from api_app.workflow import WorkflowService
+from fastapi import APIRouter, Depends, HTTPException, status
 
 router = APIRouter(prefix="/api/v1/requests", tags=["requests"])
 
 
-class TargetObject(BaseModel):
-    type: str = Field(examples=["PROCEDURE"])
-    schema_name: str = Field(alias="schema")
-    name: str
-
-    model_config = {"populate_by_name": True}
-
-
-class SPAnalysisRequest(BaseModel):
-    dbProfileId: str
-    target: TargetObject
-    outputs: list[str]
-    options: dict[str, bool] = Field(default_factory=dict)
-
-
-@router.post("/sp-analysis")
-def create_sp_analysis(req: SPAnalysisRequest) -> dict:
-    request_id = f"req_{uuid4().hex[:10]}"
-    job_id = f"job_{uuid4().hex[:10]}"
-    return {
-        "requestId": request_id,
-        "jobId": job_id,
-        "status": "SUBMITTED",
-        "echo": req.model_dump(),
-    }
+@router.post(
+    "/sp-analysis",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=SubmitRequestResponse,
+)
+def create_sp_analysis(
+    req: SPAnalysisRequest,
+    service: Annotated[WorkflowService, Depends(get_workflow_service)],
+) -> SubmitRequestResponse:
+    try:
+        request_record, job = service.submit_sp_analysis(req)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+            headers={"X-Error-Code": "BAD_REQUEST"},
+        ) from exc
+    return SubmitRequestResponse(
+        requestId=request_record.request_id,
+        jobId=job.job_id,
+        status=job.status,
+        echo=req.to_response(),
+    )
