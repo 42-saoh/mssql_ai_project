@@ -1,0 +1,150 @@
+import Link from "next/link";
+import { StatusPill } from "@/components/status-pill";
+import type { Artifact, ValidationReport } from "@/lib/api/types";
+import {
+  artifactStatusLabels,
+  artifactTypeLabels,
+  formatCoverage,
+  validationStatusLabels,
+} from "@/lib/presentation";
+
+const reviewChecklist = [
+  "Evidence references point to metadata, static analysis, policy, or explicit user input.",
+  "Assumptions marked REVIEW_REQUIRED are resolved by a human reviewer.",
+  "Generated code or DDL remains draft-only until validation and approval are recorded.",
+  "No screen in this shell executes SQL, publishes code, or mutates business data.",
+];
+
+export function ArtifactPreview({
+  artifact,
+  validation,
+}: Readonly<{
+  artifact: Artifact;
+  validation: ValidationReport;
+}>) {
+  return (
+    <div className="stack">
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Artifact preview</p>
+            <h1>{artifact.title ?? artifactTypeLabels[artifact.type]}</h1>
+          </div>
+          <StatusPill value={artifact.status} label={artifactStatusLabels[artifact.status]} />
+        </div>
+
+        <dl className="metric-grid">
+          <div>
+            <dt>Artifact id</dt>
+            <dd>{artifact.artifactId}</dd>
+          </div>
+          <div>
+            <dt>Type</dt>
+            <dd>{artifactTypeLabels[artifact.type]}</dd>
+          </div>
+          <div>
+            <dt>Evidence coverage</dt>
+            <dd>{formatCoverage(artifact.evidenceCoverage)}</dd>
+          </div>
+          <div>
+            <dt>Generator</dt>
+            <dd>{artifact.generatorVersion}</dd>
+          </div>
+        </dl>
+
+        <div className="content-preview" aria-label="Draft artifact content">
+          <pre>{artifact.content}</pre>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Validation</p>
+            <h2>Evidence and policy checks</h2>
+          </div>
+          <StatusPill
+            value={validation.status}
+            label={validationStatusLabels[validation.status]}
+          />
+        </div>
+
+        <div className="validation-list">
+          {validation.checks.map((check) => (
+            <article className="validation-row" key={check.ruleId}>
+              <div>
+                <h3>{check.ruleId}</h3>
+                <p>{check.message ?? "No message provided."}</p>
+              </div>
+              <div className="status-cluster">
+                <StatusPill value={check.severity} label={check.severity} />
+                <StatusPill value={check.result} label={check.result.replace("_", " ")} />
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {(validation.missingEvidence?.length ?? 0) > 0 ? (
+          <div className="callout callout--warning">
+            <strong>Missing evidence</strong>
+            <ul>
+              {validation.missingEvidence?.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="split-layout">
+        <div className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Evidence refs</p>
+              <h2>Trace points</h2>
+            </div>
+          </div>
+          <div className="evidence-list">
+            {artifact.evidenceRefs.map((evidence) => (
+              <article className="evidence-row" key={`${evidence.type}-${evidence.locator}`}>
+                <strong>{evidence.type}</strong>
+                <span>{evidence.objectRef}</span>
+                <code>{evidence.locator}</code>
+                {evidence.snapshotId ? <small>{evidence.snapshotId}</small> : null}
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Review</p>
+              <h2>Checklist placeholder</h2>
+            </div>
+          </div>
+          <ul className="checklist">
+            {reviewChecklist.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+
+          {(validation.manualReviewPoints?.length ?? 0) > 0 ? (
+            <div className="callout">
+              <strong>Manual review points</strong>
+              <ul>
+                {validation.manualReviewPoints?.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="page-actions">
+        <Link href="/jobs/job_demo_review_pending">Back to review job</Link>
+      </div>
+    </div>
+  );
+}
