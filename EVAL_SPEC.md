@@ -119,6 +119,24 @@
 - 결정론적 결과가 필요한 artifact 는 동일 결과
 - 비결정론 허용 artifact 는 차이 범위가 문서화됨
 
+### 7. Integration Happy Path
+대상:
+- request submission
+- job status
+- draft artifact preview
+- validation report
+- approval decision recording
+
+필수 체크:
+- 기본 경로는 `master` metadata profile 과 fixture-backed MCP snapshot 을 사용
+- job 은 `REVIEW_PENDING`, current step 은 `VALIDATE`
+- persisted artifact type 이 OpenAPI requested output group 과 구분됨
+- 승인 decision 은 기록만 수행하며 publish 상태로 전이하지 않음
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/e2e tests/eval"` 통과
+- `PUBLISHED` 상태, 자동 DDL, row-data access 흐름 0건
+
 ## 초기 fixture 세트
 
 `fixtures/` 아래에 최소 아래 대표 사례를 둔다.
@@ -174,6 +192,13 @@
   ]
 }
 ```
+
+현재 P06 eval fixture 는 `fixtures/eval/` 아래 file-based interface 로 둔다.
+
+- `request.json`
+- `canonical_analysis_candidate.json`
+- `artifact_payloads.json`
+- `rubric.yaml`
 
 ## 완료 판정
 

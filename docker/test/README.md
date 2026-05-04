@@ -55,9 +55,10 @@
 - host-run 값: `.env` 에 `MSSQL_METADATA_HOST=127.0.0.1`, `PLATFORM_DB_HOST=127.0.0.1`
 - docker/test 내부 값: `.env` 에 `MSSQL_METADATA_DOCKER_HOST=host.docker.internal`, `PLATFORM_DB_DOCKER_HOST=host.docker.internal`
 - 기본 profile registry: `config/mssql/local_docker_profiles.yaml`
-- 기본 profile id: `pfl`
+- 기본 metadata profile id: `master`
+- platform DB profile id: `plf`
 
-live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1` 로 켠 뒤 테스트 컨테이너 또는 로컬 `run-mcp` 프로세스에서 readiness endpoint 를 확인한다.
+live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1` 로 켠 뒤 테스트 컨테이너 또는 로컬 `run-mcp` 프로세스에서 readiness endpoint 를 확인한다. live tool query execution 은 아직 optional adapter boundary 이며, 기본 테스트/e2e/eval 은 fixture-first 로 유지한다.
 
 ## 예시
 
@@ -65,5 +66,6 @@ live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1
 cp .env.example .env
 make test-build
 make test
+make test PYTEST_ARGS="tests/e2e tests/eval"
 make test-web-smoke
 ```

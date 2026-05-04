@@ -5,7 +5,7 @@ from api_app.metadata_gateway import McpMetadataGateway
 
 def test_mcp_metadata_gateway_collects_fixture_metadata_through_registry() -> None:
     metadata = McpMetadataGateway().collect_procedure_metadata(
-        db_profile_id="pfl",
+        db_profile_id="master",
         schema="dbo",
         procedure_name="usp_GetOrderSummary",
     )
@@ -21,7 +21,7 @@ def test_mcp_metadata_gateway_collects_fixture_metadata_through_registry() -> No
 
 def test_mcp_metadata_gateway_returns_review_required_fallback_for_missing_fixture() -> None:
     metadata = McpMetadataGateway().collect_procedure_metadata(
-        db_profile_id="pfl",
+        db_profile_id="master",
         schema="dbo",
         procedure_name="usp_NotInFixture",
     )

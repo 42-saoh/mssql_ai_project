@@ -496,7 +496,7 @@ def generation_evidence_sources(
 
 def system_code(db_profile_id: str) -> str:
     cleaned = "".join(char for char in db_profile_id.upper() if char.isalnum())
-    return cleaned or "PFL"
+    return cleaned or "PLF"
 
 
 def pascal_case(value: str) -> str:

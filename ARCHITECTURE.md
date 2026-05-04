@@ -204,6 +204,14 @@ packages/templates
   - reusable rule snippets
 ```
 
+## 현재 통합 구현 상태
+
+- `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/validation/approval decision recording happy path 를 제공한다.
+- `apps/web` 는 Next.js shell 이며 기본값은 mock adapter 다. 실제 승인 확정, publish, DDL 실행, row-data 조회 UI 는 제공하지 않는다.
+- `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tool execution, optional live readiness boundary 를 제공한다. live metadata query 구현은 아직 완료 기능이 아니다.
+- `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
+- `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다.
+
 ## 저장소 경계 규칙
 
 - `apps/api` 는 MSSQL 에 직접 붙지 않는다.
@@ -222,6 +230,8 @@ packages/templates
 - Policy assets: `spec/policy/`
 
 DDL v2 의 persisted enum 이름을 storage 기준으로 삼고, OpenAPI 의 요청 `outputs` 는 사용자-facing 그룹(`RequestedOutputType`)으로 유지한다. 요청 output 은 domain 의 mapping 을 통해 하나 이상의 persisted `ArtifactType` 으로 연결한다.
+
+기본 MSSQL metadata profile id 는 `master` 이며, platform DB profile 로 `plf` 을 함께 둔다. 두 profile 은 `config/mssql/local_docker_profiles.yaml` 에서 database 이름과 분리해 관리한다.
 
 ## 아키텍처 결정 체크리스트
 

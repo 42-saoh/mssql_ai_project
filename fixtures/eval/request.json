@@ -1,0 +1,35 @@
+{
+  "sampleId": "p06-fixture-workflow-master-order-summary-v1",
+  "description": "Fixture-first request for the implemented API workflow happy path.",
+  "request": {
+    "dbProfileId": "master",
+    "target": {
+      "type": "PROCEDURE",
+      "schema": "dbo",
+      "name": "usp_GetOrderSummary"
+    },
+    "outputs": [
+      "SP_ANALYSIS_DOCUMENT",
+      "DEPENDENCY_REPORT",
+      "JAVA_MYBATIS_DRAFT"
+    ],
+    "options": {
+      "includeEvidenceRefs": true
+    }
+  },
+  "expected": {
+    "jobStatus": "REVIEW_PENDING",
+    "currentStep": "VALIDATE",
+    "metadataMode": "fixture-first",
+    "defaultMetadataProfileId": "master",
+    "snapshotId": "mcp-fixture-snapshot-0001",
+    "forbiddenStates": [
+      "PUBLISHED"
+    ],
+    "forbiddenOperations": [
+      "auto_ddl_execution",
+      "row_data_access",
+      "automatic_publish"
+    ]
+  }
+}

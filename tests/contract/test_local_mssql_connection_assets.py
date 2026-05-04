@@ -11,8 +11,9 @@ def test_local_docker_profile_registry_exists() -> None:
     registry = REPO_ROOT / "config" / "mssql" / "local_docker_profiles.yaml"
     assert registry.exists(), "local MSSQL profile registry should exist"
     payload = yaml.safe_load(registry.read_text(encoding="utf-8"))
-    assert payload["defaultProfileId"] == "pfl"
-    assert any(profile["database"] == "PFL" for profile in payload["profiles"])
+    assert payload["defaultProfileId"] == "master"
+    assert any(profile["database"] == "master" for profile in payload["profiles"])
+    assert any(profile["database"] == "PLF" for profile in payload["profiles"])
 
 
 

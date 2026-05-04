@@ -26,7 +26,7 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     submit = client.post(
         "/api/v1/requests/sp-analysis",
         json={
-            "dbProfileId": "pfl",
+            "dbProfileId": "master",
             "target": {
                 "type": "PROCEDURE",
                 "schema": "dbo",

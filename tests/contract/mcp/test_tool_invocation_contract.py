@@ -14,71 +14,71 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
     "get_procedure_definition": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "procedureName": "usp_GetOrderSummary",
     },
     "get_procedure_parameters": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "procedureName": "usp_GetOrderSummary",
     },
     "get_procedure_dependencies": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "procedureName": "usp_GetOrderSummary",
     },
     "get_related_db_objects": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "objectName": "usp_GetOrderSummary",
         "objectType": "PROCEDURE",
         "topK": 5,
     },
     "get_table_schema": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "tableName": "TB_ORDER",
     },
     "get_table_constraints": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "tableName": "TB_ORDER",
     },
     "get_table_indexes": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "tableName": "TB_ORDER",
     },
     "get_extended_properties": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "objectName": "TB_ORDER",
         "objectType": "TABLE",
     },
     "get_view_definition": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "viewName": "VW_ORDER_SUMMARY",
     },
     "get_function_definition": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "schema": "dbo",
         "functionName": "fn_NormalizeOrderStatus",
     },
     "search_tables": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "physicalName": "ORDER",
         "columns": ["ORDER_ID", "CUSTOMER_ID"],
         "topK": 3,
     },
     "search_columns": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "physicalName": "ORDER_ID",
         "topK": 3,
     },
     "find_similar_tables": {
-        "dbProfileId": "pfl",
+        "dbProfileId": "master",
         "description": "order",
         "columns": [
             {"name": "ORDER_ID", "type": "INT"},
@@ -116,7 +116,7 @@ def test_fixture_backed_tool_contract(
     payload = response.json()
     assert payload["ok"] is True
     assert payload["toolName"] == tool_name
-    assert payload["dbProfileId"] == "pfl"
+    assert payload["dbProfileId"] == "master"
     assert payload["snapshotId"] == "mcp-fixture-snapshot-0001"
     assert payload["collectedAt"] == "2026-01-15T00:00:00Z"
     assert payload["evidenceRefs"]
@@ -133,13 +133,13 @@ def test_tool_error_response_contract(monkeypatch: pytest.MonkeyPatch) -> None:
 
     response = client.post(
         "/tools/get_table_schema/invoke",
-        json={"arguments": {"dbProfileId": "pfl", "schema": "dbo", "tableName": "NOPE"}},
+        json={"arguments": {"dbProfileId": "master", "schema": "dbo", "tableName": "NOPE"}},
     )
 
     assert response.status_code == 404
     payload = response.json()
     assert payload["ok"] is False
     assert payload["toolName"] == "get_table_schema"
-    assert payload["dbProfileId"] == "pfl"
+    assert payload["dbProfileId"] == "master"
     assert payload["error"]["code"] == "OBJECT_NOT_FOUND"
     assert "data" not in payload
