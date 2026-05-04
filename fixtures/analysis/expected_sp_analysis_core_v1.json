@@ -1,0 +1,135 @@
+{
+  "analysisVersion": "analysis-local-v0.1",
+  "fixtures": {
+    "sp_simple_crud": {
+      "procedureFullName": "dbo.usp_OrderSelect",
+      "parameters": [
+        {
+          "name": "@ORDER_ID",
+          "dataType": "BIGINT",
+          "direction": "INPUT"
+        }
+      ],
+      "tableReferences": [
+        {
+          "fullName": "dbo.TB_ORDER",
+          "objectType": "TABLE",
+          "operation": "READ"
+        }
+      ],
+      "calledProcedures": [],
+      "patterns": {
+        "transaction": false,
+        "tryCatch": false,
+        "dynamicSql": false,
+        "tempTable": false
+      },
+      "metadataEnrichment": [
+        {
+          "tableFullName": "dbo.TB_ORDER",
+          "candidateFullName": "dbo.TB_ORDER",
+          "status": "OBSERVED"
+        }
+      ]
+    },
+    "sp_txn_with_try_catch": {
+      "procedureFullName": "dbo.usp_OrderSave",
+      "parameters": [
+        {
+          "name": "@ORDER_ID",
+          "dataType": "BIGINT",
+          "direction": "INPUT"
+        },
+        {
+          "name": "@CUSTOMER_ID",
+          "dataType": "BIGINT",
+          "direction": "INPUT"
+        }
+      ],
+      "tableReferences": [
+        {
+          "fullName": "dbo.TB_ORDER",
+          "objectType": "TABLE",
+          "operation": "WRITE"
+        }
+      ],
+      "calledProcedures": [],
+      "patterns": {
+        "transaction": true,
+        "tryCatch": true,
+        "dynamicSql": false,
+        "tempTable": false
+      }
+    },
+    "sp_with_dynamic_sql": {
+      "procedureFullName": "dbo.usp_OrderSearchDynamic",
+      "parameters": [
+        {
+          "name": "@TABLE_NAME",
+          "dataType": "SYSNAME",
+          "direction": "INPUT"
+        }
+      ],
+      "tableReferences": [],
+      "calledProcedures": [
+        {
+          "fullName": "sp_executesql",
+          "objectType": "SYSTEM_PROCEDURE",
+          "status": "REVIEW_REQUIRED",
+          "isDynamicSqlExecutor": true
+        }
+      ],
+      "patterns": {
+        "transaction": false,
+        "tryCatch": false,
+        "dynamicSql": true,
+        "tempTable": false
+      },
+      "reviewMarkers": [
+        "DYNAMIC_SQL_DEPENDENCY_REVIEW"
+      ]
+    },
+    "sp_with_temp_table": {
+      "procedureFullName": "dbo.usp_OrderTemp",
+      "parameters": [],
+      "tableReferences": [
+        {
+          "fullName": "dbo.TB_ORDER",
+          "objectType": "TABLE",
+          "operation": "READ"
+        },
+        {
+          "fullName": "#TMP_ORDER",
+          "objectType": "TEMP_TABLE",
+          "operation": "READ"
+        },
+        {
+          "fullName": "#TMP_ORDER",
+          "objectType": "TEMP_TABLE",
+          "operation": "WRITE"
+        },
+        {
+          "fullName": "#TMP_ORDER",
+          "objectType": "TEMP_TABLE",
+          "operation": "DECLARE"
+        }
+      ],
+      "calledProcedures": [],
+      "tempTables": [
+        {
+          "name": "#TMP_ORDER",
+          "columns": [
+            "ORDER_ID",
+            "CUSTOMER_ID"
+          ]
+        }
+      ],
+      "patterns": {
+        "transaction": false,
+        "tryCatch": false,
+        "dynamicSql": false,
+        "tempTable": true
+      }
+    }
+  }
+}
