@@ -1,5 +1,5 @@
 PROJECT.md, AGENTS.md, ARCHITECTURE.md, TOOLS.md, POLICY.md, EVAL_SPEC.md, TASK_TEMPLATE.md 를 먼저 읽고 기준으로 작업해.
-추가로 현재 기준 자산인 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.sample`, `Makefile`, `docker/test/docker-compose.yml`, `requirements/lock/py311-dev.txt`, `pnpm-lock.yaml` 을 확인해.
+추가로 현재 기준 자산인 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.example`, `Makefile`, `docker/test/docker-compose.yml`, `requirements/lock/py311-dev.txt`, `pnpm-lock.yaml` 을 확인해.
 
 너는 이 저장소의 **코디네이터 겸 베이스라인 고정 담당**이다.
 이번 작업은 병렬 개발에 들어가기 전에 공유 계약과 공통 골격이 현재 파일 기준으로 흔들리지 않는지 점검하고, 필요한 최소 보완만 수행하는 단계다.
@@ -16,7 +16,7 @@ Preferred Skills:
 
 Task:
 - 병렬 개발의 기준선이 되는 저장소 골격, 공유 계약, 실행 명령, 정책 파일, lockfile 상태를 점검해.
-- 현재 존재하는 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, policy assets, `.env.sample`, Docker test runner, worktree port resolver 가 서로 모순되지 않게 최소 보완해.
+- 현재 존재하는 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, policy assets, `.env.example`, Docker test runner, worktree port resolver 가 서로 모순되지 않게 최소 보완해.
 - 이후 worker가 충돌 없이 작업할 수 있도록 디렉터리 경계와 검증 명령을 명확히 남겨.
 
 In Scope:
@@ -25,7 +25,7 @@ In Scope:
 - `Makefile`, `pyproject.toml`, root `package.json`, `apps/web/package.json`, `pnpm-lock.yaml` 의 재현성 기준 확인
 - `packages/domain` 의 최소 공통 계약 확인. 확장이 필요하면 작은 계약 패치로만 처리하고 worker 영역 구현은 하지 않음
 - `spec/openapi/`, `spec/mcp/`, `spec/validation/`, `spec/policy/`, `db/schema/` 의 존재와 상호 명칭 drift 점검
-- `.env.sample` 은 비밀값 없는 기본 샘플로 유지하고, `.env` 또는 실제 credential 은 생성/커밋하지 않음
+- `.env.example` 은 비밀값 없는 기본 샘플로 유지하고, `.env` 또는 실제 credential 은 생성/커밋하지 않음
 - `docker/test/`, `scripts/compose_project_name.sh`, `scripts/resolve_dev_ports.sh`, 설치 스크립트의 병렬 worktree 기준 확인
 - 필요한 경우 prompt pack 또는 runbook 의 경로/명령 drift 최소 수정
 - 공유 계약 존재 여부를 보장하는 contract test 보강
@@ -53,7 +53,7 @@ Target Files/Dirs:
 - pyproject.toml
 - package.json
 - apps/web/package.json
-- .env.sample
+- .env.example
 - packages/domain/**
 - db/schema/**
 - spec/openapi/**
@@ -75,7 +75,7 @@ Constraints:
 - 자동 DDL 실행 금지
 - DB lifecycle 관리 금지
 - 무검증 자동 반영 금지
-- 비밀값을 `.env.sample`, 문서, fixture, 테스트에 넣지 않는다.
+- 비밀값을 `.env.example`, 문서, fixture, 테스트에 넣지 않는다.
 - 이미 있는 `pnpm-lock.yaml` 과 `requirements/lock/py311-dev.txt` 를 재현성 기준으로 취급한다.
 - OpenAPI, DDL, domain, validation rule 간 명칭 불일치가 보이면 임의 확장보다 blocker 또는 작은 계약 정리로 처리한다.
 

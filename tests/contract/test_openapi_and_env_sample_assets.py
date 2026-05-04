@@ -25,7 +25,7 @@ def test_openapi_skeleton_exists_and_parses() -> None:
 
 
 def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
-    path = ROOT / ".env.sample"
+    path = ROOT / ".env.example"
     assert path.exists()
 
     text = path.read_text(encoding="utf-8")

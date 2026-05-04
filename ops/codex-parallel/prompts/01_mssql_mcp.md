@@ -1,5 +1,5 @@
 PROJECT.md, AGENTS.md, ARCHITECTURE.md, TOOLS.md, POLICY.md, EVAL_SPEC.md 를 읽고 기준으로 작업해.
-추가로 `tasks/0002-metadata-mcp-mvp.md`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `services/mssql-mcp/README.md`, `config/mssql/local_docker_profiles.yaml`, `.env.sample`, `tests/unit/test_mcp_catalog.py`, `tests/unit/test_mssql_mcp_live_config.py` 를 먼저 확인해.
+추가로 `tasks/0002-metadata-mcp-mvp.md`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `services/mssql-mcp/README.md`, `config/mssql/local_docker_profiles.yaml`, `.env.example`, `tests/unit/test_mcp_catalog.py`, `tests/unit/test_mssql_mcp_live_config.py` 를 먼저 확인해.
 
 너는 **MSSQL Metadata MCP 트랙 담당**이다.
 이 작업은 병렬 worker 중 하나이며, 반드시 지정된 경로만 수정해.
@@ -53,7 +53,7 @@ Read-only References:
 - PROJECT.md
 - ARCHITECTURE.md
 - POLICY.md
-- .env.sample
+- .env.example
 - config/mssql/local_docker_profiles.yaml
 - spec/policy/platform_db_standardization_rules_for_ai.json
 

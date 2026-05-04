@@ -1,5 +1,5 @@
 PROJECT.md, AGENTS.md, ARCHITECTURE.md, TOOLS.md, POLICY.md 를 읽고 기준으로 작업해.
-추가로 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `apps/web/package.json`, `apps/web/app/`, `.env.sample`, `Makefile`, `scripts/resolve_dev_ports.sh` 를 확인해.
+추가로 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `apps/web/package.json`, `apps/web/app/`, `.env.example`, `Makefile`, `scripts/resolve_dev_ports.sh` 를 확인해.
 
 너는 **Web Portal Shell 트랙 담당**이다.
 이 작업은 병렬 worker 중 하나이며, backend 계약을 임의 확장하지 않고 mock adapter 로 경계를 유지해야 한다.
@@ -43,7 +43,7 @@ Read-only References:
 - PROJECT.md
 - ARCHITECTURE.md
 - POLICY.md
-- .env.sample
+- .env.example
 - Makefile
 
 Constraints:

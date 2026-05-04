@@ -1,7 +1,7 @@
 # Codex Parallel Request Pack
 
 이 디렉터리는 **로컬 Codex CLI 병렬 개발**을 위한 운영 패키지다.
-현재 기준은 저장소의 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, policy files, `.env.sample`, Python/Web lockfile 을 먼저 읽고 각 트랙이 자기 경로만 구현하는 방식이다.
+현재 기준은 저장소의 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, policy files, `.env.example`, Python/Web lockfile 을 먼저 읽고 각 트랙이 자기 경로만 구현하는 방식이다.
 
 구성:
 - `PARALLEL_REQUEST_PLAN.md` — 병렬 개발 웨이브, 트랙, 의존성, 병합 순서
@@ -12,7 +12,7 @@
 권장 사용 순서:
 1. `PARALLEL_REQUEST_PLAN.md` 읽기
 2. `PARALLEL_RUNBOOK.md` 기준으로 worktree 준비
-3. `.env.sample` 을 `.env` 로 복사하고 로컬 secret 은 커밋하지 않기
+3. `.env.example` 을 `.env` 로 복사하고 로컬 secret 은 커밋하지 않기
 4. `prompts/00_coordinator_baseline.md` 를 메인 코디네이터 세션에 먼저 실행
 5. Wave 1 프롬프트를 각 worktree의 Codex 세션에 분산 실행
 6. Wave 1 머지 후 `prompts/05_api_workflow.md`

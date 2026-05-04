@@ -1,5 +1,5 @@
 PROJECT.md, AGENTS.md, ARCHITECTURE.md, TOOLS.md, POLICY.md, EVAL_SPEC.md 를 읽고 기준으로 작업해.
-추가로 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.sample`, `ops/codex-parallel/REQUEST_MANIFEST.yaml` 를 확인해.
+추가로 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.example`, `ops/codex-parallel/REQUEST_MANIFEST.yaml` 를 확인해.
 
 너는 **통합 검증 / Eval / Docs Sync 트랙 담당**이다.
 이 단계는 앞선 트랙의 결과가 병합된 뒤 저장소를 한 번 정리하고, 최소 end-to-end 와 문서 정합성을 맞추는 목적이다.
@@ -25,7 +25,7 @@ In Scope:
 - docs sync for changed commands, paths, architecture notes
 - OpenAPI/MCP/validation/policy drift memo
 - known gaps / next slices documentation
-- `.env.sample` 기준 환경 안내 정리. 단, 비밀값 예시는 넣지 않음
+- `.env.example` 기준 환경 안내 정리. 단, 비밀값 예시는 넣지 않음
 
 Out of Scope:
 - 대규모 신규 기능 구현
@@ -48,7 +48,7 @@ Read-only References:
 - spec/**
 - db/schema/**
 - ops/codex-parallel/**
-- .env.sample
+- .env.example
 
 Constraints:
 - 신규 구현보다 통합 검증과 정합성 유지에 집중

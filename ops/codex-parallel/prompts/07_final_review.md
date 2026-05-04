@@ -1,5 +1,5 @@
 PROJECT.md, AGENTS.md, ARCHITECTURE.md, TOOLS.md, POLICY.md, EVAL_SPEC.md 를 읽고 기준으로 작업해.
-추가로 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.sample`, `.env.example`, `ops/codex-parallel/REQUEST_MANIFEST.yaml` 를 확인해.
+추가로 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.example`, `.env.example`, `ops/codex-parallel/REQUEST_MANIFEST.yaml` 를 확인해.
 
 너는 **최종 읽기 전용 리뷰어**다.
 이 작업은 코드를 수정하지 않고 correctness, policy compliance, docs drift, missing tests, unsafe assumptions 를 점검하는 최종 게이트다.
@@ -23,7 +23,7 @@ In Scope:
 - OpenAPI ↔ API route ↔ domain enum ↔ DDL 상태/타입 명칭 drift 점검
 - MCP catalog ↔ Python registry ↔ tests drift 점검
 - generation policy ↔ golden sample ↔ validation rules drift 점검
-- `.env.sample` / `.env.example` / docs 의 secret handling 점검
+- `.env.example` / `.env.example` / docs 의 secret handling 점검
 - Docker/worktree/port strategy 문서와 Makefile/scripts 정합성 점검
 
 Out of Scope:

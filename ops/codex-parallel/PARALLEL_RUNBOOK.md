@@ -6,7 +6,7 @@
 - 작업 전 루트 저장소가 깨끗한지 확인한다.
 - Codex는 같은 파일을 동시에 수정하지 않도록 운영한다.
 - 병렬 worker는 각자 **별도 worktree** 에서 실행한다.
-- 현재 기준 자산은 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, policy files, `.env.sample`, `pnpm-lock.yaml`, Python lockfile 이다.
+- 현재 기준 자산은 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, policy files, `.env.example`, `pnpm-lock.yaml`, Python lockfile 이다.
 
 ## 2. 권장 디렉터리 구조
 
@@ -48,7 +48,7 @@ git status --short
 corepack enable
 corepack use pnpm@10.33.0
 pnpm install --frozen-lockfile
-cp .env.sample .env        # 로컬 전용. 비밀값을 채운 뒤 커밋하지 않는다.
+cp .env.example .env        # 로컬 전용. 비밀값을 채운 뒤 커밋하지 않는다.
 make docker-project-name
 make dev-ports
 make test-build
@@ -57,12 +57,12 @@ python -m compileall apps services packages tests
 
 - `pnpm-lock.yaml` 은 현재 기준 저장소에 존재한다. coordinator 는 잠금 파일을 임의 재생성하지 말고 필요 시 명시적인 dependency 변경 작업에서만 갱신한다.
 - Python 의존성은 `requirements/lock/py311-dev.txt` 와 `scripts/install_python_locked.sh` 기준으로 맞춘다.
-- `.env.sample` 은 비밀값 없는 샘플이다. 실제 credential 은 `.env`, `.env.local`, OS keychain 등 저장소 밖/비커밋 경로에 둔다.
+- `.env.example` 은 비밀값 없는 샘플이다. 실제 credential 은 `.env`, `.env.local`, OS keychain 등 저장소 밖/비커밋 경로에 둔다.
 - 로컬 Docker MSSQL 을 붙일 때는 `.env` 를 만들고 `PLATFORM_DB_*`, `MSSQL_METADATA_*` 를 채운다.
 - metadata profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 공유 기준으로 사용한다.
 - 기본 profile id 는 `pfl` 이며, 같은 SQL Server 인스턴스의 `PFL`, `master` 등 DB 는 profile 로 분리한다.
 - host-run 은 `127.0.0.1`, `docker/test` 내부 연결은 `host.docker.internal` 기본값을 사용한다.
-- `.env.example` 이 있더라도 새 작업의 기본 복사 원본은 비밀값 없는 `.env.sample` 로 둔다.
+- `.env.example` 이 있더라도 새 작업의 기본 복사 원본은 비밀값 없는 `.env.example` 로 둔다.
 
 ## 5. Codex 세션 배치
 
@@ -102,7 +102,7 @@ codex --profile dev-edit
 - `pNN-*` 형식이 아닌 worktree 는 경로 기반 hash slot 을 써서 충돌 가능성을 낮춘다.
 - 슬롯을 사람이 고정하고 싶으면 `WORKTREE_PORT_SLOT=21 make dev-ports` 처럼 override 한다.
 - API/MCP/Web worker 는 하드코딩된 8000/8100/3000 을 전제로 하지 말고 `make run-api`, `make run-mcp`, `make run-web` 를 사용한다.
-- `.env.sample` 의 `APP_PORT`, `MCP_PORT`, `WEB_PORT` 는 비워 두는 것이 기본이다. 그래야 Makefile 이 worktree 기준 포트를 계산한다.
+- `.env.example` 의 `APP_PORT`, `MCP_PORT`, `WEB_PORT` 는 비워 두는 것이 기본이다. 그래야 Makefile 이 worktree 기준 포트를 계산한다.
 
 ## 8. 운영 규칙
 
@@ -149,7 +149,7 @@ make test-web-smoke
 - 무검증 상태 머지
 - 다른 track 소유 경로 수정
 - 파괴적 git 명령 사용
-- secret 을 문서, fixture, 로그, `.env.sample` 에 기록
+- secret 을 문서, fixture, 로그, `.env.example` 에 기록
 
 ## 추가 검증 규칙
 

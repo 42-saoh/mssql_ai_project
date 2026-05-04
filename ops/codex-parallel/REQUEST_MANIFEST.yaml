@@ -13,7 +13,7 @@ basis:
   - spec/validation/validation_rules.yaml
   - spec/policy/project_ai_java_mybatis_generation_policy.yaml
   - spec/policy/platform_db_standardization_rules_for_ai.json
-  - .env.sample
+  - .env.example
   - pnpm-lock.yaml
 profiles:
   coordinator: safe-explore
@@ -24,7 +24,7 @@ preflight:
   - corepack enable
   - corepack use pnpm@10.33.0
   - pnpm install --frozen-lockfile
-  - cp .env.sample .env  # local only; fill secrets manually and never commit .env
+  - cp .env.example .env  # local only; fill secrets manually and never commit .env
   - make docker-project-name
   - make dev-ports
   - make test-build
@@ -41,7 +41,7 @@ reproducibility:
   web_lock: pnpm-lock.yaml
   python_install_script: scripts/install_python_locked.sh
   web_install_script: scripts/install_web_workspace.sh
-  env_sample: .env.sample
+  env_example: .env.example
 shared_read_only_after_p00:
   - AGENTS.md
   - PROJECT.md
@@ -78,7 +78,7 @@ waves:
           - .codex/
           - .agents/
           - Makefile
-          - .env.sample
+          - .env.example
           - config/mssql/local_docker_profiles.yaml
           - pyproject.toml
           - package.json
@@ -173,7 +173,7 @@ waves:
           - tests/unit/web/
         readonly_paths:
           - spec/openapi/
-          - .env.sample
+          - .env.example
         verify:
           - make test-web-smoke
   - wave: W2
@@ -224,7 +224,7 @@ waves:
           - spec/
           - db/schema/
           - ops/codex-parallel/
-          - .env.sample
+          - .env.example
         verify:
           - make test PYTEST_ARGS="tests/e2e tests/eval"
           - make test-web-smoke

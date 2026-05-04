@@ -17,7 +17,7 @@ def test_parallel_prompt_pack_references_current_baseline_assets() -> None:
     p00 = _read(PROMPTS / "00_coordinator_baseline.md")
     assert "spec/openapi/ai_agent_platform_openapi_v1.yaml" in p00
     assert "spec/policy/**" in p00
-    assert ".env.sample" in p00
+    assert ".env.example" in p00
     assert "pnpm-lock.yaml" in p00
 
     p01 = _read(PROMPTS / "01_mssql_mcp.md")
@@ -37,7 +37,7 @@ def test_parallel_prompt_pack_references_current_baseline_assets() -> None:
     assert "request/job/artifact/validation/approval" in p05
 
     p07 = _read(PROMPTS / "07_final_review.md")
-    assert ".env.sample" in p07
+    assert ".env.example" in p07
     assert ".env.example" in p07
     assert "MCP catalog" in p07
 
@@ -47,13 +47,13 @@ def test_parallel_manifest_uses_env_sample_and_current_lockfiles() -> None:
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["plan_id"] == "codex-parallel-local-v2"
-    assert ".env.sample" in manifest["basis"]
+    assert ".env.example" in manifest["basis"]
     assert "pnpm-lock.yaml" in manifest["basis"]
-    assert "cp .env.sample .env" in manifest["preflight"]
-    assert manifest["reproducibility"]["env_sample"] == ".env.sample"
+    assert "cp .env.example .env" in manifest["preflight"]
+    assert manifest["reproducibility"]["env_sample"] == ".env.example"
 
     p00 = manifest["waves"][0]["tracks"][0]
-    assert ".env.sample" in p00["target_paths"]
+    assert ".env.example" in p00["target_paths"]
     assert "spec/policy/" in p00["target_paths"]
     assert "ops/codex-parallel/" in p00["target_paths"]
 
@@ -61,7 +61,7 @@ def test_parallel_manifest_uses_env_sample_and_current_lockfiles() -> None:
 def test_parallel_runbook_prefers_env_sample_and_includes_final_review_worktree() -> None:
     runbook = _read(ROOT / "ops" / "codex-parallel" / "PARALLEL_RUNBOOK.md")
 
-    assert "cp .env.sample .env" in runbook
+    assert "cp .env.example .env" in runbook
     assert "../wt/p07-final-review" in runbook
     assert "make dev-ports" in runbook
     assert "WORKTREE_PATH=/abs/path/to/worktree make test" in runbook

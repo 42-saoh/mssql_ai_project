@@ -9,7 +9,7 @@
 2. 병렬 트랙은 디렉터리 경계를 명확히 나눈다.
 3. 통합은 웨이브 단위로 한다.
 
-현재 기준 저장소에는 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, Java/MyBatis generation policy, Platform DB standardization policy, `.env.sample`, Python lockfile, pnpm lockfile 이 존재한다. 병렬 작업은 이 자산을 새로 상상하지 말고 먼저 읽은 뒤 좁게 이어간다.
+현재 기준 저장소에는 OpenAPI skeleton, Platform DB DDL draft, MCP catalog, validation rules, Java/MyBatis generation policy, Platform DB standardization policy, `.env.example`, Python lockfile, pnpm lockfile 이 존재한다. 병렬 작업은 이 자산을 새로 상상하지 말고 먼저 읽은 뒤 좁게 이어간다.
 
 ## 운영 원칙
 
@@ -19,7 +19,7 @@
 - 공유 계약 변경이 필요하면 임의 확장하지 말고 코디네이터에게 blocker로 올린다.
 - worker는 구현을 시작할 때 수정 예정 파일, 검증 명령, blocker 후보를 먼저 정리한다.
 - worker는 구현을 마치면 변경 파일, 검증 결과, 남은 리스크를 반드시 남긴다.
-- 실제 secret 은 `.env`, `.env.local`, OS keychain 등 비커밋 경로에만 둔다. `.env.sample` 은 비밀값 없는 샘플이다.
+- 실제 secret 은 `.env`, `.env.local`, OS keychain 등 비커밋 경로에만 둔다. `.env.example` 은 비밀값 없는 샘플이다.
 
 ## 공유 계약 동결 범위
 
@@ -34,7 +34,7 @@
 - `TASK_TEMPLATE.md`
 - `.codex/**`
 - `.agents/**`
-- `.env.sample`
+- `.env.example`
 - `packages/domain/**`
 - `spec/openapi/**`
 - `spec/policy/**`
@@ -56,7 +56,7 @@
 - 저장소 기본 구조 고정
 - 공통 명령과 품질 게이트 준비
 - 공유 계약 파일과 정책 파일 drift 점검
-- `packages/domain`, `spec/openapi`, `spec/policy`, `db/schema`, `.env.sample`, lockfile 을 기준선으로 고정
+- `packages/domain`, `spec/openapi`, `spec/policy`, `db/schema`, `.env.example`, lockfile 을 기준선으로 고정
 
 트랙:
 - `P00` Base/Foundation
@@ -80,7 +80,7 @@
   - `tests/contract/test_local_mssql_connection_assets.py`
   - `fixtures/mcp/**`
 - 읽기 전용 참조:
-  - `.env.sample`
+  - `.env.example`
   - `config/mssql/local_docker_profiles.yaml`
   - `spec/policy/platform_db_standardization_rules_for_ai.json`
 - 산출물:
@@ -138,7 +138,7 @@
   - `tests/unit/web/**`
 - 읽기 전용 참조:
   - `spec/openapi/**`
-  - `.env.sample`
+  - `.env.example`
   - `PROJECT.md`, `ARCHITECTURE.md`, `POLICY.md`
 - 산출물:
   - Next.js shell
