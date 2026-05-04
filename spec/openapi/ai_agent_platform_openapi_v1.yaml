@@ -319,14 +319,7 @@ components:
           type: array
           minItems: 1
           items:
-            type: string
-            enum:
-              - SP_ANALYSIS_DOCUMENT
-              - DEPENDENCY_REPORT
-              - TABLE_COLUMN_METADATA
-              - JAVA_MYBATIS_DRAFT
-              - DTO_MODEL_DRAFT
-              - DDL_DRAFT
+            $ref: "#/components/schemas/RequestedOutputType"
         options:
           type: object
           additionalProperties:
@@ -346,7 +339,7 @@ components:
           description: Optional starter implementation echo of the normalized request.
     Job:
       type: object
-      required: [jobId, requestId, status, currentStep]
+      required: [jobId, requestId, status]
       properties:
         jobId:
           type: string
@@ -355,17 +348,9 @@ components:
         status:
           $ref: "#/components/schemas/JobStatus"
         currentStep:
-          type: string
-          enum:
-            - SUBMITTED
-            - COLLECTING_METADATA
-            - ANALYZING
-            - GENERATING_DRAFTS
-            - VALIDATING
-            - REVIEW_PENDING
-            - APPROVED
-            - REJECTED
-            - FAILED
+          oneOf:
+            - $ref: "#/components/schemas/WorkflowStepType"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -376,12 +361,25 @@ components:
       type: string
       enum:
         - SUBMITTED
-        - RUNNING
+        - COLLECTING_METADATA
+        - ANALYZING
+        - GENERATING
+        - VALIDATING
         - REVIEW_PENDING
         - APPROVED
         - REJECTED
+        - PUBLISHED
         - FAILED
-        - CANCELLED
+        - CANCELED
+    WorkflowStepType:
+      type: string
+      enum:
+        - COLLECT_METADATA
+        - ANALYZE
+        - GENERATE
+        - VALIDATE
+        - REVIEW
+        - PUBLISH
     ArtifactSummary:
       type: object
       required: [artifactId, type, status]
@@ -426,6 +424,24 @@ components:
               default: true
     ArtifactType:
       type: string
+      description: Persisted draft artifact type. Request output groups map to one or more of these values.
+      enum:
+        - SP_ANALYSIS_DOC
+        - DEPENDENCY_REPORT
+        - METADATA_QUERY_RESULT
+        - SCHEMA_ENRICHMENT_RESULT
+        - MAPPER_XML
+        - MAPPER_INTERFACE
+        - SERVICE_DRAFT
+        - DTO_DRAFT
+        - VO_DRAFT
+        - MODEL_DRAFT
+        - DDL_DRAFT
+        - VALIDATION_REPORT
+        - APPROVAL_LOG
+    RequestedOutputType:
+      type: string
+      description: User-facing output group requested at submission time.
       enum:
         - SP_ANALYSIS_DOCUMENT
         - DEPENDENCY_REPORT
@@ -437,11 +453,12 @@ components:
       type: string
       enum:
         - DRAFT
-        - VALIDATION_FAILED
-        - REVIEW_REQUIRED
+        - VALIDATED
         - REVIEW_PENDING
         - APPROVED
         - REJECTED
+        - PUBLISHED
+        - ARCHIVED
     EvidenceRef:
       type: object
       required: [type, objectRef, locator]

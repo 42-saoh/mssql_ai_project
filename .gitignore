@@ -4,11 +4,13 @@
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.pnpm-store/
 .next/
 node_modules/
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
 .env
 .env.local
 coverage.xml

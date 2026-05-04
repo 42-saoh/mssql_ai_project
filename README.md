@@ -64,9 +64,8 @@
 ## 빠른 시작
 
 1. `.env.example` 를 복사해 `.env.local` 을 만든다.
-2. Python/Web 의존성을 준비한다.
-   - `python -m pip install -e .[dev]`
-   - `cd apps/web && pnpm install`
+2. Python/Web 의존성을 lockfile 기준으로 준비한다.
+   - `make setup`
 3. API 와 MCP 서버를 각각 실행한다.
    - `make run-api`
    - `make run-mcp`
@@ -78,6 +77,8 @@
    - `make test`
    - `make test-web-smoke`
    - `make check`
+
+호스트에 `python` 명령이 없으면 `PYTHON=python3 make setup` 처럼 override 하거나, compile-only 확인은 `python3 -m compileall apps services packages tests` 로 수행한다.
 
 ## DB 와 스키마 운영 방식
 
@@ -91,4 +92,3 @@
 - `make test` 는 파이썬 테스트를 도커 컨테이너 안에서 실행한다.
 - `make test-web-smoke` 는 현재 단계에서 web 자동 테스트 대신 컨테이너 기반 build smoke 를 수행한다.
 - UI 수동/반자동 smoke 가 필요하면 Playwright MCP 와 `browser-automation-smoke` skill 을 사용한다.
-

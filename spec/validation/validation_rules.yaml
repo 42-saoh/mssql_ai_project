@@ -6,8 +6,12 @@ rules:
       - SP_ANALYSIS_DOC
       - DEPENDENCY_REPORT
       - MAPPER_XML
+      - MAPPER_INTERFACE
       - SERVICE_DRAFT
       - DTO_DRAFT
+      - VO_DRAFT
+      - MODEL_DRAFT
+      - DDL_DRAFT
     description: Every generated artifact must contain evidence refs or explicit review-required markers.
 
   - id: workflow.approval.before_publish
@@ -28,6 +32,8 @@ rules:
       - SP_ANALYSIS_DOC
       - DDL_DRAFT
       - DTO_DRAFT
+      - VO_DRAFT
+      - MODEL_DRAFT
     description: Inferred or ambiguous sections should be marked REVIEW_REQUIRED.
 
   - id: repo.schema.versioned_file_only
@@ -41,4 +47,3 @@ rules:
     appliesTo:
       - repository-workflow
     description: Automated verification commands should provide a dockerized execution path.
-

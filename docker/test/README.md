@@ -21,8 +21,8 @@
 ## 재현성 규칙:
 - Python 의존성은 `requirements/lock/py311-dev.txt` 제약 파일을 통해 설치한다.
 - `make test` 와 `make setup` 은 `scripts/install_python_locked.sh` 를 호출해 같은 Python 잠금 기준을 사용한다.
-- Web 의존성은 `pnpm-lock.yaml` 이 있으면 반드시 `--frozen-lockfile` 로 설치한다.
-- 현재 패치에는 네트워크가 없는 작업 환경 제약 때문에 실제 `pnpm-lock.yaml` 을 포함하지 않았다. 로컬 coordinator worktree 에서 한 번 생성 후 commit 해서 모든 worker 가 공유하도록 한다.
+- Web 의존성은 커밋된 `pnpm-lock.yaml` 을 기준으로 반드시 `--frozen-lockfile` 로 설치한다.
+- `web-test` 는 compose volume `/pnpm/store` 를 pnpm store 로 사용해 worktree 안의 `.pnpm-store` 생성을 피한다.
 - 잠금 없는 임시 설치가 정말 필요하면 `ALLOW_UNLOCKED_PNPM_INSTALL=1 make test-web-smoke` 로만 예외 실행한다.
 
 ## 권장 명령:

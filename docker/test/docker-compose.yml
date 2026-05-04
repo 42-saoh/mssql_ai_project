@@ -44,6 +44,7 @@ services:
     environment:
       CI: "1"
       PNPM_STORE_DIR: /pnpm/store
+      NPM_CONFIG_STORE_DIR: /pnpm/store
       PLATFORM_DB_HOST: ${PLATFORM_DB_DOCKER_HOST:-host.docker.internal}
       PLATFORM_DB_PORT: ${PLATFORM_DB_PORT:-1433}
       PLATFORM_DB_USER: ${PLATFORM_DB_USER:-}
