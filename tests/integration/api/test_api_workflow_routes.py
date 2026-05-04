@@ -74,14 +74,14 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     approval = client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
         json={
-            "decision": "APPROVE",
+            "decision": "REQUEST_CHANGES",
             "reviewer": "reviewer@example.com",
             "comment": "API skeleton decision recording only",
         },
     )
     assert approval.status_code == 201
     assert approval.json()["artifactId"] == artifact_id
-    assert approval.json()["decision"] == "APPROVE"
+    assert approval.json()["decision"] == "REQUEST_CHANGES"
 
 
 def test_metadata_and_registry_routes_are_safe_skeletons(client: TestClient) -> None:

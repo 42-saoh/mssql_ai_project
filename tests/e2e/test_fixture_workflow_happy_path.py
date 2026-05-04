@@ -98,7 +98,7 @@ def test_fixture_backed_request_to_review_happy_path(
     assert validation_payload["status"] == "REVIEW_REQUIRED"
     assert validation_payload["manualReviewPoints"]
 
-    approval = client.post(
+    blocked_approval = client.post(
         f"/api/v1/artifacts/{analysis_artifact_id}/approval-decisions",
         json={
             "decision": "APPROVE",
@@ -106,18 +106,28 @@ def test_fixture_backed_request_to_review_happy_path(
             "comment": "Fixture-first e2e approval recording only.",
         },
     )
-    assert approval.status_code == 201
-    approval_payload = approval.json()
-    assert approval_payload["artifactId"] == analysis_artifact_id
-    assert approval_payload["decision"] == "APPROVE"
+    assert blocked_approval.status_code == 400
+    assert "PASSED" in blocked_approval.json()["detail"]
 
-    approved_preview = client.get(f"/api/v1/artifacts/{analysis_artifact_id}")
-    assert approved_preview.status_code == 200
-    assert approved_preview.json()["status"] == "APPROVED"
+    request_changes = client.post(
+        f"/api/v1/artifacts/{analysis_artifact_id}/approval-decisions",
+        json={
+            "decision": "REQUEST_CHANGES",
+            "reviewer": "reviewer@example.com",
+            "comment": "Fixture-first e2e review decision recording only.",
+        },
+    )
+    assert request_changes.status_code == 201
+    request_changes_payload = request_changes.json()
+    assert request_changes_payload["artifactId"] == analysis_artifact_id
+    assert request_changes_payload["decision"] == "REQUEST_CHANGES"
+
+    review_preview = client.get(f"/api/v1/artifacts/{analysis_artifact_id}")
+    assert review_preview.status_code == 200
+    assert review_preview.json()["status"] == "REVIEW_PENDING"
 
     assert {artifact.status.value for artifact in repository.artifacts.values()} <= {
-        "APPROVED",
-        "REVIEW_PENDING",
+        "REVIEW_PENDING"
     }
     assert "PUBLISHED" not in {artifact.status.value for artifact in repository.artifacts.values()}
     assert "PUBLISH_GATE_EVALUATED" not in {event.action for event in repository.audit_events}

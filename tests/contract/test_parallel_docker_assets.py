@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -24,3 +26,18 @@ def test_parallel_docker_assets_exist() -> None:
     runbook = (root / "ops" / "codex-parallel" / "PARALLEL_RUNBOOK.md").read_text(encoding="utf-8")
     assert "make docker-project-name" in runbook
     assert "WORKTREE_PATH=/abs/path/to/worktree make test" in runbook
+
+
+def test_pytest_selection_fails_for_missing_explicit_target() -> None:
+    root = Path(__file__).resolve().parents[2]
+
+    result = subprocess.run(
+        [sys.executable, "scripts/run_pytest_selection.py", "tests/does_not_exist"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Pytest target does not exist" in result.stderr

@@ -80,6 +80,12 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
 
 def test_requested_output_groups_map_to_persisted_artifact_types() -> None:
     assert set(REQUESTED_OUTPUT_ARTIFACT_TYPES) == set(RequestedOutputType)
+    assert REQUESTED_OUTPUT_ARTIFACT_TYPES[RequestedOutputType.JAVA_MYBATIS_DRAFT] == (
+        ArtifactType.DTO_DRAFT,
+        ArtifactType.SERVICE_DRAFT,
+        ArtifactType.MAPPER_INTERFACE,
+        ArtifactType.MAPPER_XML,
+    )
     for requested_output, artifact_types in REQUESTED_OUTPUT_ARTIFACT_TYPES.items():
         assert isinstance(requested_output, RequestedOutputType)
         assert artifact_types
@@ -108,6 +114,8 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "Leave APP/MCP/WEB port empty" in text
     assert "PLATFORM_DB_PASSWORD=\n" in text
     assert "MSSQL_METADATA_PASSWORD=\n" in text
+    assert "MSSQL_METADATA_USER=readonly_metadata_user\n" in text
+    assert "MSSQL_METADATA_USER=sa" not in text
     assert "MSSQL_METADATA_DEFAULT_PROFILE_ID=master" in text
     assert "TPsaoh" not in text
 

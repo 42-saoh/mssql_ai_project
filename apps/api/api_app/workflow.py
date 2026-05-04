@@ -24,11 +24,6 @@ from api_app.repositories import (
 )
 from api_app.schemas import SPAnalysisRequest
 
-JAVA_MYBATIS_DOMAIN_MAPPING_NOTE = (
-    "Domain mapping note: REQUESTED_OUTPUT_ARTIFACT_TYPES[JAVA_MYBATIS_DRAFT] omits DTO_DRAFT, "
-    "while the merged renderer emits DTO_DRAFT as part of the draft bundle."
-)
-
 WORKFLOW_METADATA_NOTE = (
     "REVIEW_REQUIRED: metadata is collected through the MSSQL MCP registry boundary "
     "and persisted through the platform DB workflow repository for this integration slice."
@@ -128,11 +123,20 @@ class WorkflowService:
         validation_report_id: str | None,
     ) -> ApprovalRecordData:
         self._require_artifact(artifact_id)
+        latest_validation = self.repository.latest_validation_for(artifact_id)
         if (
             validation_report_id is not None
-            and not self.repository.has_validation_report(validation_report_id)
+            and (
+                latest_validation is None
+                or validation_report_id != latest_validation.validation_report_id
+            )
         ):
-            raise ValueError("Unknown validationReportId for approval decision.")
+            raise ValueError("validationReportId must match the latest artifact validation.")
+        if decision == "APPROVE":
+            if latest_validation is None:
+                raise ValueError("APPROVE requires a PASSED validation report.")
+            if latest_validation.status != "PASSED":
+                raise ValueError("APPROVE requires latest validation status PASSED.")
         return self.repository.add_approval(
             artifact_id=artifact_id,
             decision=decision,
@@ -257,7 +261,7 @@ class WorkflowService:
         assumptions = (
             tuple(bundle.manifest.assumptions)
             + tuple(bundle.blockers)
-            + (JAVA_MYBATIS_DOMAIN_MAPPING_NOTE, WORKFLOW_METADATA_NOTE)
+            + (WORKFLOW_METADATA_NOTE,)
         )
         artifacts = []
         for file in bundle.files:

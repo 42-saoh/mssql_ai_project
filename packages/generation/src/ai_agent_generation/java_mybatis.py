@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ai_agent_domain import ArtifactType, RequestedOutputType
 
-from ai_agent_generation.artifact_types import JAVA_MYBATIS_DTO_MAPPING_BLOCKER
 from ai_agent_generation.models import (
     DraftFile,
     GenerationContext,
@@ -65,7 +64,6 @@ class JavaMyBatisSpWrapperRenderer:
             requested_output_type=self.requested_output_type,
             manifest=manifest,
             files=files,
-            blockers=(JAVA_MYBATIS_DTO_MAPPING_BLOCKER,),
         )
 
     def dto_path(self, context: GenerationContext) -> str:
