@@ -14,6 +14,14 @@
 - template: `template:java_mybatis_sp_wrapper@0.2.0`
 - registry: `java_mybatis_templates_v1`
 
+## generator_metadata
+- generatorVersion: `generation-core-0.1.0`
+- requestedOutputType: `JAVA_MYBATIS_DRAFT`
+- artifactStatus: `DRAFT`
+- reviewRequired: `true`
+- approvalRequired: `true`
+- publishBoundary: `blocked_until_validation_review_approval`
+
 ## input_snapshot
 - sanitizedSnapshotHash: `9a64f54f70ebdb4a7bfd17b80da9388827abb111e358a0433d20a61433af92f5`
 - sanitizedSnapshot:

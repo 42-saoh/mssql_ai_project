@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 
 import yaml
@@ -62,11 +63,16 @@ def test_java_mybatis_sp_wrapper_matches_golden_manifest_and_files() -> None:
     )
     assert bundle.blockers == ()
     assert bundle.manifest.review_required is True
-    assert "REVIEW_REQUIRED" in bundle.manifest.content
-    assert "## registry_versions" in bundle.manifest.content
-    assert "## input_snapshot" in bundle.manifest.content
-    assert "## sql_risk_markers" in bundle.manifest.content
-    assert "## diff_review_summary" in bundle.manifest.content
+    content = bundle.manifest.content
+    assert "REVIEW_REQUIRED" in content
+    assert "## registry_versions" in content
+    assert "## generator_metadata" in content
+    assert "- generatorVersion: `generation-core-0.1.0`" in content
+    assert "- artifactStatus: `DRAFT`" in content
+    assert "- publishBoundary: `blocked_until_validation_review_approval`" in content
+    assert "## input_snapshot" in content
+    assert "## sql_risk_markers" in content
+    assert "## diff_review_summary" in content
     assert "template:java_mybatis_sp_wrapper@0.2.0" in bundle.manifest.registry_refs
     assert bundle.manifest.extra["inputSnapshotHash"] == context.input_snapshot_hash
 
@@ -175,3 +181,25 @@ def test_missing_policy_naming_asset_blocks_generation() -> None:
         assert "policy.classNames.mapper" in str(exc)
     else:
         raise AssertionError("broken generation policy should block rendering")
+
+
+def test_template_requested_output_drift_blocks_generation() -> None:
+    assets = load_generation_assets(template_ids=("java_mybatis_sp_wrapper",))
+    registry = deepcopy(assets.registry)
+    registry["templates"]["java_mybatis_sp_wrapper"]["requestedOutputType"] = (
+        RequestedOutputType.DTO_MODEL_DRAFT.value
+    )
+    drifted_assets = GenerationPolicyAssets(
+        policy=assets.policy,
+        registry=registry,
+        policy_path=assets.policy_path,
+        registry_path=assets.registry_path,
+    )
+
+    try:
+        JavaMyBatisSpWrapperRenderer(assets=drifted_assets)
+    except GenerationPolicyError as exc:
+        assert "requestedOutputType drift" in str(exc)
+        assert RequestedOutputType.JAVA_MYBATIS_DRAFT.value in str(exc)
+    else:
+        raise AssertionError("registry requestedOutputType drift should block rendering")

@@ -10,6 +10,7 @@ expectedFiles:
 checks:
 - output_structure_headings_present
 - registry_versions_present
+- generator_metadata_present
 - input_snapshot_hash_present
 - evidence_summary_present
 - assumptions_and_todo_present

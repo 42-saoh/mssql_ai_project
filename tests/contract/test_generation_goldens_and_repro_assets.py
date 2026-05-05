@@ -7,6 +7,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
+GENERATION_GOLDENS = (
+    ("java_mybatis_sp_wrapper_order_request_v1", "spWrapper", "OrderRequest"),
+    ("java_mybatis_dto_model_order_metadata_v1", "metadataObject", "OrderMetadata"),
+)
+
 
 def test_dev_port_and_repro_assets_exist() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
@@ -32,20 +37,25 @@ def test_dev_port_and_repro_assets_exist() -> None:
     assert "WORKTREE_PORT_SLOT=21 make dev-ports" in runbook
 
 
-def test_generation_golden_sample_exists_and_is_consistent() -> None:
-    sample_dir = ROOT / "fixtures" / "generation" / "golden" / "java_mybatis_sp_wrapper_order_request_v1"
-    assert sample_dir.exists()
+def test_generation_golden_samples_exist_and_are_consistent() -> None:
+    for sample_name, generation_mode, entity_name in GENERATION_GOLDENS:
+        sample_dir = ROOT / "fixtures" / "generation" / "golden" / sample_name
+        assert sample_dir.exists()
 
-    input_data = yaml.safe_load((sample_dir / "input.yaml").read_text(encoding="utf-8"))
-    manifest = yaml.safe_load((sample_dir / "expected_manifest.yaml").read_text(encoding="utf-8"))
-    expected_output = (sample_dir / "expected_output.md").read_text(encoding="utf-8")
+        input_data = yaml.safe_load((sample_dir / "input.yaml").read_text(encoding="utf-8"))
+        manifest = yaml.safe_load(
+            (sample_dir / "expected_manifest.yaml").read_text(encoding="utf-8")
+        )
+        expected_output = (sample_dir / "expected_output.md").read_text(encoding="utf-8")
 
-    assert input_data["request"]["generationMode"] == "spWrapper"
-    assert input_data["request"]["entityName"] == "OrderRequest"
-    assert manifest["generationMode"] == "spWrapper"
-    assert "## evidence_summary" in expected_output
-    assert "## assumptions_and_todo" in expected_output
-    assert "## review_checklist" in expected_output
+        assert input_data["request"]["generationMode"] == generation_mode
+        assert input_data["request"]["entityName"] == entity_name
+        assert manifest["generationMode"] == generation_mode
+        assert "generator_metadata_present" in manifest["checks"]
+        assert "## generator_metadata" in expected_output
+        assert "## evidence_summary" in expected_output
+        assert "## assumptions_and_todo" in expected_output
+        assert "## review_checklist" in expected_output
 
-    for relative_path in manifest["expectedFiles"]:
-        assert (sample_dir / relative_path).exists(), relative_path
+        for relative_path in manifest["expectedFiles"]:
+            assert (sample_dir / relative_path).exists(), relative_path
