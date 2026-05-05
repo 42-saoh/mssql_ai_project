@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -232,7 +231,12 @@ class FixtureMetadataRepository:
 
     def _handle_get_procedure_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
         procedure, index = self._find_procedure(arguments["schema"], arguments["procedureName"])
-        definition = str(procedure["definition"])
+        definition = procedure.get("definition")
+        definition_info = definition_metadata(
+            definition,
+            is_encrypted=bool(procedure.get("isEncrypted", False)),
+        )
+        caveats = [] if definition_info["available"] else ["definition_unavailable"]
         evidence = self._evidence(
             "procedure-definition",
             "PROCEDURE",
@@ -244,8 +248,13 @@ class FixtureMetadataRepository:
             "schema": procedure["schema"],
             "procedureName": procedure["name"],
             "definition": definition,
-            "definitionHash": _sha256(definition),
-            "isEncrypted": bool(procedure.get("isEncrypted", False)),
+            "definitionHash": definition_info["hash"],
+            "definitionLength": definition_info["length"],
+            "detectedPatterns": definition_info["detectedPatterns"],
+            "isEncrypted": definition_info["isEncrypted"],
+            "hasDefinitionAccess": definition_info["available"],
+            "caveats": caveats,
+            "reviewRequired": bool(caveats),
             "snapshotMode": arguments.get("snapshotMode", "LATEST"),
         }
         return self._result(data=data, evidence_refs=[evidence])
@@ -399,7 +408,12 @@ class FixtureMetadataRepository:
 
     def _handle_get_view_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
         view, index = self._find_view(arguments["schema"], arguments["viewName"])
-        definition = str(view["definition"])
+        definition = view.get("definition")
+        definition_info = definition_metadata(definition)
+        dependencies = view.get("dependencies", [])
+        caveats = _dependency_caveats(dependencies)
+        if not definition_info["available"]:
+            caveats.append("definition_unavailable")
         evidence = self._evidence(
             "view-definition",
             "VIEW",
@@ -411,14 +425,26 @@ class FixtureMetadataRepository:
             "schema": view["schema"],
             "viewName": view["name"],
             "definition": definition,
-            "definitionHash": _sha256(definition),
+            "definitionHash": definition_info["hash"],
+            "definitionLength": definition_info["length"],
+            "detectedPatterns": definition_info["detectedPatterns"],
+            "hasDefinitionAccess": definition_info["available"],
+            "dependencies": dependencies,
+            "dependencySummary": procedure_dependency_summary(dependencies),
+            "caveats": list(dict.fromkeys(caveats)),
+            "reviewRequired": bool(caveats),
             "snapshotMode": arguments.get("snapshotMode", "LATEST"),
         }
         return self._result(data=data, evidence_refs=[evidence])
 
     def _handle_get_function_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
         function, index = self._find_function(arguments["schema"], arguments["functionName"])
-        definition = str(function["definition"])
+        definition = function.get("definition")
+        definition_info = definition_metadata(definition)
+        dependencies = function.get("dependencies", [])
+        caveats = _dependency_caveats(dependencies)
+        if not definition_info["available"]:
+            caveats.append("definition_unavailable")
         evidence = self._evidence(
             "function-definition",
             "FUNCTION",
@@ -430,7 +456,14 @@ class FixtureMetadataRepository:
             "schema": function["schema"],
             "functionName": function["name"],
             "definition": definition,
-            "definitionHash": _sha256(definition),
+            "definitionHash": definition_info["hash"],
+            "definitionLength": definition_info["length"],
+            "detectedPatterns": definition_info["detectedPatterns"],
+            "hasDefinitionAccess": definition_info["available"],
+            "dependencies": dependencies,
+            "dependencySummary": procedure_dependency_summary(dependencies),
+            "caveats": list(dict.fromkeys(caveats)),
+            "reviewRequired": bool(caveats),
             "snapshotMode": arguments.get("snapshotMode", "LATEST"),
         }
         return self._result(data=data, evidence_refs=[evidence])
@@ -959,6 +992,7 @@ class LiveMetadataRepository:
             definition,
             is_encrypted=bool(row.get("is_encrypted")),
         )
+        caveats = [] if definition_info["available"] else ["definition_unavailable"]
         evidence = self._live_evidence(
             "procedure-definition",
             "PROCEDURE",
@@ -977,6 +1011,8 @@ class LiveMetadataRepository:
                 "detectedPatterns": definition_info["detectedPatterns"],
                 "isEncrypted": definition_info["isEncrypted"],
                 "hasDefinitionAccess": definition_info["available"],
+                "caveats": caveats,
+                "reviewRequired": bool(caveats),
                 "snapshotMode": arguments.get("snapshotMode", "LATEST"),
             },
             evidence_refs=[evidence],
@@ -2332,10 +2368,6 @@ def _same(left: Any, right: Any) -> bool:
 
 def _matches(needle: str, value: Any) -> bool:
     return needle.lower() in str(value).lower()
-
-
-def _sha256(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _collection_name(object_type: str) -> str:

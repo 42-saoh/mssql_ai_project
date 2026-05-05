@@ -169,5 +169,6 @@ def test_tool_error_response_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     assert payload["ok"] is False
     assert payload["toolName"] == "get_table_schema"
     assert payload["dbProfileId"] == "master"
+    assert payload["collectedAt"]
     assert payload["error"]["code"] == "OBJECT_NOT_FOUND"
     assert "data" not in payload

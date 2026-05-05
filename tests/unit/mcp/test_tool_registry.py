@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +12,22 @@ from mssql_mcp_app.profiles import DbProfile, load_db_profiles
 from mssql_mcp_app.registry import build_tool_registry
 from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
 from mssql_mcp_app.settings import LiveMetadataSettings, load_live_metadata_settings
+
+
+DEFINITION_TOOL_CASES = [
+    (
+        "get_procedure_definition",
+        {"dbProfileId": "master", "schema": "dbo", "procedureName": "usp_GetOrderSummary"},
+    ),
+    (
+        "get_view_definition",
+        {"dbProfileId": "master", "schema": "dbo", "viewName": "VW_ORDER_SUMMARY"},
+    ),
+    (
+        "get_function_definition",
+        {"dbProfileId": "master", "schema": "dbo", "functionName": "fn_NormalizeOrderStatus"},
+    ),
+]
 
 
 def test_fixture_repository_returns_table_schema() -> None:
@@ -101,6 +118,58 @@ def test_fixture_repository_returns_view_and_function_inventory() -> None:
     assert views["data"]["views"][0]["definition"]["available"] is True
     assert functions["data"]["functions"][0]["objectType"] == "FUNCTION"
     assert functions["data"]["functions"][0]["definition"]["available"] is True
+
+
+@pytest.mark.parametrize("tool_name, arguments", DEFINITION_TOOL_CASES)
+def test_fixture_definition_tools_return_standard_definition_metadata(
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    payload = registry.invoke_payload(tool_name, {"arguments": arguments})
+    data = payload["data"]
+
+    assert payload["ok"] is True
+    assert isinstance(data["definition"], str)
+    assert data["definitionHash"]
+    assert isinstance(data["definitionLength"], int)
+    assert data["definitionLength"] == len(data["definition"])
+    assert isinstance(data["detectedPatterns"], list)
+    assert data["hasDefinitionAccess"] is True
+    assert isinstance(data["caveats"], list)
+    assert isinstance(data["reviewRequired"], bool)
+    assert data["sourceProfile"] == arguments["dbProfileId"]
+    assert data["objectIdentity"]["database"] == "master"
+
+
+def test_fixture_inventory_tools_do_not_return_definition_text() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    procedure_inventory = registry.invoke_payload(
+        "list_procedures",
+        {"arguments": {"dbProfileId": "master", "schema": "dbo", "topK": 10}},
+    )
+    view_inventory = registry.invoke_payload(
+        "list_views",
+        {"arguments": {"dbProfileId": "master", "schema": "dbo", "topK": 10}},
+    )
+    function_inventory = registry.invoke_payload(
+        "list_functions",
+        {"arguments": {"dbProfileId": "master", "schema": "dbo", "topK": 10}},
+    )
+
+    inventories = [procedure_inventory, view_inventory, function_inventory]
+    assert "CREATE PROCEDURE" not in str(inventories)
+    assert "CREATE VIEW" not in str(inventories)
+    assert "CREATE FUNCTION" not in str(inventories)
+    assert procedure_inventory["data"]["procedures"][0]["definition"]["hash"]
+    assert view_inventory["data"]["views"][0]["definition"]["hash"]
+    assert function_inventory["data"]["functions"][0]["definition"]["hash"]
 
 
 def test_tool_invocation_rejects_free_form_sql_argument(monkeypatch) -> None:
@@ -244,6 +313,52 @@ def test_tool_invocation_rejects_unknown_profile_id(monkeypatch) -> None:
     assert payload["error"]["code"] == "PROFILE_NOT_FOUND"
 
 
+def test_check_database_exists_allows_master_to_probe_ppm(monkeypatch) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/check_database_exists/invoke",
+        json={"arguments": {"dbProfileId": "master", "databaseName": "PPM"}},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["data"]["databaseName"] == "PPM"
+    assert payload["data"]["sourceProfile"] == "master"
+
+
+@pytest.mark.parametrize(
+    "db_profile_id, database_name, expected_database",
+    [
+        ("ppm", "PLF", "PPM"),
+        ("plf", "PPM", "PLF"),
+    ],
+)
+def test_check_database_exists_rejects_cross_profile_database_probe(
+    db_profile_id: str,
+    database_name: str,
+    expected_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/check_database_exists/invoke",
+        json={"arguments": {"dbProfileId": db_profile_id, "databaseName": database_name}},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["collectedAt"]
+    assert payload["error"]["code"] == "INVALID_ARGUMENTS"
+    assert payload["error"]["details"]["requestedDatabase"] == database_name
+    assert payload["error"]["details"]["expectedDatabase"] == expected_database
+
+
 def test_live_tool_execution_stays_behind_env_gated_boundary(monkeypatch) -> None:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "1")
     monkeypatch.delenv("MSSQL_METADATA_HOST", raising=False)
@@ -311,3 +426,113 @@ def test_live_missing_table_metadata_reports_not_found_without_plf_fallback() ->
     assert exc_info.value.code == "OBJECT_NOT_FOUND"
     assert exc_info.value.details["objectType"] == "TABLE"
     assert repository.queried_databases == ["PPM"]
+
+
+class DefinitionShapeLiveMetadataRepository(LiveMetadataRepository):
+    def __init__(self) -> None:
+        super().__init__(
+            settings=LiveMetadataSettings(
+                live_metadata_enabled=True,
+                metadata_host="127.0.0.1",
+                metadata_port=1433,
+                metadata_user="readonly_user",
+                metadata_password="secret",
+                metadata_db_fallback="master",
+                default_profile_id="master",
+                profile_file="config/mssql/local_docker_profiles.yaml",
+                connect_timeout_seconds=7,
+            ),
+            profiles=[
+                DbProfile(
+                    id="master",
+                    label="Server metadata (master)",
+                    database="master",
+                    purpose="server",
+                    is_default=True,
+                )
+            ],
+        )
+
+    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+        if "sys.sql_expression_dependencies" in sql:
+            return []
+        if tool_name == "get_procedure_definition":
+            return [
+                {
+                    "schema_name": params[0],
+                    "object_name": params[1],
+                    "is_encrypted": 0,
+                    "definition": (
+                        "CREATE PROCEDURE dbo.usp_GetOrderSummary AS "
+                        "BEGIN SELECT ORDER_ID FROM dbo.TB_ORDER END"
+                    ),
+                }
+            ]
+        if tool_name == "get_view_definition":
+            return [
+                {
+                    "schema_name": params[0],
+                    "object_name": params[1],
+                    "object_id": 101,
+                    "definition": (
+                        "CREATE VIEW dbo.VW_ORDER_SUMMARY AS "
+                        "SELECT ORDER_ID FROM dbo.TB_ORDER"
+                    ),
+                }
+            ]
+        if tool_name == "get_function_definition":
+            return [
+                {
+                    "schema_name": params[0],
+                    "object_name": params[1],
+                    "object_id": 102,
+                    "definition": (
+                        "CREATE FUNCTION dbo.fn_NormalizeOrderStatus() "
+                        "RETURNS INT AS BEGIN RETURN 1 END"
+                    ),
+                }
+            ]
+        return []
+
+
+@pytest.mark.parametrize("tool_name, arguments", DEFINITION_TOOL_CASES)
+def test_live_definition_tools_match_fixture_definition_metadata_shape(
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    fixture_registry = build_tool_registry(
+        repository=FixtureMetadataRepository(),
+        profiles=profiles,
+    )
+    live_repository = DefinitionShapeLiveMetadataRepository()
+    live_registry = build_tool_registry(
+        repository=live_repository,
+        profiles=live_repository.profiles or [],
+    )
+
+    fixture_data = fixture_registry.invoke_payload(tool_name, {"arguments": arguments})["data"]
+    live_data = live_registry.invoke_payload(tool_name, {"arguments": arguments})["data"]
+
+    expected_keys = {
+        "definition",
+        "definitionHash",
+        "definitionLength",
+        "detectedPatterns",
+        "hasDefinitionAccess",
+        "caveats",
+        "reviewRequired",
+        "sourceProfile",
+        "sourceDatabase",
+        "objectIdentity",
+        "snapshotMode",
+    }
+    assert expected_keys <= set(fixture_data)
+    assert expected_keys <= set(live_data)
+    assert isinstance(fixture_data["definitionLength"], int)
+    assert isinstance(live_data["definitionLength"], int)
+    assert isinstance(fixture_data["detectedPatterns"], list)
+    assert isinstance(live_data["detectedPatterns"], list)
+    assert isinstance(fixture_data["hasDefinitionAccess"], bool)
+    assert isinstance(live_data["hasDefinitionAccess"], bool)
