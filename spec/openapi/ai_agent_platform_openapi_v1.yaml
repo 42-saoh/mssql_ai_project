@@ -234,6 +234,72 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/MetadataToolSummary"
+  /api/v1/metadata/search:
+    get:
+      tags: [metadata]
+      summary: Search read-only MSSQL metadata objects.
+      operationId: searchMetadataObjects
+      description: |
+        Searches metadata object identities through the MSSQL Metadata MCP read-only boundary.
+        The response is limited to object identity, profile/database context, snapshot/evidence
+        references, caveats, review-required markers, and blocker codes. It never returns row
+        data, executes stored procedures, exposes SQL definition text, or performs DDL/DML.
+        PPM search must not fall back to PLF when PPM is unavailable.
+      parameters:
+        - name: dbProfileId
+          in: query
+          required: true
+          schema:
+            type: string
+          examples:
+            master:
+              value: master
+            ppm:
+              value: ppm
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          example: order
+        - name: objectTypes
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/MetadataSearchObjectType"
+            default: [PROCEDURE, TABLE, VIEW, FUNCTION]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Metadata object search results and blocker/caveat context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/registry/versions:
     get:
       tags: [registry]
@@ -275,8 +341,26 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The requested read-only metadata dependency is blocked by policy or access.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    DependencyBlocked:
+      description: Required metadata dependency is unavailable or blocked by policy.
       content:
         application/json:
           schema:
@@ -563,6 +647,116 @@ components:
         readOnly:
           type: boolean
           const: true
+    MetadataSearchObjectType:
+      type: string
+      enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+    MetadataObjectIdentity:
+      type: object
+      required: [schema, name, type]
+      properties:
+        schema:
+          type: string
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/MetadataSearchObjectType"
+    MetadataSearchBlocker:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          examples:
+            - PPM_MANIFEST_TEMPLATE_ONLY
+            - METADATA_SEARCH_MCP_TOOL_MISSING
+            - PPM_DB_NOT_FOUND
+            - PPM_DB_ACCESS_DENIED
+            - LIVE_METADATA_UNAVAILABLE
+            - DEPENDENCY_METADATA_INCOMPLETE
+        message:
+          type: string
+    MetadataSearchResult:
+      type: object
+      required:
+        - objectIdentity
+        - sourceProfile
+        - sourceDatabase
+        - evidenceRefs
+        - caveats
+        - reviewRequired
+        - blockers
+      properties:
+        objectIdentity:
+          $ref: "#/components/schemas/MetadataObjectIdentity"
+        sourceProfile:
+          type: string
+        sourceDatabase:
+          type: string
+        snapshotId:
+          type: string
+        evidenceRefs:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceRef"
+        caveats:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchBlocker"
+    MetadataSearchResponse:
+      type: object
+      required:
+        - dbProfileId
+        - query
+        - objectTypes
+        - limit
+        - sourceProfile
+        - sourceDatabase
+        - results
+        - caveats
+        - reviewRequired
+        - blockers
+      properties:
+        dbProfileId:
+          type: string
+        query:
+          type: string
+        objectTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchObjectType"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        sourceProfile:
+          type: string
+        sourceDatabase:
+          type: string
+        snapshotId:
+          type: string
+        collectedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchResult"
+        caveats:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchBlocker"
     RegistryVersion:
       type: object
       required: [registryType, version]
@@ -576,7 +770,7 @@ components:
           type: boolean
     ErrorResponse:
       type: object
-      required: [detail]
+      required: [detail, code]
       properties:
         detail:
           type: string
