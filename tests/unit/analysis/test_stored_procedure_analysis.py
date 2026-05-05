@@ -156,6 +156,45 @@ def test_cte_alias_is_not_table_dependency_and_cte_body_is_not_result_set() -> N
     assert result.patterns.multi_result_set.detected is True
 
 
+def test_cte_alias_scope_does_not_hide_later_table_reference() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_OrderCteScope
+    AS
+    BEGIN
+        WITH base_cte AS (
+            SELECT ORDER_ID
+            FROM dbo.TB_ORDER
+        ),
+        order_cte AS (
+            SELECT ORDER_ID
+            FROM base_cte
+        )
+        SELECT ORDER_ID
+        FROM order_cte;
+
+        SELECT ORDER_ID
+        FROM order_cte;
+    END
+    """
+
+    result = analyze_stored_procedure(sql, source_name="cte-scope-regression.sql")
+
+    assert _table_references(result) == [
+        {
+            "fullName": "dbo.TB_ORDER",
+            "objectType": "TABLE",
+            "operation": "READ",
+            "status": "OBSERVED",
+        },
+        {
+            "fullName": "order_cte",
+            "objectType": "TABLE",
+            "operation": "READ",
+            "status": "OBSERVED",
+        },
+    ]
+
+
 def test_plain_variable_assignment_does_not_trigger_dynamic_sql() -> None:
     sql = """
     CREATE PROCEDURE dbo.usp_OrderCount

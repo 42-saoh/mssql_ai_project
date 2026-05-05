@@ -123,7 +123,7 @@ def extract_table_references(
             identifier = parse_identifier(target)
             if not identifier.object_name or _is_keyword(identifier.object_name):
                 continue
-            if scan.is_cte_reference(identifier):
+            if scan.is_cte_reference(identifier, match.start("target")):
                 continue
             object_type, status = _classify_relation_reference(identifier.object_name)
             key = (identifier.full_name.upper(), operation, object_type)
