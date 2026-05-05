@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import ValidationError
 
 from mssql_mcp_app.catalog import TOOL_CATALOG, ToolSpec
 from mssql_mcp_app.errors import (
+    INVALID_ARGUMENTS,
     INTERNAL_ERROR,
     PROFILE_NOT_FOUND,
     UNKNOWN_TOOL,
@@ -37,9 +39,12 @@ class ToolRegistry:
         request = self._parse_request(tool_name, payload)
 
         raw_arguments = request.arguments
-        enforce_read_only_arguments(raw_arguments)
+        enforce_read_only_arguments(
+            raw_arguments,
+            allowed_argument_paths=_allowed_guardrail_paths(tool.name),
+        )
         arguments = validate_tool_arguments(tool, raw_arguments)
-        self._validate_profile(arguments)
+        self._validate_profile(tool.name, arguments)
 
         result = self.repository.invoke(tool.name, arguments)
         data = self._standardize_success_data(tool.name, arguments, result.data)
@@ -80,14 +85,45 @@ class ToolRegistry:
                 {"toolName": tool_name, "validationErrors": _safe_validation_errors(exc)},
             ) from exc
 
-    def _validate_profile(self, arguments: dict[str, Any]) -> None:
+    def _validate_profile(self, tool_name: str, arguments: dict[str, Any]) -> None:
         profile_id = arguments.get("dbProfileId")
-        if profile_id not in self._profile_ids:
+        profile = self._profile_by_id(profile_id)
+        if profile is None:
             raise MetadataToolError(
                 PROFILE_NOT_FOUND,
                 "Unknown dbProfileId. Use one of the public profile registry ids.",
                 {"dbProfileId": profile_id, "availableProfileIds": sorted(self._profile_ids)},
             )
+        if tool_name == "check_database_exists":
+            self._validate_database_probe_boundary(profile, arguments)
+
+    def _profile_by_id(self, profile_id: Any) -> DbProfile | None:
+        for profile in self.profiles:
+            if profile.id == profile_id:
+                return profile
+        return None
+
+    @staticmethod
+    def _validate_database_probe_boundary(
+        profile: DbProfile,
+        arguments: dict[str, Any],
+    ) -> None:
+        requested_database = arguments.get("databaseName")
+        if not requested_database:
+            return
+        if profile.id == "master":
+            return
+        if str(requested_database).lower() == profile.database.lower():
+            return
+        raise MetadataToolError(
+            INVALID_ARGUMENTS,
+            "check_database_exists may only probe another database from the master profile.",
+            {
+                "dbProfileId": profile.id,
+                "requestedDatabase": requested_database,
+                "expectedDatabase": profile.database,
+            },
+        )
 
     def _standardize_success_data(
         self,
@@ -129,6 +165,12 @@ def build_tool_registry(
     return ToolRegistry(catalog=catalog or TOOL_CATALOG, repository=repository, profiles=profiles)
 
 
+def _allowed_guardrail_paths(tool_name: str) -> set[str]:
+    if tool_name == "search_metadata_objects":
+        return {"arguments.query"}
+    return set()
+
+
 def error_response(
     tool_name: str,
     error: MetadataToolError,
@@ -140,6 +182,7 @@ def error_response(
         toolName=tool_name,
         dbProfileId=_argument_value(arguments, "dbProfileId"),
         snapshotId=_argument_value(arguments, "snapshotId"),
+        collectedAt=_utc_now(),
         evidenceRefs=[],
         error=ToolErrorPayload(
             code=error.code,
@@ -148,6 +191,10 @@ def error_response(
         ),
     )
     return payload.model_dump(exclude_none=True)
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _argument_value(arguments: dict[str, Any] | None, key: str) -> Any:
@@ -252,7 +299,12 @@ def _object_identity_for_tool(
             schema=arguments.get("schema"),
             name=arguments.get("objectName"),
         )
-    if tool_name in {"search_tables", "search_columns", "find_similar_tables"}:
+    if tool_name in {
+        "search_tables",
+        "search_columns",
+        "find_similar_tables",
+        "search_metadata_objects",
+    }:
         return _identity(
             source_database=source_database,
             object_type="CATALOG",

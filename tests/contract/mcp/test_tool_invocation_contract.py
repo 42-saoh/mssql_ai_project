@@ -35,6 +35,12 @@ TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
         "schema": "dbo",
         "topK": 10,
     },
+    "search_metadata_objects": {
+        "dbProfileId": "master",
+        "query": "order",
+        "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+        "limit": 4,
+    },
     "get_procedure_definition": {
         "dbProfileId": "master",
         "schema": "dbo",
@@ -155,6 +161,44 @@ def test_fixture_backed_tool_contract(
         assert evidence_ref["path"].startswith("fixtures/mcp/")
 
 
+def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/search_metadata_objects/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "query": "order",
+                "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+                "limit": 4,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["data"]["results"]
+    assert len(payload["data"]["results"]) <= 4
+    assert payload["data"]["blockers"]
+    for result in payload["data"]["results"]:
+        assert set(result["objectIdentity"]) == {"schema", "name", "type"}
+        assert result["objectIdentity"]["type"] in {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"}
+        assert result["sourceProfile"] == "master"
+        assert result["sourceDatabase"] == "master"
+        assert result["snapshotId"] == "mcp-fixture-snapshot-0001"
+        assert result["evidenceRefs"]
+        assert isinstance(result["caveats"], list)
+        assert isinstance(result["reviewRequired"], bool)
+        assert isinstance(result["blockers"], list)
+
+    serialized = str(payload).lower()
+    forbidden = ("rowdata", "row_data", "create procedure", "create view", "create function")
+    assert not any(value in serialized for value in forbidden)
+
+
 def test_tool_error_response_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     client = TestClient(app)
@@ -169,5 +213,6 @@ def test_tool_error_response_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     assert payload["ok"] is False
     assert payload["toolName"] == "get_table_schema"
     assert payload["dbProfileId"] == "master"
+    assert payload["collectedAt"]
     assert payload["error"]["code"] == "OBJECT_NOT_FOUND"
     assert "data" not in payload

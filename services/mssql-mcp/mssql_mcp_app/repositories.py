@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,6 +8,7 @@ from typing import Any, Protocol
 
 from mssql_mcp_app.catalog import repo_root
 from mssql_mcp_app.errors import (
+    DEPENDENCY_METADATA_INCOMPLETE,
     LIVE_METADATA_UNAVAILABLE,
     METADATA_READ_ONLY_PERMISSION_INSUFFICIENT,
     OBJECT_NOT_FOUND,
@@ -80,6 +80,7 @@ class FixtureMetadataRepository:
         data: dict[str, Any],
         evidence_refs: list[dict[str, Any]],
     ) -> MetadataToolResult:
+        data = _attach_snapshot_to_results(data, self.snapshot_id)
         return MetadataToolResult(
             snapshot_id=self.snapshot_id,
             collected_at=self.collected_at,
@@ -230,9 +231,119 @@ class FixtureMetadataRepository:
         }
         return self._result(data=data, evidence_refs=[evidence])
 
+    def _handle_search_metadata_objects(self, arguments: dict[str, Any]) -> MetadataToolResult:
+        query = arguments["query"]
+        object_types = _search_object_types(arguments)
+        limit = _search_limit(arguments)
+        context = source_context(arguments, payload=self.payload)
+        results: list[dict[str, Any]] = []
+
+        if "PROCEDURE" in object_types:
+            for index, procedure in enumerate(self.payload.get("procedures", [])):
+                evidence = self._evidence(
+                    "procedure-search",
+                    "PROCEDURE",
+                    procedure["schema"],
+                    procedure["name"],
+                    f"/procedures/{index}",
+                )
+                item = procedure_inventory_item(procedure, evidence_refs=[evidence])
+                score = _metadata_search_score(item, query)
+                if score > 0:
+                    item["score"] = score
+                    results.append(_metadata_search_result_item(item, context=context))
+
+        if "TABLE" in object_types:
+            for index, table in enumerate(self.payload.get("tables", [])):
+                evidence = self._evidence(
+                    "table-search",
+                    "TABLE",
+                    table["schema"],
+                    table["name"],
+                    f"/tables/{index}",
+                )
+                item = table_inventory_item(
+                    table,
+                    related_procedures=self._related_for_table(table["schema"], table["name"]),
+                    evidence_refs=[evidence],
+                )
+                score = _metadata_search_score(item, query)
+                if score > 0:
+                    item["score"] = score
+                    results.append(_metadata_search_result_item(item, context=context))
+
+        if "VIEW" in object_types:
+            for index, view in enumerate(self.payload.get("views", [])):
+                evidence = self._evidence(
+                    "view-search",
+                    "VIEW",
+                    view["schema"],
+                    view["name"],
+                    f"/views/{index}",
+                )
+                item = module_inventory_item(view, object_type="VIEW", evidence_refs=[evidence])
+                score = _metadata_search_score(item, query)
+                if score > 0:
+                    item["score"] = score
+                    results.append(_metadata_search_result_item(item, context=context))
+
+        if "FUNCTION" in object_types:
+            for index, function in enumerate(self.payload.get("functions", [])):
+                evidence = self._evidence(
+                    "function-search",
+                    "FUNCTION",
+                    function["schema"],
+                    function["name"],
+                    f"/functions/{index}",
+                )
+                item = module_inventory_item(
+                    function,
+                    object_type="FUNCTION",
+                    evidence_refs=[evidence],
+                )
+                score = _metadata_search_score(item, query)
+                if score > 0:
+                    item["score"] = score
+                    results.append(_metadata_search_result_item(item, context=context))
+
+        results.sort(
+            key=lambda item: (
+                -item["score"],
+                item["objectIdentity"]["type"],
+                item["objectIdentity"]["schema"],
+                item["objectIdentity"]["name"],
+            )
+        )
+        results = [_without_score(item) for item in results[:limit]]
+        caveats = _metadata_search_caveats(results)
+        blockers = _blockers_for_caveats(caveats)
+        evidence = self._evidence(
+            "metadata-object-search",
+            "CATALOG",
+            "*",
+            "metadata_objects",
+            "/",
+        )
+        data = {
+            **context,
+            "query": query,
+            "objectTypes": object_types,
+            "limit": limit,
+            "results": results,
+            "caveats": caveats,
+            "reviewRequired": bool(caveats or blockers),
+            "blockers": blockers,
+        }
+        return self._result(data=data, evidence_refs=[evidence])
+
     def _handle_get_procedure_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
         procedure, index = self._find_procedure(arguments["schema"], arguments["procedureName"])
-        definition = str(procedure["definition"])
+        definition = procedure.get("definition")
+        definition_info = definition_metadata(
+            definition,
+            is_encrypted=bool(procedure.get("isEncrypted", False)),
+        )
+        caveats = [] if definition_info["available"] else ["definition_unavailable"]
         evidence = self._evidence(
             "procedure-definition",
             "PROCEDURE",
@@ -244,8 +355,13 @@ class FixtureMetadataRepository:
             "schema": procedure["schema"],
             "procedureName": procedure["name"],
             "definition": definition,
-            "definitionHash": _sha256(definition),
-            "isEncrypted": bool(procedure.get("isEncrypted", False)),
+            "definitionHash": definition_info["hash"],
+            "definitionLength": definition_info["length"],
+            "detectedPatterns": definition_info["detectedPatterns"],
+            "isEncrypted": definition_info["isEncrypted"],
+            "hasDefinitionAccess": definition_info["available"],
+            "caveats": caveats,
+            "reviewRequired": bool(caveats),
             "snapshotMode": arguments.get("snapshotMode", "LATEST"),
         }
         return self._result(data=data, evidence_refs=[evidence])
@@ -399,7 +515,12 @@ class FixtureMetadataRepository:
 
     def _handle_get_view_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
         view, index = self._find_view(arguments["schema"], arguments["viewName"])
-        definition = str(view["definition"])
+        definition = view.get("definition")
+        definition_info = definition_metadata(definition)
+        dependencies = view.get("dependencies", [])
+        caveats = _dependency_caveats(dependencies)
+        if not definition_info["available"]:
+            caveats.append("definition_unavailable")
         evidence = self._evidence(
             "view-definition",
             "VIEW",
@@ -411,14 +532,26 @@ class FixtureMetadataRepository:
             "schema": view["schema"],
             "viewName": view["name"],
             "definition": definition,
-            "definitionHash": _sha256(definition),
+            "definitionHash": definition_info["hash"],
+            "definitionLength": definition_info["length"],
+            "detectedPatterns": definition_info["detectedPatterns"],
+            "hasDefinitionAccess": definition_info["available"],
+            "dependencies": dependencies,
+            "dependencySummary": procedure_dependency_summary(dependencies),
+            "caveats": list(dict.fromkeys(caveats)),
+            "reviewRequired": bool(caveats),
             "snapshotMode": arguments.get("snapshotMode", "LATEST"),
         }
         return self._result(data=data, evidence_refs=[evidence])
 
     def _handle_get_function_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
         function, index = self._find_function(arguments["schema"], arguments["functionName"])
-        definition = str(function["definition"])
+        definition = function.get("definition")
+        definition_info = definition_metadata(definition)
+        dependencies = function.get("dependencies", [])
+        caveats = _dependency_caveats(dependencies)
+        if not definition_info["available"]:
+            caveats.append("definition_unavailable")
         evidence = self._evidence(
             "function-definition",
             "FUNCTION",
@@ -430,7 +563,14 @@ class FixtureMetadataRepository:
             "schema": function["schema"],
             "functionName": function["name"],
             "definition": definition,
-            "definitionHash": _sha256(definition),
+            "definitionHash": definition_info["hash"],
+            "definitionLength": definition_info["length"],
+            "detectedPatterns": definition_info["detectedPatterns"],
+            "hasDefinitionAccess": definition_info["available"],
+            "dependencies": dependencies,
+            "dependencySummary": procedure_dependency_summary(dependencies),
+            "caveats": list(dict.fromkeys(caveats)),
+            "reviewRequired": bool(caveats),
             "snapshotMode": arguments.get("snapshotMode", "LATEST"),
         }
         return self._result(data=data, evidence_refs=[evidence])
@@ -925,6 +1065,91 @@ class LiveMetadataRepository:
     def _handle_list_functions(self, arguments: dict[str, Any]) -> MetadataToolResult:
         return self._handle_list_modules(arguments, object_kind="FUNCTION")
 
+    def _handle_search_metadata_objects(self, arguments: dict[str, Any]) -> MetadataToolResult:
+        profile = self._profile(arguments["dbProfileId"])
+        object_types = _search_object_types(arguments)
+        limit = _search_limit(arguments)
+        type_codes = _search_sql_type_codes(object_types)
+        type_placeholders = ", ".join(["%s"] * len(type_codes))
+        pattern = f"%{arguments['query']}%"
+        rows = self._query(
+            profile.database,
+            f"""
+            SELECT
+                o.object_id,
+                o.type AS object_type,
+                s.name AS schema_name,
+                o.name AS object_name,
+                CONVERT(nvarchar(4000), ep.value) AS description,
+                COALESCE(rs.name, dep_rs.name, dep.referenced_schema_name) AS dep_schema_name,
+                COALESCE(ro.name, dep_ro.name, dep.referenced_entity_name) AS dep_object_name,
+                COALESCE(ro.type, dep_ro.type) AS dep_referenced_type,
+                dep.referenced_class_desc,
+                dep.is_ambiguous
+            FROM sys.objects AS o
+            INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
+            LEFT JOIN sys.extended_properties AS ep
+                ON ep.major_id = o.object_id
+                AND ep.minor_id = 0
+                AND ep.name = 'MS_Description'
+            LEFT JOIN sys.sql_expression_dependencies AS dep
+                ON o.object_id = dep.referencing_id
+            LEFT JOIN sys.objects AS ro ON dep.referenced_id = ro.object_id
+            LEFT JOIN sys.schemas AS rs ON ro.schema_id = rs.schema_id
+            LEFT JOIN sys.schemas AS dep_rs ON dep.referenced_schema_name = dep_rs.name
+            LEFT JOIN sys.objects AS dep_ro
+                ON dep_rs.schema_id = dep_ro.schema_id
+                AND dep.referenced_entity_name = dep_ro.name
+            WHERE o.is_ms_shipped = 0
+                AND o.type IN ({type_placeholders})
+                AND (
+                    s.name LIKE %s
+                    OR o.name LIKE %s
+                    OR CONVERT(nvarchar(4000), ep.value) LIKE %s
+                )
+            ORDER BY s.name, o.name
+            """,
+            [*type_codes, pattern, pattern, pattern],
+            tool_name="search_metadata_objects",
+            profile=profile,
+        )
+        context = {"sourceProfile": profile.id, "sourceDatabase": profile.database}
+        results = [
+            _metadata_search_result_item(item, context=context)
+            for item in _metadata_search_items_from_live_rows(self, rows)
+        ]
+        results.sort(
+            key=lambda item: (
+                item["objectIdentity"]["type"],
+                item["objectIdentity"]["schema"],
+                item["objectIdentity"]["name"],
+            )
+        )
+        results = [_without_score(item) for item in results[:limit]]
+        caveats = _metadata_search_caveats(results)
+        blockers = _blockers_for_caveats(caveats)
+        evidence = self._live_evidence(
+            "metadata-object-search",
+            "CATALOG",
+            "*",
+            "metadata_objects",
+            "sys.objects,sys.schemas,sys.extended_properties,sys.sql_expression_dependencies",
+        )
+        return self._live_result(
+            arguments,
+            data={
+                **context,
+                "query": arguments["query"],
+                "objectTypes": object_types,
+                "limit": limit,
+                "results": results,
+                "caveats": caveats,
+                "reviewRequired": bool(caveats or blockers),
+                "blockers": blockers,
+            },
+            evidence_refs=[evidence],
+        )
+
     def _handle_get_procedure_definition(
         self,
         arguments: dict[str, Any],
@@ -959,6 +1184,7 @@ class LiveMetadataRepository:
             definition,
             is_encrypted=bool(row.get("is_encrypted")),
         )
+        caveats = [] if definition_info["available"] else ["definition_unavailable"]
         evidence = self._live_evidence(
             "procedure-definition",
             "PROCEDURE",
@@ -977,6 +1203,8 @@ class LiveMetadataRepository:
                 "detectedPatterns": definition_info["detectedPatterns"],
                 "isEncrypted": definition_info["isEncrypted"],
                 "hasDefinitionAccess": definition_info["available"],
+                "caveats": caveats,
+                "reviewRequired": bool(caveats),
                 "snapshotMode": arguments.get("snapshotMode", "LATEST"),
             },
             evidence_refs=[evidence],
@@ -2138,6 +2366,7 @@ class LiveMetadataRepository:
     ) -> MetadataToolResult:
         collected_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         snapshot_id = f"live:{arguments['dbProfileId']}:{collected_at}"
+        data = _attach_snapshot_to_results(data, snapshot_id)
         return MetadataToolResult(
             snapshot_id=snapshot_id,
             collected_at=collected_at,
@@ -2334,10 +2563,6 @@ def _matches(needle: str, value: Any) -> bool:
     return needle.lower() in str(value).lower()
 
 
-def _sha256(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
 def _collection_name(object_type: str) -> str:
     return {
         "PROCEDURE": "procedures",
@@ -2471,6 +2696,175 @@ def _column_candidate(table: dict[str, Any], column: dict[str, Any], score: int)
 
 def _criteria(arguments: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in arguments.items() if key != "dbProfileId"}
+
+
+def _search_object_types(arguments: dict[str, Any]) -> list[str]:
+    values = arguments.get("objectTypes") or ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+    object_types = list(dict.fromkeys(str(value).upper() for value in values))
+    return object_types or ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+
+
+def _search_limit(arguments: dict[str, Any]) -> int:
+    return min(max(int(arguments.get("limit", 20)), 1), 100)
+
+
+def _search_sql_type_codes(object_types: list[str]) -> list[str]:
+    codes: list[str] = []
+    mapping = {
+        "PROCEDURE": ["P", "PC"],
+        "TABLE": ["U"],
+        "VIEW": ["V"],
+        "FUNCTION": ["FN", "IF", "TF", "FS", "FT"],
+    }
+    for object_type in object_types:
+        codes.extend(mapping.get(object_type, []))
+    return codes or ["P", "PC", "U", "V", "FN", "IF", "TF", "FS", "FT"]
+
+
+def _metadata_search_score(item: dict[str, Any], query: str) -> int:
+    needle = query.casefold()
+    score = 0
+    values = [
+        item.get("schema"),
+        item.get("name"),
+        item.get("objectType"),
+        item.get("logicalName"),
+        item.get("description"),
+        item.get("descriptionStatus"),
+    ]
+    identity = ".".join(str(value) for value in (item.get("schema"), item.get("name")) if value)
+    values.append(identity)
+    dependency_summary = item.get("dependencySummary")
+    if isinstance(dependency_summary, dict):
+        for dependencies in dependency_summary.values():
+            if isinstance(dependencies, list):
+                values.extend(dependency.get("name") for dependency in dependencies)
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).casefold()
+        if text == needle:
+            score += 100
+        elif needle in text:
+            score += 20
+    return score
+
+
+def _metadata_search_result_item(
+    item: dict[str, Any],
+    *,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    caveats = _dedupe(item.get("caveats", []))
+    blockers = _blockers_for_caveats(caveats)
+    return {
+        "objectIdentity": {
+            "schema": item.get("schema"),
+            "name": item.get("name"),
+            "type": item.get("objectType"),
+        },
+        "sourceProfile": context["sourceProfile"],
+        "sourceDatabase": context["sourceDatabase"],
+        "snapshotId": item.get("snapshotId"),
+        "evidenceRefs": item.get("evidenceRefs", []),
+        "caveats": caveats,
+        "reviewRequired": bool(item.get("reviewRequired") or caveats or blockers),
+        "blockers": blockers,
+        "score": int(item.get("score", 0)),
+    }
+
+
+def _metadata_search_items_from_live_rows(
+    repository: Any,
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[Any, dict[str, Any]] = {}
+    for index, row in enumerate(rows):
+        item = grouped.setdefault(
+            row["object_id"],
+            {
+                "schema": row["schema_name"],
+                "name": row["object_name"],
+                "objectType": _map_object_type(row.get("object_type")),
+                "description": row.get("description"),
+                "descriptionStatus": "CONFIRMED"
+                if row.get("description")
+                else "REVIEW_REQUIRED",
+                "dependencies": [],
+                "evidenceRefs": [
+                    repository._live_evidence(
+                        "metadata-object-search",
+                        _map_object_type(row.get("object_type")),
+                        row["schema_name"],
+                        row["object_name"],
+                        f"sys.objects[{index}]",
+                    )
+                ],
+            },
+        )
+        if row.get("dep_object_name"):
+            item["dependencies"].append(
+                {
+                    "objectType": _map_object_type(row.get("dep_referenced_type")),
+                    "schema": row.get("dep_schema_name"),
+                    "name": row.get("dep_object_name"),
+                    "dependencyType": "REFERENCE",
+                    "isAmbiguous": bool(row.get("is_ambiguous")),
+                    "reviewStatus": "REVIEW_REQUIRED"
+                    if row.get("is_ambiguous")
+                    else "CONFIRMED",
+                }
+            )
+    items = []
+    for item in grouped.values():
+        caveats = _dependency_caveats(item["dependencies"])
+        if item["objectType"] == "TABLE" and item.get("descriptionStatus") == "REVIEW_REQUIRED":
+            caveats.append("description_review_required")
+        item["caveats"] = list(dict.fromkeys(caveats))
+        item["reviewRequired"] = bool(item["caveats"])
+        items.append(item)
+    return items
+
+
+def _metadata_search_caveats(results: list[dict[str, Any]]) -> list[str]:
+    return _dedupe(caveat for result in results for caveat in result.get("caveats", []))
+
+
+def _blockers_for_caveats(caveats: list[str]) -> list[dict[str, str]]:
+    messages = {
+        DEPENDENCY_METADATA_INCOMPLETE: (
+            "Dependency metadata is incomplete and requires review before relying on links."
+        )
+    }
+    return [
+        {"code": caveat, "message": messages[caveat]}
+        for caveat in caveats
+        if caveat in messages
+    ]
+
+
+def _dedupe(items: Any) -> list[str]:
+    return list(dict.fromkeys(str(item) for item in items if str(item)))
+
+
+def _without_score(item: dict[str, Any]) -> dict[str, Any]:
+    cleaned = dict(item)
+    cleaned.pop("score", None)
+    return cleaned
+
+
+def _attach_snapshot_to_results(data: dict[str, Any], snapshot_id: str) -> dict[str, Any]:
+    results = data.get("results")
+    if not isinstance(results, list):
+        return data
+    copied = dict(data)
+    copied["results"] = [
+        {**result, "snapshotId": result.get("snapshotId") or snapshot_id}
+        if isinstance(result, dict)
+        else result
+        for result in results
+    ]
+    return copied
 
 
 def _is_empty_search(arguments: dict[str, Any]) -> bool:

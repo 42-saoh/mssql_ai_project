@@ -19,6 +19,7 @@ def test_mcp_health_and_catalog() -> None:
     assert "list_tables" in names
     assert "list_views" in names
     assert "list_functions" in names
+    assert "search_metadata_objects" in names
     assert "get_procedure_definition" in names
     assert "find_similar_tables" in names
     for tool in catalog.json()["tools"]:
@@ -80,6 +81,14 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     assert "SQL text" in payload["response"]["error"]["properties"]["error"]["properties"][
         "details"
     ]["description"]
+    search_tool = next(tool for tool in payload["tools"] if tool["name"] == "search_metadata_objects")
+    assert search_tool["input"]["required"] == ["dbProfileId", "query"]
+    assert search_tool["input"]["properties"]["objectTypes"]["items"]["enum"] == [
+        "PROCEDURE",
+        "TABLE",
+        "VIEW",
+        "FUNCTION",
+    ]
     for tool in payload["tools"]:
         assert tool["active"] is True
         assert tool["readOnly"] is True

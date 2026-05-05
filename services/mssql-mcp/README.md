@@ -1,6 +1,6 @@
 # services/mssql-mcp
 
-MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, fixture-backed execution, env-gated live metadata execution 을 제공한다.
+MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, fixture-backed execution, env-gated live metadata execution 을 제공한다. 활성 catalog tool 은 fixture 경로와 live repository handler 를 모두 가진다.
 
 ## 원칙
 
@@ -71,6 +71,24 @@ metadata queries against SQL Server catalog views such as `sys.objects`,
 `sys.columns`, `sys.sql_modules`, `sys.sql_expression_dependencies`,
 `sys.indexes`, `sys.key_constraints`, `sys.foreign_keys`,
 `sys.check_constraints`, and `sys.extended_properties`.
+
+Inventory tools expose definition availability, hash, length, detected patterns,
+dependency summary, caveats, and review flags without returning definition text.
+Direct definition tools (`get_procedure_definition`, `get_view_definition`,
+`get_function_definition`) may return definition text for downstream analysis and
+also return the same standardized hash/length/pattern/access/caveat fields.
+
+`search_metadata_objects` is the query-aware metadata search capability for API
+and UI consumers. It searches procedure/table/view/function identities through
+the same read-only MCP boundary and returns only object identity, source
+profile/database, snapshot/evidence refs, caveats, review-required state, and
+blocker codes. It does not return row data, execute procedures, perform DDL/DML,
+or expose SQL definition text. PPM `template_only` object-name suppression is
+owned by the API layer; this MCP service remains a generic metadata service.
+
+`check_database_exists` preserves profile boundaries: `dbProfileId=ppm` checks
+PPM, `dbProfileId=plf` checks PLF, and only the `master` server metadata profile
+may probe a different `databaseName`. PPM metadata must never fall back to PLF.
 
 Live query failures return safe diagnostic fields only: tool name, profile id,
 database, timeout seconds, attempt count, and error class. Error details must not
