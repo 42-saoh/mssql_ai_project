@@ -140,6 +140,24 @@ tools:
         schema: { type: string }
         topK: { type: integer, default: 100 }
 
+  - name: search_metadata_objects
+    active: true
+    readOnly: true
+    description: Search procedure/table/view/function metadata identities without row data, procedure execution, DDL/DML, or SQL definition text.
+    input:
+      type: object
+      required: [dbProfileId, query]
+      properties:
+        dbProfileId: { type: string }
+        query: { type: string }
+        objectTypes:
+          type: array
+          default: [PROCEDURE, TABLE, VIEW, FUNCTION]
+          items:
+            type: string
+            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+        limit: { type: integer, default: 20 }
+
   - name: get_procedure_definition
     active: true
     readOnly: true

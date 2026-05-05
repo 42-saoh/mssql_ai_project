@@ -78,6 +78,14 @@ Direct definition tools (`get_procedure_definition`, `get_view_definition`,
 `get_function_definition`) may return definition text for downstream analysis and
 also return the same standardized hash/length/pattern/access/caveat fields.
 
+`search_metadata_objects` is the query-aware metadata search capability for API
+and UI consumers. It searches procedure/table/view/function identities through
+the same read-only MCP boundary and returns only object identity, source
+profile/database, snapshot/evidence refs, caveats, review-required state, and
+blocker codes. It does not return row data, execute procedures, perform DDL/DML,
+or expose SQL definition text. PPM `template_only` object-name suppression is
+owned by the API layer; this MCP service remains a generic metadata service.
+
 `check_database_exists` preserves profile boundaries: `dbProfileId=ppm` checks
 PPM, `dbProfileId=plf` checks PLF, and only the `master` server metadata profile
 may probe a different `databaseName`. PPM metadata must never fall back to PLF.

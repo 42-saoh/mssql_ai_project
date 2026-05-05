@@ -47,6 +47,72 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "ValidationReport" in data["components"]["schemas"]
     assert "RequestedOutputType" in data["components"]["schemas"]
     assert "WorkflowStepType" in data["components"]["schemas"]
+    assert "/api/v1/metadata/search" in data["paths"]
+    assert "MetadataSearchResponse" in data["components"]["schemas"]
+
+
+def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    operation = openapi["paths"]["/api/v1/metadata/search"]["get"]
+    schemas = openapi["components"]["schemas"]
+
+    assert operation["operationId"] == "searchMetadataObjects"
+    assert operation["tags"] == ["metadata"]
+    assert {parameter["name"] for parameter in operation["parameters"]} == {
+        "dbProfileId",
+        "query",
+        "objectTypes",
+        "limit",
+    }
+    object_types = next(
+        parameter for parameter in operation["parameters"] if parameter["name"] == "objectTypes"
+    )
+    assert object_types["style"] == "form"
+    assert object_types["explode"] is True
+    assert object_types["schema"]["items"] == {
+        "$ref": "#/components/schemas/MetadataSearchObjectType"
+    }
+    assert schemas["MetadataSearchObjectType"]["enum"] == [
+        "PROCEDURE",
+        "TABLE",
+        "VIEW",
+        "FUNCTION",
+    ]
+
+    responses = operation["responses"]
+    assert responses["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataSearchResponse"
+    }
+    assert responses["403"] == {"$ref": "#/components/responses/Forbidden"}
+    assert responses["424"] == {"$ref": "#/components/responses/DependencyBlocked"}
+    assert responses["503"] == {"$ref": "#/components/responses/DependencyBlocked"}
+
+    result_schema = schemas["MetadataSearchResult"]
+    assert result_schema["properties"]["objectIdentity"] == {
+        "$ref": "#/components/schemas/MetadataObjectIdentity"
+    }
+    assert result_schema["properties"]["evidenceRefs"]["items"] == {
+        "$ref": "#/components/schemas/EvidenceRef"
+    }
+    forbidden_response_fields = {
+        "rowData",
+        "row_data",
+        "definition",
+        "sqlText",
+        "ddl",
+        "dml",
+        "execute",
+    }
+    response_properties = set(schemas["MetadataSearchResponse"]["properties"])
+    result_properties = set(result_schema["properties"])
+    identity_properties = set(schemas["MetadataObjectIdentity"]["properties"])
+    assert forbidden_response_fields.isdisjoint(
+        response_properties | result_properties | identity_properties
+    )
 
 
 def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
