@@ -47,8 +47,72 @@ errorCodes:
   - OBJECT_NOT_FOUND
   - READ_ONLY_VIOLATION
   - LIVE_METADATA_UNAVAILABLE
+  - PPM_DB_NOT_FOUND
+  - PPM_DB_ACCESS_DENIED
+  - METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+  - SP_DEFINITION_ACCESS_DENIED
+  - DEPENDENCY_METADATA_INCOMPLETE
   - INTERNAL_ERROR
 tools:
+  - name: check_database_exists
+    active: true
+    readOnly: true
+    description: Return database existence and catalog accessibility metadata.
+    input:
+      type: object
+      required: [dbProfileId]
+      properties:
+        dbProfileId: { type: string }
+        databaseName: { type: string }
+
+  - name: list_procedures
+    active: true
+    readOnly: true
+    description: Return procedure inventory metadata for object selection.
+    input:
+      type: object
+      required: [dbProfileId]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        topK: { type: integer, default: 100 }
+
+  - name: list_tables
+    active: true
+    readOnly: true
+    description: Return table inventory metadata for object selection.
+    input:
+      type: object
+      required: [dbProfileId]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        topK: { type: integer, default: 100 }
+
+  - name: list_views
+    active: true
+    readOnly: true
+    description: Return view identity and definition availability metadata.
+    input:
+      type: object
+      required: [dbProfileId]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        topK: { type: integer, default: 100 }
+
+  - name: list_functions
+    active: true
+    readOnly: true
+    description: Return function identity and definition availability metadata.
+    input:
+      type: object
+      required: [dbProfileId]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        topK: { type: integer, default: 100 }
+
   - name: get_procedure_definition
     active: true
     readOnly: true

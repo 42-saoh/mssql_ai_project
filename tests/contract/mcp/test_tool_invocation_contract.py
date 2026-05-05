@@ -6,13 +6,35 @@ from typing import Any
 import pytest
 import yaml
 from fastapi.testclient import TestClient
-
 from mssql_mcp_app.main import app
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
+    "check_database_exists": {
+        "dbProfileId": "master",
+        "databaseName": "PPM",
+    },
+    "list_procedures": {
+        "dbProfileId": "master",
+        "schema": "dbo",
+        "topK": 10,
+    },
+    "list_tables": {
+        "dbProfileId": "master",
+        "schema": "dbo",
+        "topK": 10,
+    },
+    "list_views": {
+        "dbProfileId": "master",
+        "schema": "dbo",
+        "topK": 10,
+    },
+    "list_functions": {
+        "dbProfileId": "master",
+        "schema": "dbo",
+        "topK": 10,
+    },
     "get_procedure_definition": {
         "dbProfileId": "master",
         "schema": "dbo",

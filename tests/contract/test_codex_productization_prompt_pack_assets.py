@@ -101,3 +101,22 @@ def test_productization_runbook_documents_plf_ppm_roles() -> None:
         assert "PPM" in text
         assert "PLF로 대체하지" in text
         assert "PFL" not in text
+
+
+def test_p08a_can_own_minimum_metadata_discovery_surface_without_running_full_p10() -> None:
+    tracks = _tracks()
+    p08a = tracks["P08A"]
+    target_paths = set(p08a["target_paths"])
+    prompt_text = _read(PROMPTS / PRODUCTIZATION_PROMPTS["P08A"])
+
+    assert "최소 metadata discovery surface" in prompt_text
+    assert "P10 전체" in prompt_text
+    assert "MIN_METADATA_DISCOVERY_SURFACE_INSUFFICIENT" in prompt_text
+    assert "spec/mcp/mssql_metadata_tool_catalog.yaml" in target_paths
+    assert "services/mssql-mcp/mssql_mcp_app/metadata_discovery.py" in target_paths
+    assert "services/mssql-mcp/mssql_mcp_app/repositories.py" in target_paths
+    assert any(path.startswith("tests/contract/mcp") for path in target_paths)
+    assert any(path.startswith("tests/unit/mcp") for path in target_paths)
+    assert "apps/**" in prompt_text
+    assert "spec/openapi/**" in prompt_text
+    assert "db/schema/**" in prompt_text

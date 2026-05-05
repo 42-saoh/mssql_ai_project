@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[2]
 PILOT_DIR = ROOT / "fixtures" / "pilot" / "ppm_object_selection_v1"
 
@@ -21,20 +20,39 @@ def test_ppm_pilot_selection_assets_exist_and_parse() -> None:
     assert isinstance(_yaml("candidate_inventory_template.yaml"), dict)
 
 
-def test_selected_objects_is_template_only_without_invented_object_names() -> None:
+def test_selected_objects_records_template_or_live_metadata_selection() -> None:
     payload = _yaml("selected_objects.yaml")
 
     assert payload["selection_version"] == "ppm_object_selection_v1"
     assert payload["source_db"] == "PPM"
     assert payload["platform_db_context"] == "PLF"
-    assert payload["selection_mode"] == "template_only"
     assert payload["connection_profile_used"]["profile_id"] == "ppm"
     assert payload["connection_profile_used"]["database"] == "PPM"
-    assert payload["connection_profile_used"]["live_connection_verified"] is False
-    assert payload["stored_procedures"] == []
-    assert payload["tables"] == []
-    assert payload["views"] == []
-    assert payload["functions"] == []
+    assert payload["selection_mode"] in {"template_only", "live_metadata"}
+
+    if payload["selection_mode"] == "template_only":
+        assert payload["connection_profile_used"]["live_connection_verified"] is False
+        assert payload["stored_procedures"] == []
+        assert payload["tables"] == []
+        assert payload["views"] == []
+        assert payload["functions"] == []
+    else:
+        assert payload["connection_profile_used"]["live_connection_verified"] is True
+        assert {item["complexity"] for item in payload["stored_procedures"]} == {
+            "simple",
+            "medium",
+            "complex",
+        }
+        assert len(payload["tables"]) >= 3
+        assert len(payload["views"]) >= 1
+        assert len(payload["functions"]) >= 1
+        assert payload["active_blockers"][0]["code"] == "DEPENDENCY_METADATA_INCOMPLETE"
+        for item in payload["stored_procedures"]:
+            evidence = item["metadata_evidence"]
+            assert evidence["source_profile"] == "ppm"
+            assert evidence["source_database"] == "PPM"
+            assert evidence["definition_hash"]
+            assert "definition" not in item
 
     blockers = {item["code"] for item in payload["blocker_candidates"]}
     assert {
@@ -45,7 +63,16 @@ def test_selected_objects_is_template_only_without_invented_object_names() -> No
         "DEPENDENCY_METADATA_INCOMPLETE",
         "PPM_PLF_ROLE_CONFLICT",
         "LIVE_METADATA_UNAVAILABLE",
+        "MIN_METADATA_DISCOVERY_SURFACE_INSUFFICIENT",
     }.issubset(blockers)
+    required_tools = set(payload["minimum_metadata_discovery_surface"]["required_tools"])
+    assert {
+        "check_database_exists",
+        "list_procedures",
+        "list_tables",
+        "list_views",
+        "list_functions",
+    }.issubset(required_tools)
 
 
 def test_candidate_inventory_template_is_metadata_only_and_covers_selection_rules() -> None:
@@ -58,6 +85,9 @@ def test_candidate_inventory_template_is_metadata_only_and_covers_selection_rule
     assert payload["connection_profile_used"]["profile_id"] == "ppm"
     assert "user_table_row_data" in payload["metadata_sources_forbidden"]
     assert "procedure_execution" in payload["metadata_sources_forbidden"]
+    assert "MIN_METADATA_DISCOVERY_SURFACE_INSUFFICIENT" in {
+        item["code"] for item in payload["blocker_candidates"]
+    }
 
     sp_rules = payload["selection_rules"]["stored_procedures"]
     assert sp_rules["minimum_recommended"] >= 3
@@ -71,7 +101,9 @@ def test_candidate_inventory_template_is_metadata_only_and_covers_selection_rule
 
 
 def test_pilot_assets_do_not_encode_row_data_or_pfl_typo() -> None:
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in PILOT_DIR.iterdir() if path.is_file())
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in PILOT_DIR.iterdir() if path.is_file()
+    )
     forbidden_terms = (
         "sample_rows",
         "row_sample",
@@ -85,7 +117,11 @@ def test_pilot_assets_do_not_encode_row_data_or_pfl_typo() -> None:
 
 
 def test_local_profile_registry_contains_ppm_and_plf_roles() -> None:
-    registry = yaml.safe_load((ROOT / "config" / "mssql" / "local_docker_profiles.yaml").read_text(encoding="utf-8"))
+    registry = yaml.safe_load(
+        (ROOT / "config" / "mssql" / "local_docker_profiles.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
     profiles = {profile["id"]: profile for profile in registry["profiles"]}
 
     assert profiles["plf"]["database"] == "PLF"

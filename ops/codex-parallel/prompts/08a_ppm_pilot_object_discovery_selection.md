@@ -15,7 +15,11 @@
 
 ## 목표
 
-로컬 MSSQL 인스턴스의 `PPM` DB에서 이후 productization wave 전체가 공통으로 사용할 대표 Stored Procedure, Table, View, Function 후보를 metadata-only 방식으로 선정한다. live metadata 연결이 불가능하면 실제 오브젝트 이름을 만들지 않고 `template_only` manifest와 blocker 기준만 정리한다.
+로컬 MSSQL 인스턴스의 `PPM` DB에서 이후 productization wave 전체가 공통으로 사용할 대표 Stored Procedure, Table, View, Function 후보를 metadata-only 방식으로 선정한다.
+
+단, P10 전체 productization을 선행하지 않는다. P08A 안에서는 PPM pilot object selection을 실행하는 데 필요한 **최소 metadata discovery surface**만 먼저 보강할 수 있다. 이 surface는 P08A 실행을 unblock하기 위한 제한된 MCP metadata catalog/adapter/test 보강이며, P10의 broader production hardening 범위로 확장하지 않는다.
+
+live metadata 연결이 불가능하거나 최소 discovery surface로도 선정 근거를 확보할 수 없으면 실제 오브젝트 이름을 만들지 않고 `template_only` manifest와 blocker 기준만 정리한다.
 
 ## 읽어야 할 기준 파일
 
@@ -29,6 +33,7 @@
 - `services/mssql-mcp/README.md`
 - `services/mssql-mcp/mssql_mcp_app/**`
 - `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- `fixtures/mcp/**`
 - `fixtures/pilot/ppm_object_selection_v1/README.md`
 - `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml`
 - `fixtures/pilot/ppm_object_selection_v1/candidate_inventory_template.yaml`
@@ -37,13 +42,24 @@
 
 - `fixtures/pilot/ppm_object_selection_v1/**`
 - `tests/contract/test_ppm_pilot_object_selection_assets.py`
+- `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- `services/mssql-mcp/mssql_mcp_app/catalog.py`
+- `services/mssql-mcp/mssql_mcp_app/errors.py`
+- `services/mssql-mcp/mssql_mcp_app/guardrails.py`
+- `services/mssql-mcp/mssql_mcp_app/metadata_discovery.py`
+- `services/mssql-mcp/mssql_mcp_app/registry.py`
+- `services/mssql-mcp/mssql_mcp_app/repositories.py`
+- `tests/contract/mcp/**`
+- `tests/unit/mcp/**`
+- `tests/unit/test_mcp_catalog.py`
+- `fixtures/mcp/**`
 - 필요한 경우 P08A 결과만 설명하는 좁은 docs 파일
 
 ## 금지 경로
 
 - `apps/**`
 - `packages/**`
-- `services/mssql-mcp/**` 구현 파일
+- `services/mssql-mcp/**` 중 위 허용 수정 경로에 명시되지 않은 파일
 - `spec/openapi/**`
 - `spec/policy/**`
 - `db/schema/**`
@@ -51,6 +67,52 @@
 - `.env`, 실제 credential 파일, live DB dump, row-data fixture
 
 ## 구현 범위
+
+### 1. P08A 선행 최소 metadata discovery surface
+
+기존 MCP surface만으로 PPM pilot object selection을 수행할 수 있으면 새 tool을 만들지 말고 재사용한다. 기존 surface가 부족하면 P08A 실행에 필요한 최소 범위로만 MCP metadata discovery surface를 보강한다.
+
+허용되는 최소 surface 예시는 다음과 같다.
+
+- `check_database_exists` 또는 동등한 DB 존재/접근 가능성 확인 tool
+- `list_procedures` 또는 동등한 procedure inventory tool
+- `get_procedure_definition`
+- `get_procedure_parameters`
+- `get_procedure_dependencies`
+- `list_tables` 또는 `search_tables`
+- `get_table_schema`
+- `get_table_indexes`
+- `get_table_constraints`
+- `get_extended_properties`
+- `list_views` 또는 view identity/definition availability 조회
+- `list_functions` 또는 function identity/definition availability 조회
+
+최소 surface의 response는 P08A 선정 근거에 필요한 metadata evidence만 담는다.
+
+- source profile: `ppm`
+- source database: `PPM`
+- object identity: schema/name/type
+- snapshot 또는 collected timestamp
+- definition access 가능 여부와 definition hash/length/pattern flag
+- parameter count와 parameter metadata
+- dependency summary
+- table key/index/constraint/extended property summary
+- permission caveat, dependency caveat, review_required flag
+
+### 2. 엄격한 제외 범위
+
+P08A에서 아래 작업은 하지 않는다. 필요하면 P10 또는 coordinator blocker로 넘긴다.
+
+- P10 전체 production hardening
+- API/BFF workflow 변경
+- OpenAPI/domain/policy/schema 변경
+- platform DB persistence 구현
+- full observability, logging pipeline, retry framework 구현
+- free-form SQL 실행 interface 추가
+- procedure 실행, row data 조회, DDL/DML/EXEC 실행
+- fixture에 실제 row sample, 실데이터, credential 기록
+
+### 3. PPM pilot object selection
 
 - `PPM` DB 존재 여부, 접근 가능 여부, metadata 권한 확인 절차를 문서화한다.
 - live metadata 가능 시 다음 catalog만 사용해 candidate inventory를 작성한다.
@@ -70,8 +132,8 @@
 
 ## 검증 명령
 
-- `python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py`
-- `python -m compileall tests`
+- `python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py`
+- `python -m compileall services/mssql-mcp tests`
 - `python - <<'PY'` 로 `selected_objects.yaml` / `candidate_inventory_template.yaml` YAML parse 확인
 - live metadata를 실제 시도한 경우에는 실행 명령, profile id, 실패/성공 원인을 secret 없이 기록한다.
 
@@ -84,4 +146,5 @@
 - `DEPENDENCY_METADATA_INCOMPLETE`: dependency metadata가 대표 후보 선정에 부족
 - `PPM_PLF_ROLE_CONFLICT`: 프로젝트 파일/로컬 설정이 `PPM=pilot`, `PLF=platform` 기준과 충돌
 - `LIVE_METADATA_UNAVAILABLE`: 현재 worker 환경에서 live MSSQL 연결 불가
+- `MIN_METADATA_DISCOVERY_SURFACE_INSUFFICIENT`: P10 전체 범위로 넘어가지 않고는 P08A 선정 근거를 확보할 수 없음
 - 실제 row data 조회가 필요해 보이는 후보는 제외하고 blocker 또는 review_required로 기록

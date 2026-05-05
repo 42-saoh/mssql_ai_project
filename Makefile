@@ -23,6 +23,7 @@ ALLOW_UNLOCKED_PNPM_INSTALL ?= 0
 .PHONY: setup fmt lint test check run-api run-mcp run-web eval test-build test-web-smoke docker-project-name test-shell test-web-shell test-down test-reset dev-ports
 
 ENV_FILE ?= $(REPO_ROOT)/.env
+COMPOSE_ENV_FILE ?= $(if $(wildcard $(ENV_FILE)),--env-file "$(ENV_FILE)",)
 LOAD_ENV = set -a; if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; set +a;
 
 setup:
@@ -43,7 +44,7 @@ dev-ports:
 	@WORKTREE_PATH="$(WORKTREE_PATH)" WORKTREE_PORT_SLOT="$(WORKTREE_PORT_SLOT)" sh "$(PORT_RESOLVER)"
 
 test:
-	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) -f "$(TEST_COMPOSE_FILE)" run --rm python-test sh -lc "env PYTHON=python PYTHON_LOCK_FILE=$(PYTHON_LOCK_FILE) sh scripts/install_python_locked.sh && python $(PYTEST_SELECTION_RUNNER) $(PYTEST_ARGS)"
+	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" run --rm python-test sh -lc "env PYTHON=python PYTHON_LOCK_FILE=$(PYTHON_LOCK_FILE) sh scripts/install_python_locked.sh && python $(PYTEST_SELECTION_RUNNER) $(PYTEST_ARGS)"
 
 check: fmt lint test
 
@@ -60,19 +61,19 @@ eval:
 	$(MAKE) test PYTEST_ARGS="tests/contract tests/e2e tests/eval"
 
 test-build:
-	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) -f "$(TEST_COMPOSE_FILE)" build python-test web-test
+	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" build python-test web-test
 
 test-web-smoke:
-	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) -f "$(TEST_COMPOSE_FILE)" run --rm web-test sh -lc "env PNPM=pnpm ALLOW_UNLOCKED_PNPM_INSTALL=$(ALLOW_UNLOCKED_PNPM_INSTALL) sh scripts/install_web_workspace.sh && pnpm --dir apps/web test"
+	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" run --rm web-test sh -lc "env PNPM=pnpm ALLOW_UNLOCKED_PNPM_INSTALL=$(ALLOW_UNLOCKED_PNPM_INSTALL) sh scripts/install_web_workspace.sh && pnpm --dir apps/web test"
 
 test-shell:
-	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) -f "$(TEST_COMPOSE_FILE)" run --rm python-test sh
+	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" run --rm python-test sh
 
 test-web-shell:
-	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) -f "$(TEST_COMPOSE_FILE)" run --rm web-test sh
+	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" run --rm web-test sh
 
 test-down:
-	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) -f "$(TEST_COMPOSE_FILE)" down --remove-orphans
+	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" down --remove-orphans
 
 test-reset:
-	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) -f "$(TEST_COMPOSE_FILE)" down --remove-orphans --volumes
+	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" down --remove-orphans --volumes

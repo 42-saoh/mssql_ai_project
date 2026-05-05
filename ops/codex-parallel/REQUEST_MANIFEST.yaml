@@ -264,11 +264,22 @@ waves:
         worktree: ../wt/p08a-ppm-pilot-object-selection
         prompt: prompts/08a_ppm_pilot_object_discovery_selection.md
         role: mcp_engineer
-        skills: [mcp-tooling-design, eval-fixture-authoring, quality-gate-review]
+        skills: [mcp-tooling-design, mcp-minimum-discovery-surface, eval-fixture-authoring, quality-gate-review]
         depends_on: [P07]
         target_paths:
           - fixtures/pilot/ppm_object_selection_v1/
           - tests/contract/test_ppm_pilot_object_selection_assets.py
+          - spec/mcp/mssql_metadata_tool_catalog.yaml
+          - services/mssql-mcp/mssql_mcp_app/catalog.py
+          - services/mssql-mcp/mssql_mcp_app/errors.py
+          - services/mssql-mcp/mssql_mcp_app/guardrails.py
+          - services/mssql-mcp/mssql_mcp_app/metadata_discovery.py
+          - services/mssql-mcp/mssql_mcp_app/registry.py
+          - services/mssql-mcp/mssql_mcp_app/repositories.py
+          - tests/contract/mcp/
+          - tests/unit/mcp/
+          - tests/unit/test_mcp_catalog.py
+          - fixtures/mcp/
         readonly_paths:
           - PROJECT.md
           - ARCHITECTURE.md
@@ -276,11 +287,13 @@ waves:
           - EVAL_SPEC.md
           - .env.example
           - config/mssql/local_docker_profiles.yaml
-          - services/mssql-mcp/
-          - spec/mcp/
+          - services/mssql-mcp/README.md
+          - services/mssql-mcp/mssql_mcp_app/settings.py
+          - services/mssql-mcp/mssql_mcp_app/profiles.py
+          - services/mssql-mcp/mssql_mcp_app/tool_models.py
         verify:
-          - python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py
-          - python -m compileall tests
+          - python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py
+          - python -m compileall services/mssql-mcp tests
       - id: P08
         branch: feat/p08-product-architecture-backlog
         worktree: ../wt/p08-product-architecture-backlog

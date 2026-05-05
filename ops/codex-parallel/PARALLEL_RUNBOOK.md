@@ -63,6 +63,7 @@ python -m compileall apps services packages tests
 - metadata profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 공유 기준으로 사용한다.
 - 기본 metadata profile id 는 `master`, platform profile id 는 `plf`(`PLF`), pilot analysis target profile id 는 `ppm`(`PPM`) 이다. 같은 SQL Server 인스턴스의 DB는 profile 로 분리한다. PPM 이 없거나 접근 불가하면 PLF로 대체하지 않고 blocker 로 보고한다.
 - host-run 은 `127.0.0.1`, `docker/test` 내부 연결은 `host.docker.internal` 기본값을 사용한다.
+- Docker 기반 테스트와 smoke 명령은 worktree 루트의 `.env` 가 있으면 `docker compose --env-file .env` 와 동등하게 주입한다. 외부 PLF/PPM live 검증을 직접 `docker compose` 로 실행할 때도 `--env-file .env` 를 명시해 false `LIVE_METADATA_UNAVAILABLE` blocker 를 피한다.
 - `.env.example` 이 있더라도 새 작업의 기본 복사 원본은 비밀값 없는 `.env.example` 로 둔다.
 
 ## 5. Codex 세션 배치
@@ -91,6 +92,7 @@ codex --profile dev-edit
 - 각 worktree 는 `Makefile` 이 자동 계산한 `COMPOSE_PROJECT_NAME` 으로 테스트를 수행한다.
 - 현재 worktree 에서 `make docker-project-name` 을 실행하면 적용될 compose project name 을 바로 확인할 수 있다.
 - `make test`, `make test-web-smoke`, `make test-build` 는 현재 worktree 경로를 `WORKTREE_PATH` 로 주입하므로 bind mount 와 build context 도 worktree 별로 분리된다.
+- `make test`, `make test-web-smoke`, `make test-build`, `make test-shell`, `make test-web-shell`, `make test-down`, `make test-reset` 는 `.env` 가 있으면 Docker Compose env-file 로 함께 넘긴다. `.env` 가 없으면 비밀값 없는 기본값으로 fixture-first 테스트를 수행한다.
 - 캐시 volume / 네트워크 / 컨테이너 이름은 compose project 단위로 묶이므로 branch 별 병렬 검증 충돌을 줄일 수 있다.
 - 종료 후 정리가 필요하면 `make test-down`, 캐시까지 초기화하려면 `make test-reset` 을 사용한다.
 - 코디네이터가 다른 worktree 를 대신 검증해야 할 때만 `WORKTREE_PATH=/abs/path/to/worktree make test` 형태의 명시적 override 를 사용한다.
@@ -188,9 +190,9 @@ git worktree add ../wt/p16-pilot-release-readiness -b feat/p16-pilot-release-rea
 
 ### Productization 실행 순서
 
-1. `P08A` — PPM pilot object selection. live metadata 가능 시 실제 metadata 기반 선정, 불가 시 template-only와 blocker 기록.
+1. `P08A` — PPM pilot object selection. live metadata에 필요한 surface가 부족하면 P10 전체가 아니라 P08A 내부에서 최소 metadata discovery surface만 선행 보강한 뒤 선정한다. 그래도 불가하면 template-only와 blocker 기록.
 2. `P08` — product architecture, release backlog, acceptance criteria.
-3. `P09`~`P12` — API/MCP/analysis/generation productization 병렬 또는 의존성 순차 구현.
+3. `P09`~`P12` — API/MCP/analysis/generation productization 병렬 또는 의존성 순차 구현. P10은 P08A의 최소 discovery surface를 product-level MCP로 확장·경화한다.
 4. `P13`~`P15` — validation/approval/audit, Web UI, eval/observability/security/ops 고도화.
 5. `P16` — pilot release readiness, handoff package, go/no-go 판정.
 
