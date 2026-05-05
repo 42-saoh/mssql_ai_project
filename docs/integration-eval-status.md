@@ -12,7 +12,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | Metadata collection | fixture-first | Default path uses `fixtures/mcp/metadata_snapshot.json` through the MSSQL MCP registry boundary. |
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
 | Web portal | stub/skeleton | Next.js shell uses mock data by default. HTTP API smoke is follow-up. |
-| Live MSSQL | hard-live for P15 eval | P15 eval requires `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions. Missing live PPM access is a blocker, not a skip. |
+| Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | not production-ready | P16 records live pilot release as NO-GO because `DEPENDENCY_METADATA_INCOMPLETE` and manual approval evidence gaps remain. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
@@ -29,7 +29,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 
 ## Verification Scope
 
-`make test PYTEST_ARGS="tests/e2e tests/eval"` verifies:
+`make test PYTEST_ARGS="tests/e2e tests/eval"` verifies the default fixture-first/eval gate:
 
 - request acceptance returns `REVIEW_PENDING`
 - job current step is `VALIDATE`
@@ -38,17 +38,21 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - validation reports keep draft artifacts in review-required state
 - approval decisions are recorded without publishing
 - eval fixtures parse and match generated workflow summaries
-- P15 hard-live PPM metadata calls return live evidence refs, source profile/database context, no raw definition text, no row-data shape, and latency within the current live gate budget
+- P15 hard-live fixture contract, metrics, redaction, permission-check schema, and blocker policy are valid
 - P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing
 - P16 readiness fixture and docs preserve `DEPENDENCY_METADATA_INCOMPLETE`, do not overclaim production readiness, and keep live release NO-GO
 
-For P15, the same command must run with live PPM read-only metadata access configured. If `MSSQL_ENABLE_LIVE_METADATA` is disabled or PPM access/permissions are missing, the eval suite fails with the corresponding blocker and must not fall back to PLF.
+For P15 hard-live validation, run the same suite with `P15_HARD_LIVE_GATE=1` and live PPM read-only metadata access configured:
 
-For P16, `make test PYTEST_ARGS="tests/eval/test_p16_pilot_release_readiness.py"` verifies the release fixture and handoff docs. The broader P16 gate is `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"` plus web smoke and compileall.
+```bash
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+```
 
-The full suite intentionally mixes fixture-first and hard-live checks. Tests that assert fixture
-snapshot ids or fixture-backed metadata search results pin `MSSQL_ENABLE_LIVE_METADATA=0`;
-P15 hard-live tests keep `MSSQL_ENABLE_LIVE_METADATA=1` and must never fall back from PPM to PLF.
+In this explicit mode, P15 hard-live PPM metadata calls must return live evidence refs, source profile/database context, no raw definition text, no row-data shape, and latency within the current live gate budget. If `MSSQL_ENABLE_LIVE_METADATA` is disabled or PPM access/permissions are missing, the eval suite fails with the corresponding blocker and must not fall back to PLF.
+
+For P16, `make test PYTEST_ARGS="tests/eval/test_p16_pilot_release_readiness.py"` verifies the release fixture and handoff docs. The broader default P16 gate is `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"` plus web smoke and compileall. Live PPM claims additionally require the explicit P15 hard-live command above.
+
+The full default suite remains fixture-first/reproducible. Tests that assert fixture snapshot ids or fixture-backed metadata search results pin `MSSQL_ENABLE_LIVE_METADATA=0`; P15 hard-live tests require `P15_HARD_LIVE_GATE=1` and must never fall back from PPM to PLF.
 
 ## P15 Ops Gate
 

@@ -29,7 +29,7 @@ release blocker.
 
 ## Verification Commands
 
-Run these from the repository root:
+Run the default reproducibility gate from the repository root:
 
 ```bash
 make test
@@ -38,9 +38,16 @@ make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
 python -m compileall apps services packages tests
 ```
 
-If the P15/P16 live checks fail because PPM is unavailable, metadata permissions are missing, or
-`MSSQL_ENABLE_LIVE_METADATA=1` is not configured, report the exact blocker. Do not switch the
-analysis profile to PLF.
+Run the explicit hard-live gate before making any live PPM readiness claim:
+
+```bash
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+```
+
+If the explicit P15/P16 live checks fail because PPM is unavailable, metadata permissions are
+missing, or `MSSQL_ENABLE_LIVE_METADATA=1` is not configured, report the exact blocker. Do not
+switch the analysis profile to PLF.
 
 ## Policy Boundaries
 

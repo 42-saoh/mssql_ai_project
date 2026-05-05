@@ -60,8 +60,9 @@
 
 live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1` 로 켠 뒤 테스트 컨테이너 또는 로컬 `run-mcp` 프로세스에서 readiness endpoint 를 확인한다. live tool query execution 은 아직 optional adapter boundary 이며, 기본 테스트/e2e/eval 은 fixture-first 로 유지한다.
 
-P15 eval 은 예외적으로 hard-live gate 다. `make test PYTEST_ARGS="tests/e2e tests/eval"` 을 P15 기준으로 통과시키려면 `.env` 또는 승인된 환경변수에 아래 조건을 충족해야 한다.
+P15 hard-live gate 는 명시 실행할 때만 live PPM 을 호출한다. 기본 `make test` 와 `make test PYTEST_ARGS="tests/e2e tests/eval"` 은 fixture-first 재현성을 유지한다. hard-live gate 를 통과시키려면 `.env` 또는 승인된 환경변수에 아래 조건을 충족해야 한다.
 
+- `P15_HARD_LIVE_GATE=1`
 - `MSSQL_ENABLE_LIVE_METADATA=1`
 - `MSSQL_METADATA_*` 값은 read-only metadata 접근 가능한 계정을 가리킴
 - `MSSQL_METADATA_PROFILE_FILE` 의 `ppm` profile 이 `PPM` 을 가리킴
@@ -78,5 +79,6 @@ cp .env.example .env
 make test-build
 make test
 make test PYTEST_ARGS="tests/e2e tests/eval"
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
 make test-web-smoke
 ```

@@ -200,7 +200,7 @@ Scope:
 Acceptance criteria:
 
 - Eval scenarios distinguish fixture-first, hard-live, and blocker-dependent modes.
-- P15 hard-live eval fails when `MSSQL_ENABLE_LIVE_METADATA=1` is not set, `dbProfileId=ppm` is missing, `PPM` is unavailable, or read-only metadata permissions are unavailable; it never falls back to PLF.
+- P15 hard-live eval is explicit. Default eval remains fixture-first, and `P15_HARD_LIVE_GATE=1` makes missing `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, `PPM`, or read-only metadata permissions fail without PLF fallback.
 - Metrics include evidence coverage, review-required ratio, validation pass rate, generation reproducibility, and artifact completeness.
 - Logging and audit docs define correlation ids and secret redaction.
 - Read-only DB permission checks are documented without DB lifecycle automation.
@@ -209,6 +209,7 @@ Acceptance criteria:
 Verification:
 
 - `make test PYTEST_ARGS="tests/e2e tests/eval"`
+- `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"`
 - `python -m compileall tests`
 - `bash -n scripts/*.sh`
 - Optional: `python -m pytest tests/contract`
@@ -241,6 +242,7 @@ Verification:
 - `make test`
 - `make test-web-smoke`
 - `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
+- `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
 - `python -m compileall apps services packages tests`
 
 Blockers:

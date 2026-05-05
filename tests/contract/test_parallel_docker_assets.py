@@ -18,6 +18,7 @@ def test_parallel_docker_assets_exist() -> None:
     assert "type: bind" in compose
     assert "PNPM_STORE_DIR: /pnpm/store" in compose
     assert "NPM_CONFIG_STORE_DIR: /pnpm/store" in compose
+    assert "P15_HARD_LIVE_GATE" in compose
 
     web_install = (root / "scripts" / "install_web_workspace.sh").read_text(encoding="utf-8")
     assert "--store-dir" in web_install
