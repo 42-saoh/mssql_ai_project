@@ -66,6 +66,43 @@ def test_platform_db_safe_summary_never_contains_password() -> None:
     assert "do-not-echo" not in repr(summary)
 
 
+def test_platform_audit_event_persists_trace_id_without_schema_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = PlatformDbSettings(
+        host="127.0.0.1",
+        port=1433,
+        user="sa",
+        password="do-not-echo",
+        database="PLF",
+        requester_login="codex-api-local",
+    )
+    repository = MssqlPlatformRepository(settings)
+    executed: list[tuple[str, tuple[object, ...]]] = []
+
+    monkeypatch.setattr(repository, "_try_resolve_user_id", lambda _actor: None)
+    monkeypatch.setattr(
+        repository,
+        "_execute",
+        lambda sql, params: executed.append((sql, params)),
+    )
+
+    event = repository.record_audit_event(
+        action="ARTIFACT_VALIDATED",
+        target_type="ARTIFACT",
+        target_ref_id="art_p13_trace",
+        payload={"validationReportId": "val_p13_trace"},
+        correlation_id="corr-p13-trace",
+    )
+
+    assert event.correlation_id == "corr-p13-trace"
+    assert event.payload["stage"] == "VALIDATION"
+    assert event.payload["targetRef"] == {"type": "ARTIFACT", "id": "art_p13_trace"}
+    assert event.payload["refs"]["validationReportId"] == "val_p13_trace"
+    assert "TRC_ID" in executed[0][0]
+    assert "corr-p13-trace" in executed[0][1]
+
+
 def test_storage_id_and_artifact_content_type_mapping() -> None:
     markdown = _artifact(ArtifactType.SP_ANALYSIS_DOC)
     mapper = _artifact(ArtifactType.MAPPER_XML)

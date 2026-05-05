@@ -4,10 +4,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from ai_agent_domain import ArtifactType
-from ai_agent_validation.models import ValidationRule, ValidationSeverity
 
+from ai_agent_validation.models import ValidationRule, ValidationSeverity
 
 NON_ARTIFACT_SCOPES = {"artifact-workflow", "mssql-mcp", "repository-workflow"}
 

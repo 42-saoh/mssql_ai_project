@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Mapping
+from typing import Any
 
 
 class ValidationSeverity(StrEnum):
@@ -45,6 +46,22 @@ class ValidationCheck:
             "severity": self.severity.value,
             "result": self.result.value,
             "message": self.message,
+        }
+
+
+@dataclass(frozen=True)
+class ReviewerChecklistItem:
+    item_id: str
+    label: str
+    satisfied: bool
+    detail: str
+
+    def as_dict(self) -> dict[str, str | bool]:
+        return {
+            "itemId": self.item_id,
+            "label": self.label,
+            "satisfied": self.satisfied,
+            "detail": self.detail,
         }
 
 

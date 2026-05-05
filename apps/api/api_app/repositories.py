@@ -117,6 +117,8 @@ class ApprovalRecordData:
     validation_report_id: str | None
     storage_decision: str
     persistence_note: str
+    reviewer_checklist: list[dict[str, Any]] = field(default_factory=list)
+    validation_summary: dict[str, Any] = field(default_factory=dict)
     decided_at: datetime = field(default_factory=utc_now)
 
 
@@ -240,6 +242,8 @@ class WorkflowRepository(Protocol):
         reviewer: str,
         comment: str,
         validation_report_id: str | None,
+        reviewer_checklist: list[dict[str, Any]] | None = None,
+        validation_summary: dict[str, Any] | None = None,
         correlation_id: str | None = None,
     ) -> ApprovalRecordData:
         ...
@@ -274,6 +278,76 @@ def tracking_payload(
     if request_hash:
         payload["requestHash"] = request_hash
     return payload
+
+
+AUDIT_STAGE_BY_ACTION: dict[str, str] = {
+    "REQUEST_SUBMITTED": "REQUEST",
+    "IDEMPOTENT_REQUEST_REPLAYED": "REQUEST",
+    "JOB_TRANSITIONED": "JOB",
+    "JOB_FAILED": "JOB",
+    "METADATA_COLLECTED": "METADATA",
+    "ARTIFACT_CREATED": "ARTIFACT",
+    "ARTIFACT_VALIDATED": "VALIDATION",
+    "APPROVAL_DECISION_RECORDED": "APPROVAL",
+    "PUBLISH_GATE_EVALUATED": "APPROVAL_GATE",
+}
+
+
+def standardized_audit_payload(
+    *,
+    action: str,
+    target_type: str,
+    target_ref_id: str,
+    payload: dict[str, Any],
+    actor: str,
+    correlation_id: str | None,
+) -> dict[str, Any]:
+    audit_payload = dict(payload)
+    if correlation_id:
+        current_tracking = dict(audit_payload.get("tracking") or {})
+        current_tracking["correlationId"] = correlation_id
+        audit_payload["tracking"] = current_tracking
+        audit_payload["correlationId"] = correlation_id
+    audit_payload.setdefault("stage", audit_stage(action, target_type))
+    audit_payload.setdefault("actor", actor)
+    audit_payload.setdefault(
+        "targetRef",
+        {
+            "type": target_type,
+            "id": target_ref_id,
+        },
+    )
+    refs = dict(audit_payload.get("refs") or {})
+    for key in (
+        "requestId",
+        "jobId",
+        "metadataId",
+        "artifactId",
+        "validationReportId",
+        "approvalId",
+    ):
+        value = audit_payload.get(key)
+        if value is not None:
+            refs[key] = str(value)[:128]
+    if refs:
+        audit_payload["refs"] = refs
+    return audit_payload
+
+
+def audit_stage(action: str, target_type: str) -> str:
+    if action in AUDIT_STAGE_BY_ACTION:
+        return AUDIT_STAGE_BY_ACTION[action]
+    return target_type.replace("-", "_").replace(" ", "_").upper()
+
+
+def audit_correlation_id(payload: dict[str, Any]) -> str | None:
+    direct = payload.get("correlationId")
+    if direct:
+        return str(direct)
+    tracking = payload.get("tracking")
+    if isinstance(tracking, dict) and tracking.get("correlationId"):
+        return str(tracking["correlationId"])
+    return None
 
 
 def bounded_artifacts(

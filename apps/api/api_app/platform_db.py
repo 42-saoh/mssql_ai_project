@@ -27,7 +27,9 @@ from api_app.repositories import (
     ValidationReportRecord,
     WorkflowRepository,
     WorkRequestRecord,
+    audit_correlation_id,
     prefixed_id,
+    standardized_audit_payload,
     tracking_payload,
     utc_now,
 )
@@ -435,6 +437,19 @@ class MssqlPlatformRepository:
             extra=extra or {},
         )
         self._save_artifact(record)
+        job = self.get_job(job_id)
+        self.record_audit_event(
+            action="ARTIFACT_CREATED",
+            target_type="ARTIFACT",
+            target_ref_id=record.artifact_id,
+            payload={
+                "artifactId": record.artifact_id,
+                "jobId": job_id,
+                "artifactType": artifact_type.value,
+                "status": record.status.value,
+            },
+            correlation_id=job.correlation_id if job else None,
+        )
         return record
 
     def get_job(self, job_id: str) -> JobRecord | None:
@@ -592,6 +607,8 @@ class MssqlPlatformRepository:
         reviewer: str,
         comment: str,
         validation_report_id: str | None,
+        reviewer_checklist: list[dict[str, Any]] | None = None,
+        validation_summary: dict[str, Any] | None = None,
         correlation_id: str | None = None,
     ) -> ApprovalRecordData:
         artifact = self.get_artifact(artifact_id)
@@ -609,6 +626,8 @@ class MssqlPlatformRepository:
             validation_report_id=validation_report_id,
             storage_decision=mapping.storage_decision,
             persistence_note=mapping.persistence_note,
+            reviewer_checklist=reviewer_checklist or [],
+            validation_summary=validation_summary or {},
         )
         self._execute(
             """
@@ -631,6 +650,8 @@ class MssqlPlatformRepository:
                         "apiDecision": decision,
                         "validationReportId": validation_report_id,
                         "persistenceNote": record.persistence_note,
+                        "reviewerChecklist": record.reviewer_checklist,
+                        "validationSummary": record.validation_summary,
                     }
                 ),
                 record.decided_at,
@@ -648,6 +669,8 @@ class MssqlPlatformRepository:
                 "decision": decision,
                 "storageDecision": record.storage_decision,
                 "validationReportId": validation_report_id,
+                "approvalId": record.approval_id,
+                "reviewerChecklist": record.reviewer_checklist,
             },
             actor=reviewer,
             correlation_id=correlation_id or self._correlation_for_artifact(artifact),
@@ -683,11 +706,15 @@ class MssqlPlatformRepository:
         actor: str = "api-system",
         correlation_id: str | None = None,
     ) -> AuditEventRecord:
-        audit_payload = dict(payload)
-        if correlation_id:
-            current_tracking = dict(audit_payload.get("tracking") or {})
-            current_tracking["correlationId"] = correlation_id
-            audit_payload["tracking"] = current_tracking
+        audit_payload = standardized_audit_payload(
+            action=action,
+            target_type=target_type,
+            target_ref_id=target_ref_id,
+            payload=payload,
+            actor=actor,
+            correlation_id=correlation_id,
+        )
+        trace_id = audit_correlation_id(audit_payload)
         record = AuditEventRecord(
             audit_id=prefixed_id("audit"),
             action=action,
@@ -695,15 +722,15 @@ class MssqlPlatformRepository:
             target_ref_id=target_ref_id,
             payload=audit_payload,
             actor=actor,
-            correlation_id=correlation_id,
+            correlation_id=trace_id,
         )
         self._execute(
             """
             INSERT INTO dbo.AUDIT_EVENTS(
                 AUDT_ID, ACTR_USR_ID, ACTION_CD, TRGT_TP_CD, TRGT_REF_ID,
-                PAYLD_JSON, AUDT_DTM
+                TRC_ID, PAYLD_JSON, AUDT_DTM
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 storage_uuid(record.audit_id),
@@ -711,6 +738,7 @@ class MssqlPlatformRepository:
                 action,
                 target_type,
                 target_ref_id[:100],
+                trace_id[:100] if trace_id else None,
                 json_text(audit_payload),
                 record.created_at,
             ),
@@ -1028,6 +1056,8 @@ def approval_from_row(
         validation_report_id=payload.get("validationReportId"),
         storage_decision=str(row[1]),
         persistence_note=str(payload.get("persistenceNote") or ""),
+        reviewer_checklist=list(payload.get("reviewerChecklist") or []),
+        validation_summary=dict(payload.get("validationSummary") or {}),
         decided_at=as_datetime(row[4]),
     )
 

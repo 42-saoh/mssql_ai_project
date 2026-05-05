@@ -73,6 +73,12 @@ def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> 
     assert all(artifact.latest_validation_report_id for artifact in repository.artifacts.values())
     assert repository.audit_events
     assert any(event.action == "METADATA_COLLECTED" for event in repository.audit_events)
+    artifact_created = [
+        event for event in repository.audit_events if event.action == "ARTIFACT_CREATED"
+    ]
+    assert len(artifact_created) == len(repository.artifacts)
+    assert all(event.payload["stage"] == "ARTIFACT" for event in artifact_created)
+    assert all(event.payload["targetRef"]["type"] == "ARTIFACT" for event in artifact_created)
 
 
 def test_submit_replays_same_idempotency_key_for_same_payload() -> None:
@@ -144,6 +150,9 @@ def test_tracking_context_is_carried_to_request_job_and_audit_payloads() -> None
         event.payload.get("tracking", {}).get("correlationId") == "corr-p09-trace"
         for event in repository.audit_events
     )
+    assert all("stage" in event.payload for event in repository.audit_events)
+    assert all("actor" in event.payload for event in repository.audit_events)
+    assert all("targetRef" in event.payload for event in repository.audit_events)
 
 
 def test_repository_rejects_unsupported_job_transition() -> None:
@@ -244,6 +253,41 @@ def test_approve_requires_latest_passed_validation_report() -> None:
     assert gate_report.checks[0]["ruleId"] == "workflow.approval.before_publish"
 
 
+def test_approval_decision_requires_latest_validation_context() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={},
+        request_hash="hash-no-validation",
+        correlation_id="corr-no-validation",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    artifact = repository.add_artifact(
+        job_id=job.job_id,
+        artifact_type=ArtifactType.SP_ANALYSIS_DOC,
+        title="Analysis",
+        content="# Analysis",
+        evidence_refs=[],
+        generator_version="test",
+        registry_refs=(),
+        assumptions=(),
+        review_required=True,
+    )
+
+    with pytest.raises(ValueError, match="latest artifact validation"):
+        service.record_approval_decision(
+            artifact_id=artifact.artifact_id,
+            decision="REQUEST_CHANGES",
+            reviewer="reviewer@example.com",
+            comment="needs validation first",
+            validation_report_id=None,
+        )
+
+
 def test_approve_rejects_non_latest_validation_report_id() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
@@ -271,9 +315,17 @@ def test_request_changes_decision_maps_to_storage_rejected_without_closing_revie
         decision="REQUEST_CHANGES",
         reviewer="reviewer@example.com",
         comment="please revise",
-        validation_report_id=artifact.latest_validation_report_id,
+        validation_report_id=None,
     )
 
     assert approval.decision == "REQUEST_CHANGES"
     assert approval.storage_decision == "REJECTED"
+    assert approval.validation_report_id == artifact.latest_validation_report_id
+    assert approval.reviewer_checklist
+    assert approval.validation_summary["artifactId"] == artifact.artifact_id
     assert repository.artifacts[artifact.artifact_id].status.value == "REVIEW_PENDING"
+    audit = repository.audit_events[-1]
+    assert audit.action == "APPROVAL_DECISION_RECORDED"
+    assert audit.payload["stage"] == "APPROVAL"
+    assert audit.payload["actor"] == "reviewer@example.com"
+    assert audit.payload["refs"]["validationReportId"] == artifact.latest_validation_report_id
