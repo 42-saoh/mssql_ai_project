@@ -2,6 +2,23 @@ version: 0.1.0
 service: mssqlMetadata
 readOnly: true
 response:
+  standardData:
+    required: [sourceProfile, sourceDatabase, objectIdentity, caveats, reviewRequired]
+    properties:
+      sourceProfile: { type: string }
+      sourceDatabase: { type: string }
+      objectIdentity:
+        type: object
+        required: [database, name, objectType]
+        properties:
+          database: { type: string }
+          schema: { type: string }
+          name: { type: string }
+          objectType: { type: string }
+      caveats:
+        type: array
+        items: { type: string }
+      reviewRequired: { type: boolean }
   success:
     required: [ok, toolName, dbProfileId, snapshotId, collectedAt, evidenceRefs, data]
     properties:
@@ -39,7 +56,17 @@ response:
         properties:
           code: { type: string }
           message: { type: string }
-          details: { type: object }
+          details:
+            type: object
+            description: Safe diagnostic fields only; never SQL text, credentials, row data, or connection strings.
+            properties:
+              toolName: { type: string }
+              dbProfileId: { type: string }
+              database: { type: string }
+              missingSettingsCount: { type: integer }
+              timeoutSeconds: { type: integer }
+              attempt: { type: integer }
+              errorClass: { type: string }
 errorCodes:
   - UNKNOWN_TOOL
   - INVALID_ARGUMENTS

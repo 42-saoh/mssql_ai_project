@@ -1,6 +1,6 @@
 # services/mssql-mcp
 
-MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, live readiness endpoint 를 가진 최소 skeleton 이다.
+MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, fixture-backed execution, env-gated live metadata execution 을 제공한다.
 
 ## 원칙
 
@@ -9,6 +9,7 @@ MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog
 - metadata-only
 - snapshot / evidence refs 계약 유지
 - live 연결이 필요해도 metadata read-only 계정만 사용 권장
+- PPM metadata 가 필요할 때 PLF 로 대체하지 않고 blocker/error 로 보고
 
 ## 로컬 Docker SQL Server 연결 기준
 
@@ -23,6 +24,7 @@ MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog
 - 기본 metadata profile id: `master`
 - 기본 metadata DB name: `master`
 - platform DB profile id: `plf`
+- pilot analysis target profile id: `ppm`
 - 기본 platform DB name: `PLF`
 
 여러 DB 를 같은 SQL Server 인스턴스에서 함께 쓰는 경우에는 `config/mssql/local_docker_profiles.yaml` 에 profile 을 추가해서 `dbProfileId -> database` 매핑을 늘린다.
@@ -58,17 +60,29 @@ MVP tool execution uses structured arguments only:
 ```
 
 The response always carries `snapshotId`, `collectedAt`, `evidenceRefs`, and either
-`data` or a documented `error.code`. The default execution path is fixture-backed
-metadata from `fixtures/mcp/metadata_snapshot.json`, so tests do not require a live
-SQL Server. When `MSSQL_ENABLE_LIVE_METADATA=1`, readiness uses the live connection
-probe; live tool query execution remains an optional adapter-bound follow-up and is
-not documented as a completed metadata query implementation.
+`data` or a documented `error.code`. Successful `data` payloads are standardized
+with `sourceProfile`, `sourceDatabase`, `objectIdentity`, `caveats`, and
+`reviewRequired`.
+
+The default execution path is fixture-backed metadata from
+`fixtures/mcp/metadata_snapshot.json`, so tests do not require a live SQL Server.
+When `MSSQL_ENABLE_LIVE_METADATA=1`, tool invocation uses structured read-only
+metadata queries against SQL Server catalog views such as `sys.objects`,
+`sys.columns`, `sys.sql_modules`, `sys.sql_expression_dependencies`,
+`sys.indexes`, `sys.key_constraints`, `sys.foreign_keys`,
+`sys.check_constraints`, and `sys.extended_properties`.
+
+Live query failures return safe diagnostic fields only: tool name, profile id,
+database, timeout seconds, attempt count, and error class. Error details must not
+include SQL text, connection strings, credentials, row samples, or procedure
+execution output. The adapter does not perform hidden retries; workflow-level retry
+can use the standardized timeout/attempt details.
 
 ## 다음 구현 우선순위
 
-1. live adapter 에 metadata read-only query 구현
-2. 실제 MCP transport 연결
-3. fixture set 확장과 optional integration smoke 추가
+1. 실제 MCP transport 연결
+2. fixture set 확장과 optional integration smoke 추가
+3. PPM dependency caveat 감소를 위한 더 강한 metadata evidence 전략 검토
 
 ## 외부 DB 연결 주의
 

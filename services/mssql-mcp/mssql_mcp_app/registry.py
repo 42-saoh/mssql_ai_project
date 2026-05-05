@@ -42,6 +42,7 @@ class ToolRegistry:
         self._validate_profile(arguments)
 
         result = self.repository.invoke(tool.name, arguments)
+        data = self._standardize_success_data(tool.name, arguments, result.data)
         return ToolResponse(
             ok=True,
             toolName=tool.name,
@@ -49,7 +50,7 @@ class ToolRegistry:
             snapshotId=result.snapshot_id,
             collectedAt=result.collected_at,
             evidenceRefs=result.evidence_refs,
-            data=result.data,
+            data=data,
         ).model_dump(exclude_none=True)
 
     def _get_tool(self, tool_name: str) -> ToolSpec:
@@ -87,6 +88,36 @@ class ToolRegistry:
                 "Unknown dbProfileId. Use one of the public profile registry ids.",
                 {"dbProfileId": profile_id, "availableProfileIds": sorted(self._profile_ids)},
             )
+
+    def _standardize_success_data(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        standardized = dict(data)
+        source_profile = str(arguments["dbProfileId"])
+        source_database = self._database_for_profile(source_profile)
+        caveats = _stable_caveats(standardized)
+
+        standardized["sourceProfile"] = source_profile
+        standardized["sourceDatabase"] = source_database
+        standardized["objectIdentity"] = _object_identity_for_tool(
+            tool_name,
+            arguments,
+            source_database=source_database,
+        )
+        standardized["caveats"] = caveats
+        standardized["reviewRequired"] = bool(
+            standardized.get("reviewRequired", False) or caveats
+        )
+        return standardized
+
+    def _database_for_profile(self, profile_id: str) -> str:
+        for profile in self.profiles:
+            if profile.id == profile_id:
+                return profile.database
+        return profile_id
 
 
 def build_tool_registry(
@@ -137,3 +168,140 @@ def _safe_validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
         }
         for error in exc.errors()
     ]
+
+
+def _object_identity_for_tool(
+    tool_name: str,
+    arguments: dict[str, Any],
+    *,
+    source_database: str,
+) -> dict[str, Any]:
+    if tool_name == "check_database_exists":
+        return _identity(
+            source_database=arguments.get("databaseName") or source_database,
+            object_type="DATABASE",
+            name=arguments.get("databaseName") or source_database,
+        )
+    if tool_name == "list_procedures":
+        return _identity(
+            source_database=source_database,
+            object_type="CATALOG",
+            schema=arguments.get("schema"),
+            name="procedures",
+        )
+    if tool_name == "list_tables":
+        return _identity(
+            source_database=source_database,
+            object_type="CATALOG",
+            schema=arguments.get("schema"),
+            name="tables",
+        )
+    if tool_name == "list_views":
+        return _identity(
+            source_database=source_database,
+            object_type="CATALOG",
+            schema=arguments.get("schema"),
+            name="views",
+        )
+    if tool_name == "list_functions":
+        return _identity(
+            source_database=source_database,
+            object_type="CATALOG",
+            schema=arguments.get("schema"),
+            name="functions",
+        )
+    if tool_name.startswith("get_procedure_"):
+        return _identity(
+            source_database=source_database,
+            object_type="PROCEDURE",
+            schema=arguments.get("schema"),
+            name=arguments.get("procedureName"),
+        )
+    if tool_name in {"get_table_schema", "get_table_constraints", "get_table_indexes"}:
+        return _identity(
+            source_database=source_database,
+            object_type="TABLE",
+            schema=arguments.get("schema"),
+            name=arguments.get("tableName"),
+        )
+    if tool_name == "get_extended_properties":
+        return _identity(
+            source_database=source_database,
+            object_type=arguments.get("objectType") or "OBJECT",
+            schema=arguments.get("schema"),
+            name=arguments.get("objectName"),
+        )
+    if tool_name == "get_view_definition":
+        return _identity(
+            source_database=source_database,
+            object_type="VIEW",
+            schema=arguments.get("schema"),
+            name=arguments.get("viewName"),
+        )
+    if tool_name == "get_function_definition":
+        return _identity(
+            source_database=source_database,
+            object_type="FUNCTION",
+            schema=arguments.get("schema"),
+            name=arguments.get("functionName"),
+        )
+    if tool_name == "get_related_db_objects":
+        return _identity(
+            source_database=source_database,
+            object_type=arguments.get("objectType") or "OBJECT",
+            schema=arguments.get("schema"),
+            name=arguments.get("objectName"),
+        )
+    if tool_name in {"search_tables", "search_columns", "find_similar_tables"}:
+        return _identity(
+            source_database=source_database,
+            object_type="CATALOG",
+            name=tool_name,
+        )
+    return _identity(source_database=source_database, object_type="CATALOG", name=tool_name)
+
+
+def _identity(
+    *,
+    source_database: str,
+    object_type: str,
+    name: Any,
+    schema: Any | None = None,
+) -> dict[str, Any]:
+    return {
+        "database": source_database,
+        "schema": schema,
+        "name": name,
+        "objectType": object_type,
+    }
+
+
+def _stable_caveats(data: dict[str, Any]) -> list[str]:
+    caveats = [str(item) for item in data.get("caveats", []) if str(item)]
+
+    if data.get("hasDefinitionAccess") is False:
+        caveats.append("definition_unavailable")
+
+    dependencies = data.get("dependencies")
+    if isinstance(dependencies, list) and _dependencies_need_review(dependencies):
+        caveats.append("DEPENDENCY_METADATA_INCOMPLETE")
+
+    if data.get("descriptionStatus") == "REVIEW_REQUIRED":
+        caveats.append("description_review_required")
+
+    return list(dict.fromkeys(caveats))
+
+
+def _dependencies_need_review(dependencies: list[Any]) -> bool:
+    for dependency in dependencies:
+        if not isinstance(dependency, dict):
+            continue
+        if dependency.get("reviewStatus") == "REVIEW_REQUIRED":
+            return True
+        if dependency.get("isAmbiguous") is True:
+            return True
+        if dependency.get("objectType") in {None, "", "UNKNOWN"}:
+            return True
+        if not dependency.get("name"):
+            return True
+    return False

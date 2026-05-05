@@ -20,6 +20,7 @@ from mssql_mcp_app.errors import (
 from mssql_mcp_app.metadata_discovery import (
     definition_metadata,
     module_inventory_item,
+    procedure_dependency_summary,
     procedure_inventory_item,
     source_context,
     source_database_for_profile,
@@ -843,6 +844,11 @@ class LiveMetadataRepository:
                 ) AS foreign_key_count,
                 (
                     SELECT COUNT(1)
+                    FROM sys.check_constraints AS cc
+                    WHERE cc.parent_object_id = t.object_id
+                ) AS check_constraint_count,
+                (
+                    SELECT COUNT(1)
                     FROM sys.indexes AS i
                     WHERE i.object_id = t.object_id
                         AND i.index_id > 0
@@ -889,7 +895,8 @@ class LiveMetadataRepository:
                         "foreignKeyCount": int(row.get("foreign_key_count") or 0),
                         "indexCount": int(row.get("index_count") or 0),
                         "constraintCount": int(row.get("key_constraint_count") or 0)
-                        + int(row.get("foreign_key_count") or 0),
+                        + int(row.get("foreign_key_count") or 0)
+                        + int(row.get("check_constraint_count") or 0),
                     },
                     "extendedPropertyCount": int(row.get("extended_property_count") or 0),
                     "relatedProcedures": [],
@@ -980,6 +987,13 @@ class LiveMetadataRepository:
         arguments: dict[str, Any],
     ) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
+        self._ensure_object_id(
+            profile,
+            schema=arguments["schema"],
+            name=arguments["procedureName"],
+            object_type="PROCEDURE",
+            tool_name="get_procedure_parameters",
+        )
         rows = self._query(
             profile.database,
             """
@@ -1027,6 +1041,13 @@ class LiveMetadataRepository:
         arguments: dict[str, Any],
     ) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
+        self._ensure_object_id(
+            profile,
+            schema=arguments["schema"],
+            name=arguments["procedureName"],
+            object_type="PROCEDURE",
+            tool_name="get_procedure_dependencies",
+        )
         rows = self._query(
             profile.database,
             """
@@ -1070,7 +1091,58 @@ class LiveMetadataRepository:
                 "schema": arguments["schema"],
                 "procedureName": arguments["procedureName"],
                 "dependencies": dependencies,
+                "dependencySummary": procedure_dependency_summary(dependencies),
+                "caveats": _dependency_caveats(dependencies),
+                "reviewRequired": bool(_dependency_caveats(dependencies)),
                 "snapshotMode": arguments.get("snapshotMode", "LATEST"),
+            },
+            evidence_refs=[evidence],
+        )
+
+    def _handle_get_related_db_objects(self, arguments: dict[str, Any]) -> MetadataToolResult:
+        profile = self._profile(arguments["dbProfileId"])
+        object_type = arguments["objectType"]
+        schema = arguments["schema"]
+        object_name = arguments["objectName"]
+        object_id = self._ensure_object_id(
+            profile,
+            schema=schema,
+            name=object_name,
+            object_type=object_type,
+            tool_name="get_related_db_objects",
+        )
+        if object_type == "TABLE":
+            related = self._referrers_for_object(
+                profile,
+                object_id=object_id,
+                schema=schema,
+                name=object_name,
+                tool_name="get_related_db_objects",
+            )
+        else:
+            related = self._dependencies_for_object(
+                profile,
+                object_id=object_id,
+                tool_name="get_related_db_objects",
+            )
+        related = related[: arguments.get("topK", 20)]
+        caveats = _dependency_caveats(related)
+        evidence = self._live_evidence(
+            "related-objects",
+            object_type,
+            schema,
+            object_name,
+            "sys.sql_expression_dependencies",
+        )
+        return self._live_result(
+            arguments,
+            data={
+                "schema": schema,
+                "objectName": object_name,
+                "objectType": object_type,
+                "relatedObjects": related,
+                "caveats": caveats,
+                "reviewRequired": bool(caveats),
             },
             evidence_refs=[evidence],
         )
@@ -1091,12 +1163,17 @@ class LiveMetadataRepository:
                 c.column_id,
                 c.is_nullable,
                 c.is_identity,
+                CONVERT(nvarchar(4000), table_ep.value) AS table_description,
                 CONVERT(nvarchar(4000), ep.value) AS description,
                 CASE WHEN pk.column_id IS NULL THEN 0 ELSE 1 END AS is_primary_key
             FROM sys.tables AS t
             INNER JOIN sys.schemas AS s ON t.schema_id = s.schema_id
             INNER JOIN sys.columns AS c ON t.object_id = c.object_id
             INNER JOIN sys.types AS ty ON c.user_type_id = ty.user_type_id
+            LEFT JOIN sys.extended_properties AS table_ep
+                ON table_ep.major_id = t.object_id
+                AND table_ep.minor_id = 0
+                AND table_ep.name = 'MS_Description'
             LEFT JOIN sys.extended_properties AS ep
                 ON ep.major_id = c.object_id
                 AND ep.minor_id = c.column_id
@@ -1149,8 +1226,10 @@ class LiveMetadataRepository:
                 "schema": arguments["schema"],
                 "tableName": arguments["tableName"],
                 "logicalName": None,
-                "description": None,
-                "descriptionStatus": "REVIEW_REQUIRED",
+                "description": rows[0].get("table_description"),
+                "descriptionStatus": "CONFIRMED"
+                if rows[0].get("table_description")
+                else "REVIEW_REQUIRED",
                 "columns": columns,
             },
             evidence_refs=[evidence],
@@ -1158,6 +1237,13 @@ class LiveMetadataRepository:
 
     def _handle_get_table_constraints(self, arguments: dict[str, Any]) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
+        self._ensure_object_id(
+            profile,
+            schema=arguments["schema"],
+            name=arguments["tableName"],
+            object_type="TABLE",
+            tool_name="get_table_constraints",
+        )
         key_rows = self._query(
             profile.database,
             """
@@ -1212,13 +1298,33 @@ class LiveMetadataRepository:
             tool_name="get_table_constraints",
             profile=profile,
         )
-        constraints = _group_key_constraints(key_rows) + _group_foreign_keys(fk_rows)
+        check_rows = self._query(
+            profile.database,
+            """
+            SELECT
+                cc.name,
+                cc.definition
+            FROM sys.tables AS t
+            INNER JOIN sys.schemas AS s ON t.schema_id = s.schema_id
+            INNER JOIN sys.check_constraints AS cc ON t.object_id = cc.parent_object_id
+            WHERE s.name = %s AND t.name = %s
+            ORDER BY cc.name
+            """,
+            [arguments["schema"], arguments["tableName"]],
+            tool_name="get_table_constraints",
+            profile=profile,
+        )
+        constraints = (
+            _group_key_constraints(key_rows)
+            + _group_foreign_keys(fk_rows)
+            + _group_check_constraints(check_rows)
+        )
         evidence = self._live_evidence(
             "table-constraints",
             "TABLE",
             arguments["schema"],
             arguments["tableName"],
-            "sys.key_constraints,sys.foreign_keys",
+            "sys.key_constraints,sys.foreign_keys,sys.check_constraints",
         )
         return self._live_result(
             arguments,
@@ -1232,6 +1338,13 @@ class LiveMetadataRepository:
 
     def _handle_get_table_indexes(self, arguments: dict[str, Any]) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
+        self._ensure_object_id(
+            profile,
+            schema=arguments["schema"],
+            name=arguments["tableName"],
+            object_type="TABLE",
+            tool_name="get_table_indexes",
+        )
         rows = self._query(
             profile.database,
             """
@@ -1291,8 +1404,23 @@ class LiveMetadataRepository:
             if "." not in object_name:
                 raise _object_not_found("COLUMN", arguments["schema"], object_name)
             table_name, column_name = object_name.split(".", 1)
+            self._ensure_column_exists(
+                profile,
+                schema=arguments["schema"],
+                table_name=table_name,
+                column_name=column_name,
+                tool_name="get_extended_properties",
+            )
             minor_filter = "AND c.name = %s"
             params = [arguments["schema"], table_name, column_name]
+        else:
+            self._ensure_object_id(
+                profile,
+                schema=arguments["schema"],
+                name=table_name,
+                object_type=object_type,
+                tool_name="get_extended_properties",
+            )
         rows = self._query(
             profile.database,
             f"""
@@ -1345,6 +1473,96 @@ class LiveMetadataRepository:
             evidence_refs=[evidence],
         )
 
+    def _handle_search_tables(self, arguments: dict[str, Any]) -> MetadataToolResult:
+        profile = self._profile(arguments["dbProfileId"])
+        top_k = arguments.get("topK", 5)
+        candidates = []
+        for index, table in enumerate(
+            self._searchable_live_tables(profile, tool_name="search_tables")
+        ):
+            score = _score_table_match(table, arguments)
+            if score > 0 or _is_empty_search(arguments):
+                candidates.append(_live_table_candidate(self, table, score, index))
+        candidates.sort(key=lambda item: (-item["score"], item["schema"], item["tableName"]))
+        evidence = self._live_evidence("table-search", "CATALOG", "*", "tables", "sys.tables")
+        return self._live_result(
+            arguments,
+            data={
+                "criteria": _criteria(arguments),
+                "candidates": candidates[:top_k],
+                "caveats": [],
+                "reviewRequired": False,
+            },
+            evidence_refs=[evidence],
+        )
+
+    def _handle_search_columns(self, arguments: dict[str, Any]) -> MetadataToolResult:
+        profile = self._profile(arguments["dbProfileId"])
+        top_k = arguments.get("topK", 5)
+        candidates = []
+        for table in self._searchable_live_tables(profile, tool_name="search_columns"):
+            if arguments.get("tableName") and not _matches(arguments["tableName"], table["name"]):
+                continue
+            for column in table.get("columns", []):
+                score = _score_column_match(column, table, arguments)
+                if score > 0 or _is_empty_search(arguments):
+                    candidate = _column_candidate(table, column, score)
+                    candidate["evidenceRefs"] = [
+                        self._live_evidence(
+                            "column-search",
+                            "COLUMN",
+                            table["schema"],
+                            f"{table['name']}.{column['name']}",
+                            "sys.columns",
+                        )
+                    ]
+                    candidates.append(candidate)
+        candidates.sort(
+            key=lambda item: (-item["score"], item["schema"], item["tableName"], item["columnName"])
+        )
+        evidence = self._live_evidence("column-search", "CATALOG", "*", "columns", "sys.columns")
+        return self._live_result(
+            arguments,
+            data={
+                "criteria": _criteria(arguments),
+                "candidates": candidates[:top_k],
+                "caveats": [],
+                "reviewRequired": False,
+            },
+            evidence_refs=[evidence],
+        )
+
+    def _handle_find_similar_tables(self, arguments: dict[str, Any]) -> MetadataToolResult:
+        profile = self._profile(arguments["dbProfileId"])
+        top_k = arguments.get("topK", 5)
+        candidates = []
+        for index, table in enumerate(
+            self._searchable_live_tables(profile, tool_name="find_similar_tables")
+        ):
+            score, matched_columns = _score_similar_table(table, arguments)
+            if score > 0:
+                candidate = _live_table_candidate(self, table, score, index)
+                candidate["matchedColumns"] = matched_columns
+                candidates.append(candidate)
+        candidates.sort(key=lambda item: (-item["score"], item["schema"], item["tableName"]))
+        evidence = self._live_evidence(
+            "similar-table-search",
+            "CATALOG",
+            "*",
+            "tables",
+            "sys.tables,sys.columns",
+        )
+        return self._live_result(
+            arguments,
+            data={
+                "criteria": _criteria(arguments),
+                "candidates": candidates[:top_k],
+                "caveats": [],
+                "reviewRequired": False,
+            },
+            evidence_refs=[evidence],
+        )
+
     def _handle_get_view_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
         return self._handle_get_module_definition(
             arguments,
@@ -1378,6 +1596,7 @@ class LiveMetadataRepository:
                 SELECT
                     s.name AS schema_name,
                     o.name AS object_name,
+                    o.object_id,
                     m.definition
                 FROM sys.objects AS o
                 INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
@@ -1397,6 +1616,14 @@ class LiveMetadataRepository:
         )
         definition = row.get("definition")
         definition_info = definition_metadata(definition)
+        dependencies = self._dependencies_for_object(
+            profile,
+            object_id=row["object_id"],
+            tool_name=f"get_{object_kind.lower()}_definition",
+        )
+        caveats = _dependency_caveats(dependencies)
+        if not definition_info["available"]:
+            caveats.append("definition_unavailable")
         evidence = self._live_evidence(
             f"{object_kind.lower()}-definition",
             object_kind,
@@ -1414,6 +1641,10 @@ class LiveMetadataRepository:
                 "definitionLength": definition_info["length"],
                 "detectedPatterns": definition_info["detectedPatterns"],
                 "hasDefinitionAccess": definition_info["available"],
+                "dependencies": dependencies,
+                "dependencySummary": procedure_dependency_summary(dependencies),
+                "caveats": list(dict.fromkeys(caveats)),
+                "reviewRequired": bool(caveats),
                 "snapshotMode": arguments.get("snapshotMode", "LATEST"),
             },
             evidence_refs=[evidence],
@@ -1429,6 +1660,7 @@ class LiveMetadataRepository:
         schema_filter, params = _schema_filter(arguments)
         if object_kind == "VIEW":
             source = "sys.views"
+            type_filter = "= 'V'"
             sql = f"""
             SELECT
                 s.name AS schema_name,
@@ -1443,6 +1675,7 @@ class LiveMetadataRepository:
             """
         else:
             source = "sys.objects"
+            type_filter = "IN ('FN', 'IF', 'TF', 'FS', 'FT')"
             sql = f"""
             SELECT
                 s.name AS schema_name,
@@ -1463,6 +1696,35 @@ class LiveMetadataRepository:
             tool_name=f"list_{object_kind.lower()}s",
             profile=profile,
         )
+        dependency_rows = self._query(
+            profile.database,
+            f"""
+            SELECT
+                o.object_id,
+                COALESCE(rs.name, dep_rs.name, dep.referenced_schema_name) AS schema_name,
+                COALESCE(ro.name, dep_ro.name, dep.referenced_entity_name) AS object_name,
+                COALESCE(ro.type, dep_ro.type) AS referenced_type,
+                dep.referenced_class_desc,
+                dep.is_ambiguous
+            FROM sys.objects AS o
+            INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
+            LEFT JOIN sys.sql_expression_dependencies AS dep
+                ON o.object_id = dep.referencing_id
+            LEFT JOIN sys.objects AS ro ON dep.referenced_id = ro.object_id
+            LEFT JOIN sys.schemas AS rs ON ro.schema_id = rs.schema_id
+            LEFT JOIN sys.schemas AS dep_rs ON dep.referenced_schema_name = dep_rs.name
+            LEFT JOIN sys.objects AS dep_ro
+                ON dep_rs.schema_id = dep_ro.schema_id
+                AND dep.referenced_entity_name = dep_ro.name
+            WHERE o.type {type_filter}
+                AND o.is_ms_shipped = 0{schema_filter}
+            ORDER BY o.object_id, schema_name, object_name
+            """,
+            params,
+            tool_name=f"list_{object_kind.lower()}s",
+            profile=profile,
+        )
+        dependencies_by_object = _group_dependencies(dependency_rows)
         modules = []
         for row in rows[: arguments.get("topK", 100)]:
             evidence = self._live_evidence(
@@ -1476,7 +1738,7 @@ class LiveMetadataRepository:
                 "schema": row["schema_name"],
                 "name": row["object_name"],
                 "definition": row.get("definition"),
-                "dependencies": [],
+                "dependencies": dependencies_by_object.get(row["object_id"], []),
             }
             modules.append(
                 module_inventory_item(
@@ -1505,6 +1767,218 @@ class LiveMetadataRepository:
                 )
             ],
         )
+
+    def _ensure_object_id(
+        self,
+        profile: DbProfile,
+        *,
+        schema: str,
+        name: str,
+        object_type: str | None,
+        tool_name: str,
+    ) -> int:
+        type_filter = _object_type_filter(object_type)
+        rows = self._query(
+            profile.database,
+            f"""
+            SELECT
+                o.object_id
+            FROM sys.objects AS o
+            INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
+            WHERE s.name = %s
+                AND o.name = %s
+                {type_filter}
+                AND o.is_ms_shipped = 0
+            """,
+            [schema, name],
+            tool_name=tool_name,
+            profile=profile,
+        )
+        if not rows:
+            raise _object_not_found(object_type or "OBJECT", schema, name)
+        return int(rows[0]["object_id"])
+
+    def _ensure_column_exists(
+        self,
+        profile: DbProfile,
+        *,
+        schema: str,
+        table_name: str,
+        column_name: str,
+        tool_name: str,
+    ) -> None:
+        rows = self._query(
+            profile.database,
+            """
+            SELECT
+                c.column_id
+            FROM sys.tables AS t
+            INNER JOIN sys.schemas AS s ON t.schema_id = s.schema_id
+            INNER JOIN sys.columns AS c ON t.object_id = c.object_id
+            WHERE s.name = %s
+                AND t.name = %s
+                AND c.name = %s
+                AND t.is_ms_shipped = 0
+            """,
+            [schema, table_name, column_name],
+            tool_name=tool_name,
+            profile=profile,
+        )
+        if not rows:
+            raise _object_not_found("COLUMN", schema, f"{table_name}.{column_name}")
+
+    def _dependencies_for_object(
+        self,
+        profile: DbProfile,
+        *,
+        object_id: int,
+        tool_name: str,
+    ) -> list[dict[str, Any]]:
+        rows = self._query(
+            profile.database,
+            """
+            SELECT
+                dep.referencing_id AS object_id,
+                COALESCE(rs.name, dep_rs.name, dep.referenced_schema_name) AS schema_name,
+                COALESCE(ro.name, dep_ro.name, dep.referenced_entity_name) AS object_name,
+                COALESCE(ro.type, dep_ro.type) AS referenced_type,
+                dep.referenced_class_desc,
+                dep.is_ambiguous
+            FROM sys.sql_expression_dependencies AS dep
+            LEFT JOIN sys.objects AS ro ON dep.referenced_id = ro.object_id
+            LEFT JOIN sys.schemas AS rs ON ro.schema_id = rs.schema_id
+            LEFT JOIN sys.schemas AS dep_rs ON dep.referenced_schema_name = dep_rs.name
+            LEFT JOIN sys.objects AS dep_ro
+                ON dep_rs.schema_id = dep_ro.schema_id
+                AND dep.referenced_entity_name = dep_ro.name
+            WHERE dep.referencing_id = %s
+            ORDER BY schema_name, object_name
+            """,
+            [object_id],
+            tool_name=tool_name,
+            profile=profile,
+        )
+        return [item for values in _group_dependencies(rows).values() for item in values]
+
+    def _referrers_for_object(
+        self,
+        profile: DbProfile,
+        *,
+        object_id: int,
+        schema: str,
+        name: str,
+        tool_name: str,
+    ) -> list[dict[str, Any]]:
+        rows = self._query(
+            profile.database,
+            """
+            SELECT DISTINCT
+                s.name AS schema_name,
+                o.name AS object_name,
+                o.type AS object_type,
+                dep.is_ambiguous
+            FROM sys.sql_expression_dependencies AS dep
+            INNER JOIN sys.objects AS o ON dep.referencing_id = o.object_id
+            INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
+            WHERE dep.referenced_id = %s
+                OR (
+                    dep.referenced_schema_name = %s
+                    AND dep.referenced_entity_name = %s
+                )
+            ORDER BY s.name, o.name
+            """,
+            [object_id, schema, name],
+            tool_name=tool_name,
+            profile=profile,
+        )
+        return [
+            {
+                "objectType": _map_object_type(row.get("object_type")),
+                "schema": row.get("schema_name"),
+                "name": row.get("object_name"),
+                "relationship": "REFERENCED_BY",
+                "dependencyType": "REFERENCE",
+                "isAmbiguous": bool(row.get("is_ambiguous")),
+                "reviewStatus": "REVIEW_REQUIRED"
+                if row.get("is_ambiguous")
+                else "CONFIRMED",
+            }
+            for row in rows
+        ]
+
+    def _searchable_live_tables(
+        self,
+        profile: DbProfile,
+        *,
+        tool_name: str,
+    ) -> list[dict[str, Any]]:
+        rows = self._query(
+            profile.database,
+            """
+            SELECT
+                t.object_id,
+                s.name AS schema_name,
+                t.name AS table_name,
+                CONVERT(nvarchar(4000), table_ep.value) AS table_description,
+                c.name AS column_name,
+                ty.name AS type_name,
+                c.max_length,
+                c.precision,
+                c.scale,
+                c.column_id,
+                c.is_nullable,
+                c.is_identity,
+                CONVERT(nvarchar(4000), column_ep.value) AS column_description
+            FROM sys.tables AS t
+            INNER JOIN sys.schemas AS s ON t.schema_id = s.schema_id
+            INNER JOIN sys.columns AS c ON t.object_id = c.object_id
+            INNER JOIN sys.types AS ty ON c.user_type_id = ty.user_type_id
+            LEFT JOIN sys.extended_properties AS table_ep
+                ON table_ep.major_id = t.object_id
+                AND table_ep.minor_id = 0
+                AND table_ep.name = 'MS_Description'
+            LEFT JOIN sys.extended_properties AS column_ep
+                ON column_ep.major_id = c.object_id
+                AND column_ep.minor_id = c.column_id
+                AND column_ep.name = 'MS_Description'
+            WHERE t.is_ms_shipped = 0
+            ORDER BY s.name, t.name, c.column_id
+            """,
+            [],
+            tool_name=tool_name,
+            profile=profile,
+        )
+        tables: dict[int, dict[str, Any]] = {}
+        for row in rows:
+            table = tables.setdefault(
+                int(row["object_id"]),
+                {
+                    "schema": row["schema_name"],
+                    "name": row["table_name"],
+                    "logicalName": None,
+                    "description": row.get("table_description"),
+                    "descriptionStatus": "CONFIRMED"
+                    if row.get("table_description")
+                    else "REVIEW_REQUIRED",
+                    "columns": [],
+                },
+            )
+            table["columns"].append(
+                {
+                    "name": row["column_name"],
+                    "logicalName": None,
+                    "description": row.get("column_description"),
+                    "descriptionStatus": "CONFIRMED"
+                    if row.get("column_description")
+                    else "REVIEW_REQUIRED",
+                    "dataType": _format_data_type(row),
+                    "ordinal": row["column_id"],
+                    "isNullable": bool(row.get("is_nullable")),
+                    "isIdentity": bool(row.get("is_identity")),
+                    "isPrimaryKey": False,
+                }
+            )
+        return list(tables.values())
 
     @staticmethod
     def _single_row(
@@ -1541,7 +2015,14 @@ class LiveMetadataRepository:
             raise MetadataToolError(
                 LIVE_METADATA_UNAVAILABLE,
                 "Missing live metadata configuration.",
-                {"toolName": tool_name, "dbProfileId": profile.id, "missing": missing},
+                {
+                    "toolName": tool_name,
+                    "dbProfileId": profile.id,
+                    "database": database,
+                    "missingSettingsCount": len(missing),
+                    "timeoutSeconds": self.settings.connect_timeout_seconds,
+                    "attempt": 1,
+                },
             )
         try:
             import pytds
@@ -1549,7 +2030,13 @@ class LiveMetadataRepository:
             raise MetadataToolError(
                 LIVE_METADATA_UNAVAILABLE,
                 "python-tds is required for live MSSQL metadata connectivity.",
-                {"toolName": tool_name, "dbProfileId": profile.id},
+                {
+                    "toolName": tool_name,
+                    "dbProfileId": profile.id,
+                    "database": database,
+                    "timeoutSeconds": self.settings.connect_timeout_seconds,
+                    "attempt": 1,
+                },
             ) from exc
         try:
             return pytds.connect(
@@ -1604,6 +2091,8 @@ class LiveMetadataRepository:
                     "toolName": tool_name,
                     "dbProfileId": profile.id,
                     "database": database,
+                    "timeoutSeconds": self.settings.connect_timeout_seconds,
+                    "attempt": 1,
                     "errorClass": exc.__class__.__name__,
                 },
             ) from exc
@@ -1634,6 +2123,8 @@ class LiveMetadataRepository:
                 "toolName": tool_name,
                 "dbProfileId": profile.id,
                 "database": database,
+                "timeoutSeconds": self.settings.connect_timeout_seconds,
+                "attempt": 1,
                 "errorClass": exc.__class__.__name__,
             },
         ) from exc
@@ -1730,6 +2221,17 @@ def _map_object_type(sql_server_type: Any) -> str:
     }.get(str(sql_server_type), "UNKNOWN")
 
 
+def _object_type_filter(object_type: str | None) -> str:
+    if object_type is None:
+        return ""
+    return {
+        "TABLE": "AND o.type = 'U'",
+        "VIEW": "AND o.type = 'V'",
+        "PROCEDURE": "AND o.type IN ('P', 'PC')",
+        "FUNCTION": "AND o.type IN ('FN', 'IF', 'TF', 'FS', 'FT')",
+    }.get(str(object_type).upper(), "")
+
+
 def _format_data_type(row: dict[str, Any]) -> str:
     type_name = str(row["type_name"]).upper()
     max_length = row.get("max_length")
@@ -1783,6 +2285,19 @@ def _group_foreign_keys(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         constraint["columns"].append(row["column_name"])
         constraint["referencedObject"]["columns"].append(row["referenced_column"])
     return list(grouped.values())
+
+
+def _group_check_constraints(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": row["name"],
+            "constraintType": "CHECK",
+            "columns": [],
+            "referencedObject": None,
+            "definition": row.get("definition"),
+        }
+        for row in rows
+    ]
 
 
 def _group_indexes(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1916,6 +2431,31 @@ def _table_candidate(table: dict[str, Any], score: int, fixture_index: int) -> d
     }
 
 
+def _live_table_candidate(
+    repository: Any,
+    table: dict[str, Any],
+    score: int,
+    index: int,
+) -> dict[str, Any]:
+    return {
+        "schema": table["schema"],
+        "tableName": table["name"],
+        "logicalName": table.get("logicalName"),
+        "description": table.get("description"),
+        "descriptionStatus": table.get("descriptionStatus", "CONFIRMED"),
+        "score": score,
+        "evidenceRefs": [
+            repository._live_evidence(
+                "table",
+                "TABLE",
+                table["schema"],
+                table["name"],
+                f"sys.tables[{index}]",
+            )
+        ],
+    }
+
+
 def _column_candidate(table: dict[str, Any], column: dict[str, Any], score: int) -> dict[str, Any]:
     return {
         "schema": table["schema"],
@@ -1935,3 +2475,16 @@ def _criteria(arguments: dict[str, Any]) -> dict[str, Any]:
 
 def _is_empty_search(arguments: dict[str, Any]) -> bool:
     return not any(value for key, value in arguments.items() if key not in {"dbProfileId", "topK"})
+
+
+def _dependency_caveats(dependencies: list[dict[str, Any]]) -> list[str]:
+    for dependency in dependencies:
+        if dependency.get("reviewStatus") == "REVIEW_REQUIRED":
+            return ["DEPENDENCY_METADATA_INCOMPLETE"]
+        if dependency.get("isAmbiguous") is True:
+            return ["DEPENDENCY_METADATA_INCOMPLETE"]
+        if dependency.get("objectType") in {None, "", "UNKNOWN"}:
+            return ["DEPENDENCY_METADATA_INCOMPLETE"]
+        if not dependency.get("name"):
+            return ["DEPENDENCY_METADATA_INCOMPLETE"]
+    return []

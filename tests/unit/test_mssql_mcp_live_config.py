@@ -14,7 +14,8 @@ def test_profile_registry_file_exposes_master_default() -> None:
 
     assert default_profile.id == "master"
     assert default_profile.database == "master"
-    assert {profile.id for profile in profiles} >= {"plf", "master"}
+    assert {profile.id for profile in profiles} >= {"plf", "master", "ppm"}
+    assert next(profile for profile in profiles if profile.id == "ppm").database == "PPM"
 
 
 def test_ready_endpoint_skips_live_check_when_disabled(monkeypatch) -> None:
