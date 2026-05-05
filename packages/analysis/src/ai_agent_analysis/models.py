@@ -6,8 +6,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-ANALYSIS_VERSION = "analysis-local-v0.1"
-CANONICAL_TARGET = "CanonicalAnalysisModel-compatible-local-v0.1"
+ANALYSIS_VERSION = "analysis-local-v0.2"
+CANONICAL_TARGET = "CanonicalAnalysisModel-compatible-local-v0.2"
 
 
 class EvidenceStatus(StrEnum):
@@ -20,6 +20,8 @@ class ObjectType(StrEnum):
     PROCEDURE = "PROCEDURE"
     SYSTEM_PROCEDURE = "SYSTEM_PROCEDURE"
     TABLE = "TABLE"
+    VIEW = "VIEW"
+    FUNCTION = "FUNCTION"
     TEMP_TABLE = "TEMP_TABLE"
 
 
@@ -49,6 +51,30 @@ class ReviewMarker(BaseModel):
     message: str
     status: EvidenceStatus = EvidenceStatus.REVIEW_REQUIRED
     evidence: list[EvidenceRef] = Field(default_factory=list)
+
+
+class ConfidenceScore(BaseModel):
+    score: float = Field(ge=0.0, le=1.0)
+    status: EvidenceStatus = EvidenceStatus.OBSERVED
+    rationale: str
+    factors: list[str] = Field(default_factory=list)
+
+
+class TodoItem(BaseModel):
+    code: str
+    message: str
+    status: EvidenceStatus = EvidenceStatus.REVIEW_REQUIRED
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+
+class EvidenceAssessment(BaseModel):
+    status: EvidenceStatus = EvidenceStatus.OBSERVED
+    review_required: bool = False
+    evidence_ref_count: int = 0
+    observed_ref_count: int = 0
+    review_required_ref_count: int = 0
+    todo_count: int = 0
+    notes: list[str] = Field(default_factory=list)
 
 
 class ProcedureIdentifier(BaseModel):
@@ -114,12 +140,50 @@ class PatternSummary(BaseModel):
     try_catch: PatternFinding
     dynamic_sql: PatternFinding
     temp_table: PatternFinding
+    cursor: PatternFinding
+    multi_result_set: PatternFinding
 
 
 class DependencySummary(BaseModel):
     table_references: list[ObjectReference] = Field(default_factory=list)
+    view_references: list[ObjectReference] = Field(default_factory=list)
+    function_references: list[ObjectReference] = Field(default_factory=list)
     called_procedures: list[ProcedureCall] = Field(default_factory=list)
     temp_tables: list[TempTableFinding] = Field(default_factory=list)
+
+
+class ResultSetColumnHint(BaseModel):
+    name: str | None = None
+    expression: str
+    status: EvidenceStatus = EvidenceStatus.OBSERVED
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    review_notes: list[str] = Field(default_factory=list)
+
+
+class ResultSetHint(BaseModel):
+    ordinal: int
+    source: str = "STATIC_SELECT"
+    columns: list[ResultSetColumnHint] = Field(default_factory=list)
+    status: EvidenceStatus = EvidenceStatus.OBSERVED
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    review_notes: list[str] = Field(default_factory=list)
+
+
+class CallGraphEdge(BaseModel):
+    caller: str
+    callee: str
+    operation: DependencyOperation = DependencyOperation.EXECUTE
+    status: EvidenceStatus = EvidenceStatus.OBSERVED
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    review_notes: list[str] = Field(default_factory=list)
+
+
+class BusinessRuleSummary(BaseModel):
+    category: str
+    summary: str
+    status: EvidenceStatus = EvidenceStatus.OBSERVED
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    inferred_from: list[str] = Field(default_factory=list)
 
 
 class MetadataEnrichmentCandidate(BaseModel):
@@ -147,6 +211,18 @@ class StoredProcedureAnalysisResult(BaseModel):
     procedure: ProcedureSignature
     dependencies: DependencySummary
     patterns: PatternSummary
+    result_sets: list[ResultSetHint] = Field(default_factory=list)
+    call_graph: list[CallGraphEdge] = Field(default_factory=list)
+    business_rules: list[BusinessRuleSummary] = Field(default_factory=list)
+    todos: list[TodoItem] = Field(default_factory=list)
+    evidence_assessment: EvidenceAssessment = Field(default_factory=EvidenceAssessment)
+    overall_confidence: ConfidenceScore = Field(
+        default_factory=lambda: ConfidenceScore(
+            score=0.0,
+            status=EvidenceStatus.REVIEW_REQUIRED,
+            rationale="Analysis confidence has not been calculated.",
+        )
+    )
     metadata_enrichment: list[MetadataEnrichmentCandidate] = Field(default_factory=list)
     review_markers: list[ReviewMarker] = Field(default_factory=list)
     canonical_conversion_blockers: list[CanonicalConversionBlocker] = Field(default_factory=list)

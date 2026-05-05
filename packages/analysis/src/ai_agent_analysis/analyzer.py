@@ -3,6 +3,13 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from ai_agent_analysis.assessment import (
+    assess_evidence,
+    build_call_graph,
+    build_todos,
+    calculate_overall_confidence,
+    summarize_business_rules,
+)
 from ai_agent_analysis.canonical import canonical_conversion_blockers
 from ai_agent_analysis.dependencies import extract_dependencies
 from ai_agent_analysis.detectors import detect_patterns
@@ -13,6 +20,7 @@ from ai_agent_analysis.enrichment import (
 )
 from ai_agent_analysis.models import EvidenceStatus, ReviewMarker, StoredProcedureAnalysisResult
 from ai_agent_analysis.parser import parse_procedure_signature
+from ai_agent_analysis.result_sets import extract_result_set_hints
 
 
 def analyze_stored_procedure(
@@ -24,6 +32,7 @@ def analyze_stored_procedure(
     procedure, parser_review_markers = parse_procedure_signature(sql_text, source_name=source_name)
     dependencies = extract_dependencies(sql_text, source_name=source_name)
     patterns = detect_patterns(sql_text, source_name=source_name)
+    result_sets = extract_result_set_hints(sql_text, source_name=source_name)
     review_markers = [*parser_review_markers]
     if patterns.dynamic_sql.detected:
         review_markers.append(
@@ -55,15 +64,46 @@ def analyze_stored_procedure(
         if schema_search_fixture is not None
         else []
     )
+    blockers = canonical_conversion_blockers()
+    call_graph = build_call_graph(procedure, dependencies)
+    business_rules = summarize_business_rules(dependencies, patterns, result_sets)
+    todos = build_todos(dependencies, patterns, result_sets, blockers)
+    overall_confidence = calculate_overall_confidence(
+        dependencies,
+        patterns,
+        result_sets,
+        review_markers,
+        todos,
+        blockers,
+    )
+    evidence_assessment = assess_evidence(
+        [
+            procedure,
+            dependencies,
+            patterns,
+            result_sets,
+            call_graph,
+            business_rules,
+            review_markers,
+            blockers,
+        ],
+        todos,
+    )
     return StoredProcedureAnalysisResult(
         source_name=source_name,
         source_hash_sha256=hashlib.sha256(sql_text.encode("utf-8")).hexdigest(),
         procedure=procedure,
         dependencies=dependencies,
         patterns=patterns,
+        result_sets=result_sets,
+        call_graph=call_graph,
+        business_rules=business_rules,
+        todos=todos,
+        evidence_assessment=evidence_assessment,
+        overall_confidence=overall_confidence,
         metadata_enrichment=metadata_enrichment,
         review_markers=review_markers,
-        canonical_conversion_blockers=canonical_conversion_blockers(),
+        canonical_conversion_blockers=blockers,
     )
 
 

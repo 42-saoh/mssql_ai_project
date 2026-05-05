@@ -38,6 +38,19 @@ SELECT_INTO_TEMP_RE = re.compile(
     r"\bINTO\s+(?P<name>#[A-Za-z_][A-Za-z0-9_]*)\b",
     re.IGNORECASE,
 )
+CURSOR_RE = re.compile(
+    r"\bDECLARE\s+[A-Za-z_][A-Za-z0-9_]*\s+CURSOR\b"
+    r"|\b(?:OPEN|CLOSE|DEALLOCATE)\s+[A-Za-z_][A-Za-z0-9_]*\b"
+    r"|\bFETCH\s+(?:NEXT|PRIOR|FIRST|LAST|ABSOLUTE|RELATIVE)?\s*FROM\b",
+    re.IGNORECASE,
+)
+SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
+INSERT_SELECT_CONTEXT_RE = re.compile(
+    r"\bINSERT\s+(?:INTO\s+)?(?:#[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_\[][^;]*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+CURSOR_SELECT_CONTEXT_RE = re.compile(r"\bCURSOR\s+FOR\s*$", re.IGNORECASE | re.DOTALL)
+ASSIGNMENT_SELECT_RE = re.compile(r"^\s*SELECT\s+@[A-Za-z_][A-Za-z0-9_]*\s*=", re.IGNORECASE)
 
 
 def detect_patterns(sql_text: str, *, source_name: str = "<memory>") -> PatternSummary:
@@ -63,6 +76,15 @@ def detect_patterns(sql_text: str, *, source_name: str = "<memory>") -> PatternS
         for match in SQL_VARIABLE_RE.finditer(sanitized)
     )
     temp_tables = detect_temp_tables(sql_text, source_name=source_name)
+    cursor_evidence = [
+        make_evidence(sql_text, match.start(), source_name)
+        for match in CURSOR_RE.finditer(sanitized)
+    ]
+    result_select_evidence = [
+        make_evidence(sql_text, match.start(), source_name)
+        for match in SELECT_RE.finditer(sanitized)
+        if _is_client_result_select(sanitized, match.start())
+    ]
     return PatternSummary(
         transaction=PatternFinding(
             name="TRANSACTION",
@@ -95,6 +117,23 @@ def detect_patterns(sql_text: str, *, source_name: str = "<memory>") -> PatternS
             detected=bool(temp_tables),
             evidence=[evidence for table in temp_tables for evidence in table.evidence],
             details={"temp_table_names": [table.name for table in temp_tables]},
+        ),
+        cursor=PatternFinding(
+            name="CURSOR",
+            detected=bool(cursor_evidence),
+            evidence=cursor_evidence,
+            details={"signal_count": len(cursor_evidence)},
+        ),
+        multi_result_set=PatternFinding(
+            name="MULTI_RESULT_SET",
+            detected=len(result_select_evidence) > 1,
+            status=(
+                EvidenceStatus.REVIEW_REQUIRED
+                if len(result_select_evidence) > 1
+                else EvidenceStatus.OBSERVED
+            ),
+            evidence=result_select_evidence,
+            details={"result_select_count": len(result_select_evidence)},
         ),
     )
 
@@ -140,3 +179,17 @@ def _extract_column_names(columns_block: str) -> list[str]:
             continue
         columns.append(token)
     return columns
+
+
+def _is_client_result_select(sanitized_sql: str, select_start: int) -> bool:
+    statement_prefix = sanitized_sql[
+        max(0, sanitized_sql.rfind(";", 0, select_start)) : select_start
+    ]
+    if INSERT_SELECT_CONTEXT_RE.search(statement_prefix):
+        return False
+    if CURSOR_SELECT_CONTEXT_RE.search(statement_prefix):
+        return False
+    statement_tail = sanitized_sql[select_start : select_start + 120]
+    if ASSIGNMENT_SELECT_RE.match(statement_tail):
+        return False
+    return True

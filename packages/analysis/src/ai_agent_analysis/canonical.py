@@ -12,7 +12,7 @@ def canonical_conversion_blockers() -> list[CanonicalConversionBlocker]:
         CanonicalConversionBlocker(
             code="DOMAIN_CONTRACT_MISSING",
             message=(
-                "tasks/0003 requests CanonicalAnalysisModel expansion, but this worker boundary "
+                "P11 requests CanonicalAnalysisModel expansion, but this worker boundary "
                 "marks packages/domain as read-only."
             ),
             target_path="packages/domain/src/ai_agent_domain/models.py",
