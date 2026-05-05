@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import Annotated
 
 from api_app.dependencies import get_workflow_service
+from api_app.errors import api_http_exception
 from api_app.presenters import present_approval_record
 from api_app.schemas import ApprovalDecisionRequest, ApprovalRecord
+from api_app.tracking import tracking_context_from_request
 from api_app.workflow import WorkflowService
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Request, status
 
 router = APIRouter(prefix="/api/v1/artifacts", tags=["approvals"])
 
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/api/v1/artifacts", tags=["approvals"])
 def create_approval_decision(
     artifactId: str,
     req: ApprovalDecisionRequest,
+    request: Request,
     service: Annotated[WorkflowService, Depends(get_workflow_service)],
 ) -> ApprovalRecord:
     try:
@@ -28,9 +31,18 @@ def create_approval_decision(
             reviewer=req.reviewer,
             comment=req.comment,
             validation_report_id=req.validation_report_id,
+            correlation_id=tracking_context_from_request(request).correlation_id,
         )
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Unknown artifact: {artifactId}") from exc
+        raise api_http_exception(
+            status_code=404,
+            detail=f"Unknown artifact: {artifactId}",
+            code="RESOURCE_NOT_FOUND",
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise api_http_exception(
+            status_code=400,
+            detail=str(exc),
+            code="WORKFLOW_STATE_CONFLICT",
+        ) from exc
     return present_approval_record(record)

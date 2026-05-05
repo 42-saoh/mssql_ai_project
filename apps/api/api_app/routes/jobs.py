@@ -1,10 +1,11 @@
 from typing import Annotated
 
 from api_app.dependencies import get_repository
+from api_app.errors import api_http_exception
 from api_app.presenters import present_job
 from api_app.repositories import WorkflowRepository
 from api_app.schemas import Job
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
@@ -16,5 +17,9 @@ def get_job(
 ) -> Job:
     job = repository.get_job(jobId)
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Unknown job: {jobId}")
+        raise api_http_exception(
+            status_code=404,
+            detail=f"Unknown job: {jobId}",
+            code="RESOURCE_NOT_FOUND",
+        )
     return present_job(job)

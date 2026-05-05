@@ -1,0 +1,97 @@
+version: api_productization_ppm_workflow_v1
+source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+selection_mode: live_metadata
+profile_policy:
+  analysis_db_profile_id: ppm
+  source_database: PPM
+  platform_db_context: PLF
+  plf_fallback_allowed: false
+tracking_contract:
+  request_headers:
+    idempotency_key: Idempotency-Key
+    correlation_id: X-Correlation-ID
+  response_headers:
+    correlation_id: X-Correlation-ID
+  idempotency_replay: same_key_same_normalized_payload_returns_same_request_and_job
+  idempotency_conflict: same_key_different_normalized_payload_returns_IDEMPOTENCY_CONFLICT
+active_blockers:
+  - DEPENDENCY_METADATA_INCOMPLETE
+forbidden_evidence:
+  - row_data
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+sample_requests:
+  - sample_id: p09-api-ppm-simple-procedure
+    readiness_label: optional_live_metadata_evidence
+    request:
+      dbProfileId: ppm
+      target:
+        type: PROCEDURE
+        schema: dbo
+        name: GetInspItemsCd
+      outputs:
+        - SP_ANALYSIS_DOCUMENT
+        - DEPENDENCY_REPORT
+      options:
+        includeEvidenceRefs: true
+    expected:
+      job_status: REVIEW_PENDING
+      current_step: VALIDATE
+      artifact_statuses_allowed:
+        - DRAFT
+        - VALIDATED
+        - REVIEW_PENDING
+        - APPROVED
+        - REJECTED
+      artifact_statuses_forbidden:
+        - PUBLISHED
+      caveats:
+        - table_dependency_links_incomplete
+      review_required: true
+  - sample_id: p09-api-ppm-medium-procedure
+    readiness_label: optional_live_metadata_evidence
+    request:
+      dbProfileId: ppm
+      target:
+        type: PROCEDURE
+        schema: dbo
+        name: PAD_GET_BAT_LIST_PRC
+      outputs:
+        - SP_ANALYSIS_DOCUMENT
+        - TABLE_COLUMN_METADATA
+      options:
+        includeEvidenceRefs: true
+    expected:
+      job_status: REVIEW_PENDING
+      current_step: VALIDATE
+      artifact_statuses_forbidden:
+        - PUBLISHED
+      caveats:
+        - table_dependency_links_incomplete
+      review_required: true
+  - sample_id: p09-api-ppm-complex-procedure
+    readiness_label: optional_live_metadata_evidence
+    request:
+      dbProfileId: ppm
+      target:
+        type: PROCEDURE
+        schema: dbo
+        name: PCS_PY_ManageInvoiceFldSchd_PRC
+      outputs:
+        - SP_ANALYSIS_DOCUMENT
+        - DEPENDENCY_REPORT
+        - JAVA_MYBATIS_DRAFT
+      options:
+        includeEvidenceRefs: true
+    expected:
+      job_status: REVIEW_PENDING
+      current_step: VALIDATE
+      artifact_statuses_forbidden:
+        - PUBLISHED
+      caveats:
+        - ambiguous_dependency_metadata
+        - table_dependency_links_incomplete
+      review_required: true

@@ -7,3 +7,4 @@
 - `artifact_payloads.json` — stable workflow/artifact expectation summary
 - `rubric.yaml` — pass/fail thresholds and forbidden boundary checks
 - `productization_readiness_v1.yaml` — P08A PPM manifest 를 P09~P16 eval/demo/release gate 에 연결하는 metadata-only readiness fixture
+- `api_productization_ppm_workflow_v1.yaml` — P09 API workflow 의 idempotency/correlation 기대값과 PPM metadata-only request 예시
