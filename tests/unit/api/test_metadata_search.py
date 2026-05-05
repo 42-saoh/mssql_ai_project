@@ -5,6 +5,7 @@ import pytest
 import api_app.metadata_service as metadata_service
 from api_app.metadata_service import (
     METADATA_SEARCH_MCP_TOOL_MISSING,
+    METADATA_SEARCH_TOOL_NAME,
     PPM_MANIFEST_TEMPLATE_ONLY,
     MetadataSearchDependencyError,
     metadata_search_repository,
@@ -40,6 +41,75 @@ def _metadata_profiles() -> list[DbProfile]:
             purpose="server",
         )
     ]
+
+
+class RecordingSearchRegistry:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    def invoke_payload(self, tool_name: str, payload: dict) -> dict:
+        self.calls.append((tool_name, payload))
+        return {
+            "ok": True,
+            "toolName": tool_name,
+            "dbProfileId": "master",
+            "snapshotId": "mcp-search-snapshot-1",
+            "collectedAt": "2026-05-05T00:00:00Z",
+            "evidenceRefs": [
+                {
+                    "source": "fixture",
+                    "path": "fixtures/mcp/metadata_snapshot.json#/",
+                    "objectName": "metadata_objects",
+                }
+            ],
+            "data": {
+                "sourceProfile": "master",
+                "sourceDatabase": "master",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "limit": 2,
+                "results": [
+                    {
+                        "objectIdentity": {
+                            "schema": "dbo",
+                            "name": "TB_ORDER",
+                            "type": "TABLE",
+                        },
+                        "sourceProfile": "master",
+                        "sourceDatabase": "master",
+                        "evidenceRefs": [
+                            {
+                                "source": "fixture",
+                                "path": "fixtures/mcp/metadata_snapshot.json#/tables/0",
+                                "objectName": "dbo.TB_ORDER",
+                            }
+                        ],
+                        "caveats": ["DEPENDENCY_METADATA_INCOMPLETE"],
+                        "reviewRequired": True,
+                        "blockers": [
+                            {
+                                "code": "DEPENDENCY_METADATA_INCOMPLETE",
+                                "message": (
+                                    "Dependency metadata is incomplete and requires review "
+                                    "before relying on links."
+                                ),
+                            }
+                        ],
+                    }
+                ],
+                "caveats": ["DEPENDENCY_METADATA_INCOMPLETE"],
+                "reviewRequired": True,
+                "blockers": [
+                    {
+                        "code": "DEPENDENCY_METADATA_INCOMPLETE",
+                        "message": (
+                            "Dependency metadata is incomplete and requires review "
+                            "before relying on links."
+                        ),
+                    }
+                ],
+            },
+        }
 
 
 def test_metadata_search_returns_read_only_fixture_identities() -> None:
@@ -81,6 +151,56 @@ def test_metadata_search_repository_boundary_selects_live_adapter_when_enabled()
 
     assert isinstance(fixture_repository, FixtureMetadataRepository)
     assert isinstance(live_repository, LiveMetadataRepository)
+
+
+def test_metadata_search_invokes_single_mcp_search_tool_and_maps_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = RecordingSearchRegistry()
+    monkeypatch.setattr(
+        metadata_service,
+        "build_tool_registry",
+        lambda **_kwargs: registry,
+    )
+
+    response = search_metadata_objects(
+        db_profile_id="master",
+        query="  order  ",
+        object_types=("TABLE",),
+        limit=2,
+    )
+    payload = response.to_response()
+
+    assert registry.calls == [
+        (
+            METADATA_SEARCH_TOOL_NAME,
+            {
+                "arguments": {
+                    "dbProfileId": "master",
+                    "query": "order",
+                    "objectTypes": ["TABLE"],
+                    "limit": 2,
+                }
+            },
+        )
+    ]
+    assert payload["snapshotId"] == "mcp-search-snapshot-1"
+    assert payload["collectedAt"] == "2026-05-05T00:00:00Z"
+    assert payload["reviewRequired"] is True
+    assert payload["blockers"][0]["code"] == "DEPENDENCY_METADATA_INCOMPLETE"
+    assert payload["results"][0]["objectIdentity"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "type": "TABLE",
+    }
+    assert payload["results"][0]["evidenceRefs"] == [
+        {
+            "type": "MSSQL_METADATA",
+            "objectRef": "dbo.TB_ORDER",
+            "locator": "fixtures/mcp/metadata_snapshot.json#/tables/0",
+            "snapshotId": "mcp-search-snapshot-1",
+        }
+    ]
 
 
 def test_metadata_search_rejects_invalid_object_type_and_normalizes_limit() -> None:
@@ -142,8 +262,8 @@ def test_missing_mcp_inventory_capability_returns_search_blocker(
 ) -> None:
     monkeypatch.setattr(
         metadata_service,
-        "METADATA_SEARCH_TOOLS",
-        {"TABLE": ("missing_metadata_search_tool", "tables")},
+        "METADATA_SEARCH_TOOL_NAME",
+        "missing_metadata_search_tool",
     )
 
     with pytest.raises(MetadataSearchDependencyError) as exc_info:

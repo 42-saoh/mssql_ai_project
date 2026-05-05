@@ -26,12 +26,7 @@ PPM_MANIFEST_TEMPLATE_ONLY = "PPM_MANIFEST_TEMPLATE_ONLY"
 DEPENDENCY_METADATA_INCOMPLETE = "DEPENDENCY_METADATA_INCOMPLETE"
 
 DEFAULT_METADATA_SEARCH_OBJECT_TYPES = ("PROCEDURE", "TABLE", "VIEW", "FUNCTION")
-METADATA_SEARCH_TOOLS: dict[str, tuple[str, str]] = {
-    "PROCEDURE": ("list_procedures", "procedures"),
-    "TABLE": ("list_tables", "tables"),
-    "VIEW": ("list_views", "views"),
-    "FUNCTION": ("list_functions", "functions"),
-}
+METADATA_SEARCH_TOOL_NAME = "search_metadata_objects"
 METADATA_BLOCKER_MESSAGES = {
     METADATA_SEARCH_MCP_TOOL_MISSING: (
         "Required read-only MSSQL MCP metadata search capability is unavailable."
@@ -131,66 +126,49 @@ def search_metadata_objects(
         profiles=profiles,
     )
 
-    results: list[MetadataSearchResult] = []
-    top_level_caveats: list[str] = []
-    top_level_blockers: list[MetadataSearchBlocker] = []
-    snapshot_id: str | None = None
-    collected_at: str | None = None
     source_profile = db_profile_id
     source_database = _source_database_for_profile(db_profile_id, profiles)
-
-    for object_type in normalized_types:
-        tool_name, data_key = METADATA_SEARCH_TOOLS[object_type]
-        try:
-            payload = registry.invoke_payload(
-                tool_name,
-                {
-                    "arguments": {
-                        "dbProfileId": db_profile_id,
-                        "topK": 100,
-                    }
-                },
-            )
-        except MetadataToolError as exc:
-            if exc.code == UNKNOWN_TOOL:
-                raise MetadataSearchDependencyError(
-                    code=METADATA_SEARCH_MCP_TOOL_MISSING,
-                    detail=METADATA_BLOCKER_MESSAGES[METADATA_SEARCH_MCP_TOOL_MISSING],
-                    status_code=503,
-                ) from exc
-            raise
-
-        snapshot_id = snapshot_id or payload.get("snapshotId")
-        collected_at = collected_at or payload.get("collectedAt")
-        data = dict(payload.get("data") or {})
-        source_profile = str(data.get("sourceProfile") or source_profile)
-        source_database = str(data.get("sourceDatabase") or source_database)
-        top_level_caveats.extend(str(item) for item in data.get("caveats", []) if item)
-        for item in data.get(data_key, []):
-            if not _metadata_item_matches(item, normalized_query):
-                continue
-            result = _metadata_search_result(
-                item=item,
-                object_type=object_type,
-                source_profile=source_profile,
-                source_database=source_database,
-                snapshot_id=str(payload.get("snapshotId") or ""),
-                payload_evidence_refs=payload.get("evidenceRefs", []),
-            )
-            top_level_caveats.extend(result.caveats)
-            top_level_blockers.extend(result.blockers)
-            results.append(result)
-
-    results.sort(
-        key=lambda item: (
-            item.object_identity.type,
-            item.object_identity.schema_name.lower(),
-            item.object_identity.name.lower(),
+    try:
+        payload = registry.invoke_payload(
+            METADATA_SEARCH_TOOL_NAME,
+            {
+                "arguments": {
+                    "dbProfileId": db_profile_id,
+                    "query": normalized_query,
+                    "objectTypes": list(normalized_types),
+                    "limit": normalized_limit,
+                }
+            },
         )
+    except MetadataToolError as exc:
+        if exc.code == UNKNOWN_TOOL:
+            raise MetadataSearchDependencyError(
+                code=METADATA_SEARCH_MCP_TOOL_MISSING,
+                detail=METADATA_BLOCKER_MESSAGES[METADATA_SEARCH_MCP_TOOL_MISSING],
+                status_code=503,
+            ) from exc
+        raise
+
+    snapshot_id = str(payload.get("snapshotId") or "") or None
+    collected_at = str(payload.get("collectedAt") or "") or None
+    data = dict(payload.get("data") or {})
+    source_profile = str(data.get("sourceProfile") or source_profile)
+    source_database = str(data.get("sourceDatabase") or source_database)
+    top_level_caveats = _dedupe(data.get("caveats", []))
+    top_level_blockers = _dedupe_blockers(
+        _metadata_search_blockers(data.get("blockers", []))
     )
-    results = results[:normalized_limit]
-    top_level_caveats = _dedupe(top_level_caveats)
-    top_level_blockers = _dedupe_blockers(top_level_blockers)
+    results = [
+        _metadata_search_result(
+            item=dict(item),
+            source_profile=source_profile,
+            source_database=source_database,
+            payload_snapshot_id=snapshot_id,
+            payload_evidence_refs=payload.get("evidenceRefs", []),
+        )
+        for item in data.get("results", [])
+        if isinstance(item, dict)
+    ]
     return MetadataSearchResponse(
         dbProfileId=db_profile_id,
         query=normalized_query,
@@ -202,7 +180,9 @@ def search_metadata_objects(
         collectedAt=collected_at,
         results=results,
         caveats=top_level_caveats,
-        reviewRequired=bool(top_level_caveats or top_level_blockers),
+        reviewRequired=bool(
+            data.get("reviewRequired") or top_level_caveats or top_level_blockers
+        ),
         blockers=top_level_blockers,
     )
 
@@ -277,49 +257,46 @@ def _source_database_for_profile(db_profile_id: str, profiles: list[Any]) -> str
     return db_profile_id
 
 
-def _metadata_item_matches(item: dict[str, Any], query: str) -> bool:
-    needle = query.casefold()
-    values = [
-        item.get("schema"),
-        item.get("name"),
-        item.get("objectType"),
-        item.get("logicalName"),
-        item.get("descriptionStatus"),
-    ]
-    identity = ".".join(str(value) for value in (item.get("schema"), item.get("name")) if value)
-    values.append(identity)
-    return any(needle in str(value).casefold() for value in values if value is not None)
-
-
 def _metadata_search_result(
     *,
     item: dict[str, Any],
-    object_type: str,
     source_profile: str,
     source_database: str,
-    snapshot_id: str,
+    payload_snapshot_id: str | None,
     payload_evidence_refs: list[dict[str, Any]],
 ) -> MetadataSearchResult:
+    identity = dict(item.get("objectIdentity") or {})
+    schema = str(identity.get("schema") or item.get("schema") or "")
+    name = str(identity.get("name") or item.get("name") or "")
+    object_type = str(identity.get("type") or item.get("objectType") or "")
+    result_source_profile = str(item.get("sourceProfile") or source_profile)
+    result_source_database = str(item.get("sourceDatabase") or source_database)
+    result_snapshot_id = str(item.get("snapshotId") or payload_snapshot_id or "") or None
     caveats = _dedupe(str(value) for value in item.get("caveats", []) if value)
-    blockers = [
-        metadata_search_blocker(caveat)
-        for caveat in caveats
-        if caveat in METADATA_BLOCKER_MESSAGES
-    ]
+    blockers = _dedupe_blockers(
+        [
+            *_metadata_search_blockers(item.get("blockers", [])),
+            *[
+                metadata_search_blocker(caveat)
+                for caveat in caveats
+                if caveat in METADATA_BLOCKER_MESSAGES
+            ],
+        ]
+    )
     evidence_refs = _metadata_search_evidence_refs(
         item.get("evidenceRefs") or payload_evidence_refs,
-        snapshot_id=snapshot_id,
-        default_object_ref=f"{source_database}.{item.get('schema')}.{item.get('name')}",
+        snapshot_id=result_snapshot_id or "",
+        default_object_ref=f"{result_source_database}.{schema}.{name}",
     )
     return MetadataSearchResult(
         objectIdentity=MetadataObjectIdentity(
-            schema=str(item.get("schema") or ""),
-            name=str(item.get("name") or ""),
+            schema=schema,
+            name=name,
             type=object_type,
         ),
-        sourceProfile=source_profile,
-        sourceDatabase=source_database,
-        snapshotId=snapshot_id or None,
+        sourceProfile=result_source_profile,
+        sourceDatabase=result_source_database,
+        snapshotId=result_snapshot_id,
         evidenceRefs=evidence_refs,
         caveats=caveats,
         reviewRequired=bool(item.get("reviewRequired") or caveats or blockers),
@@ -350,6 +327,22 @@ def _metadata_search_evidence_refs(
                 snapshotId=snapshot_id or None,
             )
         )
+    return converted
+
+
+def _metadata_search_blockers(blockers: Any) -> list[MetadataSearchBlocker]:
+    converted: list[MetadataSearchBlocker] = []
+    for blocker in blockers or []:
+        if isinstance(blocker, dict):
+            code = str(blocker.get("code") or "")
+            message = str(
+                blocker.get("message") or METADATA_BLOCKER_MESSAGES.get(code, code)
+            )
+        else:
+            code = str(blocker)
+            message = METADATA_BLOCKER_MESSAGES.get(code, code)
+        if code:
+            converted.append(MetadataSearchBlocker(code=code, message=message))
     return converted
 
 
