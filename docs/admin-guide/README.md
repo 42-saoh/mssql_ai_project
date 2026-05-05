@@ -14,6 +14,7 @@
 - stub/skeleton: Platform DB adapter, auth/RBAC, publish route, full registry admin.
 - optional live: MSSQL MCP readiness probe. live metadata query execution 은 아직 completed feature 가 아니다.
 - follow-up: published version 승격 UI/API, 운영 권한 모델, live read-only metadata adapter.
+- not production-ready: P16 live pilot release 는 `DEPENDENCY_METADATA_INCOMPLETE` 와 live release approval evidence 누락 때문에 NO-GO 로 유지한다.
 
 ## 기본 운영 절차
 1. `.env.example` 을 기준으로 `.env` 를 만들고 비밀값은 커밋하지 않는다.
@@ -30,6 +31,14 @@
 - latency 는 PPM readiness, metadata inventory smoke, fixture workflow smoke 로 나누어 측정하며 현재 live gate 와 product target 을 구분한다.
 - correlation id 는 request/job/metadata/artifact/validation/approval/audit 문맥에 전달되어야 한다.
 - 로그와 audit 에 connection string, credential, cookie, raw definition text, row data 를 남기지 않는다.
+
+## P16 pilot readiness 운영
+
+- P16 readiness package 는 `docs/pilot-release-readiness.md`, `ops/codex-parallel/P16_PILOT_RELEASE_HANDOFF.md`, `fixtures/eval/pilot_release_readiness_p16_v1.yaml` 을 기준으로 검토한다.
+- 현재 PPM manifest 는 `live_metadata` 이므로 대표 object identity 를 문서와 fixture 에 참조할 수 있다.
+- `DEPENDENCY_METADATA_INCOMPLETE` 가 닫히기 전에는 selected table 을 selected procedure dependency 로 주장하지 않는다.
+- live pilot release 는 NO-GO 이며, fixture-first/demo handoff 만 제한적으로 GO WITH LIMITATIONS 상태다.
+- live release 로 전환하려면 PPM hard-live 검증, passed validation, human `APPROVE`, audit trace 가 같은 artifact/version 에 묶여야 한다.
 
 ## 스키마 변경 운영
 

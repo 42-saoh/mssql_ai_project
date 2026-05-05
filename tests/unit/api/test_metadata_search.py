@@ -18,6 +18,11 @@ from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRe
 from mssql_mcp_app.settings import LiveMetadataSettings
 
 
+@pytest.fixture(autouse=True)
+def fixture_metadata_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+
+
 def _live_metadata_settings(*, enabled: bool) -> LiveMetadataSettings:
     return LiveMetadataSettings(
         live_metadata_enabled=enabled,
