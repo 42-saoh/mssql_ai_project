@@ -25,7 +25,8 @@
 
 ## P15 hard-live eval 운영
 
-- P15 eval 은 `MSSQL_ENABLE_LIVE_METADATA=1` 과 `ppm` profile 의 `PPM` read-only metadata 접근을 요구한다.
+- 기본 eval 은 fixture-first 재현성을 유지하며 live PPM 을 호출하지 않는다.
+- P15 hard-live eval 은 `P15_HARD_LIVE_GATE=1`, `MSSQL_ENABLE_LIVE_METADATA=1`, `ppm` profile 의 `PPM` read-only metadata 접근을 요구한다.
 - PPM 접근 실패, metadata 권한 부족, live 연결 부재는 blocker 이며 PLF 로 대체하지 않는다.
 - read-only permission check 는 database 존재/접근성, procedure/table/view/function inventory, procedure dependency, table schema metadata 를 확인한다.
 - latency 는 PPM readiness, metadata inventory smoke, fixture workflow smoke 로 나누어 측정하며 현재 live gate 와 product target 을 구분한다.

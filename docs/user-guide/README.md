@@ -30,7 +30,7 @@
 
 ## P15 live eval 주의
 
-운영 준비도 검증에서는 PPM live metadata gate 가 켜질 수 있다. 이 경우 `dbProfileId=ppm` 이 `PPM` 에 read-only metadata 로 연결되어야 하며, PPM 이 없거나 권한이 없으면 테스트는 실패한다. 실패 시 PLF 로 대체하지 않고 blocker 로 보고한다.
+운영 준비도 검증에서는 명시적으로 PPM live metadata gate 를 켤 수 있다. 기본 검증은 fixture-first 로 동작하고, `P15_HARD_LIVE_GATE=1` 을 켠 경우 `dbProfileId=ppm` 이 `PPM` 에 read-only metadata 로 연결되어야 한다. PPM 이 없거나 권한이 없으면 테스트는 실패한다. 실패 시 PLF 로 대체하지 않고 blocker 로 보고한다.
 
 P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidence coverage, review-required 비율, validation 상태, draft artifact completeness, latency budget, audit stage, redaction 상태다. raw definition text, row data, credential 은 화면/로그/fixture 에 포함하지 않는다.
 

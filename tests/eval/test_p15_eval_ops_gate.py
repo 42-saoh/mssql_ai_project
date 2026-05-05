@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,12 @@ def test_p15_hard_live_fixture_contract_matches_manifest() -> None:
     manifest = _pilot_manifest()
 
     assert fixture["gate_mode"] == "hard_live"
+    assert fixture["activation"] == {
+        "explicit_env_flag": "P15_HARD_LIVE_GATE",
+        "required_value": "1",
+        "live_metadata_env_flag": "MSSQL_ENABLE_LIVE_METADATA",
+        "live_metadata_required_value": "1",
+    }
     assert fixture["source_manifest"] == str(
         Path("fixtures") / "pilot" / "ppm_object_selection_v1" / "selected_objects.yaml"
     )
@@ -139,6 +146,12 @@ def test_p15_hard_live_ppm_metadata_gate_enforced() -> None:
     fixture = _yaml_fixture("eval_observability_security_ops_p15_v1.yaml")
     manifest = _pilot_manifest()
     _require_live_manifest(fixture, manifest)
+
+    if not _hard_live_gate_enabled():
+        pytest.skip(
+            "P15 hard-live metadata gate requires P15_HARD_LIVE_GATE=1. "
+            "Default eval remains fixture-first and does not call live PPM."
+        )
 
     settings = load_live_metadata_settings()
     if not settings.live_metadata_enabled:
@@ -375,6 +388,10 @@ def _review_required_ratio(items: list[dict[str, Any]]) -> float:
 
 def _profile_by_id(profiles: list[DbProfile], profile_id: str) -> DbProfile | None:
     return next((profile for profile in profiles if profile.id == profile_id), None)
+
+
+def _hard_live_gate_enabled() -> bool:
+    return os.getenv("P15_HARD_LIVE_GATE", "").strip() == "1"
 
 
 def _raw_definition_text_paths(payload: Any, path: str = "$") -> list[str]:
