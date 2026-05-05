@@ -42,17 +42,38 @@ class TextSpan:
 
 
 @dataclass(frozen=True)
-class StaticSqlScan:
-    cte_names: frozenset[str] = frozenset()
+class CteScope:
+    names: frozenset[str]
     cte_body_spans: tuple[TextSpan, ...] = ()
+    reference_span: TextSpan = TextSpan(0, 0)
+
+    def is_reference(self, identifier: Identifier, index: int) -> bool:
+        if identifier.schema_name:
+            return False
+        if normalize_identifier_token(identifier.object_name).lower() not in self.names:
+            return False
+        return self.reference_span.contains(index) or any(
+            span.contains(index) for span in self.cte_body_spans
+        )
+
+
+@dataclass(frozen=True)
+class StaticSqlScan:
+    cte_scopes: tuple[CteScope, ...] = ()
+
+    @property
+    def cte_names(self) -> frozenset[str]:
+        return frozenset(name for scope in self.cte_scopes for name in scope.names)
+
+    @property
+    def cte_body_spans(self) -> tuple[TextSpan, ...]:
+        return tuple(span for scope in self.cte_scopes for span in scope.cte_body_spans)
 
     def is_inside_cte_body(self, index: int) -> bool:
         return any(span.contains(index) for span in self.cte_body_spans)
 
-    def is_cte_reference(self, identifier: Identifier) -> bool:
-        if identifier.schema_name:
-            return False
-        return normalize_identifier_token(identifier.object_name).lower() in self.cte_names
+    def is_cte_reference(self, identifier: Identifier, index: int) -> bool:
+        return any(scope.is_reference(identifier, index) for scope in self.cte_scopes)
 
 
 def mask_comments_and_literals(sql_text: str) -> str:
@@ -88,16 +109,13 @@ def parse_identifier(token: str) -> Identifier:
 
 def scan_static_sql(sql_text: str) -> StaticSqlScan:
     sanitized = mask_comments_and_literals(sql_text)
-    cte_names: list[str] = []
-    cte_body_spans: list[TextSpan] = []
+    cte_scopes: list[CteScope] = []
     for with_match in CTE_START_RE.finditer(sanitized):
         parsed = _parse_cte_clause(sanitized, with_match.end())
         if parsed is None:
             continue
-        names, spans = parsed
-        cte_names.extend(names)
-        cte_body_spans.extend(spans)
-    return StaticSqlScan(frozenset(cte_names), tuple(cte_body_spans))
+        cte_scopes.append(parsed)
+    return StaticSqlScan(tuple(cte_scopes))
 
 
 def is_client_result_select(
@@ -172,14 +190,16 @@ def _replace_preserving_newlines(sub_func, text: str) -> str:
 def _parse_cte_clause(
     sanitized_sql: str,
     start: int,
-) -> tuple[list[str], list[TextSpan]] | None:
+) -> CteScope | None:
     cte_names: list[str] = []
     cte_body_spans: list[TextSpan] = []
     cursor = start
     while True:
         definition_match = CTE_DEFINITION_RE.match(sanitized_sql, cursor)
         if definition_match is None:
-            return None if not cte_names else (cte_names, cte_body_spans)
+            if not cte_names:
+                return None
+            return _cte_scope(cte_names, cte_body_spans, sanitized_sql, cursor)
         open_paren = definition_match.end() - 1
         close_paren = _find_matching_paren(sanitized_sql, open_paren)
         if close_paren is None:
@@ -190,8 +210,35 @@ def _parse_cte_clause(
         while cursor < len(sanitized_sql) and sanitized_sql[cursor].isspace():
             cursor += 1
         if cursor >= len(sanitized_sql) or sanitized_sql[cursor] != ",":
-            return cte_names, cte_body_spans
+            return _cte_scope(cte_names, cte_body_spans, sanitized_sql, cursor)
         cursor += 1
+
+
+def _cte_scope(
+    cte_names: list[str],
+    cte_body_spans: list[TextSpan],
+    sanitized_sql: str,
+    reference_start: int,
+) -> CteScope:
+    reference_end = _find_statement_end(sanitized_sql, reference_start)
+    return CteScope(
+        names=frozenset(cte_names),
+        cte_body_spans=tuple(cte_body_spans),
+        reference_span=TextSpan(reference_start, reference_end),
+    )
+
+
+def _find_statement_end(sanitized_sql: str, start: int) -> int:
+    depth = 0
+    for index in range(start, len(sanitized_sql)):
+        char = sanitized_sql[index]
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth:
+            depth -= 1
+        elif char == ";" and depth == 0:
+            return index
+    return len(sanitized_sql)
 
 
 def _find_matching_paren(sql_text: str, open_paren: int) -> int | None:
