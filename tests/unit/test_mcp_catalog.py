@@ -70,6 +70,16 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
         "evidenceRefs",
         "data",
     ]
+    assert payload["response"]["standardData"]["required"] == [
+        "sourceProfile",
+        "sourceDatabase",
+        "objectIdentity",
+        "caveats",
+        "reviewRequired",
+    ]
+    assert "SQL text" in payload["response"]["error"]["properties"]["error"]["properties"][
+        "details"
+    ]["description"]
     for tool in payload["tools"]:
         assert tool["active"] is True
         assert tool["readOnly"] is True

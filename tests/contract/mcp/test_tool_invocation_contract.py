@@ -143,6 +143,12 @@ def test_fixture_backed_tool_contract(
     assert payload["collectedAt"] == "2026-01-15T00:00:00Z"
     assert payload["evidenceRefs"]
     assert payload["data"]
+    assert payload["data"]["sourceProfile"] == arguments["dbProfileId"]
+    assert payload["data"]["sourceDatabase"] == "master"
+    assert payload["data"]["objectIdentity"]["database"]
+    assert payload["data"]["objectIdentity"]["objectType"]
+    assert isinstance(payload["data"]["caveats"], list)
+    assert isinstance(payload["data"]["reviewRequired"], bool)
     assert "error" not in payload
     for evidence_ref in payload["evidenceRefs"]:
         assert evidence_ref["source"] == "fixture"

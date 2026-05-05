@@ -167,6 +167,10 @@ def procedure_inventory_item(
         caveats.append("definition_unavailable")
     if any(dep.get("isAmbiguous") for dep in dependencies):
         caveats.append("ambiguous_dependency_metadata")
+    if dependency_summary["unresolved"] or any(
+        dep.get("reviewStatus") == "REVIEW_REQUIRED" for dep in dependencies
+    ):
+        caveats.append("DEPENDENCY_METADATA_INCOMPLETE")
 
     return {
         "schema": procedure["schema"],
@@ -240,15 +244,21 @@ def module_inventory_item(
         is_encrypted=bool(module.get("isEncrypted", False)),
     )
     dependencies = module.get("dependencies", [])
+    dependency_summary = procedure_dependency_summary(dependencies)
+    caveats = [] if definition_info["available"] else ["definition_unavailable"]
+    if dependency_summary["unresolved"] or any(
+        dep.get("reviewStatus") == "REVIEW_REQUIRED" for dep in dependencies
+    ):
+        caveats.append("DEPENDENCY_METADATA_INCOMPLETE")
     return {
         "schema": module["schema"],
         "name": module["name"],
         "objectType": object_type,
         "definition": definition_info,
         "dependencyCount": len(dependencies),
-        "dependencySummary": procedure_dependency_summary(dependencies),
-        "caveats": [] if definition_info["available"] else ["definition_unavailable"],
-        "reviewRequired": not definition_info["available"],
+        "dependencySummary": dependency_summary,
+        "caveats": caveats,
+        "reviewRequired": bool(caveats),
         "evidenceRefs": evidence_refs,
     }
 
