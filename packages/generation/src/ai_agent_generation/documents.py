@@ -21,7 +21,10 @@ class SPAnalysisDocumentRenderer:
             "",
             "## analysis_summary",
             "- status: DRAFT",
-            "- REVIEW_REQUIRED: SP 내부 제어 흐름과 비즈니스 규칙은 canonical analysis 확정 후 보강",
+            (
+                "- REVIEW_REQUIRED: SP 내부 제어 흐름과 비즈니스 규칙은 "
+                "canonical analysis 확정 후 보강"
+            ),
             f"- generationMode: {context.generation_mode}",
             "",
             "## procedure_signature",

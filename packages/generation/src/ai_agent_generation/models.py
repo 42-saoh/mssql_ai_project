@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 from ai_agent_domain import ArtifactStatus, ArtifactType
-
 
 GENERATOR_VERSION = "generation-core-0.1.0"
 
@@ -32,13 +34,17 @@ class EvidenceSource:
     type: str
     name: str
     reason: str
+    locator: str = ""
+    snapshot_id: str | None = None
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> EvidenceSource:
         return cls(
             type=str(payload.get("type", "unknown")),
-            name=str(payload.get("name", "")),
+            name=str(payload.get("name", payload.get("objectRef", ""))),
             reason=str(payload.get("reason", "")),
+            locator=str(payload.get("locator", "")),
+            snapshot_id=payload.get("snapshotId", payload.get("snapshot_id")),
         )
 
     @property
@@ -236,10 +242,44 @@ class GenerationContext:
                 EvidenceRef(
                     type=source.evidence_type,
                     object_ref=source.name,
-                    locator=source.reason or "generation-input.evidence.sources",
+                    locator=source.locator
+                    or source.reason
+                    or "generation-input.evidence.sources",
+                    snapshot_id=source.snapshot_id,
                 )
             )
         return tuple(refs)
+
+    def sanitized_input_snapshot(self) -> dict[str, Any]:
+        return {
+            "sampleId": self.sample_id,
+            "request": _sanitize_for_snapshot(self.request),
+            "evidence": {
+                "sources": [
+                    _sanitize_for_snapshot(
+                        {
+                            "type": source.type,
+                            "name": source.name,
+                            "reason": source.reason,
+                            "locator": source.locator,
+                            "snapshotId": source.snapshot_id,
+                        }
+                    )
+                    for source in self.evidence_sources
+                ],
+                "assumptions": list(self.evidence_assumptions),
+            },
+        }
+
+    @property
+    def input_snapshot_hash(self) -> str:
+        snapshot = json.dumps(
+            self.sanitized_input_snapshot(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -301,3 +341,23 @@ class RenderedBundle:
     @property
     def file_map(self) -> dict[str, str]:
         return {file.path: file.content for file in self.files}
+
+
+def _sanitize_for_snapshot(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        sanitized = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if _looks_secret_key(key_text):
+                sanitized[key_text] = "REDACTED"
+            else:
+                sanitized[key_text] = _sanitize_for_snapshot(item)
+        return sanitized
+    if isinstance(value, list | tuple):
+        return [_sanitize_for_snapshot(item) for item in value]
+    return value
+
+
+def _looks_secret_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(marker in lowered for marker in ("password", "secret", "token", "credential"))

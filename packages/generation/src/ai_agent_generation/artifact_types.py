@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ai_agent_domain import ArtifactType, RequestedOutputType
 
-
 JAVA_MYBATIS_POLICY_ARTIFACT_TYPES = (
     ArtifactType.DTO_DRAFT,
     ArtifactType.SERVICE_DRAFT,

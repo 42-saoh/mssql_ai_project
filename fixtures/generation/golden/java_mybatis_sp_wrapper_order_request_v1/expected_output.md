@@ -9,15 +9,128 @@
 - spName: dbo.USP_ORDER_REQUEST_LIST
 - tableName: dbo.ORD_REQ
 
+## registry_versions
+- policy: `policy:project_ai_java_mybatis_generation_policy.yaml@1.0.0`
+- template: `template:java_mybatis_sp_wrapper@0.2.0`
+- registry: `java_mybatis_templates_v1`
+
+## input_snapshot
+- sanitizedSnapshotHash: `9a64f54f70ebdb4a7bfd17b80da9388827abb111e358a0433d20a61433af92f5`
+- sanitizedSnapshot:
+
+```json
+{
+  "evidence": {
+    "assumptions": [
+      "페이징 정책은 아직 미확정이므로 TODO 로 남긴다.",
+      "정렬 규칙은 SP 내부 기본 정렬을 그대로 유지한다."
+    ],
+    "sources": [
+      {
+        "locator": "",
+        "name": "dbo.USP_ORDER_REQUEST_LIST",
+        "reason": "조회 SQL 재구성 근거가 부족하므로 SP wrapper 유지",
+        "snapshotId": null,
+        "type": "storedProcedure"
+      },
+      {
+        "locator": "",
+        "name": "dbo.ORD_REQ",
+        "reason": "DTO 필드 정의 및 컬럼 타입 근거",
+        "snapshotId": null,
+        "type": "table"
+      }
+    ]
+  },
+  "request": {
+    "authorId": "AI",
+    "businessCodeLv1": "order",
+    "businessCodeLv2": "request",
+    "columns": [
+      {
+        "dbType": "bigint",
+        "description": "주문요청ID",
+        "name": "ORD_REQ_ID",
+        "nullable": false
+      },
+      {
+        "dbType": "varchar(20)",
+        "description": "고객ID",
+        "name": "CUS_ID",
+        "nullable": false
+      },
+      {
+        "dbType": "varchar(20)",
+        "description": "요청상태코드",
+        "name": "REQ_STAT_CD",
+        "nullable": false
+      },
+      {
+        "dbType": "datetime2",
+        "description": "요청일시",
+        "name": "REQ_DTM",
+        "nullable": false
+      },
+      {
+        "dbType": "uniqueidentifier",
+        "description": "등록사용자ID",
+        "name": "CRE_USR_ID",
+        "nullable": false
+      }
+    ],
+    "commonFramework": "spring-mybatis",
+    "description": "주문 요청 목록 조회용 Java/MyBatis SP wrapper 초안",
+    "entityName": "OrderRequest",
+    "generationMode": "spWrapper",
+    "inputParams": [
+      {
+        "dbType": "varchar(20)",
+        "name": "CUS_ID",
+        "required": false
+      },
+      {
+        "dbType": "varchar(20)",
+        "name": "REQ_STAT_CD",
+        "required": false
+      }
+    ],
+    "javaTimePreferred": true,
+    "messagePrefix": "order.request",
+    "pkColumns": [
+      "ORD_REQ_ID"
+    ],
+    "resourceName": "order-request",
+    "resultShape": [
+      "ORD_REQ_ID",
+      "CUS_ID",
+      "REQ_STAT_CD",
+      "REQ_DTM",
+      "CRE_USR_ID"
+    ],
+    "serviceInterfaceRequired": true,
+    "spName": "dbo.USP_ORDER_REQUEST_LIST",
+    "subSystemCode": "ORD",
+    "systemCode": "PEM",
+    "tableName": "dbo.ORD_REQ",
+    "useLombok": false
+  },
+  "sampleId": "golden-java-mybatis-sp-wrapper-order-request-v1"
+}
+```
+
 ## generation_mode
 - `spWrapper`
-- 사유: SP 내부 조회 로직을 SQL 로 재구성할 근거가 아직 충분하지 않음
+- 사유: 생성 모드는 policy asset 의 generationModes 기준을 따른다.
 
 ## evidence_summary
-- Stored Procedure: `dbo.USP_ORDER_REQUEST_LIST`
-- Table: `dbo.ORD_REQ`
-- DTO 필드 정의는 테이블 컬럼과 결과 shape 에 근거함
-- Mapper XML 은 SP 직접 호출 wrapper 로 유지함
+- Stored Procedure: `dbo.USP_ORDER_REQUEST_LIST` - 조회 SQL 재구성 근거가 부족하므로 SP wrapper 유지
+- Table: `dbo.ORD_REQ` - DTO 필드 정의 및 컬럼 타입 근거
+- DTO 필드 정의는 metadata column/result shape evidence 에 근거함
+- 모든 생성물은 draft-only artifact 이며 자동 적용 대상이 아님
+
+## evidence_refs
+- MSSQL_METADATA: `dbo.USP_ORDER_REQUEST_LIST` locator=`조회 SQL 재구성 근거가 부족하므로 SP wrapper 유지`
+- MSSQL_METADATA: `dbo.ORD_REQ` locator=`DTO 필드 정의 및 컬럼 타입 근거`
 
 ## package_structure
 - `com.pec.pem.order.request.model`
@@ -25,17 +138,45 @@
 - `com.pec.pem.order.request.mapper`
 - `src/main/resources/mybatis/pem/mappers/order/request`
 
+## output_roles
+- dto: DTO_DRAFT
+- service: SERVICE_DRAFT
+- mapperInterface: MAPPER_INTERFACE
+- mapperXml: MAPPER_XML
+
 ## generated_files
-- `src/main/java/com/pec/pem/order/request/model/OrderRequestDTO.java`
-- `src/main/java/com/pec/pem/order/request/service/OrderRequestService.java`
-- `src/main/java/com/pec/pem/order/request/mapper/OrderRequestMapper.java`
-- `src/main/resources/mybatis/pem/mappers/order/request/OrderRequestMapperSQL.xml`
+- `src/main/java/com/pec/pem/order/request/model/OrderRequestDTO.java` (DTO_DRAFT)
+- `src/main/java/com/pec/pem/order/request/service/OrderRequestService.java` (SERVICE_DRAFT)
+- `src/main/java/com/pec/pem/order/request/mapper/OrderRequestMapper.java` (MAPPER_INTERFACE)
+- `src/main/resources/mybatis/pem/mappers/order/request/OrderRequestMapperSQL.xml` (MAPPER_XML)
 
 ## code_draft
-- DTO / Service / Mapper / Mapper XML 초안은 동일 디렉터리의 `src/` 아래 파일을 기준으로 한다.
+- DTO / Service / Mapper / Mapper XML 초안은 artifact file inventory 를 기준으로 한다.
+- generated_source_application: `not_performed`
+- target_application_write: `forbidden_without_human_review`
+
+## diff_review_summary
+- 모든 파일은 artifact preview/diff 대상으로만 생성한다.
+- 실제 프로젝트 소스 반영, DDL/DML 실행, procedure 실행은 수행하지 않는다.
+- reviewer 는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.
+
+## sql_risk_markers
+- REVIEW_REQUIRED: SP_EXEC_WRAPPER - Mapper XML preserves EXEC stored procedure wrapper; generation never executes it.
+- REVIEW_REQUIRED: SQL_REBUILD_NOT_CONFIRMED - Stored procedure logic is not rebuilt as inline SQL without stronger evidence.
+- REVIEW_REQUIRED: PARAMETER_BINDING_REVIEW_REQUIRED - Parameter binding must be checked against procedure metadata before adoption.
+
+## unconfirmed_areas
+- REVIEW_REQUIRED: pk_columns
+- REVIEW_REQUIRED: transaction_boundary
+- REVIEW_REQUIRED: validation_group_usage
+- REVIEW_REQUIRED: base_framework_usage
+- REVIEW_REQUIRED: exact_exception_message_codes
+- REVIEW_REQUIRED: controller_need
+- REVIEW_REQUIRED: dto_vo_model_final_choice
+- REVIEW_REQUIRED: sp_rebuild_feasibility
 
 ## message_and_config_examples
-- message key example: `biz.info.orderrequest.retrieve.001`
+- message key example: `biz.info.order.request.retrieve.001`
 - message value example: `주문 요청 목록을 조회했습니다.`
 - application yml example:
 
@@ -47,11 +188,16 @@ pem:
 
 ## assumptions_and_todo
 - REVIEW_REQUIRED: 모든 파일은 draft-only 이며 수동 검토 전 실제 프로젝트 반영 금지
-- TODO: 페이징 조건 파라미터 유무 확인
-- TODO: transaction boundary 확인 후 서비스 계층 주석 보강
-- TODO: controller 필요 여부 확인
-- TODO: exact exception/message code 확정
-- TODO: 향후 evidence 가 충분해지면 `spRebuild` 전환 가능성 재평가
+- TODO(input): 페이징 정책은 아직 미확정이므로 TODO 로 남긴다.
+- TODO(input): 정렬 규칙은 SP 내부 기본 정렬을 그대로 유지한다.
+- TODO(policy.mustMarkUnknown): pk_columns
+- TODO(policy.mustMarkUnknown): transaction_boundary
+- TODO(policy.mustMarkUnknown): validation_group_usage
+- TODO(policy.mustMarkUnknown): base_framework_usage
+- TODO(policy.mustMarkUnknown): exact_exception_message_codes
+- TODO(policy.mustMarkUnknown): controller_need
+- TODO(policy.mustMarkUnknown): dto_vo_model_final_choice
+- TODO(policy.mustMarkUnknown): sp_rebuild_feasibility
 
 ## review_checklist
 - [x] naming_rules_applied
@@ -61,3 +207,6 @@ pem:
 - [x] evidence_included
 - [x] assumptions_disclosed
 - [x] project_exclusions_respected
+- [ ] sql_risk_markers_reviewed
+- [ ] unconfirmed_areas_reviewed
+- [ ] generated_diff_reviewed_before_apply

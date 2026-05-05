@@ -1,0 +1,68 @@
+registryVersion: java_mybatis_templates_v1
+registryName: java-mybatis-draft-template-registry
+policyRef: spec/policy/project_ai_java_mybatis_generation_policy.yaml
+templates:
+  java_mybatis_sp_wrapper:
+    version: 0.2.0
+    requestedOutputType: JAVA_MYBATIS_DRAFT
+    description: Draft Java/MyBatis stored procedure wrapper bundle.
+    reviewChecklistPolicyRef: reviewChecklist
+    outputRoles:
+      dto:
+        artifactType: DTO_DRAFT
+        classNamePolicy: classNames.dto
+        packageLayer: model
+      service:
+        artifactType: SERVICE_DRAFT
+        classNamePolicy: classNames.service
+        packageLayer: service
+      mapperInterface:
+        artifactType: MAPPER_INTERFACE
+        classNamePolicy: classNames.mapper
+        packageLayer: mapper
+      mapperXml:
+        artifactType: MAPPER_XML
+        pathPolicy: mybatis.mapperXmlPath
+    sqlRiskMarkers:
+      - code: SP_EXEC_WRAPPER
+        status: REVIEW_REQUIRED
+        description: Mapper XML preserves EXEC stored procedure wrapper; generation never executes it.
+      - code: SQL_REBUILD_NOT_CONFIRMED
+        status: REVIEW_REQUIRED
+        description: Stored procedure logic is not rebuilt as inline SQL without stronger evidence.
+      - code: PARAMETER_BINDING_REVIEW_REQUIRED
+        status: REVIEW_REQUIRED
+        description: Parameter binding must be checked against procedure metadata before adoption.
+    manualReviewChecklist:
+      - sql_risk_markers_reviewed
+      - unconfirmed_areas_reviewed
+      - generated_diff_reviewed_before_apply
+  java_mybatis_dto_model_bundle:
+    version: 0.1.0
+    requestedOutputType: DTO_MODEL_DRAFT
+    description: Draft DTO/VO/Model bundle from metadata-only field evidence.
+    reviewChecklistPolicyRef: reviewChecklist
+    outputRoles:
+      dto:
+        artifactType: DTO_DRAFT
+        classNamePolicy: classNames.dto
+        packageLayer: model
+      vo:
+        artifactType: VO_DRAFT
+        classNamePolicy: classNames.vo
+        packageLayer: model
+      model:
+        artifactType: MODEL_DRAFT
+        classNamePolicy: classNames.model
+        packageLayer: model
+    sqlRiskMarkers:
+      - code: NO_SQL_RENDERED
+        status: PASS
+        description: DTO/VO/Model drafts contain no executable SQL.
+      - code: FIELD_MAPPING_REVIEW_REQUIRED
+        status: REVIEW_REQUIRED
+        description: Field names and Java types remain draft mappings until reviewed.
+    manualReviewChecklist:
+      - dto_vo_model_final_choice_reviewed
+      - field_mapping_reviewed
+      - generated_diff_reviewed_before_apply
