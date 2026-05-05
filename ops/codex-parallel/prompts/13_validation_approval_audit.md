@@ -20,6 +20,9 @@ validation rule engine, artifact validation result, reviewer checklist, approval
 ## 읽어야 할 기준 파일
 
 - `PROJECT.md`, `ARCHITECTURE.md`, `POLICY.md`, `EVAL_SPEC.md`
+- `docs/productization-architecture-gap-analysis.md`
+- `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
+- `fixtures/eval/productization_readiness_v1.yaml`
 - `packages/validation/README.md`
 - `packages/validation/src/ai_agent_validation/**`
 - `spec/validation/validation_rules.yaml`

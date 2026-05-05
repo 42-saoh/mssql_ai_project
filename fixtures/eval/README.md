@@ -6,3 +6,4 @@
 - `canonical_analysis_candidate.json` — review-required canonical payload sample
 - `artifact_payloads.json` — stable workflow/artifact expectation summary
 - `rubric.yaml` — pass/fail thresholds and forbidden boundary checks
+- `productization_readiness_v1.yaml` — P08A PPM manifest 를 P09~P16 eval/demo/release gate 에 연결하는 metadata-only readiness fixture

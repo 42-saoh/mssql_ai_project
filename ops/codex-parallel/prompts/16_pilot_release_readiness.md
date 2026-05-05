@@ -20,6 +20,9 @@ PPM 대표 SP/Table 대상 시범 적용 준비 상태를 점검하고, 산출�
 ## 읽어야 할 기준 파일
 
 - `README.md`, `PROJECT.md`, `ARCHITECTURE.md`, `TOOLS.md`, `POLICY.md`, `EVAL_SPEC.md`
+- `docs/productization-architecture-gap-analysis.md`
+- `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
+- `fixtures/eval/productization_readiness_v1.yaml`
 - `docs/**`
 - `ops/codex-parallel/**`
 - `fixtures/eval/**`

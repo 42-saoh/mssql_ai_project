@@ -20,6 +20,9 @@ API/BFF를 실제 제품 workflow 기준으로 정리한다. request, job, artif
 ## 읽어야 할 기준 파일
 
 - `PROJECT.md`, `ARCHITECTURE.md`, `POLICY.md`, `EVAL_SPEC.md`
+- `docs/productization-architecture-gap-analysis.md`
+- `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
+- `fixtures/eval/productization_readiness_v1.yaml`
 - `apps/api/README.md`
 - `apps/api/api_app/**`
 - `spec/openapi/ai_agent_platform_openapi_v1.yaml`

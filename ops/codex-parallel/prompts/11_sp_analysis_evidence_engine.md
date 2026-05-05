@@ -20,6 +20,9 @@ Stored Procedure 분석을 evidence-first engine으로 발전시킨다. definiti
 ## 읽어야 할 기준 파일
 
 - `PROJECT.md`, `ARCHITECTURE.md`, `POLICY.md`, `EVAL_SPEC.md`
+- `docs/productization-architecture-gap-analysis.md`
+- `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
+- `fixtures/eval/productization_readiness_v1.yaml`
 - `packages/analysis/README.md`
 - `packages/analysis/src/ai_agent_analysis/**`
 - `packages/domain/src/ai_agent_domain/models.py`

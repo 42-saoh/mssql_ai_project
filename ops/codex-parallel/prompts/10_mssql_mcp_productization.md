@@ -20,6 +20,9 @@ MSSQL Metadata MCP를 production target에 맞게 확장 설계·구현한다. p
 ## 읽어야 할 기준 파일
 
 - `PROJECT.md`, `ARCHITECTURE.md`, `POLICY.md`, `TOOLS.md`
+- `docs/productization-architecture-gap-analysis.md`
+- `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
+- `fixtures/eval/productization_readiness_v1.yaml`
 - `.env.example`
 - `config/mssql/local_docker_profiles.yaml`
 - `services/mssql-mcp/README.md`

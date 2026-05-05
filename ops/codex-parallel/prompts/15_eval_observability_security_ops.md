@@ -20,6 +20,9 @@ eval fixtures, representative pilot scenarios, quality metrics, latency/performa
 ## 읽어야 할 기준 파일
 
 - `PROJECT.md`, `ARCHITECTURE.md`, `TOOLS.md`, `POLICY.md`, `EVAL_SPEC.md`
+- `docs/productization-architecture-gap-analysis.md`
+- `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
+- `fixtures/eval/productization_readiness_v1.yaml`
 - `.env.example`
 - `Makefile`
 - `docker/test/**`
