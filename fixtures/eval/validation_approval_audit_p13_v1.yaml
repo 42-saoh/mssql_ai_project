@@ -1,0 +1,87 @@
+version: validation_approval_audit_p13_v1
+source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+selection_mode: live_metadata
+profile_policy:
+  analysis_db_profile_id: ppm
+  source_database: PPM
+  platform_db_context: PLF
+  plf_fallback_allowed: false
+active_blockers:
+  - DEPENDENCY_METADATA_INCOMPLETE
+public_api_contract:
+  approval_checklist_exposed_as_response_fields: false
+  audit_events_exposed_as_response_fields: false
+  validation_shape_uses_existing_fields:
+    - checks
+    - missingEvidence
+    - manualReviewPoints
+storage_contract:
+  approval_checklist_location: ARTIFACT_APPROVAL_RECORDS.CHKLST_RSLT_JSON
+  validation_summary_location: ARTIFACT_APPROVAL_RECORDS.CHKLST_RSLT_JSON
+  audit_trace_location: AUDIT_EVENTS.TRC_ID
+  schema_change_required: false
+forbidden_evidence:
+  - row_data
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - unapproved_publish_or_export
+sample_scenarios:
+  - sample_id: p13-validation-approval-audit-simple-procedure
+    readiness_label: optional_live_metadata_evidence
+    request:
+      dbProfileId: ppm
+      target:
+        type: PROCEDURE
+        schema: dbo
+        name: GetInspItemsCd
+      outputs:
+        - SP_ANALYSIS_DOCUMENT
+        - DEPENDENCY_REPORT
+      options:
+        includeEvidenceRefs: true
+    expected:
+      job_status: REVIEW_PENDING
+      current_step: VALIDATE
+      validation_report:
+        required_check_fields:
+          - ruleId
+          - severity
+          - result
+        required_report_fields:
+          - artifactId
+          - status
+          - checks
+          - missingEvidence
+          - manualReviewPoints
+      approval_decision_log:
+        decision: REQUEST_CHANGES
+        validation_report_binding: auto_fill_latest_validation_report_id
+        checklist_items:
+          - validation.latest_report_bound
+          - validation.status_passed_for_approval
+          - validation.no_failed_checks
+          - evidence.no_missing_refs
+          - review.manual_points_acknowledged
+          - approval.human_actor_recorded
+      audit_event_shape:
+        required_fields:
+          - stage
+          - actor
+          - targetRef
+          - correlationId
+          - refs
+        expected_stages:
+          - REQUEST
+          - JOB
+          - METADATA
+          - ARTIFACT
+          - VALIDATION
+          - APPROVAL
+      forbidden_artifact_statuses:
+        - PUBLISHED
+      forbidden_actions:
+        - publish_without_passed_validation_and_approval
+        - export_without_passed_validation_and_approval

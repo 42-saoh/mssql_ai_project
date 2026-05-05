@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from ai_agent_validation.models import (
+    ReviewerChecklistItem,
     ValidationCheck,
     ValidationCheckResult,
     ValidationReport,
@@ -11,7 +13,6 @@ from ai_agent_validation.models import (
     ValidationStatus,
 )
 from ai_agent_validation.rules import load_validation_rules, rules_for_artifact
-
 
 REQUIRED_SECTIONS_BY_ARTIFACT: dict[str, tuple[str, ...]] = {
     "SP_ANALYSIS_DOC": (
@@ -105,6 +106,8 @@ def validate_artifact(
         manual_review_points.append(assumption)
 
     status = _status_from_checks(checks)
+    manual_review_points = _dedupe_preserve_order(manual_review_points)
+    missing_evidence = _dedupe_preserve_order(missing_evidence)
     return ValidationReport(
         artifact_id=artifact_id,
         status=status,
@@ -123,7 +126,10 @@ def validate_publish_gate(
     artifact_id: str,
     validation_status: str | ValidationStatus | None,
     approval_decision: str | None,
+    operation: str = "publish",
 ) -> ValidationReport:
+    operation_value = _gate_operation(operation)
+    operation_label = operation_value.capitalize()
     status_value = (
         validation_status.value
         if hasattr(validation_status, "value")
@@ -137,9 +143,9 @@ def validate_publish_gate(
         else ValidationCheckResult.FAIL
     )
     message = (
-        "Publish gate satisfied by passed validation and approval record."
+        f"{operation_label} gate satisfied by passed validation and approval record."
         if result == ValidationCheckResult.PASS
-        else "Publish requires PASSED validation and APPROVE decision."
+        else f"{operation_label} requires PASSED validation and APPROVE decision."
     )
     check = ValidationCheck(
         rule_id="workflow.approval.before_publish",
@@ -153,8 +159,89 @@ def validate_publish_gate(
         checks=(check,),
         manual_review_points=()
         if result == ValidationCheckResult.PASS
-        else ("Review or approval is missing for publish.",),
-        metadata={"gate": "publish"},
+        else (f"Review or approval is missing for {operation_value}.",),
+        metadata={"gate": operation_value},
+    )
+
+
+def summarize_validation_report(report: ValidationReport) -> dict[str, Any]:
+    result_counts = {result.value: 0 for result in ValidationCheckResult}
+    severity_counts = {severity.value: 0 for severity in ValidationSeverity}
+    failed_rule_ids = []
+    review_required_rule_ids = []
+
+    for check in report.checks:
+        result_counts[check.result.value] += 1
+        severity_counts[check.severity.value] += 1
+        if check.result == ValidationCheckResult.FAIL:
+            failed_rule_ids.append(check.rule_id)
+        if check.result == ValidationCheckResult.REVIEW_REQUIRED:
+            review_required_rule_ids.append(check.rule_id)
+
+    return {
+        "artifactId": report.artifact_id,
+        "status": report.status.value,
+        "checkCounts": result_counts,
+        "severityCounts": severity_counts,
+        "failedRuleIds": sorted(failed_rule_ids),
+        "reviewRequiredRuleIds": sorted(review_required_rule_ids),
+        "missingEvidence": list(report.missing_evidence),
+        "manualReviewPoints": list(report.manual_review_points),
+    }
+
+
+def build_reviewer_checklist(
+    report: ValidationReport,
+    *,
+    decision: str,
+    reviewer: str,
+    comment: str,
+) -> tuple[ReviewerChecklistItem, ...]:
+    reviewer_present = bool(str(reviewer).strip())
+    comment_present = bool(str(comment).strip())
+    manual_review_points = len(report.manual_review_points)
+    missing_evidence = len(report.missing_evidence)
+
+    return (
+        ReviewerChecklistItem(
+            item_id="validation.latest_report_bound",
+            label="Latest validation report is bound",
+            satisfied=True,
+            detail=f"{report.artifact_id}:{report.status.value}",
+        ),
+        ReviewerChecklistItem(
+            item_id="validation.status_passed_for_approval",
+            label="Validation status supports approval",
+            satisfied=report.status == ValidationStatus.PASSED,
+            detail=(
+                "APPROVE requires PASSED validation; non-approval decisions may "
+                "record unresolved review."
+            ),
+        ),
+        ReviewerChecklistItem(
+            item_id="validation.no_failed_checks",
+            label="No failed validation checks remain",
+            satisfied=not report.failed_checks,
+            detail=f"{len(report.failed_checks)} failed checks",
+        ),
+        ReviewerChecklistItem(
+            item_id="evidence.no_missing_refs",
+            label="Missing evidence has been resolved",
+            satisfied=missing_evidence == 0,
+            detail=f"{missing_evidence} missing evidence refs",
+        ),
+        ReviewerChecklistItem(
+            item_id="review.manual_points_acknowledged",
+            label="Manual review points are acknowledged",
+            satisfied=manual_review_points == 0 or comment_present,
+            detail=f"{manual_review_points} manual review points",
+        ),
+        ReviewerChecklistItem(
+            item_id="approval.human_actor_recorded",
+            label="Human reviewer and comment are recorded",
+            satisfied=reviewer_present and comment_present,
+            detail=f"decision={decision}",
+        ),
     )
 
 
@@ -315,6 +402,24 @@ def _has_review_marker(content: str, assumptions: Sequence[str]) -> bool:
         marker in content or marker in joined_assumptions
         for marker in ("REVIEW_REQUIRED", "TODO")
     )
+
+
+def _gate_operation(operation: str) -> str:
+    normalized = str(operation or "publish").strip().lower()
+    if normalized not in {"publish", "export"}:
+        raise ValueError(f"Unsupported approval gate operation: {operation}")
+    return normalized
+
+
+def _dedupe_preserve_order(items: Sequence[str]) -> list[str]:
+    seen = set()
+    deduped = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped
 
 
 def _status_from_checks(checks: Sequence[ValidationCheck]) -> ValidationStatus:

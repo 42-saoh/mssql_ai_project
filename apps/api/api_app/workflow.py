@@ -11,7 +11,17 @@ from ai_agent_generation import (
     render_java_mybatis_sp_wrapper,
 )
 from ai_agent_generation.models import GENERATOR_VERSION
-from ai_agent_validation import validate_artifact, validate_publish_gate
+from ai_agent_validation import (
+    ValidationCheck,
+    ValidationCheckResult,
+    ValidationReport,
+    ValidationSeverity,
+    ValidationStatus,
+    build_reviewer_checklist,
+    summarize_validation_report,
+    validate_artifact,
+    validate_publish_gate,
+)
 
 from api_app.metadata_gateway import McpMetadataGateway, MetadataCollectionResult, MetadataGateway
 from api_app.repositories import (
@@ -168,36 +178,50 @@ class WorkflowService:
     ) -> ApprovalRecordData:
         self._require_artifact(artifact_id)
         latest_validation = self.repository.latest_validation_for(artifact_id)
-        if (
-            validation_report_id is not None
-            and (
-                latest_validation is None
-                or validation_report_id != latest_validation.validation_report_id
-            )
+        if latest_validation is None:
+            raise ValueError("Approval decision requires the latest artifact validation.")
+        if validation_report_id is not None and (
+            validation_report_id != latest_validation.validation_report_id
         ):
             raise ValueError("validationReportId must match the latest artifact validation.")
         if decision == "APPROVE":
-            if latest_validation is None:
-                raise ValueError("APPROVE requires a PASSED validation report.")
             if latest_validation.status != "PASSED":
                 raise ValueError("APPROVE requires latest validation status PASSED.")
+        validation_report = validation_record_to_report(latest_validation)
+        reviewer_checklist = [
+            item.as_dict()
+            for item in build_reviewer_checklist(
+                validation_report,
+                decision=decision,
+                reviewer=reviewer,
+                comment=comment,
+            )
+        ]
         return self.repository.add_approval(
             artifact_id=artifact_id,
             decision=decision,
             reviewer=reviewer,
             comment=comment,
-            validation_report_id=validation_report_id,
+            validation_report_id=latest_validation.validation_report_id,
+            reviewer_checklist=reviewer_checklist,
+            validation_summary=summarize_validation_report(validation_report),
             correlation_id=correlation_id,
         )
 
-    def evaluate_publish_gate(self, artifact_id: str) -> ValidationReportRecord:
-        self._require_artifact(artifact_id)
+    def evaluate_publish_gate(
+        self,
+        artifact_id: str,
+        *,
+        operation: str = "publish",
+    ) -> ValidationReportRecord:
+        artifact = self._require_artifact(artifact_id)
         validation = self.repository.latest_validation_for(artifact_id)
         approval = self.repository.latest_approval_for(artifact_id)
         gate_report = validate_publish_gate(
             artifact_id=artifact_id,
             validation_status=validation.status if validation else None,
             approval_decision=approval.decision if approval else None,
+            operation=operation,
         )
         record = self.repository.save_validation_report(
             artifact_id=artifact_id,
@@ -210,7 +234,16 @@ class WorkflowService:
             action="PUBLISH_GATE_EVALUATED",
             target_type="ARTIFACT",
             target_ref_id=artifact_id,
-            payload={"status": record.status, "storageResult": record.storage_result},
+            payload={
+                "status": record.status,
+                "storageResult": record.storage_result,
+                "operation": operation,
+            },
+            correlation_id=(
+                job.correlation_id
+                if (job := self.repository.get_job(artifact.job_id)) is not None
+                else None
+            ),
         )
         return record
 
@@ -441,6 +474,36 @@ def generation_context_from_request(
                 "assumptions": [WORKFLOW_METADATA_NOTE],
             },
         }
+    )
+
+
+def validation_record_to_report(record: ValidationReportRecord) -> ValidationReport:
+    checks = []
+    for item in record.checks:
+        severity = str(item.get("severity") or "ERROR").upper()
+        result = str(item.get("result") or item.get("status") or "FAIL").upper()
+        if result == "PASSED":
+            result = "PASS"
+        elif result == "FAILED":
+            result = "FAIL"
+        checks.append(
+            ValidationCheck(
+                rule_id=str(item.get("ruleId") or item.get("rule_id") or "unknown"),
+                severity=ValidationSeverity(severity),
+                result=ValidationCheckResult(result),
+                message=str(item.get("message") or ""),
+            )
+        )
+    return ValidationReport(
+        artifact_id=record.artifact_id,
+        status=ValidationStatus(record.status),
+        checks=tuple(checks),
+        missing_evidence=tuple(record.missing_evidence),
+        manual_review_points=tuple(record.manual_review_points),
+        metadata={
+            "validationReportId": record.validation_report_id,
+            "storageResult": record.storage_result,
+        },
     )
 
 

@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import Any
 
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
+from api_app.contracts import approval_decision_mapping, validation_storage_result
 from api_app.lifecycle import (
     artifact_status_after_approval,
     artifact_status_after_validation,
@@ -11,7 +12,6 @@ from api_app.lifecycle import (
     ensure_artifact_can_change,
     ensure_job_transition,
 )
-from api_app.contracts import approval_decision_mapping, validation_storage_result
 from api_app.repositories import (
     ApprovalRecordData,
     ArtifactRecord,
@@ -21,6 +21,7 @@ from api_app.repositories import (
     ValidationReportRecord,
     WorkRequestRecord,
     prefixed_id,
+    standardized_audit_payload,
     utc_now,
 )
 
@@ -205,6 +206,19 @@ class MemoryWorkflowRepository:
             extra=extra or {},
         )
         self.artifacts[record.artifact_id] = record
+        job = self.jobs.get(job_id)
+        self.record_audit_event(
+            action="ARTIFACT_CREATED",
+            target_type="ARTIFACT",
+            target_ref_id=record.artifact_id,
+            payload={
+                "artifactId": record.artifact_id,
+                "jobId": job_id,
+                "artifactType": artifact_type.value,
+                "status": record.status.value,
+            },
+            correlation_id=job.correlation_id if job else None,
+        )
         return record
 
     def get_job(self, job_id: str) -> JobRecord | None:
@@ -283,6 +297,8 @@ class MemoryWorkflowRepository:
         reviewer: str,
         comment: str,
         validation_report_id: str | None,
+        reviewer_checklist: list[dict[str, Any]] | None = None,
+        validation_summary: dict[str, Any] | None = None,
         correlation_id: str | None = None,
     ) -> ApprovalRecordData:
         mapping = approval_decision_mapping(decision)
@@ -298,6 +314,8 @@ class MemoryWorkflowRepository:
             validation_report_id=validation_report_id,
             storage_decision=mapping.storage_decision,
             persistence_note=mapping.persistence_note,
+            reviewer_checklist=reviewer_checklist or [],
+            validation_summary=validation_summary or {},
         )
         self.approvals[record.approval_id] = record
         artifact.latest_approval_id = record.approval_id
@@ -311,6 +329,8 @@ class MemoryWorkflowRepository:
                 "decision": decision,
                 "storageDecision": record.storage_decision,
                 "validationReportId": validation_report_id,
+                "approvalId": record.approval_id,
+                "reviewerChecklist": record.reviewer_checklist,
             },
             actor=reviewer,
             correlation_id=correlation_id or self.jobs[artifact.job_id].correlation_id,
@@ -333,11 +353,14 @@ class MemoryWorkflowRepository:
         actor: str = "api-system",
         correlation_id: str | None = None,
     ) -> AuditEventRecord:
-        audit_payload = dict(payload)
-        if correlation_id:
-            current_tracking = dict(audit_payload.get("tracking") or {})
-            current_tracking["correlationId"] = correlation_id
-            audit_payload["tracking"] = current_tracking
+        audit_payload = standardized_audit_payload(
+            action=action,
+            target_type=target_type,
+            target_ref_id=target_ref_id,
+            payload=payload,
+            actor=actor,
+            correlation_id=correlation_id,
+        )
         record = AuditEventRecord(
             audit_id=prefixed_id("audit"),
             action=action,

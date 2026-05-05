@@ -91,6 +91,8 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert approval.headers["X-Correlation-ID"] == "corr-route-flow"
     assert approval.json()["artifactId"] == artifact_id
     assert approval.json()["decision"] == "REQUEST_CHANGES"
+    assert "validationReportId" not in approval.json()
+    assert "reviewerChecklist" not in approval.json()
 
 
 def test_sp_analysis_submit_idempotency_replays_or_conflicts(client: TestClient) -> None:

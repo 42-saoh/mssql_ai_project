@@ -41,6 +41,18 @@
 - P09 still has no publish route; artifacts may be draft, validated, review-pending,
   approved, or rejected, but this slice blocks publish transitions.
 
+## P13 validation / approval / audit notes
+
+- Approval decisions require the latest artifact validation report. If callers omit
+  `validationReportId`, the workflow binds the latest report internally; stale report ids
+  are rejected.
+- Reviewer checklist and validation summary details are persisted in the existing approval
+  checklist JSON storage and are not added to the public response shape.
+- Audit payloads carry stage, actor, target ref, compact refs, and correlation id. Platform DB
+  audit persistence uses the existing `TRC_ID` column and does not require schema changes.
+- Publish/export gate checks continue to fail unless validation is `PASSED` and the human
+  decision is `APPROVE`; no publish/export endpoint is exposed in this API slice.
+
 ## Platform DB persistence
 
 API repository 는 로컬 Platform MSSQL DB를 기준으로 동작한다. `.env`에서 아래를 설정한 뒤
