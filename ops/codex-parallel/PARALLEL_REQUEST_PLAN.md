@@ -274,8 +274,9 @@ P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이�
 
 ### P08A — PPM Pilot Object Discovery & Selection
 
-- 소유 경로: `fixtures/pilot/ppm_object_selection_v1/**`, 관련 contract test
+- 소유 경로: `fixtures/pilot/ppm_object_selection_v1/**`, 관련 contract test, P08A 실행에 필요한 최소 MCP metadata discovery surface
 - 목적: PPM DB에서 representative SP/Table/View/Function 후보를 metadata-only 방식으로 선정한다.
+- 기존 MCP surface가 부족하면 P10 전체를 당기지 않고 P08A 내부에서 DB 존재 확인, procedure/table/view/function inventory, definition/parameter/dependency/schema/index/constraint/extended property 조회에 필요한 최소 surface만 보강한다.
 - live metadata 가능 시 `selected_objects.yaml` 을 `selection_mode: live_metadata`로 갱신한다.
 - live metadata 불가 시 실제 object 이름을 만들지 않고 blocker 후보를 남긴다.
 

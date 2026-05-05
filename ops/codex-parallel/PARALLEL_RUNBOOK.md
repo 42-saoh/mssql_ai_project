@@ -188,9 +188,9 @@ git worktree add ../wt/p16-pilot-release-readiness -b feat/p16-pilot-release-rea
 
 ### Productization 실행 순서
 
-1. `P08A` — PPM pilot object selection. live metadata 가능 시 실제 metadata 기반 선정, 불가 시 template-only와 blocker 기록.
+1. `P08A` — PPM pilot object selection. live metadata에 필요한 surface가 부족하면 P10 전체가 아니라 P08A 내부에서 최소 metadata discovery surface만 선행 보강한 뒤 선정한다. 그래도 불가하면 template-only와 blocker 기록.
 2. `P08` — product architecture, release backlog, acceptance criteria.
-3. `P09`~`P12` — API/MCP/analysis/generation productization 병렬 또는 의존성 순차 구현.
+3. `P09`~`P12` — API/MCP/analysis/generation productization 병렬 또는 의존성 순차 구현. P10은 P08A의 최소 discovery surface를 product-level MCP로 확장·경화한다.
 4. `P13`~`P15` — validation/approval/audit, Web UI, eval/observability/security/ops 고도화.
 5. `P16` — pilot release readiness, handoff package, go/no-go 판정.
 
