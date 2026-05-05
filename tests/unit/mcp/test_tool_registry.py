@@ -172,6 +172,59 @@ def test_fixture_inventory_tools_do_not_return_definition_text() -> None:
     assert function_inventory["data"]["functions"][0]["definition"]["hash"]
 
 
+def test_fixture_metadata_object_search_returns_identity_only_results() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    payload = registry.invoke_payload(
+        "search_metadata_objects",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "query": "order",
+                "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+                "limit": 10,
+            }
+        },
+    )
+
+    assert payload["ok"] is True
+    data = payload["data"]
+    result_types = {result["objectIdentity"]["type"] for result in data["results"]}
+    assert {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"} <= result_types
+    assert data["blockers"][0]["code"] == "DEPENDENCY_METADATA_INCOMPLETE"
+    assert all(result["evidenceRefs"] for result in data["results"])
+
+    serialized = str(data).lower()
+    for forbidden in ("rowdata", "row_data", "create procedure", "create view", "create function"):
+        assert forbidden not in serialized
+
+
+def test_fixture_metadata_object_search_uses_ppm_without_plf_fallback() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    payload = registry.invoke_payload(
+        "search_metadata_objects",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "limit": 5,
+            }
+        },
+    )
+
+    assert payload["data"]["sourceProfile"] == "ppm"
+    assert payload["data"]["sourceDatabase"] == "PPM"
+    assert payload["data"]["sourceDatabase"] != "PLF"
+    assert payload["data"]["results"]
+    assert all(result["sourceDatabase"] == "PPM" for result in payload["data"]["results"])
+
+
 def test_tool_invocation_rejects_free_form_sql_argument(monkeypatch) -> None:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     client = TestClient(app)
@@ -426,6 +479,79 @@ def test_live_missing_table_metadata_reports_not_found_without_plf_fallback() ->
     assert exc_info.value.code == "OBJECT_NOT_FOUND"
     assert exc_info.value.details["objectType"] == "TABLE"
     assert repository.queried_databases == ["PPM"]
+
+
+class SearchLiveMetadataRepository(LiveMetadataRepository):
+    def __init__(self) -> None:
+        super().__init__(
+            settings=LiveMetadataSettings(
+                live_metadata_enabled=True,
+                metadata_host="127.0.0.1",
+                metadata_port=1433,
+                metadata_user="readonly_user",
+                metadata_password="secret",
+                metadata_db_fallback="master",
+                default_profile_id="master",
+                profile_file="config/mssql/local_docker_profiles.yaml",
+                connect_timeout_seconds=7,
+            ),
+            profiles=[
+                DbProfile(
+                    id="ppm",
+                    label="Pilot Analysis Target DB (PPM)",
+                    database="PPM",
+                    purpose="pilot-analysis-target",
+                )
+            ],
+        )
+        self.queried_databases: list[str] = []
+
+    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+        self.queried_databases.append(database)
+        assert tool_name == "search_metadata_objects"
+        assert "sys.objects" in sql
+        assert "sys.sql_modules" not in sql
+        return [
+            {
+                "object_id": 42,
+                "object_type": "P",
+                "schema_name": "dbo",
+                "object_name": "usp_OrderSearch",
+                "description": None,
+                "dep_schema_name": None,
+                "dep_object_name": None,
+                "dep_referenced_type": None,
+                "referenced_class_desc": None,
+                "is_ambiguous": None,
+            }
+        ]
+
+
+def test_live_metadata_object_search_queries_ppm_only_without_definition_text() -> None:
+    repository = SearchLiveMetadataRepository()
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "search_metadata_objects",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "query": "Order",
+                "objectTypes": ["PROCEDURE"],
+                "limit": 5,
+            }
+        },
+    )
+
+    assert repository.queried_databases == ["PPM"]
+    assert payload["data"]["sourceDatabase"] == "PPM"
+    assert payload["data"]["results"][0]["objectIdentity"] == {
+        "schema": "dbo",
+        "name": "usp_OrderSearch",
+        "type": "PROCEDURE",
+    }
+    assert payload["data"]["results"][0]["sourceDatabase"] == "PPM"
+    assert "definition" not in str(payload).lower()
 
 
 class DefinitionShapeLiveMetadataRepository(LiveMetadataRepository):

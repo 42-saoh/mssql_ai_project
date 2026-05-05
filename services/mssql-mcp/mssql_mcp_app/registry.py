@@ -39,7 +39,10 @@ class ToolRegistry:
         request = self._parse_request(tool_name, payload)
 
         raw_arguments = request.arguments
-        enforce_read_only_arguments(raw_arguments)
+        enforce_read_only_arguments(
+            raw_arguments,
+            allowed_argument_paths=_allowed_guardrail_paths(tool.name),
+        )
         arguments = validate_tool_arguments(tool, raw_arguments)
         self._validate_profile(tool.name, arguments)
 
@@ -160,6 +163,12 @@ def build_tool_registry(
     catalog: list[ToolSpec] | None = None,
 ) -> ToolRegistry:
     return ToolRegistry(catalog=catalog or TOOL_CATALOG, repository=repository, profiles=profiles)
+
+
+def _allowed_guardrail_paths(tool_name: str) -> set[str]:
+    if tool_name == "search_metadata_objects":
+        return {"arguments.query"}
+    return set()
 
 
 def error_response(
@@ -290,7 +299,12 @@ def _object_identity_for_tool(
             schema=arguments.get("schema"),
             name=arguments.get("objectName"),
         )
-    if tool_name in {"search_tables", "search_columns", "find_similar_tables"}:
+    if tool_name in {
+        "search_tables",
+        "search_columns",
+        "find_similar_tables",
+        "search_metadata_objects",
+    }:
         return _identity(
             source_database=source_database,
             object_type="CATALOG",
