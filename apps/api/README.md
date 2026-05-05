@@ -65,6 +65,14 @@ API repository 는 로컬 Platform MSSQL DB를 기준으로 동작한다. `.env`
 수동으로 schema를 적용하고 `AUTH_USERS`, `CORE_DB_PROFILES` 기준 행을 준비한 로컬 DB에서만
 request/job/metadata/artifact/validation/approval/audit 기록을 저장하고 다시 읽는다.
 
+## Repository adapter boundary
+
+- `api_app.platform_db.MssqlPlatformRepository` 는 externally managed PLF schema 를 사용하는
+  platform persistence adapter 다. DDL 자동 적용, row-data 조회, procedure 실행은 수행하지 않는다.
+- `api_app.memory_repository.MemoryWorkflowRepository` 는 fixture-first 테스트와 local demo 용
+  in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation/approval
+  mapping, audit payload shape 를 유지하되 production persistence 로 사용하지 않는다.
+
 ## 남은 Blockers
 
 1. 운영 auth/RBAC enforcement 는 인증 주체와 role source 가 확정된 뒤 활성화한다.
