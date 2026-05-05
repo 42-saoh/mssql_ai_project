@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
+from api_app.lifecycle import bounded_artifact_records
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -23,6 +25,9 @@ class WorkRequestRecord:
     target: dict[str, Any]
     outputs: tuple[str, ...]
     options: dict[str, bool]
+    request_hash: str
+    correlation_id: str
+    idempotency_key: str | None = None
     status: JobStatus = JobStatus.SUBMITTED
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -34,6 +39,7 @@ class JobRecord:
     request_id: str
     status: JobStatus = JobStatus.SUBMITTED
     current_step: WorkflowStepType | None = None
+    correlation_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
     error_code: str | None = None
@@ -122,6 +128,7 @@ class AuditEventRecord:
     target_ref_id: str
     payload: dict[str, Any]
     actor: str = "api-system"
+    correlation_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
 
 
@@ -133,13 +140,25 @@ class WorkflowRepository(Protocol):
         target: dict[str, Any],
         outputs: tuple[str, ...],
         options: dict[str, bool],
+        request_hash: str,
+        correlation_id: str,
+        idempotency_key: str | None,
     ) -> WorkRequestRecord:
+        ...
+
+    def find_request_by_idempotency_key(
+        self,
+        idempotency_key: str,
+    ) -> WorkRequestRecord | None:
         ...
 
     def update_request_status(self, request_id: str, status: JobStatus) -> None:
         ...
 
-    def create_job(self, request_id: str) -> JobRecord:
+    def create_job(self, request_id: str, *, correlation_id: str | None = None) -> JobRecord:
+        ...
+
+    def find_job_by_request_id(self, request_id: str) -> JobRecord | None:
         ...
 
     def transition_job(
@@ -187,7 +206,12 @@ class WorkflowRepository(Protocol):
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         ...
 
-    def list_job_artifacts(self, job_id: str) -> list[ArtifactRecord] | None:
+    def list_job_artifacts(
+        self,
+        job_id: str,
+        *,
+        limit: int | None = None,
+    ) -> list[ArtifactRecord] | None:
         ...
 
     def save_validation_report(
@@ -198,6 +222,7 @@ class WorkflowRepository(Protocol):
         checks: list[dict[str, str]],
         missing_evidence: list[str],
         manual_review_points: list[str],
+        correlation_id: str | None = None,
     ) -> ValidationReportRecord:
         ...
 
@@ -215,6 +240,7 @@ class WorkflowRepository(Protocol):
         reviewer: str,
         comment: str,
         validation_report_id: str | None,
+        correlation_id: str | None = None,
     ) -> ApprovalRecordData:
         ...
 
@@ -229,5 +255,30 @@ class WorkflowRepository(Protocol):
         target_ref_id: str,
         payload: dict[str, Any],
         actor: str = "api-system",
+        correlation_id: str | None = None,
     ) -> AuditEventRecord:
         ...
+
+
+def tracking_payload(
+    *,
+    correlation_id: str | None,
+    idempotency_key: str | None = None,
+    request_hash: str | None = None,
+) -> dict[str, str]:
+    payload: dict[str, str] = {}
+    if correlation_id:
+        payload["correlationId"] = correlation_id
+    if idempotency_key:
+        payload["idempotencyKey"] = idempotency_key
+    if request_hash:
+        payload["requestHash"] = request_hash
+    return payload
+
+
+def bounded_artifacts(
+    artifacts: list[ArtifactRecord],
+    *,
+    limit: int | None = None,
+) -> list[ArtifactRecord]:
+    return bounded_artifact_records(artifacts, limit=limit)

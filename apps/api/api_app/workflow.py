@@ -23,6 +23,11 @@ from api_app.repositories import (
     WorkRequestRecord,
 )
 from api_app.schemas import SPAnalysisRequest
+from api_app.tracking import (
+    IdempotencyConflictError,
+    RequestTrackingContext,
+    request_payload_hash,
+)
 
 WORKFLOW_METADATA_NOTE = (
     "REVIEW_REQUIRED: metadata is collected through the MSSQL MCP registry boundary "
@@ -42,14 +47,46 @@ class WorkflowService:
     def submit_sp_analysis(
         self,
         request: SPAnalysisRequest,
+        tracking: RequestTrackingContext | None = None,
     ) -> tuple[WorkRequestRecord, JobRecord]:
+        request_hash = request_payload_hash(request.to_response())
+        tracking = (
+            tracking or RequestTrackingContext(correlation_id="api-system")
+        ).with_request_hash(request_hash)
+        if tracking.idempotency_key:
+            existing_request = self.repository.find_request_by_idempotency_key(
+                tracking.idempotency_key
+            )
+            if existing_request is not None:
+                if existing_request.request_hash != request_hash:
+                    raise IdempotencyConflictError(
+                        "Idempotency-Key was already used for a different request payload."
+                    )
+                job = self.repository.find_job_by_request_id(existing_request.request_id)
+                if job is None:
+                    raise ValueError("Idempotent request exists without a workflow job.")
+                self.repository.record_audit_event(
+                    action="IDEMPOTENT_REQUEST_REPLAYED",
+                    target_type="WORK_REQUEST",
+                    target_ref_id=existing_request.request_id,
+                    payload={"tracking": tracking.audit_payload()},
+                    correlation_id=tracking.correlation_id,
+                )
+                existing_request.status = job.status
+                return existing_request, job
         request_record = self.repository.create_request(
             db_profile_id=request.db_profile_id,
             target=request.target.to_response(),
             outputs=tuple(output.value for output in request.outputs),
             options=dict(request.options),
+            request_hash=request_hash,
+            correlation_id=tracking.correlation_id,
+            idempotency_key=tracking.idempotency_key,
         )
-        job = self.repository.create_job(request_record.request_id)
+        job = self.repository.create_job(
+            request_record.request_id,
+            correlation_id=tracking.correlation_id,
+        )
 
         try:
             job = self.run_initial_workflow(job.job_id, request_record)
@@ -102,7 +139,12 @@ class WorkflowService:
             current_step=WorkflowStepType.VALIDATE,
         )
 
-    def validate_artifact(self, artifact_id: str) -> ValidationReportRecord:
+    def validate_artifact(
+        self,
+        artifact_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> ValidationReportRecord:
         artifact = self._require_artifact(artifact_id)
         report = validate_artifact(artifact.validation_payload(), artifact_id=artifact_id)
         return self.repository.save_validation_report(
@@ -111,6 +153,7 @@ class WorkflowService:
             checks=[check.as_dict() for check in report.checks],
             missing_evidence=list(report.missing_evidence),
             manual_review_points=list(report.manual_review_points),
+            correlation_id=correlation_id,
         )
 
     def record_approval_decision(
@@ -121,6 +164,7 @@ class WorkflowService:
         reviewer: str,
         comment: str,
         validation_report_id: str | None,
+        correlation_id: str | None = None,
     ) -> ApprovalRecordData:
         self._require_artifact(artifact_id)
         latest_validation = self.repository.latest_validation_for(artifact_id)
@@ -143,6 +187,7 @@ class WorkflowService:
             reviewer=reviewer,
             comment=comment,
             validation_report_id=validation_report_id,
+            correlation_id=correlation_id,
         )
 
     def evaluate_publish_gate(self, artifact_id: str) -> ValidationReportRecord:

@@ -9,6 +9,7 @@ from api_app.platform_db import (
     build_platform_repository,
     content_type_for_artifact,
     load_platform_db_settings,
+    options_storage_payload,
     storage_uuid,
 )
 from api_app.repositories import (
@@ -85,8 +86,14 @@ def test_workflow_repository_contract_records_state_changes() -> None:
         target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
         outputs=("SP_ANALYSIS_DOCUMENT",),
         options={"includeEvidenceRefs": True},
+        request_hash="hash-platform-contract",
+        correlation_id="corr-platform-contract",
+        idempotency_key="idem-platform-contract",
     )
-    job = repository.create_job(request.request_id)
+    job = repository.create_job(
+        request.request_id,
+        correlation_id=request.correlation_id,
+    )
     repository.transition_job(
         job.job_id,
         status=JobStatus.COLLECTING_METADATA,
@@ -123,6 +130,59 @@ def test_workflow_repository_contract_records_state_changes() -> None:
     assert repository.artifacts[artifact.artifact_id].status == ArtifactStatus.APPROVED
     assert repository.validation_reports[validation.validation_report_id].status == "PASSED"
     assert repository.approvals[approval.approval_id].storage_decision == "APPROVED"
+    assert repository.audit_events[0].correlation_id == "corr-platform-contract"
+
+
+def test_workflow_repository_lists_artifacts_with_stable_internal_bound() -> None:
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="plf",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={},
+        request_hash="hash-bounded-list",
+        correlation_id="corr-bounded-list",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    for index in range(105):
+        repository.add_artifact(
+            job_id=job.job_id,
+            artifact_type=ArtifactType.SP_ANALYSIS_DOC,
+            title=f"Analysis {index:03d}",
+            content="# Analysis",
+            evidence_refs=[{"type": "MSSQL_METADATA", "locator": "fixture"}],
+            generator_version="test",
+            registry_refs=("prompt@test",),
+            assumptions=("review required",),
+            review_required=True,
+        )
+
+    listed = repository.list_job_artifacts(job.job_id, limit=200)
+
+    assert listed is not None
+    assert len(listed) == 100
+    assert listed == sorted(listed, key=lambda item: (item.created_at, item.artifact_id))
+
+
+def test_options_storage_payload_keeps_tracking_out_of_public_options() -> None:
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="ppm",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-storage-payload",
+        correlation_id="corr-storage-payload",
+        idempotency_key="idem-storage-payload",
+    )
+
+    payload = options_storage_payload(request)
+
+    assert request.options == {"includeEvidenceRefs": True}
+    assert payload["includeEvidenceRefs"] is True
+    assert payload["__tracking"]["dbProfileId"] == "ppm"
+    assert payload["__tracking"]["requestHash"] == "hash-storage-payload"
 
 
 def _artifact(artifact_type: ArtifactType) -> ArtifactRecord:

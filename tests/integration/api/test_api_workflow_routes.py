@@ -23,8 +23,10 @@ def client() -> TestClient:
 
 
 def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None:
+    headers = {"X-Correlation-ID": "corr-route-flow"}
     submit = client.post(
         "/api/v1/requests/sp-analysis",
+        headers=headers,
         json={
             "dbProfileId": "master",
             "target": {
@@ -42,6 +44,7 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     )
 
     assert submit.status_code == 202
+    assert submit.headers["X-Correlation-ID"] == "corr-route-flow"
     submitted = submit.json()
     assert submitted["requestId"].startswith("req_")
     assert submitted["jobId"].startswith("job_")
@@ -49,6 +52,7 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
+    assert job.headers["X-Correlation-ID"].startswith("corr_")
     assert job.json()["currentStep"] == "VALIDATE"
 
     listed = client.get(f"/api/v1/jobs/{submitted['jobId']}/artifacts")
@@ -59,20 +63,24 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert "DEPENDENCY_REPORT" in artifact_types
     assert "DTO_DRAFT" in artifact_types
     assert "JAVA_MYBATIS_DRAFT" not in artifact_types
+    assert all(artifact["status"] != "PUBLISHED" for artifact in artifacts)
 
     artifact_id = artifacts[0]["artifactId"]
-    preview = client.get(f"/api/v1/artifacts/{artifact_id}")
+    preview = client.get(f"/api/v1/artifacts/{artifact_id}", headers=headers)
     assert preview.status_code == 200
+    assert preview.headers["X-Correlation-ID"] == "corr-route-flow"
     assert preview.json()["reviewRequired"] is True
     assert "generatorVersion" in preview.json()
 
-    validation = client.post(f"/api/v1/artifacts/{artifact_id}/validation")
+    validation = client.post(f"/api/v1/artifacts/{artifact_id}/validation", headers=headers)
     assert validation.status_code == 200
+    assert validation.headers["X-Correlation-ID"] == "corr-route-flow"
     assert validation.json()["artifactId"] == artifact_id
     assert validation.json()["status"] in {"PASSED", "REVIEW_REQUIRED"}
 
     approval = client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
+        headers=headers,
         json={
             "decision": "REQUEST_CHANGES",
             "reviewer": "reviewer@example.com",
@@ -80,8 +88,45 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
         },
     )
     assert approval.status_code == 201
+    assert approval.headers["X-Correlation-ID"] == "corr-route-flow"
     assert approval.json()["artifactId"] == artifact_id
     assert approval.json()["decision"] == "REQUEST_CHANGES"
+
+
+def test_sp_analysis_submit_idempotency_replays_or_conflicts(client: TestClient) -> None:
+    payload = {
+        "dbProfileId": "master",
+        "target": {
+            "type": "PROCEDURE",
+            "schema": "dbo",
+            "name": "usp_OrderRequest_Select",
+        },
+        "outputs": ["SP_ANALYSIS_DOCUMENT"],
+        "options": {"includeEvidenceRefs": True},
+    }
+    headers = {
+        "Idempotency-Key": "idem-route-p09",
+        "X-Correlation-ID": "corr-idempotent-submit",
+    }
+
+    first = client.post("/api/v1/requests/sp-analysis", headers=headers, json=payload)
+    replay = client.post("/api/v1/requests/sp-analysis", headers=headers, json=payload)
+
+    assert first.status_code == 202
+    assert replay.status_code == 202
+    assert replay.json()["requestId"] == first.json()["requestId"]
+    assert replay.json()["jobId"] == first.json()["jobId"]
+    assert replay.headers["X-Correlation-ID"] == "corr-idempotent-submit"
+
+    conflict_payload = {**payload, "outputs": ["DEPENDENCY_REPORT"]}
+    conflict = client.post(
+        "/api/v1/requests/sp-analysis",
+        headers=headers,
+        json=conflict_payload,
+    )
+
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "IDEMPOTENCY_CONFLICT"
 
 
 def test_metadata_and_registry_routes_are_safe_skeletons(client: TestClient) -> None:
@@ -108,6 +153,13 @@ def test_metadata_and_registry_routes_are_safe_skeletons(client: TestClient) -> 
 
 
 def test_unknown_resources_return_not_found(client: TestClient) -> None:
-    assert client.get("/api/v1/jobs/job_missing").status_code == 404
-    assert client.get("/api/v1/artifacts/art_missing").status_code == 404
-    assert client.post("/api/v1/artifacts/art_missing/validation").status_code == 404
+    job = client.get("/api/v1/jobs/job_missing")
+    artifact = client.get("/api/v1/artifacts/art_missing")
+    validation = client.post("/api/v1/artifacts/art_missing/validation")
+
+    assert job.status_code == 404
+    assert job.json()["code"] == "RESOURCE_NOT_FOUND"
+    assert artifact.status_code == 404
+    assert artifact.json()["code"] == "RESOURCE_NOT_FOUND"
+    assert validation.status_code == 404
+    assert validation.json()["code"] == "RESOURCE_NOT_FOUND"

@@ -11,6 +11,13 @@ from uuid import UUID, uuid5
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
 from api_app.contracts import approval_decision_mapping, validation_storage_result
+from api_app.lifecycle import (
+    artifact_status_after_approval,
+    artifact_status_after_validation,
+    bounded_artifact_records,
+    ensure_artifact_can_change,
+    ensure_job_transition,
+)
 from api_app.repositories import (
     ApprovalRecordData,
     ArtifactRecord,
@@ -21,6 +28,7 @@ from api_app.repositories import (
     WorkflowRepository,
     WorkRequestRecord,
     prefixed_id,
+    tracking_payload,
     utc_now,
 )
 
@@ -91,6 +99,9 @@ class MssqlPlatformRepository:
         target: dict[str, Any],
         outputs: tuple[str, ...],
         options: dict[str, bool],
+        request_hash: str,
+        correlation_id: str,
+        idempotency_key: str | None,
     ) -> WorkRequestRecord:
         record = WorkRequestRecord(
             request_id=prefixed_id("req"),
@@ -98,6 +109,9 @@ class MssqlPlatformRepository:
             target=target,
             outputs=outputs,
             options=options,
+            request_hash=request_hash,
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
         )
         requester_id = self._resolve_user_id(self.settings.requester_login)
         storage_profile_id = self._resolve_db_profile_id(db_profile_id)
@@ -116,7 +130,7 @@ class MssqlPlatformRepository:
                 storage_profile_id,
                 json_text(record.target),
                 json_text(list(record.outputs)),
-                json_text(record.options),
+                json_text(options_storage_payload(record)),
                 record.status.value,
                 record.request_id,
                 record.created_at,
@@ -127,9 +141,57 @@ class MssqlPlatformRepository:
             action="REQUEST_SUBMITTED",
             target_type="WORK_REQUEST",
             target_ref_id=record.request_id,
-            payload={"dbProfileId": db_profile_id, "outputs": list(outputs)},
+            payload={
+                "dbProfileId": db_profile_id,
+                "outputs": list(outputs),
+                "tracking": tracking_payload(
+                    correlation_id=correlation_id,
+                    idempotency_key=idempotency_key,
+                    request_hash=request_hash,
+                ),
+            },
+            correlation_id=correlation_id,
         )
         return record
+
+    def find_request_by_idempotency_key(
+        self,
+        idempotency_key: str,
+    ) -> WorkRequestRecord | None:
+        row = self._query_one(
+            """
+            SELECT TOP (1)
+                COALESCE(TRC_ID, CONVERT(NVARCHAR(36), REQ_ID)),
+                TRGT_PAYLD_JSON,
+                DESIRED_RSLT_JSON,
+                OPTN_PAYLD_JSON,
+                CUR_STAT_CD,
+                SUBMITTED_DTM,
+                UPD_DTM
+            FROM dbo.CORE_WORK_REQUESTS
+            WHERE JSON_VALUE(OPTN_PAYLD_JSON, '$.__tracking.idempotencyKey') = %s
+            ORDER BY SUBMITTED_DTM DESC
+            """,
+            (idempotency_key,),
+        )
+        if row is None:
+            return None
+        options_payload = parse_json(row[3], {})
+        tracking = dict(options_payload.get("__tracking") or {})
+        options_payload.pop("__tracking", None)
+        return WorkRequestRecord(
+            request_id=str(row[0]),
+            db_profile_id=str(tracking.get("dbProfileId") or ""),
+            target=dict(parse_json(row[1], {})),
+            outputs=tuple(parse_json(row[2], [])),
+            options=dict(options_payload),
+            request_hash=str(tracking.get("requestHash") or ""),
+            correlation_id=str(tracking.get("correlationId") or ""),
+            idempotency_key=str(tracking.get("idempotencyKey") or idempotency_key),
+            status=JobStatus(str(row[4])),
+            created_at=as_datetime(row[5]),
+            updated_at=as_datetime(row[6]),
+        )
 
     def update_request_status(self, request_id: str, status: JobStatus) -> None:
         self._execute(
@@ -141,8 +203,12 @@ class MssqlPlatformRepository:
             (status.value, storage_uuid(request_id), request_id),
         )
 
-    def create_job(self, request_id: str) -> JobRecord:
-        record = JobRecord(job_id=prefixed_id("job"), request_id=request_id)
+    def create_job(self, request_id: str, *, correlation_id: str | None = None) -> JobRecord:
+        record = JobRecord(
+            job_id=prefixed_id("job"),
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
         self._execute(
             """
             INSERT INTO dbo.CORE_JOBS(
@@ -156,13 +222,42 @@ class MssqlPlatformRepository:
                 storage_uuid(request_id),
                 record.status.value,
                 record.created_at,
-                json_text({"source": "api-workflow", "publicJobId": record.job_id}),
+                json_text(
+                    {
+                        "source": "api-workflow",
+                        "publicJobId": record.job_id,
+                        "correlationId": correlation_id,
+                    }
+                ),
                 record.job_id,
                 record.created_at,
                 record.updated_at,
             ),
         )
         return record
+
+    def find_job_by_request_id(self, request_id: str) -> JobRecord | None:
+        row = self._query_one(
+            """
+            SELECT TOP (1)
+                CONVERT(NVARCHAR(36), j.JOB_ID),
+                COALESCE(j.WRKR_REF_ID, CONVERT(NVARCHAR(36), j.JOB_ID)),
+                COALESCE(r.TRC_ID, CONVERT(NVARCHAR(36), j.REQ_ID)),
+                j.CUR_STAT_CD,
+                j.CUR_STEP_TP_CD,
+                j.ERR_CD,
+                j.ERR_CNTNT,
+                j.CRE_DTM,
+                j.UPD_DTM,
+                j.RGST_BINDING_JSON
+            FROM dbo.CORE_JOBS j
+            JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
+            WHERE r.TRC_ID = %s OR r.REQ_ID = %s
+            ORDER BY j.CRE_DTM DESC
+            """,
+            (request_id, storage_uuid(request_id)),
+        )
+        return job_from_row(row) if row else None
 
     def transition_job(
         self,
@@ -174,6 +269,7 @@ class MssqlPlatformRepository:
         job = self.get_job(job_id)
         if job is None:
             raise KeyError(job_id)
+        ensure_job_transition(job.status, status)
         job.status = status
         job.current_step = current_step
         job.updated_at = utc_now()
@@ -205,6 +301,7 @@ class MssqlPlatformRepository:
                 "status": status.value,
                 "currentStep": current_step.value if current_step else None,
             },
+            correlation_id=job.correlation_id,
         )
         return job
 
@@ -234,6 +331,7 @@ class MssqlPlatformRepository:
             target_type="JOB",
             target_ref_id=job.job_id,
             payload={"code": code, "message": message},
+            correlation_id=job.correlation_id,
         )
         return job
 
@@ -268,11 +366,13 @@ class MssqlPlatformRepository:
                 status,
             ),
         )
+        job = self.get_job(job_id)
         self.record_audit_event(
             action="METADATA_COLLECTED",
             target_type="JOB",
             target_ref_id=job_id,
             payload={"status": status, "snapshotId": payload.get("snapshotId")},
+            correlation_id=job.correlation_id if job else None,
         )
         return record
 
@@ -349,7 +449,8 @@ class MssqlPlatformRepository:
                 j.ERR_CD,
                 j.ERR_CNTNT,
                 j.CRE_DTM,
-                j.UPD_DTM
+                j.UPD_DTM,
+                j.RGST_BINDING_JSON
             FROM dbo.CORE_JOBS j
             JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
             WHERE j.JOB_ID = %s OR j.WRKR_REF_ID = %s
@@ -368,14 +469,22 @@ class MssqlPlatformRepository:
         )
         return self._artifact_from_row(row) if row else None
 
-    def list_job_artifacts(self, job_id: str) -> list[ArtifactRecord] | None:
+    def list_job_artifacts(
+        self,
+        job_id: str,
+        *,
+        limit: int | None = None,
+    ) -> list[ArtifactRecord] | None:
         if self.get_job(job_id) is None:
             return None
         rows = self._query_all(
             f"{artifact_select_sql()} WHERE a.JOB_ID = %s ORDER BY a.CRE_DTM, a.ARTF_ID",
             (storage_uuid(job_id),),
         )
-        return [artifact for row in rows if (artifact := self._artifact_from_row(row))]
+        return bounded_artifact_records(
+            [artifact for row in rows if (artifact := self._artifact_from_row(row))],
+            limit=limit,
+        )
 
     def save_validation_report(
         self,
@@ -385,10 +494,13 @@ class MssqlPlatformRepository:
         checks: list[dict[str, str]],
         missing_evidence: list[str],
         manual_review_points: list[str],
+        correlation_id: str | None = None,
     ) -> ValidationReportRecord:
         artifact = self.get_artifact(artifact_id)
         if artifact is None:
             raise KeyError(artifact_id)
+        next_status = artifact_status_after_validation(status, artifact.status)
+        ensure_artifact_can_change(artifact.status, next_status)
         record = ValidationReportRecord(
             validation_report_id=prefixed_id("val"),
             artifact_id=artifact_id,
@@ -426,10 +538,7 @@ class MssqlPlatformRepository:
         artifact.latest_validation_report_id = record.validation_report_id
         artifact.latest_validation_status = record.status
         artifact.updated_at = utc_now()
-        if status == "PASSED":
-            artifact.status = ArtifactStatus.VALIDATED
-        elif status == "REVIEW_REQUIRED":
-            artifact.status = ArtifactStatus.REVIEW_PENDING
+        artifact.status = next_status
         self._save_artifact(artifact)
         self.record_audit_event(
             action="ARTIFACT_VALIDATED",
@@ -440,6 +549,7 @@ class MssqlPlatformRepository:
                 "storageResult": record.storage_result,
                 "validationReportId": record.validation_report_id,
             },
+            correlation_id=correlation_id or self._correlation_for_artifact(artifact),
         )
         return record
 
@@ -482,11 +592,14 @@ class MssqlPlatformRepository:
         reviewer: str,
         comment: str,
         validation_report_id: str | None,
+        correlation_id: str | None = None,
     ) -> ApprovalRecordData:
         artifact = self.get_artifact(artifact_id)
         if artifact is None:
             raise KeyError(artifact_id)
         mapping = approval_decision_mapping(decision)
+        next_status = artifact_status_after_approval(decision)
+        ensure_artifact_can_change(artifact.status, next_status)
         record = ApprovalRecordData(
             approval_id=prefixed_id("aprv"),
             artifact_id=artifact_id,
@@ -525,12 +638,7 @@ class MssqlPlatformRepository:
         )
         artifact.latest_approval_id = record.approval_id
         artifact.updated_at = utc_now()
-        if decision == "APPROVE":
-            artifact.status = ArtifactStatus.APPROVED
-        elif decision == "REJECT":
-            artifact.status = ArtifactStatus.REJECTED
-        else:
-            artifact.status = ArtifactStatus.REVIEW_PENDING
+        artifact.status = next_status
         self._save_artifact(artifact)
         self.record_audit_event(
             action="APPROVAL_DECISION_RECORDED",
@@ -542,6 +650,7 @@ class MssqlPlatformRepository:
                 "validationReportId": validation_report_id,
             },
             actor=reviewer,
+            correlation_id=correlation_id or self._correlation_for_artifact(artifact),
         )
         return record
 
@@ -572,14 +681,21 @@ class MssqlPlatformRepository:
         target_ref_id: str,
         payload: dict[str, Any],
         actor: str = "api-system",
+        correlation_id: str | None = None,
     ) -> AuditEventRecord:
+        audit_payload = dict(payload)
+        if correlation_id:
+            current_tracking = dict(audit_payload.get("tracking") or {})
+            current_tracking["correlationId"] = correlation_id
+            audit_payload["tracking"] = current_tracking
         record = AuditEventRecord(
             audit_id=prefixed_id("audit"),
             action=action,
             target_type=target_type,
             target_ref_id=target_ref_id,
-            payload=payload,
+            payload=audit_payload,
             actor=actor,
+            correlation_id=correlation_id,
         )
         self._execute(
             """
@@ -595,11 +711,15 @@ class MssqlPlatformRepository:
                 action,
                 target_type,
                 target_ref_id[:100],
-                json_text(payload),
+                json_text(audit_payload),
                 record.created_at,
             ),
         )
         return record
+
+    def _correlation_for_artifact(self, artifact: ArtifactRecord) -> str | None:
+        job = self.get_job(artifact.job_id)
+        return job.correlation_id if job else None
 
     def _save_artifact(self, record: ArtifactRecord) -> None:
         artifact_id = storage_uuid(record.artifact_id)
@@ -860,11 +980,14 @@ def artifact_select_sql() -> str:
 
 def job_from_row(row: tuple[Any, ...]) -> JobRecord:
     current_step = WorkflowStepType(str(row[4])) if row[4] else None
+    binding = parse_json(row[9] if len(row) > 9 else None, {})
+    correlation_id = str(binding.get("correlationId") or "") or None
     return JobRecord(
         job_id=str(row[1]),
         request_id=str(row[2]),
         status=JobStatus(str(row[3])),
         current_step=current_step,
+        correlation_id=correlation_id,
         error_code=str(row[5]) if row[5] else None,
         error_message=str(row[6]) if row[6] else None,
         created_at=as_datetime(row[7]),
@@ -929,6 +1052,17 @@ def json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 
+def options_storage_payload(record: WorkRequestRecord) -> dict[str, Any]:
+    payload: dict[str, Any] = dict(record.options)
+    payload["__tracking"] = {
+        "dbProfileId": record.db_profile_id,
+        "correlationId": record.correlation_id,
+        "idempotencyKey": record.idempotency_key,
+        "requestHash": record.request_hash,
+    }
+    return payload
+
+
 def parse_json(value: Any, default: Any) -> Any:
     if value is None or value == "":
         return default
@@ -960,14 +1094,6 @@ def content_type_for_artifact(record: ArtifactRecord) -> str:
     if record.type.value in {"METADATA_QUERY_RESULT", "SCHEMA_ENRICHMENT_RESULT"}:
         return "JSON"
     return "MARKDOWN"
-
-
-def artifact_status_after_approval(decision: str) -> ArtifactStatus:
-    if decision == "APPROVE":
-        return ArtifactStatus.APPROVED
-    if decision == "REJECT":
-        return ArtifactStatus.REJECTED
-    return ArtifactStatus.REVIEW_PENDING
 
 
 def storage_validation_to_api(value: str) -> str:

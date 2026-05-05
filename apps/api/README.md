@@ -27,6 +27,20 @@
 - `GET /api/v1/metadata/tools`
 - `GET /api/v1/registry/versions`
 
+## P09 workflow hardening notes
+
+- `POST /api/v1/requests/sp-analysis` accepts `Idempotency-Key`. The same key with
+  the same normalized request replays the same request/job; the same key with a different
+  payload returns `IDEMPOTENCY_CONFLICT`.
+- All routes accept `X-Correlation-ID` and return `X-Correlation-ID`. If the request omits
+  it, the API generates one for response tracing and audit payloads.
+- Error bodies use `{detail, code}` for validation errors, missing resources, dependency
+  blockers, and workflow/idempotency conflicts.
+- Artifact listing is internally bounded and stable-ordered. A public pagination contract
+  remains an OpenAPI coordination item, so no query/body schema was added in P09.
+- P09 still has no publish route; artifacts may be draft, validated, review-pending,
+  approved, or rejected, but this slice blocks publish transitions.
+
 ## Platform DB persistence
 
 API repository 는 로컬 Platform MSSQL DB를 기준으로 동작한다. `.env`에서 아래를 설정한 뒤
