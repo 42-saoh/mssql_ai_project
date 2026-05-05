@@ -5,20 +5,16 @@ import re
 from ai_agent_analysis.models import EvidenceStatus, ResultSetColumnHint, ResultSetHint
 from ai_agent_analysis.sql_utils import (
     IDENTIFIER_PATTERN,
+    is_client_result_select,
     make_evidence,
     mask_comments_and_literals,
     normalize_identifier_token,
+    scan_static_sql,
     split_top_level_csv,
 )
 
 
-SELECT_FROM_RE = re.compile(r"\bSELECT\b(?P<select>.*?)\bFROM\b", re.IGNORECASE | re.DOTALL)
-INSERT_SELECT_CONTEXT_RE = re.compile(
-    r"\bINSERT\s+(?:INTO\s+)?(?:#[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_\[][^;]*)$",
-    re.IGNORECASE | re.DOTALL,
-)
-CURSOR_SELECT_CONTEXT_RE = re.compile(r"\bCURSOR\s+FOR\s*$", re.IGNORECASE | re.DOTALL)
-ASSIGNMENT_SELECT_RE = re.compile(r"^\s*SELECT\s+@[A-Za-z_][A-Za-z0-9_]*\s*=", re.IGNORECASE)
+SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
 AS_ALIAS_RE = re.compile(rf"\s+AS\s+(?P<alias>{IDENTIFIER_PATTERN})\s*$", re.IGNORECASE)
 TRAILING_ALIAS_RE = re.compile(rf"\s+(?P<alias>{IDENTIFIER_PATTERN})\s*$", re.IGNORECASE)
 SIMPLE_IDENTIFIER_RE = re.compile(
@@ -35,17 +31,19 @@ def extract_result_set_hints(
     source_name: str = "<memory>",
 ) -> list[ResultSetHint]:
     sanitized = mask_comments_and_literals(sql_text)
+    scan = scan_static_sql(sql_text)
     result_sets: list[ResultSetHint] = []
-    for match in SELECT_FROM_RE.finditer(sanitized):
+    for match in SELECT_RE.finditer(sanitized):
         select_start = match.start()
-        if not _is_client_result_select(sanitized, select_start):
+        if not is_client_result_select(sanitized, select_start, scan=scan):
             continue
-        select_list = sql_text[match.start("select") : match.end("select")]
+        select_list_start, select_list_end = _select_list_bounds(sanitized, match.end())
+        select_list = sql_text[select_list_start:select_list_end]
         columns = _extract_column_hints(
             sql_text,
             select_list,
             source_name,
-            block_offset=match.start("select"),
+            block_offset=select_list_start,
         )
         status = (
             EvidenceStatus.REVIEW_REQUIRED
@@ -134,15 +132,32 @@ def _strip_select_modifiers(select_list: str) -> str:
     return DISTINCT_RE.sub("", value).strip()
 
 
-def _is_client_result_select(sanitized_sql: str, select_start: int) -> bool:
-    statement_prefix = sanitized_sql[
-        max(0, sanitized_sql.rfind(";", 0, select_start)) : select_start
-    ]
-    if INSERT_SELECT_CONTEXT_RE.search(statement_prefix):
+def _select_list_bounds(sanitized_sql: str, select_keyword_end: int) -> tuple[int, int]:
+    depth = 0
+    index = select_keyword_end
+    while index < len(sanitized_sql):
+        char = sanitized_sql[index]
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth:
+            depth -= 1
+        elif depth == 0:
+            if char == ";":
+                return select_keyword_end, index
+            if _keyword_at(sanitized_sql, index, "FROM"):
+                return select_keyword_end, index
+        index += 1
+    return select_keyword_end, len(sanitized_sql)
+
+
+def _keyword_at(text: str, index: int, keyword: str) -> bool:
+    end = index + len(keyword)
+    if text[index:end].upper() != keyword:
         return False
-    if CURSOR_SELECT_CONTEXT_RE.search(statement_prefix):
-        return False
-    statement_tail = sanitized_sql[select_start : select_start + 120]
-    if ASSIGNMENT_SELECT_RE.match(statement_tail):
-        return False
-    return True
+    before = text[index - 1] if index > 0 else " "
+    after = text[end] if end < len(text) else " "
+    return not _is_identifier_char(before) and not _is_identifier_char(after)
+
+
+def _is_identifier_char(char: str) -> bool:
+    return char.isalnum() or char in "_#@$]"
