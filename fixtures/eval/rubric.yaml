@@ -9,11 +9,15 @@ thresholds:
   artifact_type_exact_match: true
   review_required_marker_required: true
   evidence_required_for_markdown_artifacts: true
+  confidence_shape_required: true
+  todo_shape_required: true
+  evidence_boundary_required: true
   forbidden_state_count: 0
   secret_like_value_count: 0
 reviewRequired:
   allowed:
     - ambiguous dependency metadata
+    - dependency confidence downgrade
     - draft Java/MyBatis file bundle
     - incomplete full CanonicalAnalysisModel contract
 forbidden:

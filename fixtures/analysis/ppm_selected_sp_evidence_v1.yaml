@@ -1,0 +1,81 @@
+version: ppm_selected_sp_evidence_v1
+sourceManifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+selectionMode: live_metadata
+sourceProfile: ppm
+sourceDatabase: PPM
+platformDbContext: PLF
+snapshotId: live:ppm:2026-05-05T04:47:24Z
+metadataOnly: true
+activeBlockers:
+  - DEPENDENCY_METADATA_INCOMPLETE
+forbiddenEvidence:
+  - sql_definition_text
+  - procedure_execution
+  - table_rows
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+storedProcedures:
+  - schema: dbo
+    name: GetInspItemsCd
+    complexity: simple
+    objectType: PROCEDURE
+    collectedAt: "2026-05-05T04:47:24Z"
+    evidence:
+      sourceProfile: ppm
+      sourceDatabase: PPM
+      snapshotId: live:ppm:2026-05-05T04:47:24Z
+      definitionHash: 999c1f6db938ee3a015b210659b85d9b31db3c66b7d3726a8f1113d46239ea9a
+      definitionLength: 636
+      parameterCount: 1
+      dependencyCount: 1
+      detectedPatterns:
+        - simple_dml_or_select
+    dependencyCaveats:
+      - table_dependency_links_incomplete
+    reviewRequired: true
+  - schema: dbo
+    name: PAD_GET_BAT_LIST_PRC
+    complexity: medium
+    objectType: PROCEDURE
+    collectedAt: "2026-05-05T04:47:24Z"
+    evidence:
+      sourceProfile: ppm
+      sourceDatabase: PPM
+      snapshotId: live:ppm:2026-05-05T04:47:24Z
+      definitionHash: 05a14dfe7b10e59f7b87a4497f265a0993587bd2f905771efc908ae8c7a2f7d2
+      definitionLength: 8302
+      parameterCount: 6
+      dependencyCount: 4
+      detectedPatterns:
+        - joins_or_branching
+        - simple_dml_or_select
+    dependencyCaveats:
+      - table_dependency_links_incomplete
+    reviewRequired: true
+  - schema: dbo
+    name: PCS_PY_ManageInvoiceFldSchd_PRC
+    complexity: complex
+    objectType: PROCEDURE
+    collectedAt: "2026-05-05T04:47:24Z"
+    evidence:
+      sourceProfile: ppm
+      sourceDatabase: PPM
+      snapshotId: live:ppm:2026-05-05T04:47:24Z
+      definitionHash: 5e41bdded786e9c6c44c726930d923fe134cef24a350613453fd79ca43513345
+      definitionLength: 408310
+      parameterCount: 10
+      dependencyCount: 63
+      detectedPatterns:
+        - temp_table
+        - cursor
+        - joins_or_branching
+        - simple_dml_or_select
+    dependencyCaveats:
+      - ambiguous_dependency_metadata
+      - table_dependency_links_incomplete
+    reviewRequired: true
+notes:
+  - PPM object identities are copied from the read-only pilot manifest.
+  - Procedure text is intentionally omitted; only hash, length, pattern flags, and caveats are retained.
+  - Dependency confidence must remain review-required until P10/P11 metadata evidence confirms links.

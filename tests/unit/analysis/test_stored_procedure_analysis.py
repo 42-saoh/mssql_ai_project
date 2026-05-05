@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from ai_agent_analysis import (
     analyze_stored_procedure,
@@ -20,6 +21,7 @@ EXPECTED = json.loads(
 )
 
 SQL_FIXTURES = {
+    "sp_complex_patterns_v1": ROOT / "fixtures" / "analysis" / "sp_complex_patterns_v1.sql",
     "sp_simple_crud": ROOT / "fixtures" / "mssql" / "sp_simple_crud.sql",
     "sp_txn_with_try_catch": ROOT / "fixtures" / "mssql" / "sp_txn_with_try_catch.sql",
     "sp_with_dynamic_sql": ROOT / "fixtures" / "mssql" / "sp_with_dynamic_sql.sql",
@@ -49,8 +51,16 @@ def test_analysis_core_matches_expected_fixture(fixture_name: str) -> None:
     assert result.procedure.identifier.full_name == expected["procedureFullName"]
     assert _parameters(result) == expected["parameters"]
     assert _table_references(result) == expected["tableReferences"]
+    assert _view_references(result) == expected["viewReferences"]
+    assert _function_references(result) == expected["functionReferences"]
     assert _called_procedures(result) == expected["calledProcedures"]
+    assert _call_graph(result) == expected["callGraph"]
+    assert _result_sets(result) == expected["resultSets"]
     assert _patterns(result) == expected["patterns"]
+    assert [todo.code for todo in result.todos] == expected["todoCodes"]
+    assert result.overall_confidence.status.value == expected["confidence"]["status"]
+    assert result.overall_confidence.score == expected["confidence"]["score"]
+    assert result.evidence_assessment.review_required is True
     assert result.canonical_conversion_blockers[0].code == "DOMAIN_CONTRACT_MISSING"
 
     if "tempTables" in expected:
@@ -71,8 +81,38 @@ def test_dynamic_sql_dependencies_are_not_inferred_from_string_literals() -> Non
     assert result.patterns.dynamic_sql.detected is True
     assert result.patterns.dynamic_sql.status.value == "REVIEW_REQUIRED"
     assert result.dependencies.table_references == []
+    assert result.dependencies.view_references == []
+    assert result.dependencies.function_references == []
     assert result.dependencies.called_procedures[0].full_name == "sp_executesql"
     assert result.dependencies.called_procedures[0].status.value == "REVIEW_REQUIRED"
+    assert result.result_sets == []
+    assert [todo.code for todo in result.todos] == [
+        "DYNAMIC_SQL_DEPENDENCY_REVIEW",
+        "DOMAIN_CONTRACT_MISSING",
+    ]
+
+
+def test_complex_fixture_detects_calls_functions_cursor_and_multi_result_sets() -> None:
+    sql_path = SQL_FIXTURES["sp_complex_patterns_v1"]
+    result = analyze_stored_procedure(
+        sql_path.read_text(encoding="utf-8"),
+        source_name=str(sql_path),
+    )
+
+    expected = EXPECTED["fixtures"]["sp_complex_patterns_v1"]
+    assert _view_references(result) == expected["viewReferences"]
+    assert _function_references(result) == expected["functionReferences"]
+    assert result.patterns.cursor.detected is True
+    assert result.patterns.multi_result_set.detected is True
+    assert result.result_sets[0].columns[1].name == "STATUS_NM"
+    assert result.result_sets[1].columns[0].status.value == "REVIEW_REQUIRED"
+    assert result.call_graph[0].callee == "dbo.usp_GetOrderSummary"
+    assert {summary.category for summary in result.business_rules} >= {
+        "CALL_GRAPH",
+        "DEPENDENCY",
+        "PATTERN",
+        "RESULT_SET",
+    }
 
 
 def test_schema_search_fixture_enriches_known_order_table() -> None:
@@ -110,6 +150,37 @@ def test_canonical_candidate_reports_domain_contract_blocker() -> None:
     assert candidate["blockers"][0]["code"] == "DOMAIN_CONTRACT_MISSING"
     identifier = candidate["analysis_local"]["procedure"]["identifier"]
     assert identifier["full_name"] == "dbo.usp_OrderSelect"
+    assert "overall_confidence" in candidate["analysis_local"]
+    assert "todos" in candidate["analysis_local"]
+
+
+def test_ppm_selected_sp_evidence_fixture_is_metadata_only() -> None:
+    fixture_path = ROOT / "fixtures" / "analysis" / "ppm_selected_sp_evidence_v1.yaml"
+    payload = yaml.safe_load(fixture_path.read_text(encoding="utf-8"))
+
+    assert payload["selectionMode"] == "live_metadata"
+    assert (
+        payload["sourceManifest"]
+        == "fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml"
+    )
+    assert payload["activeBlockers"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
+    assert [procedure["complexity"] for procedure in payload["storedProcedures"]] == [
+        "simple",
+        "medium",
+        "complex",
+    ]
+    assert {
+        f"{procedure['schema']}.{procedure['name']}" for procedure in payload["storedProcedures"]
+    } == {
+        "dbo.GetInspItemsCd",
+        "dbo.PAD_GET_BAT_LIST_PRC",
+        "dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+    }
+    assert _secret_like_values(payload) == []
+    forbidden_text = fixture_path.read_text(encoding="utf-8").lower()
+    assert "definition:" not in forbidden_text
+    assert "row_data" not in forbidden_text
+    assert "password" not in forbidden_text
 
 
 def _parameters(result) -> list[dict[str, str]]:
@@ -129,8 +200,33 @@ def _table_references(result) -> list[dict[str, str]]:
             "fullName": reference.full_name,
             "objectType": reference.object_type.value,
             "operation": reference.operation.value,
+            "status": reference.status.value,
         }
         for reference in result.dependencies.table_references
+    ]
+
+
+def _view_references(result) -> list[dict[str, str]]:
+    return [
+        {
+            "fullName": reference.full_name,
+            "objectType": reference.object_type.value,
+            "operation": reference.operation.value,
+            "status": reference.status.value,
+        }
+        for reference in result.dependencies.view_references
+    ]
+
+
+def _function_references(result) -> list[dict[str, str]]:
+    return [
+        {
+            "fullName": reference.full_name,
+            "objectType": reference.object_type.value,
+            "operation": reference.operation.value,
+            "status": reference.status.value,
+        }
+        for reference in result.dependencies.function_references
     ]
 
 
@@ -152,6 +248,8 @@ def _patterns(result) -> dict[str, bool]:
         "tryCatch": result.patterns.try_catch.detected,
         "dynamicSql": result.patterns.dynamic_sql.detected,
         "tempTable": result.patterns.temp_table.detected,
+        "cursor": result.patterns.cursor.detected,
+        "multiResultSet": result.patterns.multi_result_set.detected,
     }
 
 
@@ -171,3 +269,47 @@ def _metadata_enrichment(result) -> list[dict[str, str]]:
         }
         for enrichment in result.metadata_enrichment
     ]
+
+
+def _call_graph(result) -> list[dict[str, str]]:
+    return [
+        {
+            "caller": edge.caller,
+            "callee": edge.callee,
+            "status": edge.status.value,
+        }
+        for edge in result.call_graph
+    ]
+
+
+def _result_sets(result) -> list[dict[str, object]]:
+    return [
+        {
+            "ordinal": result_set.ordinal,
+            "status": result_set.status.value,
+            "columns": [
+                {
+                    "name": column.name,
+                    "status": column.status.value,
+                }
+                for column in result_set.columns
+            ],
+        }
+        for result_set in result.result_sets
+    ]
+
+
+def _secret_like_values(payload, path: str = "$") -> list[str]:
+    offenders: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key).lower()
+            nested_path = f"{path}.{key}"
+            if any(marker in key_text for marker in ("password", "secret", "token", "api_key")):
+                if value not in ("", None, 0):
+                    offenders.append(nested_path)
+            offenders.extend(_secret_like_values(value, nested_path))
+    elif isinstance(payload, list):
+        for index, item in enumerate(payload):
+            offenders.extend(_secret_like_values(item, f"{path}[{index}]"))
+    return offenders

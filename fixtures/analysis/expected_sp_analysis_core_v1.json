@@ -1,6 +1,99 @@
 {
-  "analysisVersion": "analysis-local-v0.1",
+  "analysisVersion": "analysis-local-v0.2",
   "fixtures": {
+    "sp_complex_patterns_v1": {
+      "procedureFullName": "dbo.usp_OrderComplex",
+      "parameters": [
+        {
+          "name": "@ORDER_ID",
+          "dataType": "INT",
+          "direction": "INPUT"
+        }
+      ],
+      "tableReferences": [
+        {
+          "fullName": "dbo.TB_ORDER",
+          "objectType": "TABLE",
+          "operation": "READ",
+          "status": "OBSERVED"
+        }
+      ],
+      "viewReferences": [
+        {
+          "fullName": "dbo.VW_ORDER_SUMMARY",
+          "objectType": "VIEW",
+          "operation": "READ",
+          "status": "REVIEW_REQUIRED"
+        }
+      ],
+      "functionReferences": [
+        {
+          "fullName": "dbo.fn_NormalizeOrderStatus",
+          "objectType": "FUNCTION",
+          "operation": "EXECUTE",
+          "status": "OBSERVED"
+        }
+      ],
+      "calledProcedures": [
+        {
+          "fullName": "dbo.usp_GetOrderSummary",
+          "objectType": "PROCEDURE",
+          "status": "OBSERVED",
+          "isDynamicSqlExecutor": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "dbo.usp_OrderComplex",
+          "callee": "dbo.usp_GetOrderSummary",
+          "status": "OBSERVED"
+        }
+      ],
+      "resultSets": [
+        {
+          "ordinal": 1,
+          "status": "OBSERVED",
+          "columns": [
+            {
+              "name": "ORDER_ID",
+              "status": "OBSERVED"
+            },
+            {
+              "name": "STATUS_NM",
+              "status": "OBSERVED"
+            }
+          ]
+        },
+        {
+          "ordinal": 2,
+          "status": "REVIEW_REQUIRED",
+          "columns": [
+            {
+              "name": null,
+              "status": "REVIEW_REQUIRED"
+            }
+          ]
+        }
+      ],
+      "patterns": {
+        "transaction": false,
+        "tryCatch": false,
+        "dynamicSql": false,
+        "tempTable": false,
+        "cursor": true,
+        "multiResultSet": true
+      },
+      "todoCodes": [
+        "MULTI_RESULT_SET_REVIEW",
+        "VIEW_DEPENDENCY_TYPE_REVIEW",
+        "RESULT_SET_COLUMN_REVIEW",
+        "DOMAIN_CONTRACT_MISSING"
+      ],
+      "confidence": {
+        "status": "REVIEW_REQUIRED",
+        "score": 0.48
+      }
+    },
     "sp_simple_crud": {
       "procedureFullName": "dbo.usp_OrderSelect",
       "parameters": [
@@ -14,15 +107,41 @@
         {
           "fullName": "dbo.TB_ORDER",
           "objectType": "TABLE",
-          "operation": "READ"
+          "operation": "READ",
+          "status": "OBSERVED"
         }
       ],
+      "viewReferences": [],
+      "functionReferences": [],
       "calledProcedures": [],
+      "callGraph": [],
+      "resultSets": [
+        {
+          "ordinal": 1,
+          "status": "OBSERVED",
+          "columns": [
+            {
+              "name": "ORDER_ID",
+              "status": "OBSERVED"
+            },
+            {
+              "name": "CUSTOMER_ID",
+              "status": "OBSERVED"
+            },
+            {
+              "name": "ORDER_DATE",
+              "status": "OBSERVED"
+            }
+          ]
+        }
+      ],
       "patterns": {
         "transaction": false,
         "tryCatch": false,
         "dynamicSql": false,
-        "tempTable": false
+        "tempTable": false,
+        "cursor": false,
+        "multiResultSet": false
       },
       "metadataEnrichment": [
         {
@@ -30,7 +149,14 @@
           "candidateFullName": "dbo.TB_ORDER",
           "status": "OBSERVED"
         }
-      ]
+      ],
+      "todoCodes": [
+        "DOMAIN_CONTRACT_MISSING"
+      ],
+      "confidence": {
+        "status": "REVIEW_REQUIRED",
+        "score": 0.87
+      }
     },
     "sp_txn_with_try_catch": {
       "procedureFullName": "dbo.usp_OrderSave",
@@ -50,15 +176,29 @@
         {
           "fullName": "dbo.TB_ORDER",
           "objectType": "TABLE",
-          "operation": "WRITE"
+          "operation": "WRITE",
+          "status": "OBSERVED"
         }
       ],
+      "viewReferences": [],
+      "functionReferences": [],
       "calledProcedures": [],
+      "callGraph": [],
+      "resultSets": [],
       "patterns": {
         "transaction": true,
         "tryCatch": true,
         "dynamicSql": false,
-        "tempTable": false
+        "tempTable": false,
+        "cursor": false,
+        "multiResultSet": false
+      },
+      "todoCodes": [
+        "DOMAIN_CONTRACT_MISSING"
+      ],
+      "confidence": {
+        "status": "REVIEW_REQUIRED",
+        "score": 0.87
       }
     },
     "sp_with_dynamic_sql": {
@@ -71,6 +211,8 @@
         }
       ],
       "tableReferences": [],
+      "viewReferences": [],
+      "functionReferences": [],
       "calledProcedures": [
         {
           "fullName": "sp_executesql",
@@ -79,11 +221,29 @@
           "isDynamicSqlExecutor": true
         }
       ],
+      "callGraph": [
+        {
+          "caller": "dbo.usp_OrderSearchDynamic",
+          "callee": "sp_executesql",
+          "status": "REVIEW_REQUIRED"
+        }
+      ],
+      "resultSets": [],
       "patterns": {
         "transaction": false,
         "tryCatch": false,
         "dynamicSql": true,
-        "tempTable": false
+        "tempTable": false,
+        "cursor": false,
+        "multiResultSet": false
+      },
+      "todoCodes": [
+        "DYNAMIC_SQL_DEPENDENCY_REVIEW",
+        "DOMAIN_CONTRACT_MISSING"
+      ],
+      "confidence": {
+        "status": "REVIEW_REQUIRED",
+        "score": 0.44
       },
       "reviewMarkers": [
         "DYNAMIC_SQL_DEPENDENCY_REVIEW"
@@ -96,25 +256,32 @@
         {
           "fullName": "dbo.TB_ORDER",
           "objectType": "TABLE",
-          "operation": "READ"
+          "operation": "READ",
+          "status": "OBSERVED"
         },
         {
           "fullName": "#TMP_ORDER",
           "objectType": "TEMP_TABLE",
-          "operation": "READ"
+          "operation": "READ",
+          "status": "OBSERVED"
         },
         {
           "fullName": "#TMP_ORDER",
           "objectType": "TEMP_TABLE",
-          "operation": "WRITE"
+          "operation": "WRITE",
+          "status": "OBSERVED"
         },
         {
           "fullName": "#TMP_ORDER",
           "objectType": "TEMP_TABLE",
-          "operation": "DECLARE"
+          "operation": "DECLARE",
+          "status": "OBSERVED"
         }
       ],
+      "viewReferences": [],
+      "functionReferences": [],
       "calledProcedures": [],
+      "callGraph": [],
       "tempTables": [
         {
           "name": "#TMP_ORDER",
@@ -124,11 +291,33 @@
           ]
         }
       ],
+      "resultSets": [
+        {
+          "ordinal": 1,
+          "status": "REVIEW_REQUIRED",
+          "columns": [
+            {
+              "name": null,
+              "status": "REVIEW_REQUIRED"
+            }
+          ]
+        }
+      ],
       "patterns": {
         "transaction": false,
         "tryCatch": false,
         "dynamicSql": false,
-        "tempTable": true
+        "tempTable": true,
+        "cursor": false,
+        "multiResultSet": false
+      },
+      "todoCodes": [
+        "RESULT_SET_COLUMN_REVIEW",
+        "DOMAIN_CONTRACT_MISSING"
+      ],
+      "confidence": {
+        "status": "REVIEW_REQUIRED",
+        "score": 0.74
       }
     }
   }

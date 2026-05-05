@@ -3,7 +3,8 @@
 현재 file-based interface:
 
 - `request.json` — fixture-first OpenAPI-style request
-- `canonical_analysis_candidate.json` — review-required canonical payload sample
+- `canonical_analysis_candidate.json` — review-required canonical payload sample with confidence,
+  TODO, result-set hint, and evidence-boundary fields
 - `artifact_payloads.json` — stable workflow/artifact expectation summary
 - `rubric.yaml` — pass/fail thresholds and forbidden boundary checks
 - `productization_readiness_v1.yaml` — P08A PPM manifest 를 P09~P16 eval/demo/release gate 에 연결하는 metadata-only readiness fixture

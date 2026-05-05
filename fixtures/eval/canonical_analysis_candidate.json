@@ -11,8 +11,8 @@
     }
   ],
   "analysis_local": {
-    "analysis_version": "analysis-local-v0.1",
-    "contract_target": "CanonicalAnalysisModel-compatible-local-v0.1",
+    "analysis_version": "analysis-local-v0.2",
+    "contract_target": "CanonicalAnalysisModel-compatible-local-v0.2",
     "source_name": "fixtures/mcp/metadata_snapshot.json#/procedures/0",
     "source_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "procedure": {
@@ -86,6 +86,8 @@
           ]
         }
       ],
+      "view_references": [],
+      "function_references": [],
       "called_procedures": [],
       "temp_tables": []
     },
@@ -113,7 +115,167 @@
         "detected": false,
         "status": "OBSERVED",
         "evidence": []
+      },
+      "cursor": {
+        "name": "cursor",
+        "detected": false,
+        "status": "OBSERVED",
+        "evidence": []
+      },
+      "multi_result_set": {
+        "name": "multi_result_set",
+        "detected": false,
+        "status": "OBSERVED",
+        "evidence": []
       }
+    },
+    "result_sets": [
+      {
+        "ordinal": 1,
+        "source": "METADATA_HINT",
+        "status": "OBSERVED",
+        "columns": [
+          {
+            "name": "ORDER_ID",
+            "expression": "ORDER_ID",
+            "status": "OBSERVED",
+            "evidence": [
+              {
+                "source": "fixtures/mcp/metadata_snapshot.json",
+                "line": null,
+                "snippet": "/procedures/0/resultSetHints/0/columns/0",
+                "status": "OBSERVED"
+              }
+            ]
+          },
+          {
+            "name": "CUSTOMER_ID",
+            "expression": "CUSTOMER_ID",
+            "status": "OBSERVED",
+            "evidence": [
+              {
+                "source": "fixtures/mcp/metadata_snapshot.json",
+                "line": null,
+                "snippet": "/procedures/0/resultSetHints/0/columns/1",
+                "status": "OBSERVED"
+              }
+            ]
+          },
+          {
+            "name": "ORDER_DATE",
+            "expression": "ORDER_DATE",
+            "status": "OBSERVED",
+            "evidence": [
+              {
+                "source": "fixtures/mcp/metadata_snapshot.json",
+                "line": null,
+                "snippet": "/procedures/0/resultSetHints/0/columns/2",
+                "status": "OBSERVED"
+              }
+            ]
+          },
+          {
+            "name": "STATUS_CD",
+            "expression": "STATUS_CD",
+            "status": "OBSERVED",
+            "evidence": [
+              {
+                "source": "fixtures/mcp/metadata_snapshot.json",
+                "line": null,
+                "snippet": "/procedures/0/resultSetHints/0/columns/3",
+                "status": "OBSERVED"
+              }
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "source": "fixtures/mcp/metadata_snapshot.json",
+            "line": null,
+            "snippet": "/procedures/0/resultSetHints/0",
+            "status": "OBSERVED"
+          }
+        ]
+      }
+    ],
+    "call_graph": [],
+    "business_rules": [
+      {
+        "category": "DEPENDENCY",
+        "summary": "Reads from dbo.TB_ORDER (TABLE).",
+        "status": "OBSERVED",
+        "evidence": [
+          {
+            "source": "fixtures/mcp/metadata_snapshot.json",
+            "line": null,
+            "snippet": "/procedures/0/dependencies/0",
+            "status": "OBSERVED"
+          }
+        ],
+        "inferred_from": [
+          "metadata dependency"
+        ]
+      },
+      {
+        "category": "RESULT_SET",
+        "summary": "Returns order summary header columns.",
+        "status": "INFERRED_DESCRIPTION",
+        "evidence": [
+          {
+            "source": "fixtures/mcp/metadata_snapshot.json",
+            "line": null,
+            "snippet": "/procedures/0/resultSetHints/0",
+            "status": "OBSERVED"
+          }
+        ],
+        "inferred_from": [
+          "metadata result-set hint"
+        ]
+      }
+    ],
+    "todos": [
+      {
+        "code": "DEPENDENCY_METADATA_REVIEW",
+        "message": "Review ambiguous TB_ORDER_LINE dependency before approval.",
+        "status": "REVIEW_REQUIRED",
+        "evidence": [
+          {
+            "source": "fixtures/mcp/metadata_snapshot.json",
+            "line": null,
+            "snippet": "/procedures/0/dependencies/1",
+            "status": "REVIEW_REQUIRED"
+          }
+        ]
+      },
+      {
+        "code": "DOMAIN_CONTRACT_MISSING",
+        "message": "Full CanonicalAnalysisModel expansion remains a follow-up.",
+        "status": "REVIEW_REQUIRED",
+        "evidence": []
+      }
+    ],
+    "evidence_assessment": {
+      "status": "REVIEW_REQUIRED",
+      "review_required": true,
+      "evidence_ref_count": 9,
+      "observed_ref_count": 8,
+      "review_required_ref_count": 1,
+      "todo_count": 2,
+      "notes": [
+        "Ambiguous dependency metadata remains review-required.",
+        "Full domain canonical contract remains blocked."
+      ]
+    },
+    "overall_confidence": {
+      "score": 0.72,
+      "status": "REVIEW_REQUIRED",
+      "rationale": "Metadata-backed candidate with one ambiguous dependency and a domain contract blocker.",
+      "factors": [
+        "procedure identity and parameters are metadata-backed",
+        "result-set hint is metadata-backed",
+        "one dependency remains review-required",
+        "full CanonicalAnalysisModel contract is not implemented"
+      ]
     },
     "review_markers": [
       {
