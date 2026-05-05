@@ -124,6 +124,45 @@ class MetadataToolSummary(ApiModel):
     read_only: Literal[True] = Field(default=True, alias="readOnly")
 
 
+class MetadataSearchBlocker(ApiModel):
+    code: str
+    message: str
+
+
+class MetadataObjectIdentity(ApiModel):
+    schema_name: str = Field(alias="schema")
+    name: str
+    type: Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+
+
+class MetadataSearchResult(ApiModel):
+    object_identity: MetadataObjectIdentity = Field(alias="objectIdentity")
+    source_profile: str = Field(alias="sourceProfile")
+    source_database: str = Field(alias="sourceDatabase")
+    snapshot_id: str | None = Field(default=None, alias="snapshotId")
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list, alias="evidenceRefs")
+    caveats: list[str] = Field(default_factory=list)
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
+
+
+class MetadataSearchResponse(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId")
+    query: str
+    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
+        alias="objectTypes"
+    )
+    limit: int
+    source_profile: str = Field(alias="sourceProfile")
+    source_database: str = Field(alias="sourceDatabase")
+    snapshot_id: str | None = Field(default=None, alias="snapshotId")
+    collected_at: str | None = Field(default=None, alias="collectedAt")
+    results: list[MetadataSearchResult] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
+
+
 class RegistryVersion(ApiModel):
     registry_type: Literal["PROMPT", "TEMPLATE", "POLICY", "DB_PROFILE", "GENERATOR"] = Field(
         alias="registryType"

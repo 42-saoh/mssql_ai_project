@@ -45,6 +45,33 @@ def _fixture_request(outputs: list[str] | None = None) -> SPAnalysisRequest:
     )
 
 
+def _passed_sp_analysis_content() -> str:
+    return "\n".join(
+        [
+            "# Analysis",
+            "",
+            "## input_interpretation",
+            "dbo.usp_demo",
+            "",
+            "## analysis_summary",
+            "dbo.usp_demo is represented by metadata-only evidence.",
+            "",
+            "## procedure_signature",
+            "dbo.usp_demo()",
+            "",
+            "## evidence_summary",
+            "dbo.usp_demo",
+            "",
+            "## assumptions_and_todo",
+            "None.",
+            "",
+            "## review_checklist",
+            "- [x] Evidence refs checked.",
+            "",
+        ]
+    )
+
+
 def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
@@ -153,6 +180,7 @@ def test_tracking_context_is_carried_to_request_job_and_audit_payloads() -> None
     assert all("stage" in event.payload for event in repository.audit_events)
     assert all("actor" in event.payload for event in repository.audit_events)
     assert all("targetRef" in event.payload for event in repository.audit_events)
+    assert all(event.audit_id.startswith("audit_") for event in repository.audit_events)
 
 
 def test_repository_rejects_unsupported_job_transition() -> None:
@@ -177,6 +205,39 @@ def test_repository_rejects_unsupported_job_transition() -> None:
             status=JobStatus.GENERATING,
             current_step=WorkflowStepType.GENERATE,
         )
+
+
+def test_memory_repository_fail_job_persists_error_state_and_request_status() -> None:
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={},
+        request_hash="hash-fail-job",
+        correlation_id="corr-fail-job",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+
+    failed = repository.fail_job(
+        job.job_id,
+        code="TEST_FAILURE",
+        message="metadata fixture unavailable",
+    )
+
+    stored = repository.get_job(job.job_id)
+    assert failed.status == JobStatus.FAILED
+    assert failed.error_code == "TEST_FAILURE"
+    assert stored is not None
+    assert stored.status == JobStatus.FAILED
+    assert stored.error_code == "TEST_FAILURE"
+    assert stored.error_message == "metadata fixture unavailable"
+    assert repository.requests[request.request_id].status == JobStatus.FAILED
+    audit = repository.audit_events[-1]
+    assert audit.action == "JOB_FAILED"
+    assert audit.payload["stage"] == "JOB"
+    assert audit.payload["code"] == "TEST_FAILURE"
 
 
 def test_artifact_publish_state_blocks_validation_and_approval_mutation() -> None:
@@ -251,6 +312,63 @@ def test_approve_requires_latest_passed_validation_report() -> None:
     assert gate_report.status == "FAILED"
     assert gate_report.storage_result == "FAIL"
     assert gate_report.checks[0]["ruleId"] == "workflow.approval.before_publish"
+
+
+def test_approve_after_passed_validation_satisfies_gate_without_publishing() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={},
+        request_hash="hash-approve-pass",
+        correlation_id="corr-approve-pass",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    artifact = repository.add_artifact(
+        job_id=job.job_id,
+        artifact_type=ArtifactType.SP_ANALYSIS_DOC,
+        title="Passed Analysis",
+        content=_passed_sp_analysis_content(),
+        evidence_refs=[
+            {
+                "type": "MSSQL_METADATA",
+                "objectRef": "dbo.usp_demo",
+                "locator": "fixture.metadata",
+            }
+        ],
+        generator_version="test",
+        registry_refs=("prompt@test",),
+        assumptions=(),
+        review_required=False,
+    )
+
+    validation = service.validate_artifact(
+        artifact.artifact_id,
+        correlation_id="corr-approve-pass",
+    )
+    approval = service.record_approval_decision(
+        artifact_id=artifact.artifact_id,
+        decision="APPROVE",
+        reviewer="reviewer@example.com",
+        comment="validated and approved",
+        validation_report_id=validation.validation_report_id,
+        correlation_id="corr-approve-pass",
+    )
+    gate_report = service.evaluate_publish_gate(artifact.artifact_id)
+
+    stored = repository.artifacts[artifact.artifact_id]
+    assert validation.status == "PASSED"
+    assert approval.decision == "APPROVE"
+    assert approval.storage_decision == "APPROVED"
+    assert gate_report.status == "PASSED"
+    assert gate_report.storage_result == "PASS"
+    assert stored.status == ArtifactStatus.APPROVED
+    assert stored.status != ArtifactStatus.PUBLISHED
+    assert "PUBLISHED" not in {item.status.value for item in repository.artifacts.values()}
+    assert repository.audit_events[-1].action == "PUBLISH_GATE_EVALUATED"
 
 
 def test_approval_decision_requires_latest_validation_context() -> None:

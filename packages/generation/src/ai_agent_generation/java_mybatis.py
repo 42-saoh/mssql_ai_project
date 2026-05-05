@@ -5,11 +5,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from ai_agent_domain import ArtifactType, RequestedOutputType
+from ai_agent_domain import ArtifactStatus, ArtifactType, RequestedOutputType
 
 from ai_agent_generation.models import (
     ColumnSpec,
     DraftFile,
+    GENERATOR_VERSION,
     GenerationContext,
     RenderedArtifact,
     RenderedBundle,
@@ -184,9 +185,21 @@ class JavaMyBatisDraftRendererBase:
         else:
             validate_generation_assets(assets, template_ids=(self.template_id,))
             self.assets = assets
+        self._validate_template_requested_output()
 
     def names(self, context: GenerationContext) -> JavaMyBatisNames:
         return JavaMyBatisNames(context=context, assets=self.assets)
+
+    def _validate_template_requested_output(self) -> None:
+        registry_requested_output = str(
+            self.assets.template(self.template_id)["requestedOutputType"]
+        )
+        if registry_requested_output != self.requested_output_type:
+            raise GenerationPolicyError(
+                "Java/MyBatis template registry requestedOutputType drift: "
+                f"template `{self.template_id}` declares `{registry_requested_output}`, "
+                f"renderer expects `{self.requested_output_type}`"
+            )
 
     def render_manifest(
         self,
@@ -236,6 +249,14 @@ class JavaMyBatisDraftRendererBase:
             f"- policy: `{self.assets.policy_ref}`",
             f"- template: `{self.assets.template_ref(self.template_id)}`",
             f"- registry: `{self.assets.registry_version}`",
+            "",
+            "## generator_metadata",
+            f"- generatorVersion: `{GENERATOR_VERSION}`",
+            f"- requestedOutputType: `{self.requested_output_type}`",
+            f"- artifactStatus: `{ArtifactStatus.DRAFT.value}`",
+            "- reviewRequired: `true`",
+            "- approvalRequired: `true`",
+            "- publishBoundary: `blocked_until_validation_review_approval`",
             "",
             "## input_snapshot",
             f"- sanitizedSnapshotHash: `{context.input_snapshot_hash}`",

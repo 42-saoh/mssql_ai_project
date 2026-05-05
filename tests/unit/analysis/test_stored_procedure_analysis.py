@@ -115,6 +115,151 @@ def test_complex_fixture_detects_calls_functions_cursor_and_multi_result_sets() 
     }
 
 
+def test_cte_alias_is_not_table_dependency_and_cte_body_is_not_result_set() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_OrderCte
+    AS
+    BEGIN
+        WITH order_cte AS (
+            SELECT ORDER_ID, CUSTOMER_ID
+            FROM dbo.TB_ORDER
+        )
+        SELECT ORDER_ID
+        FROM order_cte;
+
+        SELECT 1 AS STATIC_STATUS;
+    END
+    """
+
+    result = analyze_stored_procedure(sql, source_name="cte-regression.sql")
+
+    assert _table_references(result) == [
+        {
+            "fullName": "dbo.TB_ORDER",
+            "objectType": "TABLE",
+            "operation": "READ",
+            "status": "OBSERVED",
+        }
+    ]
+    assert _result_sets(result) == [
+        {
+            "ordinal": 1,
+            "status": "OBSERVED",
+            "columns": [{"name": "ORDER_ID", "status": "OBSERVED"}],
+        },
+        {
+            "ordinal": 2,
+            "status": "OBSERVED",
+            "columns": [{"name": "STATIC_STATUS", "status": "OBSERVED"}],
+        },
+    ]
+    assert result.patterns.multi_result_set.detected is True
+
+
+def test_cte_alias_scope_does_not_hide_later_table_reference() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_OrderCteScope
+    AS
+    BEGIN
+        WITH base_cte AS (
+            SELECT ORDER_ID
+            FROM dbo.TB_ORDER
+        ),
+        order_cte AS (
+            SELECT ORDER_ID
+            FROM base_cte
+        )
+        SELECT ORDER_ID
+        FROM order_cte;
+
+        SELECT ORDER_ID
+        FROM order_cte;
+    END
+    """
+
+    result = analyze_stored_procedure(sql, source_name="cte-scope-regression.sql")
+
+    assert _table_references(result) == [
+        {
+            "fullName": "dbo.TB_ORDER",
+            "objectType": "TABLE",
+            "operation": "READ",
+            "status": "OBSERVED",
+        },
+        {
+            "fullName": "order_cte",
+            "objectType": "TABLE",
+            "operation": "READ",
+            "status": "OBSERVED",
+        },
+    ]
+
+
+def test_plain_variable_assignment_does_not_trigger_dynamic_sql() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_OrderCount
+    AS
+    BEGIN
+        DECLARE @COUNT INT;
+        SELECT @COUNT = COUNT(*)
+        FROM dbo.TB_ORDER;
+
+        SELECT @COUNT AS ORDER_COUNT;
+    END
+    """
+
+    result = analyze_stored_procedure(sql, source_name="assignment-regression.sql")
+
+    assert result.patterns.dynamic_sql.detected is False
+    assert result.dependencies.called_procedures == []
+    assert _table_references(result) == [
+        {
+            "fullName": "dbo.TB_ORDER",
+            "objectType": "TABLE",
+            "operation": "READ",
+            "status": "OBSERVED",
+        }
+    ]
+    assert _result_sets(result) == [
+        {
+            "ordinal": 1,
+            "status": "OBSERVED",
+            "columns": [{"name": "ORDER_COUNT", "status": "OBSERVED"}],
+        }
+    ]
+
+
+def test_exec_parenthesized_variable_is_review_required_dynamic_sql() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_OrderDynamicExec
+    AS
+    BEGIN
+        DECLARE @SQL NVARCHAR(MAX);
+        SET @SQL = N'SELECT * FROM dbo.TB_ORDER';
+        EXEC(@SQL);
+    END
+    """
+
+    result = analyze_stored_procedure(sql, source_name="exec-dynamic-regression.sql")
+
+    assert result.patterns.dynamic_sql.detected is True
+    assert result.patterns.dynamic_sql.status.value == "REVIEW_REQUIRED"
+    assert _called_procedures(result) == [
+        {
+            "fullName": "@SQL",
+            "objectType": "PROCEDURE",
+            "status": "REVIEW_REQUIRED",
+            "isDynamicSqlExecutor": True,
+        }
+    ]
+    assert result.dependencies.table_references == []
+    assert result.result_sets == []
+    assert [todo.code for todo in result.todos] == [
+        "DYNAMIC_SQL_DEPENDENCY_REVIEW",
+        "DOMAIN_CONTRACT_MISSING",
+    ]
+
+
 def test_schema_search_fixture_enriches_known_order_table() -> None:
     sql_path = SQL_FIXTURES["sp_simple_crud"]
     schema_fixture = load_schema_search_fixture(
@@ -148,6 +293,11 @@ def test_canonical_candidate_reports_domain_contract_blocker() -> None:
     assert candidate["target_contract"] == "CanonicalAnalysisModel"
     assert candidate["status"] == "REVIEW_REQUIRED"
     assert candidate["blockers"][0]["code"] == "DOMAIN_CONTRACT_MISSING"
+    assert candidate["evidenceRefs"]
+    assert {ref["type"] for ref in candidate["evidenceRefs"]} == {"STATIC_ANALYSIS"}
+    assert {ref["objectRef"] for ref in candidate["evidenceRefs"]} == {
+        "dbo.usp_OrderSelect"
+    }
     identifier = candidate["analysis_local"]["procedure"]["identifier"]
     assert identifier["full_name"] == "dbo.usp_OrderSelect"
     assert "overall_confidence" in candidate["analysis_local"]

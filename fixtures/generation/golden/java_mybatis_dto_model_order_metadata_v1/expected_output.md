@@ -14,6 +14,14 @@
 - template: `template:java_mybatis_dto_model_bundle@0.1.0`
 - registry: `java_mybatis_templates_v1`
 
+## generator_metadata
+- generatorVersion: `generation-core-0.1.0`
+- requestedOutputType: `DTO_MODEL_DRAFT`
+- artifactStatus: `DRAFT`
+- reviewRequired: `true`
+- approvalRequired: `true`
+- publishBoundary: `blocked_until_validation_review_approval`
+
 ## input_snapshot
 - sanitizedSnapshotHash: `8850f7880cdf3aba79c472483b3878e825005d11c81a9690bb6f5e1224496d0c`
 - sanitizedSnapshot:

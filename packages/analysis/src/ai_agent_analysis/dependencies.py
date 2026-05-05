@@ -18,6 +18,7 @@ from ai_agent_analysis.sql_utils import (
     make_evidence,
     mask_comments_and_literals,
     parse_identifier,
+    scan_static_sql,
 )
 
 
@@ -64,6 +65,10 @@ EXEC_RE = re.compile(
     rf"\bEXEC(?:UTE)?\s+(?P<target>{QUALIFIED_VARIABLE_OR_IDENTIFIER_PATTERN})",
     re.IGNORECASE,
 )
+EXEC_PAREN_RE = re.compile(
+    rf"\bEXEC(?:UTE)?\s*\(\s*(?P<target>{QUALIFIED_VARIABLE_OR_IDENTIFIER_PATTERN})\s*\)",
+    re.IGNORECASE,
+)
 FUNCTION_CALL_RE = re.compile(
     rf"(?P<target>{IDENTIFIER_PATTERN}\s*\.\s*{IDENTIFIER_PATTERN})\s*\(",
     re.IGNORECASE,
@@ -104,6 +109,7 @@ def extract_table_references(
     source_name: str = "<memory>",
 ) -> list[ObjectReference]:
     sanitized = mask_comments_and_literals(sql_text)
+    scan = scan_static_sql(sql_text)
     references: list[ObjectReference] = []
     seen: set[tuple[str, DependencyOperation, ObjectType]] = set()
     for operation, pattern in TABLE_REFERENCE_PATTERNS:
@@ -116,6 +122,8 @@ def extract_table_references(
                 continue
             identifier = parse_identifier(target)
             if not identifier.object_name or _is_keyword(identifier.object_name):
+                continue
+            if scan.is_cte_reference(identifier, match.start("target")):
                 continue
             object_type, status = _classify_relation_reference(identifier.object_name)
             key = (identifier.full_name.upper(), operation, object_type)
@@ -147,14 +155,22 @@ def extract_procedure_calls(sql_text: str, *, source_name: str = "<memory>") -> 
     sanitized = mask_comments_and_literals(sql_text)
     calls: list[ProcedureCall] = []
     seen: set[str] = set()
-    for match in EXEC_RE.finditer(sanitized):
+    exec_matches = [
+        *[(match, False) for match in EXEC_RE.finditer(sanitized)],
+        *[(match, True) for match in EXEC_PAREN_RE.finditer(sanitized)],
+    ]
+    for match, force_dynamic_review in sorted(exec_matches, key=lambda item: item[0].start()):
         target = match.group("target")
         identifier = parse_identifier(target)
         if not identifier.object_name:
             continue
         object_name_lower = identifier.object_name.lower()
         is_variable_exec = identifier.object_name.startswith("@")
-        is_dynamic_executor = object_name_lower in SYSTEM_DYNAMIC_EXECUTORS or is_variable_exec
+        is_dynamic_executor = (
+            object_name_lower in SYSTEM_DYNAMIC_EXECUTORS
+            or is_variable_exec
+            or force_dynamic_review
+        )
         status = EvidenceStatus.REVIEW_REQUIRED if is_dynamic_executor else EvidenceStatus.OBSERVED
         object_type = (
             ObjectType.SYSTEM_PROCEDURE

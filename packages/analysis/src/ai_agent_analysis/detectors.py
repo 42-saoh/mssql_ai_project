@@ -10,8 +10,10 @@ from ai_agent_analysis.models import (
     TempTableFinding,
 )
 from ai_agent_analysis.sql_utils import (
+    is_client_result_select,
     make_evidence,
     mask_comments_and_literals,
+    scan_static_sql,
     split_top_level_csv,
 )
 
@@ -24,10 +26,6 @@ TRY_RE = re.compile(r"\bBEGIN\s+TRY\b", re.IGNORECASE)
 CATCH_RE = re.compile(r"\bBEGIN\s+CATCH\b", re.IGNORECASE)
 DYNAMIC_SQL_RE = re.compile(
     r"\bsp_executesql\b|\bEXEC(?:UTE)?\s*\(|\bEXEC(?:UTE)?\s+@[A-Za-z_][A-Za-z0-9_]*\b",
-    re.IGNORECASE,
-)
-SQL_VARIABLE_RE = re.compile(
-    r"\b(?:DECLARE|SET|SELECT)\s+@[A-Za-z_][A-Za-z0-9_]*(?:\s+NVARCHAR|\s*=)",
     re.IGNORECASE,
 )
 CREATE_TEMP_TABLE_RE = re.compile(
@@ -45,16 +43,11 @@ CURSOR_RE = re.compile(
     re.IGNORECASE,
 )
 SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
-INSERT_SELECT_CONTEXT_RE = re.compile(
-    r"\bINSERT\s+(?:INTO\s+)?(?:#[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_\[][^;]*)$",
-    re.IGNORECASE | re.DOTALL,
-)
-CURSOR_SELECT_CONTEXT_RE = re.compile(r"\bCURSOR\s+FOR\s*$", re.IGNORECASE | re.DOTALL)
-ASSIGNMENT_SELECT_RE = re.compile(r"^\s*SELECT\s+@[A-Za-z_][A-Za-z0-9_]*\s*=", re.IGNORECASE)
 
 
 def detect_patterns(sql_text: str, *, source_name: str = "<memory>") -> PatternSummary:
     sanitized = mask_comments_and_literals(sql_text)
+    scan = scan_static_sql(sql_text)
     transaction_evidence = [
         make_evidence(sql_text, match.start(), source_name)
         for match in TRANSACTION_RE.finditer(sanitized)
@@ -71,10 +64,6 @@ def detect_patterns(sql_text: str, *, source_name: str = "<memory>") -> PatternS
         make_evidence(sql_text, match.start(), source_name, status=EvidenceStatus.REVIEW_REQUIRED)
         for match in DYNAMIC_SQL_RE.finditer(sanitized)
     ]
-    dynamic_evidence.extend(
-        make_evidence(sql_text, match.start(), source_name, status=EvidenceStatus.REVIEW_REQUIRED)
-        for match in SQL_VARIABLE_RE.finditer(sanitized)
-    )
     temp_tables = detect_temp_tables(sql_text, source_name=source_name)
     cursor_evidence = [
         make_evidence(sql_text, match.start(), source_name)
@@ -83,7 +72,7 @@ def detect_patterns(sql_text: str, *, source_name: str = "<memory>") -> PatternS
     result_select_evidence = [
         make_evidence(sql_text, match.start(), source_name)
         for match in SELECT_RE.finditer(sanitized)
-        if _is_client_result_select(sanitized, match.start())
+        if is_client_result_select(sanitized, match.start(), scan=scan)
     ]
     return PatternSummary(
         transaction=PatternFinding(
@@ -179,17 +168,3 @@ def _extract_column_names(columns_block: str) -> list[str]:
             continue
         columns.append(token)
     return columns
-
-
-def _is_client_result_select(sanitized_sql: str, select_start: int) -> bool:
-    statement_prefix = sanitized_sql[
-        max(0, sanitized_sql.rfind(";", 0, select_start)) : select_start
-    ]
-    if INSERT_SELECT_CONTEXT_RE.search(statement_prefix):
-        return False
-    if CURSOR_SELECT_CONTEXT_RE.search(statement_prefix):
-        return False
-    statement_tail = sanitized_sql[select_start : select_start + 120]
-    if ASSIGNMENT_SELECT_RE.match(statement_tail):
-        return False
-    return True
