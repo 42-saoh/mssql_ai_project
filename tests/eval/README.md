@@ -11,3 +11,5 @@ make test PYTEST_ARGS="tests/eval"
 ```
 
 P15 hard-live 검증을 포함하려면 worktree 의 `.env` 또는 승인된 환경변수에 PPM read-only metadata 연결 정보를 주입한 뒤 같은 명령을 실행한다. fixture-first workflow latency/reproducibility 검증은 계속 synthetic sample 로 수행하지만, P15 suite 전체는 live PPM gate 를 통과해야 한다.
+
+전체 `make test` 는 fixture-first test 와 hard-live test 를 함께 실행한다. fixture snapshot 이나 fixture-backed metadata search 를 검증하는 테스트는 `MSSQL_ENABLE_LIVE_METADATA=0` 을 test 단위에서 고정하고, P15 hard-live test 는 `.env` 의 live 설정을 그대로 사용한다.

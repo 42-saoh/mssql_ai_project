@@ -1,0 +1,183 @@
+version: pilot_release_readiness_p16_v1
+source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+manifest_generated_at: '2026-05-05T13:47:24+09:00'
+current_manifest:
+  selection_mode: live_metadata
+  source_db: PPM
+  platform_db_context: PLF
+  live_connection_verified: true
+mode_policy:
+  live_metadata:
+    can_reference_selected_object_identities: true
+    readiness_label: optional_live_metadata_evidence
+    must_preserve_active_blockers: true
+  template_only:
+    can_reference_selected_object_identities: false
+    readiness_label: blocker_dependent_template
+    object_identity_rule: do_not_invent_object_names
+    must_preserve_active_blockers: true
+release_recommendation:
+  live_pilot_release:
+    decision: NO_GO
+    reason: active_dependency_metadata_blocker_and_missing_live_release_approval
+  fixture_first_demo_handoff:
+    decision: GO_WITH_LIMITATIONS
+    reason: dockerized_fixture_first_workflow_and_demo_docs_are_ready_for_review
+profile_policy:
+  analysis_db_profile_id: ppm
+  source_database: PPM
+  platform_db_context: PLF
+  plf_fallback_allowed: false
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  ddl_dml_allowed: false
+active_blockers:
+  - code: DEPENDENCY_METADATA_INCOMPLETE
+    severity: BLOCKER
+    release_impact: live_pilot_release_no_go
+    description: Procedure dependency metadata has unresolved references and no confirmed procedure-to-table linkage.
+  - code: MANUAL_APPROVAL_EVIDENCE_MISSING
+    severity: BLOCKER
+    release_impact: live_publish_or_export_no_go
+    description: Current approval evidence records review decisions only; no passed validation plus human approval evidence exists for live release.
+forbidden_evidence:
+  - row_data
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - unapproved_publish_or_export
+representative_objects:
+  stored_procedures:
+    - schema: dbo
+      name: GetInspItemsCd
+      complexity: simple
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_identity_and_definition_hash_available
+      dependency_status: REVIEW_REQUIRED
+      review_required: true
+      caveats:
+        - table_dependency_links_incomplete
+    - schema: dbo
+      name: PAD_GET_BAT_LIST_PRC
+      complexity: medium
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_identity_and_definition_hash_available
+      dependency_status: REVIEW_REQUIRED
+      review_required: true
+      caveats:
+        - table_dependency_links_incomplete
+    - schema: dbo
+      name: PCS_PY_ManageInvoiceFldSchd_PRC
+      complexity: complex
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_identity_and_definition_hash_available
+      dependency_status: REVIEW_REQUIRED
+      review_required: true
+      caveats:
+        - ambiguous_dependency_metadata
+        - table_dependency_links_incomplete
+  tables:
+    - schema: dbo
+      name: PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_rich_table_candidate
+      linkage_status: not_confirmed_as_selected_procedure_dependency
+      review_required: false
+    - schema: dbo
+      name: PEM_PRV
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_rich_table_candidate
+      linkage_status: not_confirmed_as_selected_procedure_dependency
+      review_required: true
+      caveats:
+        - description_review_required
+    - schema: dbo
+      name: PEM_CTRT
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_rich_table_candidate
+      linkage_status: not_confirmed_as_selected_procedure_dependency
+      review_required: true
+      caveats:
+        - description_review_required
+  views:
+    - schema: dbo
+      name: PCO_COM_CD_DTL_V
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_identity_and_definition_hash_available
+      review_required: false
+  functions:
+    - schema: dbo
+      name: GetInitCap
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      evidence_status: metadata_identity_and_definition_hash_available
+      review_required: false
+quality_report:
+  evidence_coverage:
+    selected_object_identity_coverage: 1.0
+    selected_object_metadata_evidence_coverage: 1.0
+    confirmed_procedure_to_table_dependency_coverage: 0.0
+    blocker: DEPENDENCY_METADATA_INCOMPLETE
+  review_required:
+    stored_procedure_review_required_ratio: 1.0
+    selected_object_review_required_ratio: 0.625
+    reason: dependency_and_description_caveats_remain_open
+  validation:
+    fixture_workflow_status: REVIEW_REQUIRED
+    live_release_validation_status: BLOCKED
+    passed_validation_for_live_release: false
+  approval_audit:
+    manual_approval_status: MISSING_FOR_LIVE_RELEASE
+    approval_recording_status: fixture_first_request_changes_supported
+    audit_status: fixture_first_trace_shape_documented
+    publish_status: no_publish_endpoint_or_approved_live_release
+  reproducibility:
+    fixture_first_workflow_reproducible: true
+    p15_hard_live_gate_required_for_live_claim: true
+release_checklist:
+  - id: ppm_manifest_mode
+    status: PASS
+    evidence: selected_objects.yaml selection_mode live_metadata
+  - id: ppm_access_and_read_only_metadata
+    status: CONDITIONAL_PASS
+    evidence: manifest live_connection_verified true; P15 hard-live eval must pass in target environment
+  - id: dependency_evidence
+    status: BLOCKER
+    evidence: DEPENDENCY_METADATA_INCOMPLETE active blocker remains
+  - id: validation_result
+    status: BLOCKER
+    evidence: fixture workflow reaches REVIEW_REQUIRED; no live release PASSED validation evidence
+  - id: manual_approval
+    status: BLOCKER
+    evidence: no human APPROVE record bound to PASSED validation for live release
+  - id: audit_trace
+    status: CONDITIONAL_PASS
+    evidence: fixture-first audit shape documented; production persistence requires external PLF readiness
+  - id: policy_forbidden_actions
+    status: PASS
+    evidence: no row data, procedure execution, auto DDL/DML, PLF fallback, or unapproved publish path
+  - id: docs_status_taxonomy
+    status: PASS
+    evidence: docs distinguish implemented, skeleton, stub, fixture-first, optional-live, and not production-ready
+known_limitations:
+  - code: DEPENDENCY_METADATA_INCOMPLETE
+    impact: procedure_to_table_lineage_cannot_be_claimed
+  - code: FULL_CANONICAL_MODEL_NOT_IMPLEMENTED
+    impact: canonical candidate remains review-required
+  - code: WEB_PORTAL_MOCK_FIRST
+    impact: UI is demo-ready but not production integration evidence
+  - code: PUBLISH_NOT_IMPLEMENTED
+    impact: release cannot include automated publish or export
+  - code: AUTH_RBAC_STUB
+    impact: production authorization model is not ready
+handoff_package:
+  primary_report: docs/pilot-release-readiness.md
+  coordinator_handoff: ops/codex-parallel/P16_PILOT_RELEASE_HANDOFF.md
+  eval_fixture: fixtures/eval/pilot_release_readiness_p16_v1.yaml
+  required_verification:
+    - make test
+    - make test-web-smoke
+    - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+    - python -m compileall apps services packages tests

@@ -10,7 +10,8 @@ from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     app.dependency_overrides[get_repository] = lambda: repository
