@@ -6,6 +6,7 @@ import com.pec.pem.order.request.model.OrderRequestDTO;
 
 /**
  * 주문 요청 Mapper 초안.
+ * REVIEW_REQUIRED: Mapper XML namespace/sql id 와 함께 검토한다.
  */
 public interface OrderRequestMapper {
 

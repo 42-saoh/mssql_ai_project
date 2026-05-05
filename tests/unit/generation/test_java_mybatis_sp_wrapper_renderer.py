@@ -3,16 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
+from ai_agent_domain import ArtifactType, RequestedOutputType
 from ai_agent_generation import (
     GenerationContext,
+    GenerationPolicyAssets,
+    GenerationPolicyError,
+    JavaMyBatisDtoModelRenderer,
     JavaMyBatisSpWrapperRenderer,
     expand_requested_output_type,
+    load_generation_assets,
     render_artifact,
     render_requested_output,
 )
-from ai_agent_domain import ArtifactType, RequestedOutputType
-
 
 ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_DIR = (
@@ -22,10 +24,24 @@ GOLDEN_DIR = (
     / "golden"
     / "java_mybatis_sp_wrapper_order_request_v1"
 )
+DTO_MODEL_GOLDEN_DIR = (
+    ROOT
+    / "fixtures"
+    / "generation"
+    / "golden"
+    / "java_mybatis_dto_model_order_metadata_v1"
+)
 
 
 def _golden_context() -> GenerationContext:
     payload = yaml.safe_load((GOLDEN_DIR / "input.yaml").read_text(encoding="utf-8"))
+    return GenerationContext.from_mapping(payload)
+
+
+def _dto_model_golden_context() -> GenerationContext:
+    payload = yaml.safe_load(
+        (DTO_MODEL_GOLDEN_DIR / "input.yaml").read_text(encoding="utf-8")
+    )
     return GenerationContext.from_mapping(payload)
 
 
@@ -47,6 +63,12 @@ def test_java_mybatis_sp_wrapper_matches_golden_manifest_and_files() -> None:
     assert bundle.blockers == ()
     assert bundle.manifest.review_required is True
     assert "REVIEW_REQUIRED" in bundle.manifest.content
+    assert "## registry_versions" in bundle.manifest.content
+    assert "## input_snapshot" in bundle.manifest.content
+    assert "## sql_risk_markers" in bundle.manifest.content
+    assert "## diff_review_summary" in bundle.manifest.content
+    assert "template:java_mybatis_sp_wrapper@0.2.0" in bundle.manifest.registry_refs
+    assert bundle.manifest.extra["inputSnapshotHash"] == context.input_snapshot_hash
 
     for relative_path, content in bundle.file_map.items():
         assert content == (GOLDEN_DIR / relative_path).read_text(encoding="utf-8")
@@ -83,3 +105,73 @@ def test_render_requested_output_uses_openapi_group_aliases() -> None:
     assert len(rendered) == 1
     bundle = rendered[0]
     assert bundle.requested_output_type == RequestedOutputType.JAVA_MYBATIS_DRAFT.value
+
+
+def test_dto_model_requested_output_renders_dto_vo_model_bundle() -> None:
+    context = _dto_model_golden_context()
+    rendered = render_requested_output(RequestedOutputType.DTO_MODEL_DRAFT, context)
+
+    assert len(rendered) == 1
+    bundle = rendered[0]
+    assert bundle.requested_output_type == RequestedOutputType.DTO_MODEL_DRAFT.value
+    assert bundle.artifact_types == (
+        ArtifactType.DTO_DRAFT.value,
+        ArtifactType.VO_DRAFT.value,
+        ArtifactType.MODEL_DRAFT.value,
+    )
+    assert "template:java_mybatis_dto_model_bundle@0.1.0" in bundle.manifest.registry_refs
+    assert "NO_SQL_RENDERED" in bundle.manifest.content
+    assert any(path.endswith("OrderMetadataVO.java") for path in bundle.file_map)
+    assert any(path.endswith("OrderMetadataModel.java") for path in bundle.file_map)
+
+
+def test_java_mybatis_dto_model_matches_golden_manifest_and_files() -> None:
+    context = _dto_model_golden_context()
+    bundle = JavaMyBatisDtoModelRenderer().render_bundle(context)
+    manifest = yaml.safe_load(
+        (DTO_MODEL_GOLDEN_DIR / "expected_manifest.yaml").read_text(encoding="utf-8")
+    )
+
+    assert bundle.manifest.content == (DTO_MODEL_GOLDEN_DIR / "expected_output.md").read_text(
+        encoding="utf-8"
+    )
+    assert tuple(file.path for file in bundle.files) == tuple(manifest["expectedFiles"])
+    assert manifest["inputSnapshotHash"] == context.input_snapshot_hash
+
+    for relative_path, content in bundle.file_map.items():
+        assert content == (DTO_MODEL_GOLDEN_DIR / relative_path).read_text(encoding="utf-8")
+
+
+def test_dto_model_renderer_uses_same_policy_loaded_field_mapping() -> None:
+    context = _dto_model_golden_context()
+    bundle = JavaMyBatisDtoModelRenderer().render_bundle(context)
+
+    dto = bundle.file_map[
+        "src/main/java/com/pec/pem/order/metadata/model/OrderMetadataDTO.java"
+    ]
+    vo = bundle.file_map[
+        "src/main/java/com/pec/pem/order/metadata/model/OrderMetadataVO.java"
+    ]
+
+    assert "private LocalDate orderDate;" in dto
+    assert "public class OrderMetadataVO" in vo
+
+
+def test_missing_policy_naming_asset_blocks_generation() -> None:
+    assets = load_generation_assets(template_ids=("java_mybatis_sp_wrapper",))
+    policy = dict(assets.policy)
+    policy["classNames"] = dict(policy["classNames"])
+    policy["classNames"].pop("mapper")
+    broken_assets = GenerationPolicyAssets(
+        policy=policy,
+        registry=assets.registry,
+        policy_path=assets.policy_path,
+        registry_path=assets.registry_path,
+    )
+
+    try:
+        JavaMyBatisSpWrapperRenderer(assets=broken_assets)
+    except GenerationPolicyError as exc:
+        assert "policy.classNames.mapper" in str(exc)
+    else:
+        raise AssertionError("broken generation policy should block rendering")

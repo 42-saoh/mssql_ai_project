@@ -4,7 +4,7 @@
   "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.pec.pem.order.request.mapper.OrderRequestMapper">
 
-  <!-- OrderRequestMapper.selectOrderRequestList AI -->
+  <!-- /* OrderRequestMapper.selectOrderRequestList AI */ -->
   <select id="selectOrderRequestList"
           parameterType="com.pec.pem.order.request.model.OrderRequestDTO"
           resultType="com.pec.pem.order.request.model.OrderRequestDTO">

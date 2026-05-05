@@ -6,6 +6,7 @@ import com.pec.pem.order.request.model.OrderRequestDTO;
 
 /**
  * 주문 요청 서비스 초안.
+ * REVIEW_REQUIRED: transaction boundary 는 evidence 확정 후 보강한다.
  */
 public interface OrderRequestService {
 
