@@ -13,6 +13,7 @@
 - API happy path 는 fixture-backed metadata 로 request → job → artifact → validation → approval decision recording 까지 검증된다.
 - web portal 은 mock adapter 기반 shell 이며 API/BFF HTTP 연결 smoke 는 follow-up 이다.
 - 기본 metadata profile 은 `master` 이고, sample fixture target 은 `dbo.usp_GetOrderSummary` 이다.
+- P16 기준 PPM 대표 object identity 는 `live_metadata` manifest 에서 온 것이지만, live pilot release 는 아직 NO-GO 다.
 
 ## 주의
 - 결과는 초안이며 검토가 필요하다.
@@ -32,3 +33,11 @@
 운영 준비도 검증에서는 PPM live metadata gate 가 켜질 수 있다. 이 경우 `dbProfileId=ppm` 이 `PPM` 에 read-only metadata 로 연결되어야 하며, PPM 이 없거나 권한이 없으면 테스트는 실패한다. 실패 시 PLF 로 대체하지 않고 blocker 로 보고한다.
 
 P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidence coverage, review-required 비율, validation 상태, draft artifact completeness, latency budget, audit stage, redaction 상태다. raw definition text, row data, credential 은 화면/로그/fixture 에 포함하지 않는다.
+
+## P16 readiness 결과 해석
+
+- `docs/pilot-release-readiness.md` 는 현재 live pilot release 를 NO-GO 로 판정한다.
+- fixture-first/demo handoff 는 GO WITH LIMITATIONS 이며, 결과물은 계속 draft-only 이다.
+- `DEPENDENCY_METADATA_INCOMPLETE` 가 남아 있으므로 SP 와 table 사이의 확정 dependency 로 해석하면 안 된다.
+- 승인 화면이나 API decision 기록은 publish, 배포, DDL 적용을 수행하지 않는다.
+- live pilot release 후보는 passed validation 과 human `APPROVE` 가 audit context 와 함께 남은 뒤 다시 검토해야 한다.

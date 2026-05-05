@@ -2,7 +2,7 @@
 
 ## Summary
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. The suite documents what is implemented now and separates stubs, fixture-first baselines, hard-live blockers, and follow-up slices.
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16 adds a pilot release readiness fixture/report that keeps the live release NO-GO while allowing fixture-first/demo handoff with limitations. The suite documents what is implemented now and separates stubs, fixture-first baselines, optional-live evidence, hard-live blockers, and follow-up slices.
 
 ## Current Boundaries
 
@@ -13,6 +13,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
 | Web portal | stub/skeleton | Next.js shell uses mock data by default. HTTP API smoke is follow-up. |
 | Live MSSQL | hard-live for P15 eval | P15 eval requires `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions. Missing live PPM access is a blocker, not a skip. |
+| Pilot release readiness | not production-ready | P16 records live pilot release as NO-GO because `DEPENDENCY_METADATA_INCOMPLETE` and manual approval evidence gaps remain. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -24,6 +25,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/artifact_payloads.json`: expected stable workflow/artifact summary.
 - `fixtures/eval/rubric.yaml`: thresholds for fixture parsing, review-required markers, evidence, forbidden states, and secret-like values.
 - `fixtures/eval/eval_observability_security_ops_p15_v1.yaml`: P15 hard-live gate for PPM metadata smoke, quality metrics, latency budgets, correlation id, audit stage, redaction, and read-only DB permission checks.
+- `fixtures/eval/pilot_release_readiness_p16_v1.yaml`: P16 pilot release checklist, quality report, selected object evidence summary, manual approval status, blocker list, and go/no-go recommendation.
 
 ## Verification Scope
 
@@ -38,8 +40,15 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - eval fixtures parse and match generated workflow summaries
 - P15 hard-live PPM metadata calls return live evidence refs, source profile/database context, no raw definition text, no row-data shape, and latency within the current live gate budget
 - P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing
+- P16 readiness fixture and docs preserve `DEPENDENCY_METADATA_INCOMPLETE`, do not overclaim production readiness, and keep live release NO-GO
 
 For P15, the same command must run with live PPM read-only metadata access configured. If `MSSQL_ENABLE_LIVE_METADATA` is disabled or PPM access/permissions are missing, the eval suite fails with the corresponding blocker and must not fall back to PLF.
+
+For P16, `make test PYTEST_ARGS="tests/eval/test_p16_pilot_release_readiness.py"` verifies the release fixture and handoff docs. The broader P16 gate is `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"` plus web smoke and compileall.
+
+The full suite intentionally mixes fixture-first and hard-live checks. Tests that assert fixture
+snapshot ids or fixture-backed metadata search results pin `MSSQL_ENABLE_LIVE_METADATA=0`;
+P15 hard-live tests keep `MSSQL_ENABLE_LIVE_METADATA=1` and must never fall back from PPM to PLF.
 
 ## P15 Ops Gate
 
@@ -65,3 +74,4 @@ For P15, the same command must run with live PPM read-only metadata access confi
 4. Add web-to-API HTTP smoke once the portal is wired to a local API instance.
 5. Expand eval fixtures beyond the single happy path to dynamic SQL, temp tables, transaction/TRY-CATCH, DDL drafts, and failure paths.
 6. Mature DDL draft renderer while keeping schema apply/manual review outside automation.
+7. Close P16 live release blockers by improving dependency evidence and binding passed validation to human approval/audit evidence.
