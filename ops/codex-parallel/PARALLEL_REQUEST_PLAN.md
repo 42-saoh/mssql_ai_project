@@ -285,6 +285,8 @@ P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이�
 - starter/MVP 상태를 production target gap matrix로 전환한다.
 - skeleton/stub/fixture-first/optional-live/production-ready 상태를 구분한다.
 - PPM pilot object set을 product milestone/eval 기준에 연결한다.
+- 산출물은 `docs/productization-architecture-gap-analysis.md`, `PRODUCTIZATION_RELEASE_BACKLOG.md`, `fixtures/eval/productization_readiness_v1.yaml` 로 둔다.
+- P08 이후 worker는 위 산출물을 읽고 acceptance criteria, verification command, blocker 기준을 먼저 확인한다.
 
 ### P09 — API & Workflow Productization
 

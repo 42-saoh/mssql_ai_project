@@ -196,6 +196,8 @@ git worktree add ../wt/p16-pilot-release-readiness -b feat/p16-pilot-release-rea
 4. `P13`~`P15` — validation/approval/audit, Web UI, eval/observability/security/ops 고도화.
 5. `P16` — pilot release readiness, handoff package, go/no-go 판정.
 
+P08 이후 worker는 `docs/productization-architecture-gap-analysis.md`, `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`, `fixtures/eval/productization_readiness_v1.yaml` 을 먼저 읽고, 자기 prompt 의 scope/verification/blocker 기준과 충돌하지 않는지 확인한다.
+
 ### Productization 공통 규칙
 
 - `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 은 P08A 이후 worker가 공통으로 읽는 pilot 기준이다.

@@ -8,6 +8,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "ops" / "codex-parallel" / "prompts"
 MANIFEST = ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml"
+GAP_ANALYSIS = ROOT / "docs" / "productization-architecture-gap-analysis.md"
+RELEASE_BACKLOG = ROOT / "ops" / "codex-parallel" / "PRODUCTIZATION_RELEASE_BACKLOG.md"
+READINESS_FIXTURE = ROOT / "fixtures" / "eval" / "productization_readiness_v1.yaml"
+PILOT_MANIFEST = ROOT / "fixtures" / "pilot" / "ppm_object_selection_v1" / "selected_objects.yaml"
 
 PRODUCTIZATION_PROMPTS = {
     "P08A": "08a_ppm_pilot_object_discovery_selection.md",
@@ -63,6 +67,19 @@ def test_productization_prompts_exist_with_worker_contract_sections() -> None:
         assert "PFL" not in text
 
 
+def test_productization_worker_prompts_reference_p08_gap_backlog_and_readiness_fixture() -> None:
+    required_refs = (
+        "docs/productization-architecture-gap-analysis.md",
+        "ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md",
+        "fixtures/eval/productization_readiness_v1.yaml",
+    )
+
+    for track_id in ("P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16"):
+        text = _read(PROMPTS / PRODUCTIZATION_PROMPTS[track_id])
+        for ref in required_refs:
+            assert ref in text, f"{track_id} prompt missing {ref}"
+
+
 def test_manifest_declares_productization_tracks_and_merge_order() -> None:
     manifest = _manifest()
     assert manifest["plan_id"] == "codex-parallel-local-v3-productization"
@@ -102,6 +119,11 @@ def test_productization_runbook_documents_plf_ppm_roles() -> None:
         assert "PLF로 대체하지" in text
         assert "PFL" not in text
 
+    for text in (runbook, readme, plan):
+        assert "docs/productization-architecture-gap-analysis.md" in text
+        assert "PRODUCTIZATION_RELEASE_BACKLOG.md" in text
+        assert "fixtures/eval/productization_readiness_v1.yaml" in text
+
 
 def test_p08a_can_own_minimum_metadata_discovery_surface_without_running_full_p10() -> None:
     tracks = _tracks()
@@ -120,3 +142,72 @@ def test_p08a_can_own_minimum_metadata_discovery_surface_without_running_full_p1
     assert "apps/**" in prompt_text
     assert "spec/openapi/**" in prompt_text
     assert "db/schema/**" in prompt_text
+
+
+def test_p08_gap_analysis_exists_and_does_not_overclaim_production_ready() -> None:
+    text = _read(GAP_ANALYSIS)
+    assert "# P08 Productization Architecture Gap Analysis" in text
+    assert "No current surface is classified as `production-ready`" in text
+
+    for status in ("skeleton", "stub", "fixture-first", "optional-live", "production-ready"):
+        assert f"`{status}`" in text
+
+    current_matrix = text.split("## Current State Matrix", 1)[1].split(
+        "## Contract Drift Matrix", 1
+    )[0]
+    assert "| `production-ready` |" not in current_matrix
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in text
+    assert "PPM" in text
+    assert "PLF" in text
+    assert "PLF fallback" in text
+    assert "PFL" not in text
+
+
+def test_productization_release_backlog_covers_p09_to_p16_acceptance_and_verification() -> None:
+    text = _read(RELEASE_BACKLOG)
+    assert "# P08 Productization Release Backlog" in text
+    assert "PPM must not fall back to PLF" in text
+
+    for track_id in ("P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16"):
+        section = text.split(f"## {track_id} ", 1)[1]
+        next_marker = "\n## P"
+        if next_marker in section:
+            section = section.split(next_marker, 1)[0]
+        assert "Acceptance criteria:" in section
+        assert "Verification:" in section
+        assert "Blockers:" in section
+        assert "make test" in section or "make test-web-smoke" in section
+
+    lower_text = text.lower()
+    forbidden_terms = ("row-data reads", "procedure execution", "automatic ddl/dml")
+    for term in forbidden_terms:
+        assert term in lower_text
+    assert "PFL" not in text
+
+
+def test_productization_readiness_fixture_links_pilot_manifest_to_release_gates() -> None:
+    readiness = yaml.safe_load(READINESS_FIXTURE.read_text(encoding="utf-8"))
+    pilot = yaml.safe_load(PILOT_MANIFEST.read_text(encoding="utf-8"))
+
+    assert readiness["version"] == "productization_readiness_v1"
+    assert readiness["source_manifest"] == "fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml"
+    assert set(readiness["mode_policy"]) == {"live_metadata", "template_only"}
+    assert readiness["mode_policy"]["template_only"]["can_reference_selected_object_identities"] is False
+    assert readiness["mode_policy"]["live_metadata"]["can_reference_selected_object_identities"] is True
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in readiness["current_manifest_expectations"][
+        "active_blockers_to_carry_forward"
+    ]
+    assert pilot["selection_mode"] in readiness["current_manifest_expectations"][
+        "allowed_selection_modes"
+    ]
+
+    for track_id in ("P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16"):
+        milestone = readiness["milestones"][track_id]
+        assert milestone["readiness_gate"]
+        assert milestone["verification"]
+        assert milestone["blocker_if"]
+
+    combined = READINESS_FIXTURE.read_text(encoding="utf-8")
+    forbidden_terms = ("sample_rows", "row_sample", "SELECT * FROM PPM", "COUNT(*)", "PFL")
+    for term in forbidden_terms:
+        assert term not in combined

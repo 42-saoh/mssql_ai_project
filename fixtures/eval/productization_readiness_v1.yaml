@@ -1,0 +1,85 @@
+version: productization_readiness_v1
+source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+mode_policy:
+  live_metadata:
+    can_reference_selected_object_identities: true
+    must_preserve_active_blockers: true
+    readiness_label: optional_live_metadata_evidence
+  template_only:
+    can_reference_selected_object_identities: false
+    must_preserve_active_blockers: true
+    readiness_label: blocker_dependent_template
+forbidden_evidence:
+  - row_data
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+current_manifest_expectations:
+  selection_version: ppm_object_selection_v1
+  source_db: PPM
+  platform_db_context: PLF
+  allowed_selection_modes:
+    - template_only
+    - live_metadata
+  active_blockers_to_carry_forward:
+    - DEPENDENCY_METADATA_INCOMPLETE
+milestones:
+  P09:
+    readiness_gate: api_workflow_uses_ppm_object_ids_only_when_live_metadata
+    verification:
+      - make test PYTEST_ARGS="tests/integration/api tests/unit/api"
+    blocker_if:
+      - shared_contract_change_required
+      - ppm_manifest_template_only_but_live_fixture_requested
+  P10:
+    readiness_gate: mcp_metadata_evidence_remains_read_only_and_caveated
+    verification:
+      - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/unit/test_mssql_mcp_live_config.py tests/contract/test_local_mssql_connection_assets.py"
+    blocker_if:
+      - ppm_metadata_permission_missing
+      - row_data_or_procedure_execution_required
+  P11:
+    readiness_gate: sp_analysis_marks_incomplete_dependencies_review_required
+    verification:
+      - make test PYTEST_ARGS="tests/unit/analysis"
+    blocker_if:
+      - canonical_contract_change_required
+      - dependency_metadata_incomplete_but_confirmed_link_required
+  P12:
+    readiness_gate: generated_artifacts_are_draft_only_with_evidence_and_review_checklist
+    verification:
+      - make test PYTEST_ARGS="tests/unit/generation tests/contract/test_generation_goldens_and_repro_assets.py"
+    blocker_if:
+      - generation_policy_change_required
+      - generated_source_auto_apply_requested
+  P13:
+    readiness_gate: validation_approval_audit_blocks_publish_without_passed_validation_and_approval
+    verification:
+      - make test PYTEST_ARGS="tests/unit/validation tests/unit/api tests/integration/api"
+    blocker_if:
+      - db_schema_change_required
+      - publish_without_approval_possible
+  P14:
+    readiness_gate: web_demo_shows_draft_evidence_review_and_blocker_states
+    verification:
+      - make test-web-smoke
+    blocker_if:
+      - lockfile_or_dependency_change_required
+      - ui_would_trigger_publish_or_db_mutation
+  P15:
+    readiness_gate: eval_ops_metrics_distinguish_fixture_optional_live_and_blocker_modes
+    verification:
+      - make test PYTEST_ARGS="tests/e2e tests/eval"
+    blocker_if:
+      - live_ppm_eval_required_without_access
+      - security_or_observability_contract_change_required
+  P16:
+    readiness_gate: release_readiness_includes_go_no_go_and_handoff_evidence
+    verification:
+      - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+    blocker_if:
+      - ppm_manifest_template_only
+      - active_blockers_unresolved_for_live_release
+      - policy_forbidden_action_required

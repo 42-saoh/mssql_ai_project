@@ -20,6 +20,9 @@ PI 3기 표준에 맞춘 Java/MyBatis 초안 생성 factory를 template registry
 ## 읽어야 할 기준 파일
 
 - `PROJECT.md`, `ARCHITECTURE.md`, `POLICY.md`, `EVAL_SPEC.md`
+- `docs/productization-architecture-gap-analysis.md`
+- `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
+- `fixtures/eval/productization_readiness_v1.yaml`
 - `packages/generation/README.md`
 - `packages/generation/src/ai_agent_generation/**`
 - `packages/templates/**`

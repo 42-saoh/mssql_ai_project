@@ -36,6 +36,12 @@
 
 P08A~P16은 기존 P00~P07 starter/MVP 병렬 개발 철학을 유지하면서 productization으로 전환하기 위한 후속 prompt pack이다.
 
+P08 산출물:
+
+- `docs/productization-architecture-gap-analysis.md` — starter/MVP 상태, contract drift, PPM readiness 해석
+- `PRODUCTIZATION_RELEASE_BACKLOG.md` — P09~P16 worker scope, acceptance criteria, verification, blocker 기준
+- `fixtures/eval/productization_readiness_v1.yaml` — PPM pilot manifest 를 eval/demo/readiness gate 에 연결하는 metadata-only fixture
+
 추가 프롬프트:
 
 - `prompts/08a_ppm_pilot_object_discovery_selection.md`
