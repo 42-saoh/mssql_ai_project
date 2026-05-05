@@ -1,5 +1,5 @@
 import type { PortalApi } from "./portal-api";
-import type { ApprovalDecisionRequest, SPAnalysisRequest } from "./types";
+import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types";
 
 interface HttpPortalApiOptions {
   baseUrl: string;
@@ -74,6 +74,23 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
 
     listMetadataProfiles() {
       return readJson(fetcher, baseUrl, "/api/v1/metadata/db-profiles");
+    },
+
+    searchMetadataObjects(request: MetadataSearchRequest) {
+      const params = new URLSearchParams({
+        dbProfileId: request.dbProfileId,
+        query: request.query,
+      });
+
+      if (request.limit !== undefined) {
+        params.set("limit", String(request.limit));
+      }
+
+      for (const objectType of request.objectTypes ?? []) {
+        params.append("objectTypes", objectType);
+      }
+
+      return readJson(fetcher, baseUrl, `/api/v1/metadata/search?${params.toString()}`);
     },
 
     listRegistryVersions() {

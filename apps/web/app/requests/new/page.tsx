@@ -1,9 +1,23 @@
 import { RequestForm } from "@/components/request-form";
 import { getPortalApi } from "@/lib/api/client";
+import { getPilotManifestSummary } from "@/lib/pilot-manifest";
 
-export default async function NewRequestPage() {
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function NewRequestPage({
+  searchParams,
+}: Readonly<{
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}>) {
   const api = getPortalApi();
-  const profileResponse = await api.listMetadataProfiles();
+  const [profileResponse, params] = await Promise.all([api.listMetadataProfiles(), searchParams]);
+  const pilotManifest = getPilotManifestSummary();
+  const requestedSampleId = firstParam(params.sample);
+  const selectedSample =
+    pilotManifest.procedureSamples.find((sample) => sample.id === requestedSampleId) ??
+    pilotManifest.procedureSamples[0];
 
   return (
     <div className="stack">
@@ -25,6 +39,8 @@ export default async function NewRequestPage() {
         <RequestForm
           defaultProfileId={profileResponse.defaultProfileId}
           profiles={profileResponse.profiles}
+          pilotManifest={pilotManifest}
+          selectedSample={selectedSample}
         />
       </section>
     </div>

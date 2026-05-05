@@ -52,6 +52,37 @@ export function ArtifactPreview({
           </div>
         </dl>
 
+        <div className="callout callout--warning">
+          <strong>Draft-only boundary</strong>
+          <p>
+            This preview is not published or deployed. Validation and reviewer decisions can be
+            recorded later, but this UI exposes no SQL execution, DDL apply, source write, or
+            publish action.
+          </p>
+        </div>
+
+        {artifact.blockers?.length ? (
+          <div className="blocker-list">
+            {artifact.blockers.map((blocker) => (
+              <article className="blocker-row" key={blocker.code}>
+                <strong>{blocker.code}</strong>
+                <span>{blocker.message}</span>
+              </article>
+            ))}
+          </div>
+        ) : null}
+
+        {artifact.caveats?.length ? (
+          <div className="callout">
+            <strong>Caveats</strong>
+            <ul>
+              {artifact.caveats.map((caveat) => (
+                <li key={caveat}>{caveat}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="content-preview" aria-label="Draft artifact content">
           <pre>{artifact.content}</pre>
         </div>
@@ -139,11 +170,36 @@ export function ArtifactPreview({
               </ul>
             </div>
           ) : null}
+
+          {(artifact.assumptions?.length ?? 0) > 0 ? (
+            <div className="callout">
+              <strong>Assumptions</strong>
+              <ul>
+                {artifact.assumptions?.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {(artifact.todos?.length ?? 0) > 0 ? (
+            <div className="callout callout--warning">
+              <strong>TODO / REVIEW_REQUIRED</strong>
+              <ul>
+                {artifact.todos?.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       </section>
 
       <div className="page-actions">
         <Link href="/jobs/job_demo_review_pending">Back to review job</Link>
+        <Link className="secondary-action" href={`/review/decision?artifactId=${artifact.artifactId}`}>
+          Preview review decision
+        </Link>
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import type {
   ApprovalRecord,
   Job,
   MetadataProfile,
+  MetadataSearchRequest,
+  MetadataSearchResponse,
   RegistryVersion,
   SPAnalysisRequest,
   SubmitRequestResponse,
@@ -22,5 +24,6 @@ export interface PortalApi {
     request: ApprovalDecisionRequest,
   ): Promise<ApprovalRecord>;
   listMetadataProfiles(): Promise<{ defaultProfileId: string; profiles: MetadataProfile[] }>;
+  searchMetadataObjects(request: MetadataSearchRequest): Promise<MetadataSearchResponse>;
   listRegistryVersions(): Promise<{ versions: RegistryVersion[] }>;
 }

@@ -67,6 +67,8 @@ export type ApprovalDecision = "APPROVE" | "REJECT" | "REQUEST_CHANGES";
 
 export type RegistryType = "PROMPT" | "TEMPLATE" | "POLICY" | "DB_PROFILE" | "GENERATOR";
 
+export type MetadataSearchObjectType = TargetObjectType;
+
 export interface TargetObject {
   type: TargetObjectType;
   schema: string;
@@ -94,6 +96,10 @@ export interface Job {
   currentStep?: WorkflowStepType | null;
   createdAt?: string;
   updatedAt?: string;
+  progress?: number;
+  blockers?: MetadataSearchBlocker[];
+  caveats?: string[];
+  failureReason?: string;
 }
 
 export interface ArtifactSummary {
@@ -102,6 +108,9 @@ export interface ArtifactSummary {
   status: ArtifactStatus;
   title?: string;
   evidenceCoverage?: number;
+  reviewRequired?: boolean;
+  blockers?: MetadataSearchBlocker[];
+  caveats?: string[];
 }
 
 export interface EvidenceRef {
@@ -117,7 +126,7 @@ export interface Artifact extends ArtifactSummary {
   generatorVersion: string;
   registryRefs: string[];
   assumptions?: string[];
-  reviewRequired?: boolean;
+  todos?: string[];
 }
 
 export interface ValidationCheck {
@@ -140,6 +149,50 @@ export interface MetadataProfile {
   database: string;
   description?: string;
   readOnly: true;
+}
+
+export interface MetadataSearchBlocker {
+  code: string;
+  message: string;
+}
+
+export interface MetadataObjectIdentity {
+  schema: string;
+  name: string;
+  type: MetadataSearchObjectType;
+}
+
+export interface MetadataSearchRequest {
+  dbProfileId: string;
+  query: string;
+  objectTypes?: MetadataSearchObjectType[];
+  limit?: number;
+}
+
+export interface MetadataSearchResult {
+  objectIdentity: MetadataObjectIdentity;
+  sourceProfile: string;
+  sourceDatabase: string;
+  snapshotId?: string;
+  evidenceRefs: EvidenceRef[];
+  caveats: string[];
+  reviewRequired: boolean;
+  blockers: MetadataSearchBlocker[];
+}
+
+export interface MetadataSearchResponse {
+  dbProfileId: string;
+  query: string;
+  objectTypes: MetadataSearchObjectType[];
+  limit: number;
+  sourceProfile: string;
+  sourceDatabase: string;
+  snapshotId?: string;
+  collectedAt?: string;
+  results: MetadataSearchResult[];
+  caveats: string[];
+  reviewRequired: boolean;
+  blockers: MetadataSearchBlocker[];
 }
 
 export interface RegistryVersion {

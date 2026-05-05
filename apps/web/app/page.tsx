@@ -10,10 +10,16 @@ import {
 
 export default async function HomePage() {
   const api = getPortalApi();
-  const [job, artifactResponse, registryResponse] = await Promise.all([
+  const [job, artifactResponse, registryResponse, metadataSearch] = await Promise.all([
     api.getJob("job_demo_review_pending"),
     api.listJobArtifacts("job_demo_review_pending"),
     api.listRegistryVersions(),
+    api.searchMetadataObjects({
+      dbProfileId: "ppm",
+      query: "P",
+      objectTypes: ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+      limit: 6,
+    }),
   ]);
 
   return (
@@ -22,17 +28,21 @@ export default async function HomePage() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Central portal shell</p>
-            <h1>Request, validate, review</h1>
+            <h1>Analyze, validate, review</h1>
           </div>
           <span className="quiet-label">Mock data boundary</span>
         </div>
         <p className="lede">
-          A minimal App Router shell for MSSQL stored procedure analysis requests, draft
-          artifacts, evidence refs, and approval-gated review state.
+          Product-demo App Router shell for MSSQL stored procedure request intake, read-only
+          metadata search, draft artifacts, validation evidence, blockers, and approval-gated
+          review state.
         </p>
         <div className="form-actions">
           <Link className="primary-action" href="/requests/new">
-            Create mock request
+            Create PPM sample request
+          </Link>
+          <Link className="secondary-action" href="/metadata/search">
+            Search metadata
           </Link>
           <Link className="secondary-action" href="/jobs/job_demo_review_pending">
             Inspect review job
@@ -76,6 +86,68 @@ export default async function HomePage() {
                 <code>{version.version}</code>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="split-layout">
+        <div className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Metadata search</p>
+              <h2>PPM identities</h2>
+            </div>
+            <StatusPill
+              value={metadataSearch.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+              label={metadataSearch.reviewRequired ? "Review required" : "Evidence only"}
+            />
+          </div>
+          <dl className="metric-grid">
+            <div>
+              <dt>Profile</dt>
+              <dd>{metadataSearch.sourceProfile}</dd>
+            </div>
+            <div>
+              <dt>Database</dt>
+              <dd>{metadataSearch.sourceDatabase}</dd>
+            </div>
+            <div>
+              <dt>Results</dt>
+              <dd>{metadataSearch.results.length}</dd>
+            </div>
+          </dl>
+          {metadataSearch.blockers.length > 0 ? (
+            <div className="blocker-list">
+              {metadataSearch.blockers.map((blocker) => (
+                <article className="blocker-row" key={blocker.code}>
+                  <strong>{blocker.code}</strong>
+                  <span>{blocker.message}</span>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          <Link href="/metadata/search">Open metadata search</Link>
+        </div>
+
+        <div className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Review decision</p>
+              <h2>Preview record</h2>
+            </div>
+            <span className="quiet-label">No publish</span>
+          </div>
+          <p className="lede">
+            Reviewers can shape an approval decision payload while validation, audit, publish, and
+            deployment boundaries stay explicit.
+          </p>
+          <div className="form-actions">
+            <Link className="secondary-action" href="/review/decision">
+              Preview decision
+            </Link>
+            <Link className="secondary-action" href="/jobs/job_demo_failed_blocker">
+              View blocker job
+            </Link>
           </div>
         </div>
       </section>

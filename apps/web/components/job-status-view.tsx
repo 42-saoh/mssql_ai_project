@@ -15,6 +15,7 @@ const stageLinks = [
   { href: "/jobs/job_demo_review_pending", label: "review_pending" },
   { href: "/jobs/job_demo_approved", label: "approved" },
   { href: "/jobs/job_demo_rejected", label: "rejected" },
+  { href: "/jobs/job_demo_failed_blocker", label: "failed_blocker" },
 ];
 
 const workflowSteps = [
@@ -28,6 +29,10 @@ const workflowSteps = [
 function stepState(job: Job, step: (typeof workflowSteps)[number]) {
   if (job.status === "APPROVED" || job.status === "REJECTED") {
     return "done";
+  }
+
+  if (job.status === "FAILED" && job.currentStep === step) {
+    return "failed";
   }
 
   if (job.currentStep === step) {
@@ -77,7 +82,40 @@ export function JobStatusView({
             <dt>Updated</dt>
             <dd>{job.updatedAt ?? "Not available"}</dd>
           </div>
+          <div>
+            <dt>Progress</dt>
+            <dd>{job.progress !== undefined ? `${Math.round(job.progress * 100)}%` : "Unknown"}</dd>
+          </div>
         </dl>
+
+        {job.failureReason ? (
+          <div className="callout callout--warning">
+            <strong>Failure reason</strong>
+            <p>{job.failureReason}</p>
+          </div>
+        ) : null}
+
+        {job.blockers?.length ? (
+          <div className="blocker-list">
+            {job.blockers.map((blocker) => (
+              <article className="blocker-row" key={blocker.code}>
+                <strong>{blocker.code}</strong>
+                <span>{blocker.message}</span>
+              </article>
+            ))}
+          </div>
+        ) : null}
+
+        {job.caveats?.length ? (
+          <div className="callout">
+            <strong>Caveats</strong>
+            <ul>
+              {job.caveats.map((caveat) => (
+                <li key={caveat}>{caveat}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="stage-link-row" aria-label="Mock job status examples">
           {stageLinks.map((stage) => (
@@ -121,7 +159,9 @@ export function JobStatusView({
                 <p>
                   {artifactTypeLabels[artifact.type]} · evidence coverage{" "}
                   {formatCoverage(artifact.evidenceCoverage)}
+                  {artifact.reviewRequired ? " · REVIEW_REQUIRED" : ""}
                 </p>
+                {artifact.caveats?.length ? <small>{artifact.caveats.join(", ")}</small> : null}
               </div>
               <div className="row-actions">
                 <StatusPill
