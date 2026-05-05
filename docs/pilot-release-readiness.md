@@ -103,3 +103,8 @@ Required verification before accepting this package:
 - `make test-web-smoke`
 - `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
 - `python -m compileall apps services packages tests`
+
+Additional verification before any live PPM readiness claim:
+
+- `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"`
+- `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`

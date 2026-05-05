@@ -2,6 +2,11 @@ version: eval_observability_security_ops_p15_v1
 gate_mode: hard_live
 source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
 selection_mode_required: live_metadata
+activation:
+  explicit_env_flag: P15_HARD_LIVE_GATE
+  required_value: '1'
+  live_metadata_env_flag: MSSQL_ENABLE_LIVE_METADATA
+  live_metadata_required_value: '1'
 profile_policy:
   analysis_db_profile_id: ppm
   source_database: PPM
