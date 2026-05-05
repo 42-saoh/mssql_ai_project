@@ -199,10 +199,12 @@ Scope:
 
 Acceptance criteria:
 
-- Eval scenarios distinguish fixture-first, optional-live, and blocker-dependent modes.
+- Eval scenarios distinguish fixture-first, hard-live, and blocker-dependent modes.
+- P15 hard-live eval fails when `MSSQL_ENABLE_LIVE_METADATA=1` is not set, `dbProfileId=ppm` is missing, `PPM` is unavailable, or read-only metadata permissions are unavailable; it never falls back to PLF.
 - Metrics include evidence coverage, review-required ratio, validation pass rate, generation reproducibility, and artifact completeness.
 - Logging and audit docs define correlation ids and secret redaction.
 - Read-only DB permission checks are documented without DB lifecycle automation.
+- Latency budgets separate product targets from current live/fixture gate budgets.
 
 Verification:
 
@@ -216,6 +218,7 @@ Blockers:
 - Live PPM eval is required but PPM access or metadata permissions are unavailable.
 - Security/audit requirements need shared contract changes.
 - Performance instrumentation requires app/service code outside scope.
+- Hard-live latency exceeds current gate budget.
 
 ## P16 Pilot Release Readiness
 
@@ -246,4 +249,3 @@ Blockers:
 - PPM access, definition, dependency, or read-only metadata evidence is inadequate.
 - Validation/approval/audit evidence does not meet release gate.
 - Any requested release path requires automatic DDL, production DB mutation, or unapproved publish.
-

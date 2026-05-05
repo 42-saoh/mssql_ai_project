@@ -2,7 +2,7 @@
 
 ## Summary
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. The suite documents what is implemented now and separates stubs, optional live behavior, and follow-up slices.
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. The suite documents what is implemented now and separates stubs, fixture-first baselines, hard-live blockers, and follow-up slices.
 
 ## Current Boundaries
 
@@ -12,7 +12,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | Metadata collection | fixture-first | Default path uses `fixtures/mcp/metadata_snapshot.json` through the MSSQL MCP registry boundary. |
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
 | Web portal | stub/skeleton | Next.js shell uses mock data by default. HTTP API smoke is follow-up. |
-| Live MSSQL | optional live | Readiness probe is available when enabled; live tool query execution is not a completed feature. |
+| Live MSSQL | hard-live for P15 eval | P15 eval requires `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions. Missing live PPM access is a blocker, not a skip. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -23,6 +23,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/canonical_analysis_candidate.json`: sample review-required canonical candidate payload.
 - `fixtures/eval/artifact_payloads.json`: expected stable workflow/artifact summary.
 - `fixtures/eval/rubric.yaml`: thresholds for fixture parsing, review-required markers, evidence, forbidden states, and secret-like values.
+- `fixtures/eval/eval_observability_security_ops_p15_v1.yaml`: P15 hard-live gate for PPM metadata smoke, quality metrics, latency budgets, correlation id, audit stage, redaction, and read-only DB permission checks.
 
 ## Verification Scope
 
@@ -35,6 +36,18 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - validation reports keep draft artifacts in review-required state
 - approval decisions are recorded without publishing
 - eval fixtures parse and match generated workflow summaries
+- P15 hard-live PPM metadata calls return live evidence refs, source profile/database context, no raw definition text, no row-data shape, and latency within the current live gate budget
+- P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing
+
+For P15, the same command must run with live PPM read-only metadata access configured. If `MSSQL_ENABLE_LIVE_METADATA` is disabled or PPM access/permissions are missing, the eval suite fails with the corresponding blocker and must not fall back to PLF.
+
+## P15 Ops Gate
+
+- Quality metrics: evidence coverage, review-required ratio, validation pass rate, generation reproducibility, and draft artifact completeness.
+- Latency budgets: separate product targets and current live gates for PPM readiness, metadata inventory smoke, and fixture workflow smoke.
+- Observability: logs and audit traces must carry correlation id plus request/job/artifact/profile/snapshot/blocker context.
+- Redaction: connection strings, credentials, cookies, raw definition text, and row data must not be logged or committed to fixtures.
+- DB permission check: use read-only metadata tools against `ppm`/`PPM`; no row-data reads, procedure execution, DDL/DML, or PLF fallback.
 
 ## Drift Memo
 

@@ -1,0 +1,202 @@
+version: eval_observability_security_ops_p15_v1
+gate_mode: hard_live
+source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+selection_mode_required: live_metadata
+profile_policy:
+  analysis_db_profile_id: ppm
+  source_database: PPM
+  platform_db_context: PLF
+  live_metadata_required: true
+  plf_fallback_allowed: false
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  ddl_dml_allowed: false
+active_blockers_to_carry_forward:
+  - DEPENDENCY_METADATA_INCOMPLETE
+hard_fail_blockers:
+  - LIVE_PPM_EVAL_REQUIRED
+  - LIVE_METADATA_UNAVAILABLE
+  - PPM_DB_NOT_FOUND
+  - PPM_DB_ACCESS_DENIED
+  - METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+  - DEPENDENCY_METADATA_INCOMPLETE
+  - LATENCY_INSTRUMENTATION_OUT_OF_SCOPE
+forbidden_evidence:
+  - row_data
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - unapproved_publish_or_export
+quality_metrics:
+  evidence_coverage:
+    formula: evidence_backed_items / required_evidence_items
+    product_target:
+      minimum: 0.95
+      unit: ratio
+    current_live_gate:
+      minimum: 1.0
+      measured_from: p15-hard-live-ppm-metadata-smoke
+  review_required_ratio:
+    formula: review_required_items / evaluated_items
+    product_target:
+      maximum: 0.25
+      unit: ratio
+    current_live_gate:
+      maximum: 1.0
+      requires_blocker_when_above_product_target: DEPENDENCY_METADATA_INCOMPLETE
+  validation_pass_rate:
+    formula: passed_validation_reports / validation_reports
+    product_target:
+      minimum: 0.95
+      unit: ratio
+    current_live_gate:
+      minimum: 0.0
+      allowed_non_pass_statuses:
+        - REVIEW_REQUIRED
+      reason: fixture workflow currently reaches review-required validation by design
+  generation_reproducibility:
+    formula: stable_normalized_artifact_output_for_same_input
+    product_target:
+      required: true
+    current_live_gate:
+      required: true
+      measured_from: p15-fixture-workflow-reproducibility-smoke
+  draft_artifact_completeness:
+    formula: complete_draft_artifacts / expected_draft_artifacts
+    product_target:
+      minimum: 1.0
+      unit: ratio
+    current_live_gate:
+      minimum: 1.0
+      measured_from: p15-fixture-workflow-reproducibility-smoke
+latency_budgets:
+  ppm_readiness:
+    product_target:
+      max_ms: 2000
+    current_live_gate:
+      max_ms: 10000
+      measured_call: check_database_exists
+  metadata_inventory_smoke:
+    product_target:
+      max_ms: 5000
+    current_live_gate:
+      max_ms: 30000
+      measured_calls:
+        - list_procedures
+        - list_tables
+        - list_views
+        - list_functions
+        - get_procedure_dependencies
+        - get_table_schema
+  fixture_workflow_smoke:
+    product_target:
+      max_ms: 1000
+    current_live_gate:
+      max_ms: 2000
+      measured_call: fixture_backed_workflow_service_submit
+observability_contract:
+  correlation_id:
+    request_header: X-Correlation-ID
+    response_header: X-Correlation-ID
+    required_on:
+      - REQUEST
+      - JOB
+      - METADATA
+      - ARTIFACT
+      - VALIDATION
+      - APPROVAL
+      - AUDIT
+  log_context_fields:
+    - request_id
+    - job_id
+    - artifact_id
+    - correlation_id
+    - db_profile_id
+    - snapshot_id
+    - blocker_code
+  monitoring_signals:
+    - latency_ms
+    - validation_status
+    - review_required_count
+    - evidence_coverage_ratio
+    - blocker_code
+    - audit_stage
+  audit_stages:
+    - REQUEST
+    - JOB
+    - METADATA
+    - ARTIFACT
+    - VALIDATION
+    - APPROVAL
+redaction_policy:
+  sensitive_value_markers:
+    - password
+    - credential
+    - connection_string
+    - bearer
+    - cookie
+    - token
+    - api_key
+  replacement: REDACTED
+  must_not_log:
+    - connection_strings
+    - credentials
+    - cookies
+    - raw_definition_text
+    - row_data
+read_only_permission_checks:
+  required: true
+  checks:
+    - tool: check_database_exists
+      dbProfileId: ppm
+      required_result_fields:
+        - exists
+        - accessible
+        - sourceProfile
+        - sourceDatabase
+    - tool: list_procedures
+      dbProfileId: ppm
+      required_result_fields:
+        - procedures
+        - sourceProfile
+        - sourceDatabase
+    - tool: list_tables
+      dbProfileId: ppm
+      required_result_fields:
+        - tables
+        - sourceProfile
+        - sourceDatabase
+    - tool: get_procedure_dependencies
+      dbProfileId: ppm
+      required_result_fields:
+        - dependencySummary
+        - caveats
+    - tool: get_table_schema
+      dbProfileId: ppm
+      required_result_fields:
+        - columns
+sample_scenarios:
+  - sample_id: p15-hard-live-ppm-metadata-smoke
+    readiness_label: hard_live_metadata_evidence
+    required_manifest_mode: live_metadata
+    target_profile: ppm
+    expected_source_database: PPM
+    required_selected_object_buckets:
+      stored_procedures:
+        - simple
+        - medium
+        - complex
+      tables_minimum: 3
+      views_minimum: 1
+      functions_minimum: 1
+    expected_active_blockers:
+      - DEPENDENCY_METADATA_INCOMPLETE
+  - sample_id: p15-fixture-workflow-reproducibility-smoke
+    readiness_label: fixture_first_reproducibility_baseline
+    expected_job_status: REVIEW_PENDING
+    expected_current_step: VALIDATE
+    forbidden_artifact_statuses:
+      - PUBLISHED
