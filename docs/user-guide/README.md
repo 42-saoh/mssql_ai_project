@@ -26,3 +26,9 @@
 - 요청 결과 확인에 앞서 저장소 차원의 자동 검증은 도커 테스트 러너를 통해 수행한다.
 - 최소 통합/eval 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 이다.
 - UI smoke 가 필요한 경우 로컬/승인된 dev URL 에 대해서만 Playwright MCP 를 사용한다.
+
+## P15 live eval 주의
+
+운영 준비도 검증에서는 PPM live metadata gate 가 켜질 수 있다. 이 경우 `dbProfileId=ppm` 이 `PPM` 에 read-only metadata 로 연결되어야 하며, PPM 이 없거나 권한이 없으면 테스트는 실패한다. 실패 시 PLF 로 대체하지 않고 blocker 로 보고한다.
+
+P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidence coverage, review-required 비율, validation 상태, draft artifact completeness, latency budget, audit stage, redaction 상태다. raw definition text, row data, credential 은 화면/로그/fixture 에 포함하지 않는다.

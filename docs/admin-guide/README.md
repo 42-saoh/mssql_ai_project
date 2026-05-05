@@ -22,6 +22,15 @@
 4. 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 과 필요한 경우 `make test`, `make test-web-smoke` 로 수행한다.
 5. approval decision 은 현재 기록 기능이며 publish 나 배포를 자동 수행하지 않는다.
 
+## P15 hard-live eval 운영
+
+- P15 eval 은 `MSSQL_ENABLE_LIVE_METADATA=1` 과 `ppm` profile 의 `PPM` read-only metadata 접근을 요구한다.
+- PPM 접근 실패, metadata 권한 부족, live 연결 부재는 blocker 이며 PLF 로 대체하지 않는다.
+- read-only permission check 는 database 존재/접근성, procedure/table/view/function inventory, procedure dependency, table schema metadata 를 확인한다.
+- latency 는 PPM readiness, metadata inventory smoke, fixture workflow smoke 로 나누어 측정하며 현재 live gate 와 product target 을 구분한다.
+- correlation id 는 request/job/metadata/artifact/validation/approval/audit 문맥에 전달되어야 한다.
+- 로그와 audit 에 connection string, credential, cookie, raw definition text, row data 를 남기지 않는다.
+
 ## 스키마 변경 운영
 
 - 플랫폼 DB 구조 변경이 필요하면 `db/schema/` 에 versioned SQL 파일을 추가한다.

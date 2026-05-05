@@ -60,6 +60,17 @@
 
 live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1` 로 켠 뒤 테스트 컨테이너 또는 로컬 `run-mcp` 프로세스에서 readiness endpoint 를 확인한다. live tool query execution 은 아직 optional adapter boundary 이며, 기본 테스트/e2e/eval 은 fixture-first 로 유지한다.
 
+P15 eval 은 예외적으로 hard-live gate 다. `make test PYTEST_ARGS="tests/e2e tests/eval"` 을 P15 기준으로 통과시키려면 `.env` 또는 승인된 환경변수에 아래 조건을 충족해야 한다.
+
+- `MSSQL_ENABLE_LIVE_METADATA=1`
+- `MSSQL_METADATA_*` 값은 read-only metadata 접근 가능한 계정을 가리킴
+- `MSSQL_METADATA_PROFILE_FILE` 의 `ppm` profile 이 `PPM` 을 가리킴
+- docker/test 내부 연결은 `MSSQL_METADATA_DOCKER_HOST` 로 주입됨
+
+PPM 이 없거나 접근 권한이 없으면 PLF 로 대체하지 않는다. 이 실패는 `LIVE_PPM_EVAL_REQUIRED`, `LIVE_METADATA_UNAVAILABLE`, `PPM_DB_NOT_FOUND`, `PPM_DB_ACCESS_DENIED`, `METADATA_READ_ONLY_PERMISSION_INSUFFICIENT` 같은 blocker 로 취급한다.
+
+worktree 포트 전략은 계속 `make dev-ports` 를 기준으로 한다. P15 eval 자체는 API/MCP/Web dev server port 를 점유하지 않지만, 병렬 worker 가 수동 smoke 를 병행할 때는 hard-coded 8000/8100/3000 대신 worktree 별 계산값을 사용한다.
+
 ## 예시
 
 ```bash
