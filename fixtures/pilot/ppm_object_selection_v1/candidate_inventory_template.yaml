@@ -8,6 +8,26 @@ connection_profile_used:
   profile_id: ppm
   database: PPM
   live_connection_verified: false
+minimum_metadata_discovery_surface:
+  required_tools:
+    - check_database_exists
+    - list_procedures
+    - get_procedure_definition
+    - get_procedure_parameters
+    - get_procedure_dependencies
+    - list_tables
+    - get_table_schema
+    - get_table_indexes
+    - get_table_constraints
+    - get_extended_properties
+    - list_views
+    - list_functions
+  live_adapter_scope: P08A metadata inventory only
+  out_of_scope:
+    - free_form_sql
+    - row_data_sampling
+    - procedure_execution
+    - product_hardening
 metadata_sources_allowed:
   - sys.databases
   - PPM.sys.procedures
@@ -28,6 +48,24 @@ metadata_sources_forbidden:
   - procedure_execution
   - ddl_dml_execution
   - secrets_or_credentials
+allowed_evidence_fields:
+  - source_profile
+  - source_database
+  - object_identity
+  - collected_at
+  - snapshot_id
+  - definition_access
+  - definition_hash
+  - definition_length
+  - detected_patterns
+  - parameter_count
+  - parameter_metadata
+  - dependency_summary
+  - table_key_index_constraint_summary
+  - extended_property_summary
+  - permission_caveat
+  - dependency_caveat
+  - review_required
 selection_rules:
   stored_procedures:
     minimum_recommended: 3
@@ -116,7 +154,11 @@ field_templates:
     selection_reason: []
     related_objects: []
     review_required: true
-blocker_candidates: []
+blocker_candidates:
+  - code: LIVE_METADATA_UNAVAILABLE
+    when: worker cannot establish a live metadata-only MSSQL connection.
+  - code: MIN_METADATA_DISCOVERY_SURFACE_INSUFFICIENT
+    when: representative object selection would require P10 scope or row-data evidence.
 notes:
   - Do not record row data, sample values, credentials, tokens, or real passwords.
   - If PPM is unavailable, leave candidates empty and update blocker_candidates instead of inventing object names.

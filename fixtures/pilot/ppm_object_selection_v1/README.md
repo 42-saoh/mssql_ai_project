@@ -15,6 +15,16 @@
 - `selected_objects.yaml` — 현재 선정 결과 또는 template-only 상태 manifest.
 - `candidate_inventory_template.yaml` — P08A worker 가 live metadata 결과를 정리할 때 사용할 inventory template.
 
+## Discovery 절차
+
+1. `dbProfileId=ppm` 으로 `check_database_exists` 를 호출해 `PPM` 존재와 접근 가능성을 확인한다.
+2. `list_procedures`, `list_tables`, `list_views`, `list_functions` 로 후보 inventory 를 만든다.
+3. 후보 확정에 더 필요한 경우에만 `get_procedure_*`, `get_table_*`, `get_extended_properties` 를 호출한다.
+4. 충분한 metadata evidence 가 모이면 object identity 와 요약 근거만 `selected_objects.yaml` 에 기록한다.
+5. live metadata 연결 또는 권한이 부족하면 실제 이름을 만들지 않고 `template_only` 와 blocker 를 유지한다.
+
+허용 evidence 는 profile/database, object identity, snapshot/collected timestamp, definition hash/length/pattern flag, parameter/dependency summary, key/index/constraint/extended-property summary, caveat, `review_required` 로 제한한다. Definition text, row sample, sample value, credential 은 기록하지 않는다.
+
 ## Metadata-only 허용 범위
 
 허용 예시:
@@ -69,6 +79,7 @@
 - `DEPENDENCY_METADATA_INCOMPLETE`
 - `PPM_PLF_ROLE_CONFLICT`
 - `LIVE_METADATA_UNAVAILABLE`
+- `MIN_METADATA_DISCOVERY_SURFACE_INSUFFICIENT`
 
 ## 현재 상태
 

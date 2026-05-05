@@ -2,7 +2,37 @@
   "snapshotId": "mcp-fixture-snapshot-0001",
   "collectedAt": "2026-01-15T00:00:00Z",
   "source": "synthetic-fixture",
+  "profileDatabases": {
+    "master": "master",
+    "plf": "PLF",
+    "ppm": "PPM"
+  },
   "procedures": [
+    {
+      "schema": "dbo",
+      "name": "usp_ListCustomers",
+      "isEncrypted": false,
+      "definition": "CREATE PROCEDURE dbo.usp_ListCustomers AS BEGIN SET NOCOUNT ON; SELECT c.CUSTOMER_ID, c.CUSTOMER_NM FROM dbo.TB_CUSTOMER AS c; END",
+      "parameters": [],
+      "dependencies": [
+        {
+          "objectType": "TABLE",
+          "schema": "dbo",
+          "name": "TB_CUSTOMER",
+          "dependencyType": "READ",
+          "isAmbiguous": false,
+          "reviewStatus": "CONFIRMED"
+        }
+      ],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic simple customer listing procedure for P08A inventory tests.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    },
     {
       "schema": "dbo",
       "name": "usp_GetOrderSummary",
@@ -49,6 +79,56 @@
         {
           "name": "MS_Description",
           "value": "Returns synthetic order header metadata for analysis fixtures.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    },
+    {
+      "schema": "dbo",
+      "name": "usp_ProcessOrderBatch",
+      "isEncrypted": false,
+      "definition": "CREATE PROCEDURE dbo.usp_ProcessOrderBatch @BatchId INT AS BEGIN SET NOCOUNT ON; BEGIN TRY BEGIN TRANSACTION; CREATE TABLE #Work (ORDER_ID INT); INSERT INTO #Work SELECT ORDER_ID FROM dbo.TB_ORDER WHERE STATUS_CD = 'READY'; DECLARE @sql NVARCHAR(MAX) = N'SELECT ORDER_ID FROM #Work'; EXEC sp_executesql @sql; EXEC dbo.usp_GetOrderSummary @OrderId = @BatchId, @IncludeLines = 1; COMMIT TRANSACTION; END TRY BEGIN CATCH ROLLBACK TRANSACTION; THROW; END CATCH END",
+      "parameters": [
+        {
+          "name": "@BatchId",
+          "dataType": "INT",
+          "direction": "IN",
+          "ordinal": 1,
+          "isNullable": false,
+          "hasDefault": false
+        }
+      ],
+      "dependencies": [
+        {
+          "objectType": "TABLE",
+          "schema": "dbo",
+          "name": "TB_ORDER",
+          "dependencyType": "READ",
+          "isAmbiguous": false,
+          "reviewStatus": "CONFIRMED"
+        },
+        {
+          "objectType": "PROCEDURE",
+          "schema": "dbo",
+          "name": "usp_GetOrderSummary",
+          "dependencyType": "EXECUTE",
+          "isAmbiguous": false,
+          "reviewStatus": "CONFIRMED"
+        },
+        {
+          "objectType": "UNKNOWN",
+          "schema": null,
+          "name": null,
+          "dependencyType": "DYNAMIC_SQL",
+          "isAmbiguous": true,
+          "reviewStatus": "REVIEW_REQUIRED"
+        }
+      ],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic complex procedure with temp table, dynamic SQL, transaction, and TRY/CATCH metadata.",
           "level": "OBJECT",
           "source": "FIXTURE"
         }

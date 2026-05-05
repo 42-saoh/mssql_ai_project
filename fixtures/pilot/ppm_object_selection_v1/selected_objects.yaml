@@ -1,33 +1,342 @@
 selection_version: ppm_object_selection_v1
 source_db: PPM
 platform_db_context: PLF
-selection_mode: template_only
-generated_at: '2026-05-04T00:00:00+09:00'
+selection_mode: live_metadata
+generated_at: '2026-05-05T13:47:24+09:00'
 connection_profile_used:
   profile_id: ppm
   database: PPM
-  host: 127.0.0.1
+  host: host.docker.internal
   port: 1433
   sql_server: MSSQL 2017 Docker
-  container: mssql-2017
-  collation: Korean_Wansung_CI_AS
+  container: externally_managed
+  collation: null
   timezone: Asia/Seoul
-  live_connection_verified: false
+  live_connection_verified: true
   credential_policy: secrets_must_not_be_committed
 metadata_access_policy:
   metadata_only: true
   row_data_allowed: false
   procedure_execution_allowed: false
   ddl_dml_allowed: false
-stored_procedures: []
-tables: []
-views: []
-functions: []
+minimum_metadata_discovery_surface:
+  status: live_metadata_verified
+  required_tools:
+    - check_database_exists
+    - list_procedures
+    - get_procedure_definition
+    - get_procedure_parameters
+    - get_procedure_dependencies
+    - list_tables
+    - get_table_schema
+    - get_table_indexes
+    - get_table_constraints
+    - get_extended_properties
+    - list_views
+    - list_functions
+  allowed_evidence_fields:
+    - source_profile
+    - source_database
+    - object_identity
+    - collected_at
+    - snapshot_id
+    - definition_hash
+    - definition_length
+    - detected_patterns
+    - parameter_metadata
+    - dependency_summary
+    - key_index_constraint_summary
+    - extended_property_summary
+    - caveats
+    - review_required
+live_metadata_summary:
+  procedure_count: 448
+  table_count: 771
+  view_count: 14
+  function_count: 168
+  procedure_buckets:
+    simple: 8
+    medium: 179
+    complex: 261
+  dependency_summary_counts:
+    tables: 0
+    views: 0
+    functions: 293
+    procedures: 0
+    unresolved: 2887
+active_blockers:
+  - code: DEPENDENCY_METADATA_INCOMPLETE
+    description: Live sys.sql_expression_dependencies was readable, but table dependencies were not typed as TABLE and 2887 dependency refs remained unresolved; table selections are therefore metadata-rich candidates rather than SP-linked confirmed dependencies.
+stored_procedures:
+  - schema: dbo
+    name: GetInspItemsCd
+    object_type: PROCEDURE
+    complexity: simple
+    selection_reason:
+      - simple_bucket_representative
+      - metadata_definition_available
+      - dependency_summary_available_but_table_links_incomplete
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      definition_access: true
+      definition_hash: 999c1f6db938ee3a015b210659b85d9b31db3c66b7d3726a8f1113d46239ea9a
+      definition_length: 636
+      detected_patterns:
+        - simple_dml_or_select
+      parameter_count: 1
+      dependency_count: 1
+    dependency_summary:
+      tables: []
+      views: []
+      functions: []
+      procedures: []
+      unresolved_count: 1
+      unresolved_sample:
+        - schema: dbo
+          name: PEX_INSP_ITEMS
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+    caveats:
+      - table_dependency_links_incomplete
+    review_required: true
+  - schema: dbo
+    name: PAD_GET_BAT_LIST_PRC
+    object_type: PROCEDURE
+    complexity: medium
+    selection_reason:
+      - medium_bucket_representative
+      - metadata_definition_available
+      - dependency_summary_available_but_table_links_incomplete
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      definition_access: true
+      definition_hash: 05a14dfe7b10e59f7b87a4497f265a0993587bd2f905771efc908ae8c7a2f7d2
+      definition_length: 8302
+      detected_patterns:
+        - joins_or_branching
+        - simple_dml_or_select
+      parameter_count: 6
+      dependency_count: 4
+    dependency_summary:
+      tables: []
+      views: []
+      functions: []
+      procedures: []
+      unresolved_count: 4
+      unresolved_sample:
+        - schema: dbo
+          name: EHRTB_IFEmployee
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: PAD_BAT_HIS
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: PAD_BAT_MGMT
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: PCO_COM_CD_DTL_V
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+    caveats:
+      - table_dependency_links_incomplete
+    review_required: true
+  - schema: dbo
+    name: PCS_PY_ManageInvoiceFldSchd_PRC
+    object_type: PROCEDURE
+    complexity: complex
+    selection_reason:
+      - complex_bucket_representative
+      - metadata_definition_available
+      - dependency_summary_available_but_table_links_incomplete
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      definition_access: true
+      definition_hash: 5e41bdded786e9c6c44c726930d923fe134cef24a350613453fd79ca43513345
+      definition_length: 408310
+      detected_patterns:
+        - temp_table
+        - cursor
+        - joins_or_branching
+        - simple_dml_or_select
+      parameter_count: 10
+      dependency_count: 63
+    dependency_summary:
+      tables: []
+      views: []
+      functions:
+        - schema: dbo
+          name: PCO_CO_GetCurCodeCipher_FNC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: PCO_CO_GetFormatNumAndSubZeroDigits_FNC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: PCO_CO_GetInvoiceNo_FNC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+      procedures: []
+      unresolved_count: 50
+      unresolved_sample:
+        - schema: null
+          name: PCS_PY_ManageInvoiceAssetAddition_PRC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: Check_Project_Tax
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: CPBTB_ContractSummary
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: CPBTB_ProjectSummary
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+        - schema: dbo
+          name: CPITB_SubcontSchd
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+    caveats:
+      - ambiguous_dependency_metadata
+      - table_dependency_links_incomplete
+    review_required: true
+tables:
+  - schema: dbo
+    name: PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF
+    object_type: TABLE
+    selection_reason:
+      - metadata_rich_table_candidate
+      - sp_table_dependency_links_unavailable
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      column_count: 19
+      key_index_constraint_summary:
+        primary_key: null
+        foreign_key_count: 0
+        index_count: 1
+        constraint_count: 1
+      extended_property_count: 20
+    related_procedures: []
+    caveats: []
+    review_required: false
+  - schema: dbo
+    name: PEM_PRV
+    object_type: TABLE
+    selection_reason:
+      - metadata_rich_table_candidate
+      - sp_table_dependency_links_unavailable
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      column_count: 135
+      key_index_constraint_summary:
+        primary_key: null
+        foreign_key_count: 0
+        index_count: 10
+        constraint_count: 1
+      extended_property_count: 0
+    related_procedures: []
+    caveats:
+      - description_review_required
+    review_required: true
+  - schema: dbo
+    name: PEM_CTRT
+    object_type: TABLE
+    selection_reason:
+      - metadata_rich_table_candidate
+      - sp_table_dependency_links_unavailable
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      column_count: 163
+      key_index_constraint_summary:
+        primary_key: null
+        foreign_key_count: 0
+        index_count: 8
+        constraint_count: 1
+      extended_property_count: 0
+    related_procedures: []
+    caveats:
+      - description_review_required
+    review_required: true
+views:
+  - schema: dbo
+    name: PCO_COM_CD_DTL_V
+    object_type: VIEW
+    selection_reason:
+      - view_inventory_available
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      definition_access: true
+      definition_hash: daccb6b7b4ff29e3c615905b29b1c987177ec068d50f748d726a50d9836a4bcc
+      definition_length: 1974
+      detected_patterns:
+        - simple_dml_or_select
+      dependency_count: 0
+    dependency_summary:
+      tables: []
+      views: []
+      functions: []
+      procedures: []
+      unresolved_count: 0
+    caveats: []
+    review_required: false
+functions:
+  - schema: dbo
+    name: GetInitCap
+    object_type: FUNCTION
+    selection_reason:
+      - function_inventory_available
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      collected_at: '2026-05-05T04:47:24Z'
+      definition_access: true
+      definition_hash: eed6b7f67c471ad615e1b9ee15141eb746b1656954c04ba3e03213273b5af7f9
+      definition_length: 1176
+      detected_patterns:
+        - joins_or_branching
+        - simple_dml_or_select
+      dependency_count: 0
+    dependency_summary:
+      tables: []
+      views: []
+      functions: []
+      procedures: []
+      unresolved_count: 0
+    caveats: []
+    review_required: false
 known_limitations:
-  - code: TEMPLATE_ONLY
-    description: Live PPM metadata was not available in this execution environment, so no real object identifiers were selected.
   - code: NO_ROW_DATA
     description: This manifest intentionally contains only metadata and object identity fields; row data samples are forbidden.
+  - code: DEPENDENCY_METADATA_INCOMPLETE
+    description: Procedure-to-table links could not be confirmed from live dependency metadata, so table selections are metadata-rich candidates and require review.
 blocker_candidates:
   - code: PPM_DB_NOT_FOUND
     when: sys.databases lookup cannot find database name PPM on the configured local SQL Server instance.
@@ -43,6 +352,9 @@ blocker_candidates:
     when: project files or local configuration imply PPM and PLF roles differently from PPM=pilot target and PLF=platform DB.
   - code: LIVE_METADATA_UNAVAILABLE
     when: live MSSQL connection cannot be established from the worker environment.
+  - code: MIN_METADATA_DISCOVERY_SURFACE_INSUFFICIENT
+    when: P08A cannot secure enough metadata-only inventory evidence without expanding into P10 product hardening scope.
 review_notes:
-  - P08A must not invent stored procedure, table, view, or function names when selection_mode remains template_only.
-  - Later workers must treat this file as read-only unless they own P08A or receive coordinator approval.
+  - Live PPM metadata connection succeeded with dbProfileId=ppm and source database PPM.
+  - Selected object identities are real metadata object names from PPM, but no row data or definition text is stored.
+  - Procedure dependency metadata requires review before claiming table linkage because table dependency counts were zero and unresolved dependency refs were high.
