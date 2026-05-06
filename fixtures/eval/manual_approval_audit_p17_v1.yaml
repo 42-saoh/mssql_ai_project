@@ -1,0 +1,141 @@
+version: manual_approval_audit_p17_v1
+track: P17C
+source_p17b_validation_package: fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
+source_p17_blocker_closure: fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
+source_pilot_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+source_generation_manifest: fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml
+source_db: PPM
+platform_db_context: PLF
+selection_mode: live_metadata
+generated_at: '2026-05-06T22:45:00+09:00'
+approvalDecision: MISSING
+approval_status: MISSING_HUMAN_INPUT
+human_approval_recorded: false
+active_blockers_after_p17c:
+  - MANUAL_APPROVAL_EVIDENCE_MISSING
+closed_blockers_after_p17c:
+  - DEPENDENCY_METADATA_INCOMPLETE
+live_release_decision_after_p17c:
+  decision: NO_GO
+  reason: P17B validation passed, but no explicit human APPROVE decision was provided for P17C.
+policy_boundaries:
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  raw_definition_text_allowed_in_evidence: false
+  ddl_dml_allowed: false
+  plf_fallback_allowed: false
+  publish_or_export_allowed: false
+  generated_artifacts_are_draft_only: true
+  public_api_contract_changed: false
+  db_schema_changed: false
+validation_package_binding:
+  validation_status: PASSED
+  artifact_set_ref:
+    artifact_set_id: p17b-live-pilot-artifact-set
+    artifact_set_version: 2026-05-06.p17b.v1
+    artifact_status: DRAFT
+  validation_ref:
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    validation_status: PASSED
+    source_ref: fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml#validation_results
+binding_targets:
+  - artifact_id: p17b-selected-procedure-analysis
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: SP_ANALYSIS_DOC
+    artifact_ref: p17b-selected-procedure-analysis@2026-05-06.p17b.v1
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    selected_object_refs:
+      - PROCEDURE:dbo.GetInspItemsCd
+      - PROCEDURE:dbo.PAD_GET_BAT_LIST_PRC
+      - PROCEDURE:dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+      - PROCEDURE:dbo.PAD_REG_BAT_HIS_PRC
+      - PROCEDURE:dbo.PAD_SAVE_COM_CD_DTL_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallSendMail_PRC
+    evidence_refs:
+      - p17a-procedure-suite-majority-gate
+      - p17b-selected-sp-evidence
+  - artifact_id: p17b-selected-procedure-dependency-report
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: DEPENDENCY_REPORT
+    artifact_ref: p17b-selected-procedure-dependency-report@2026-05-06.p17b.v1
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    selected_object_refs:
+      - PROCEDURE:dbo.GetInspItemsCd
+      - PROCEDURE:dbo.PAD_GET_BAT_LIST_PRC
+      - PROCEDURE:dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+      - PROCEDURE:dbo.PAD_REG_BAT_HIS_PRC
+      - PROCEDURE:dbo.PAD_SAVE_COM_CD_DTL_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallSendMail_PRC
+    evidence_refs:
+      - p17a-dependency-evidence-closure
+      - p17b-selected-sp-dependency-summary
+  - artifact_id: p17b-selected-object-metadata-coverage
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: METADATA_QUERY_RESULT
+    artifact_ref: p17b-selected-object-metadata-coverage@2026-05-06.p17b.v1
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    selected_object_refs:
+      - TABLE:dbo.PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF
+      - TABLE:dbo.PEM_PRV
+      - TABLE:dbo.PEM_CTRT
+      - VIEW:dbo.PCO_COM_CD_DTL_V
+      - FUNCTION:dbo.GetInitCap
+    evidence_refs:
+      - p17b-selected-table-view-function-metadata
+      - p17b-selected-object-manifest
+approval_record_template:
+  current_status: MISSING
+  approval_ref: MISSING
+  actor: MISSING
+  timestamp: MISSING
+  correlation_id: MISSING
+  future_required_decision: APPROVE
+  required_human_input_fields:
+    - actor
+    - decision
+    - comment
+    - timestamp
+    - correlationId
+  must_bind_to:
+    - artifactRef
+    - artifactVersion
+    - validationRef
+    - selectedObjectRefs
+    - evidenceRefs
+audit_event_template:
+  current_status: MISSING
+  expected_action: APPROVAL_DECISION_RECORDED
+  audit_trail: []
+  required_fields_when_human_approval_exists:
+    - actor
+    - action
+    - artifactRef
+    - artifactVersion
+    - validationRef
+    - approvalRef
+    - selectedObjectRefs
+    - evidenceRefs
+    - timestamp
+    - correlationId
+completion_status:
+  p17c_status: BLOCKED_PENDING_HUMAN_APPROVAL
+  blocker_closed: false
+  no_go_preserved: true
+  publish_or_export_endpoint_added: false
+  schema_change_required: false
+forbidden_evidence:
+  - row_data
+  - sample_rows
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - synthetic_human_approval
+  - unapproved_publish_or_export
+known_limitations:
+  - code: MANUAL_APPROVAL_EVIDENCE_MISSING
+    impact: P17C did not receive explicit human approval input, so release decision remains NO_GO.

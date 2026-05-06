@@ -12,6 +12,10 @@ from ai_agent_validation import (
 
 ROOT = Path(__file__).resolve().parents[2]
 P17B_FIXTURE = ROOT / "fixtures" / "eval" / "live_pilot_artifact_validation_p17_v1.yaml"
+P17C_FIXTURE = ROOT / "fixtures" / "eval" / "manual_approval_audit_p17_v1.yaml"
+P17_BLOCKER_FIXTURE = (
+    ROOT / "fixtures" / "eval" / "live_pilot_blocker_closure_p17_v1.yaml"
+)
 GENERATION_MANIFEST = (
     ROOT / "fixtures" / "generation" / "live_pilot_artifacts_p17_v1" / "manifest.yaml"
 )
@@ -116,6 +120,93 @@ def test_p17b_release_critical_validation_items_all_pass_without_overclaim() -> 
     assert fixture["active_blockers_after_p17b"] == ["MANUAL_APPROVAL_EVIDENCE_MISSING"]
     assert "production-ready: true" not in P17B_FIXTURE.read_text(encoding="utf-8")
     assert "PUBLISHED" not in P17B_FIXTURE.read_text(encoding="utf-8")
+
+
+def test_p17c_missing_approval_template_binds_p17b_targets_without_closing_blocker() -> None:
+    fixture = _yaml(P17C_FIXTURE)
+    p17b = _yaml(P17B_FIXTURE)
+
+    assert fixture["version"] == "manual_approval_audit_p17_v1"
+    assert fixture["track"] == "P17C"
+    assert fixture["source_p17b_validation_package"] == (
+        "fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml"
+    )
+    assert fixture["source_db"] == "PPM"
+    assert fixture["platform_db_context"] == "PLF"
+    assert fixture["approvalDecision"] == "MISSING"
+    assert fixture["approval_status"] == "MISSING_HUMAN_INPUT"
+    assert fixture["human_approval_recorded"] is False
+    assert fixture["active_blockers_after_p17c"] == [
+        "MANUAL_APPROVAL_EVIDENCE_MISSING"
+    ]
+    assert fixture["completion_status"]["blocker_closed"] is False
+    assert fixture["completion_status"]["no_go_preserved"] is True
+    assert fixture["live_release_decision_after_p17c"]["decision"] == "NO_GO"
+
+    binding = fixture["validation_package_binding"]
+    assert binding["validation_status"] == p17b["validation_status"]
+    assert binding["artifact_set_ref"]["artifact_set_id"] == p17b["artifact_set"][
+        "artifact_set_id"
+    ]
+    assert binding["artifact_set_ref"]["artifact_set_version"] == p17b["artifact_set"][
+        "artifact_set_version"
+    ]
+    assert binding["validation_ref"]["validation_report_id"] == p17b["artifact_set"][
+        "validation_report_id"
+    ]
+
+    p17b_artifacts = {artifact["artifact_id"]: artifact for artifact in p17b["artifacts"]}
+    binding_targets = {
+        target["artifact_id"]: target for target in fixture["binding_targets"]
+    }
+    assert set(binding_targets) == set(p17b_artifacts)
+    for artifact_id, target in binding_targets.items():
+        source = p17b_artifacts[artifact_id]
+        assert target["artifact_version"] == source["artifact_version"]
+        assert target["artifact_type"] == source["artifact_type"]
+        assert target["validation_report_id"] == p17b["artifact_set"][
+            "validation_report_id"
+        ]
+        assert target["selected_object_refs"] == source["selected_object_refs"]
+        assert set(target["evidence_refs"]) == {
+            ref["evidence_id"] for ref in source["evidence_refs"]
+        }
+
+    required_audit_fields = set(
+        fixture["audit_event_template"]["required_fields_when_human_approval_exists"]
+    )
+    assert {
+        "actor",
+        "action",
+        "artifactRef",
+        "artifactVersion",
+        "validationRef",
+        "approvalRef",
+        "selectedObjectRefs",
+        "evidenceRefs",
+        "timestamp",
+        "correlationId",
+    } <= required_audit_fields
+
+    text = P17C_FIXTURE.read_text(encoding="utf-8")
+    assert "approvalDecision: APPROVE" not in text
+    assert "production-ready: true" not in text
+    assert "PUBLISHED" not in text
+
+
+def test_p17_blocker_fixture_references_p17c_missing_template() -> None:
+    fixture = _yaml(P17_BLOCKER_FIXTURE)
+
+    assert fixture["current_state"]["p17c_manual_approval_audit_fixture"] == (
+        "fixtures/eval/manual_approval_audit_p17_v1.yaml"
+    )
+    assert fixture["current_state"]["p17c_manual_approval_status"] == (
+        "MISSING_HUMAN_INPUT"
+    )
+    assert fixture["current_state"]["p17c_blocker_closed"] is False
+    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in fixture["current_state"][
+        "active_blockers_to_close"
+    ]
 
 
 def _yaml(path: Path) -> dict[str, Any]:

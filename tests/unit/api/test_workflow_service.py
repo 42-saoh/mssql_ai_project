@@ -371,6 +371,85 @@ def test_approve_after_passed_validation_satisfies_gate_without_publishing() -> 
     assert repository.audit_events[-1].action == "PUBLISH_GATE_EVALUATED"
 
 
+def test_approval_audit_payload_binds_artifact_version_refs_and_correlation() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    request = repository.create_request(
+        db_profile_id="ppm",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "GetInspItemsCd"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={},
+        request_hash="hash-p17c-approval-audit",
+        correlation_id="corr-p17c-approval-audit",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    artifact = repository.add_artifact(
+        job_id=job.job_id,
+        artifact_type=ArtifactType.SP_ANALYSIS_DOC,
+        title="Passed P17B Analysis",
+        content=_passed_sp_analysis_content(),
+        evidence_refs=[
+            {
+                "type": "MSSQL_METADATA",
+                "objectRef": "dbo.usp_demo",
+                "locator": "fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml",
+                "snapshotId": "live:ppm:2026-05-06T12:52:24Z",
+            }
+        ],
+        generator_version="live-pilot-artifact-manifest-0.1.0",
+        registry_refs=("fixture:live_pilot_artifacts_p17_v1",),
+        assumptions=(),
+        review_required=False,
+        extra={
+            "artifactVersion": "2026-05-06.p17b.v1",
+            "selectedObjectRefs": ["PROCEDURE:dbo.GetInspItemsCd"],
+        },
+    )
+    validation = service.validate_artifact(
+        artifact.artifact_id,
+        correlation_id="corr-p17c-approval-audit",
+    )
+
+    approval = service.record_approval_decision(
+        artifact_id=artifact.artifact_id,
+        decision="APPROVE",
+        reviewer="human.reviewer@example.com",
+        comment="human approval evidence supplied outside P17C missing-template mode",
+        validation_report_id=validation.validation_report_id,
+        correlation_id="corr-p17c-approval-audit",
+    )
+
+    audit = [
+        event
+        for event in repository.audit_events
+        if event.action == "APPROVAL_DECISION_RECORDED"
+    ][-1]
+    assert approval.decision == "APPROVE"
+    assert audit.correlation_id == "corr-p17c-approval-audit"
+    assert audit.payload["actor"] == "human.reviewer@example.com"
+    assert audit.payload["correlationId"] == "corr-p17c-approval-audit"
+    assert audit.payload["artifactId"] == artifact.artifact_id
+    assert audit.payload["artifactVersion"] == "2026-05-06.p17b.v1"
+    assert audit.payload["artifactRef"] == {
+        "artifactId": artifact.artifact_id,
+        "artifactVersion": "2026-05-06.p17b.v1",
+        "artifactType": "SP_ANALYSIS_DOC",
+    }
+    assert audit.payload["validationRef"]["validationReportId"] == (
+        validation.validation_report_id
+    )
+    assert audit.payload["validationRef"]["validationStatus"] == "PASSED"
+    assert audit.payload["approvalRef"]["approvalId"] == approval.approval_id
+    assert audit.payload["approvalRef"]["decision"] == "APPROVE"
+    assert audit.payload["selectedObjectRefs"] == ["PROCEDURE:dbo.GetInspItemsCd"]
+    assert audit.payload["evidenceRefs"] == artifact.evidence_refs
+    assert audit.payload["refs"]["artifactVersion"] == "2026-05-06.p17b.v1"
+    assert audit.payload["refs"]["validationReportId"] == validation.validation_report_id
+    assert audit.payload["refs"]["approvalId"] == approval.approval_id
+    assert audit.payload["timestamp"]
+
+
 def test_approval_decision_requires_latest_validation_context() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)

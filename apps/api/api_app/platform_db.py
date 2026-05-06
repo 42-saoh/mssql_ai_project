@@ -27,6 +27,7 @@ from api_app.repositories import (
     ValidationReportRecord,
     WorkflowRepository,
     WorkRequestRecord,
+    approval_audit_payload,
     audit_correlation_id,
     prefixed_id,
     standardized_audit_payload,
@@ -661,19 +662,19 @@ class MssqlPlatformRepository:
         artifact.updated_at = utc_now()
         artifact.status = next_status
         self._save_artifact(artifact)
+        resolved_correlation_id = correlation_id or self._correlation_for_artifact(artifact)
         self.record_audit_event(
             action="APPROVAL_DECISION_RECORDED",
             target_type="ARTIFACT",
             target_ref_id=artifact_id,
-            payload={
-                "decision": decision,
-                "storageDecision": record.storage_decision,
-                "validationReportId": validation_report_id,
-                "approvalId": record.approval_id,
-                "reviewerChecklist": record.reviewer_checklist,
-            },
+            payload=approval_audit_payload(
+                artifact=artifact,
+                approval=record,
+                validation_report_id=validation_report_id,
+                correlation_id=resolved_correlation_id,
+            ),
             actor=reviewer,
-            correlation_id=correlation_id or self._correlation_for_artifact(artifact),
+            correlation_id=resolved_correlation_id,
         )
         return record
 

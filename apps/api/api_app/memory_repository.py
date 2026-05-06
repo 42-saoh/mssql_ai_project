@@ -21,6 +21,7 @@ from api_app.repositories import (
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkRequestRecord,
+    approval_audit_payload,
     prefixed_id,
     standardized_audit_payload,
     utc_now,
@@ -325,19 +326,26 @@ class MemoryWorkflowRepository:
         artifact.latest_approval_id = record.approval_id
         artifact.updated_at = utc_now()
         artifact.status = next_status
+        resolved_correlation_id = (
+            correlation_id
+            or (
+                self.jobs[artifact.job_id].correlation_id
+                if artifact.job_id in self.jobs
+                else None
+            )
+        )
         self.record_audit_event(
             action="APPROVAL_DECISION_RECORDED",
             target_type="ARTIFACT",
             target_ref_id=artifact_id,
-            payload={
-                "decision": decision,
-                "storageDecision": record.storage_decision,
-                "validationReportId": validation_report_id,
-                "approvalId": record.approval_id,
-                "reviewerChecklist": record.reviewer_checklist,
-            },
+            payload=approval_audit_payload(
+                artifact=artifact,
+                approval=record,
+                validation_report_id=validation_report_id,
+                correlation_id=resolved_correlation_id,
+            ),
             actor=reviewer,
-            correlation_id=correlation_id or self.jobs[artifact.job_id].correlation_id,
+            correlation_id=resolved_correlation_id,
         )
         return record
 

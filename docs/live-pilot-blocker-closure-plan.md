@@ -12,6 +12,11 @@ Current live pilot decision remains `NO_GO` until all P17 exit criteria pass.
 |---|---|---|
 | `MANUAL_APPROVAL_EVIDENCE_MISSING` | No human `APPROVE` decision is bound to a passed validation report for the same release artifact/version. | P17C |
 
+P17C currently has a missing-evidence template at
+`fixtures/eval/manual_approval_audit_p17_v1.yaml`. It binds the P17B artifact/version and
+validation targets that a future human approval must reference, but it deliberately keeps
+`approvalDecision: MISSING` and does not close the blocker.
+
 Closed evidence gate:
 
 | Closed item | Evidence | Owner |
@@ -41,6 +46,7 @@ A third practical gap must also be closed before the final decision can change:
    - Record a human `APPROVE` decision only after P17B has a passed validation package.
    - Bind approval, validation, artifact version, actor, timestamp, correlation id, and audit event refs.
    - Do not synthesize reviewer approval. If no reviewer approval is provided, keep the blocker active.
+   - Current P17C status is `MISSING_HUMAN_INPUT`; the template records required future audit fields but does not claim approval.
 
 4. **P17D Pilot Release GO Decision Update**
    - Re-run the hard-live gates.

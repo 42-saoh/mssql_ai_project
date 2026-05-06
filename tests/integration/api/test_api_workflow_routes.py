@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
+from ai_agent_domain import ArtifactType
 from api_app.dependencies import get_repository, get_workflow_service, reset_application_state
 from api_app.main import app
 from api_app.workflow import WorkflowService
@@ -10,17 +13,26 @@ from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client_and_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[tuple[TestClient, MemoryWorkflowRepository]]:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     app.dependency_overrides[get_repository] = lambda: repository
     app.dependency_overrides[get_workflow_service] = lambda: service
     try:
-        yield TestClient(app)
+        yield TestClient(app), repository
     finally:
         app.dependency_overrides.clear()
         reset_application_state()
+
+
+@pytest.fixture
+def client(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+) -> TestClient:
+    return client_and_repository[0]
 
 
 def _sp_analysis_payload(outputs: list[str] | None = None) -> dict:
@@ -191,6 +203,121 @@ def test_approve_without_passed_validation_returns_workflow_conflict(
     preview = client.get(f"/api/v1/artifacts/{artifact_id}", headers=headers)
     assert preview.status_code == 200
     assert preview.json()["status"] != "PUBLISHED"
+
+
+def test_approval_route_records_enriched_audit_payload_for_passed_validation(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+) -> None:
+    client, repository = client_and_repository
+    request = repository.create_request(
+        db_profile_id="ppm",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "GetInspItemsCd"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-route-p17c-approval",
+        correlation_id="corr-route-p17c-approval",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    artifact = repository.add_artifact(
+        job_id=job.job_id,
+        artifact_type=ArtifactType.SP_ANALYSIS_DOC,
+        title="P17B Passed Analysis",
+        content="\n".join(
+            [
+                "# Analysis",
+                "",
+                "## input_interpretation",
+                "dbo.GetInspItemsCd",
+                "",
+                "## analysis_summary",
+                "metadata-only approval route fixture",
+                "",
+                "## procedure_signature",
+                "dbo.GetInspItemsCd()",
+                "",
+                "## evidence_summary",
+                "metadata evidence bound",
+                "",
+                "## assumptions_and_todo",
+                "None.",
+                "",
+                "## review_checklist",
+                "- [x] validation package passed.",
+                "",
+            ]
+        ),
+        evidence_refs=[
+            {
+                "type": "MSSQL_METADATA",
+                "objectRef": "PROCEDURE:dbo.GetInspItemsCd",
+                "locator": "fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml",
+                "snapshotId": "live:ppm:2026-05-06T12:52:24Z",
+            }
+        ],
+        generator_version="live-pilot-artifact-manifest-0.1.0",
+        registry_refs=("fixture:live_pilot_artifacts_p17_v1",),
+        assumptions=(),
+        review_required=False,
+        extra={
+            "artifactVersion": "2026-05-06.p17b.v1",
+            "selectedObjectRefs": ["PROCEDURE:dbo.GetInspItemsCd"],
+        },
+    )
+    validation = repository.save_validation_report(
+        artifact_id=artifact.artifact_id,
+        status="PASSED",
+        checks=[
+            {
+                "ruleId": "p17c.route.validation_passed",
+                "severity": "INFO",
+                "result": "PASS",
+                "message": "P17B validation package passed.",
+            }
+        ],
+        missing_evidence=[],
+        manual_review_points=[],
+        correlation_id="corr-route-p17c-approval",
+    )
+
+    approval = client.post(
+        f"/api/v1/artifacts/{artifact.artifact_id}/approval-decisions",
+        headers={"X-Correlation-ID": "corr-route-p17c-approval"},
+        json={
+            "decision": "APPROVE",
+            "reviewer": "human.reviewer@example.com",
+            "comment": "route-level approval binding coverage",
+            "validationReportId": validation.validation_report_id,
+        },
+    )
+
+    assert approval.status_code == 201
+    assert approval.headers["X-Correlation-ID"] == "corr-route-p17c-approval"
+    assert approval.json()["decision"] == "APPROVE"
+    assert set(approval.json()) == {
+        "approvalId",
+        "artifactId",
+        "decision",
+        "reviewer",
+        "comment",
+        "decidedAt",
+    }
+
+    audit = [
+        event
+        for event in repository.audit_events
+        if event.action == "APPROVAL_DECISION_RECORDED"
+    ][-1]
+    assert audit.correlation_id == "corr-route-p17c-approval"
+    assert audit.payload["correlationId"] == "corr-route-p17c-approval"
+    assert audit.payload["artifactVersion"] == "2026-05-06.p17b.v1"
+    assert audit.payload["artifactRef"]["artifactId"] == artifact.artifact_id
+    assert audit.payload["validationRef"]["validationReportId"] == (
+        validation.validation_report_id
+    )
+    assert audit.payload["approvalRef"]["approvalId"] == approval.json()["approvalId"]
+    assert audit.payload["selectedObjectRefs"] == ["PROCEDURE:dbo.GetInspItemsCd"]
+    assert audit.payload["evidenceRefs"] == artifact.evidence_refs
 
 
 def test_publish_and_export_routes_are_not_exposed(client: TestClient) -> None:

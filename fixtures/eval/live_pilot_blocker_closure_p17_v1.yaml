@@ -12,6 +12,9 @@ current_state:
     - MANUAL_APPROVAL_EVIDENCE_MISSING
   blockers_closed:
     - DEPENDENCY_METADATA_INCOMPLETE
+  p17c_manual_approval_audit_fixture: fixtures/eval/manual_approval_audit_p17_v1.yaml
+  p17c_manual_approval_status: MISSING_HUMAN_INPUT
+  p17c_blocker_closed: false
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false

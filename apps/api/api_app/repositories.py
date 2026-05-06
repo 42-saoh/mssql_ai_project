@@ -334,6 +334,79 @@ def standardized_audit_payload(
     return audit_payload
 
 
+def approval_audit_payload(
+    *,
+    artifact: ArtifactRecord,
+    approval: ApprovalRecordData,
+    validation_report_id: str | None,
+    correlation_id: str | None,
+) -> dict[str, Any]:
+    artifact_version = artifact_version_ref(artifact)
+    selected_object_refs = selected_object_refs_for_artifact(artifact)
+    refs = {
+        "artifactId": artifact.artifact_id,
+        "artifactVersion": artifact_version,
+        "approvalId": approval.approval_id,
+    }
+    if validation_report_id:
+        refs["validationReportId"] = validation_report_id
+    payload: dict[str, Any] = {
+        "decision": approval.decision,
+        "storageDecision": approval.storage_decision,
+        "artifactId": artifact.artifact_id,
+        "artifactVersion": artifact_version,
+        "artifactRef": {
+            "artifactId": artifact.artifact_id,
+            "artifactVersion": artifact_version,
+            "artifactType": artifact.type.value,
+        },
+        "validationReportId": validation_report_id,
+        "validationRef": {
+            "validationReportId": validation_report_id,
+            "artifactId": artifact.artifact_id,
+            "artifactVersion": artifact_version,
+            "validationStatus": approval.validation_summary.get("status"),
+        },
+        "approvalId": approval.approval_id,
+        "approvalRef": {
+            "approvalId": approval.approval_id,
+            "decision": approval.decision,
+            "storageDecision": approval.storage_decision,
+        },
+        "selectedObjectRefs": selected_object_refs,
+        "evidenceRefs": list(artifact.evidence_refs),
+        "timestamp": approval.decided_at.isoformat(),
+        "actor": approval.reviewer,
+        "reviewerChecklist": approval.reviewer_checklist,
+        "refs": refs,
+    }
+    if correlation_id:
+        payload["correlationId"] = correlation_id
+    return payload
+
+
+def artifact_version_ref(artifact: ArtifactRecord) -> str:
+    for key in ("artifactVersion", "artifact_version", "version"):
+        value = artifact.extra.get(key)
+        if value:
+            return str(value)
+    return "v1"
+
+
+def selected_object_refs_for_artifact(artifact: ArtifactRecord) -> list[str]:
+    value = artifact.extra.get("selectedObjectRefs")
+    if value is None:
+        value = artifact.extra.get("selected_object_refs")
+    if value is None:
+        return []
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return [cleaned] if cleaned else []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value if str(item).strip()]
+    return []
+
+
 def audit_stage(action: str, target_type: str) -> str:
     if action in AUDIT_STAGE_BY_ACTION:
         return AUDIT_STAGE_BY_ACTION[action]
