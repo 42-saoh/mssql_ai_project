@@ -342,3 +342,35 @@ P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이�
 3. `P09`, `P10`, `P11`, `P12`는 manifest 의존성 기준으로 병렬/순차 실행
 4. `P13`, `P14`, `P15`
 5. `P16`
+
+---
+
+## P17 Live Pilot Blocker Closure Wave
+
+P16 결과가 `NO_GO`이면 P17을 실행한다. P17은 P16을 뒤집기 위한 임의 문서 수정이 아니라, P16의 active blocker를 evidence-first로 닫는 후속 wave다. 현재 live pilot release는 P17D가 모든 evidence gate를 검증하기 전까지 계속 `NO_GO`다.
+
+### P17 실행 순서
+
+1. `P17A` — dependency metadata evidence closure
+   - `DEPENDENCY_METADATA_INCOMPLETE` 해소가 목표다.
+   - selected PPM SP의 table/view/function/procedure dependency를 metadata-only evidence refs로 확인한다.
+   - selected table을 SP dependency로 주장하려면 catalog evidence가 있어야 한다.
+   - raw definition text, row data, procedure execution은 금지한다.
+2. `P17B` — live pilot artifact validation closure
+   - P17A가 확인한 pilot object set으로 draft-only artifact와 validation evidence를 만든다.
+   - live release candidate는 `PASSED` validation과 release-critical `REVIEW_REQUIRED` 없음이 필요하다.
+3. `P17C` — manual approval and audit evidence binding
+   - human `APPROVE`를 같은 artifact/version 및 validation report에 바인딩한다.
+   - worker가 approval을 합성하거나 대리 생성하면 안 된다.
+4. `P17D` — final GO/NO-GO decision update
+   - P17A~P17C와 hard-live gate가 모두 통과하면 `CONDITIONAL_GO`로 바꿀 수 있다.
+   - 하나라도 부족하면 `NO_GO`를 유지하고 remaining blocker를 보고한다.
+
+### P17 hard-live 필수 검증
+
+```bash
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+```
+
+PPM 접근 실패 시 PLF로 대체하지 않는다. P17도 전체 플랫폼을 production-ready로 선언하지 않고, 조건부 pilot release candidate의 evidence 충족 여부만 판단한다.

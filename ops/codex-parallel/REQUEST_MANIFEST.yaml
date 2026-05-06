@@ -513,4 +513,124 @@ waves:
           - make test-web-smoke
           - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
           - python -m compileall apps services packages tests
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16]
+  - wave: W8
+    description: live pilot blocker closure after P16 NO-GO
+    tracks:
+      - id: P17A
+        branch: feat/p17a-dependency-metadata-evidence
+        worktree: ../wt/p17a-dependency-metadata-evidence
+        prompt: prompts/17a_dependency_metadata_evidence_closure.md
+        role: mcp_engineer
+        skills: [mcp-tooling-design, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P16]
+        target_paths:
+          - services/mssql-mcp/
+          - spec/mcp/
+          - fixtures/mcp/
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+          - fixtures/pilot/ppm_object_selection_v1/dependency_evidence_closure_v1.yaml
+          - tests/contract/mcp/
+          - tests/unit/mcp/
+          - tests/unit/test_mcp_catalog.py
+          - tests/contract/test_ppm_pilot_object_selection_assets.py
+        readonly_paths:
+          - apps/
+          - packages/
+          - spec/openapi/
+          - spec/policy/
+          - db/schema/
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/contract/test_ppm_pilot_object_selection_assets.py"
+          - python -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp
+          - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+      - id: P17B
+        branch: feat/p17b-live-artifact-validation
+        worktree: ../wt/p17b-live-artifact-validation
+        prompt: prompts/17b_live_artifact_validation_closure.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P17A]
+        target_paths:
+          - packages/analysis/
+          - packages/generation/
+          - packages/validation/
+          - fixtures/analysis/
+          - fixtures/generation/
+          - fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
+          - tests/unit/analysis/
+          - tests/unit/generation/
+          - tests/unit/validation/
+          - tests/eval/
+        readonly_paths:
+          - apps/
+          - services/mssql-mcp/
+          - spec/
+          - db/schema/
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/analysis tests/unit/generation tests/unit/validation tests/eval"
+          - python -m compileall packages/analysis packages/generation packages/validation tests
+      - id: P17C
+        branch: feat/p17c-approval-audit-binding
+        worktree: ../wt/p17c-approval-audit-binding
+        prompt: prompts/17c_manual_approval_audit_binding.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P17B]
+        target_paths:
+          - apps/api/
+          - fixtures/eval/manual_approval_audit_p17_v1.yaml
+          - fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
+          - tests/unit/api/
+          - tests/integration/api/
+          - tests/eval/
+          - docs/live-pilot-blocker-closure-plan.md
+        readonly_paths:
+          - services/mssql-mcp/
+          - packages/analysis/
+          - packages/generation/
+          - packages/validation/
+          - spec/openapi/
+          - spec/policy/
+          - db/schema/
+          - .env.example
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/api tests/integration/api tests/eval"
+          - python -m compileall apps/api tests/unit/api tests/integration/api tests/eval
+      - id: P17D
+        branch: feat/p17d-pilot-release-go-decision
+        worktree: ../wt/p17d-pilot-release-go-decision
+        prompt: prompts/17d_pilot_release_go_decision.md
+        role: reviewer
+        skills: [quality-gate-review, docs-sync]
+        depends_on: [P17C]
+        target_paths:
+          - docs/pilot-release-readiness.md
+          - docs/live-pilot-blocker-closure-plan.md
+          - docs/integration-eval-status.md
+          - ops/codex-parallel/P16_PILOT_RELEASE_HANDOFF.md
+          - fixtures/eval/pilot_release_readiness_p16_v1.yaml
+          - fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
+          - tests/eval/
+        readonly_paths:
+          - apps/
+          - services/
+          - packages/
+          - spec/
+          - db/schema/
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test
+          - make test-web-smoke
+          - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+          - python -m compileall apps services packages tests
+          - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+          - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D]
