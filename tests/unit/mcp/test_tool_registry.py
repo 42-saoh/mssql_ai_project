@@ -734,6 +734,9 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
         self.queried_databases.append(database)
         assert tool_name == "get_procedure_dependencies"
         if "FROM sys.sql_modules AS m" in sql:
+            assert "LIKE '%" not in sql
+            assert "%sp_executesql%" not in sql
+            assert "%#%" not in sql
             return self.module_rows
         if "FROM sys.sql_expression_dependencies AS dep" in sql:
             return self.dependency_rows

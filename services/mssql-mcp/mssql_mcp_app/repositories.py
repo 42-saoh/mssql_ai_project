@@ -2202,15 +2202,15 @@ class LiveMetadataRepository:
                 LEN(m.definition) AS definition_length,
                 CASE WHEN m.definition IS NULL THEN 0 ELSE 1 END AS has_definition_access,
                 CASE
-                    WHEN m.definition LIKE '%sp_executesql%'
-                        OR m.definition LIKE '%EXEC (%'
-                        OR m.definition LIKE '%EXEC(%'
-                        OR m.definition LIKE '%EXECUTE (%'
-                        OR m.definition LIKE '%EXECUTE(%'
+                    WHEN CHARINDEX('sp_executesql', m.definition) > 0
+                        OR CHARINDEX('EXEC (', m.definition) > 0
+                        OR CHARINDEX('EXEC(', m.definition) > 0
+                        OR CHARINDEX('EXECUTE (', m.definition) > 0
+                        OR CHARINDEX('EXECUTE(', m.definition) > 0
                     THEN 1
                     ELSE 0
                 END AS has_dynamic_sql,
-                CASE WHEN m.definition LIKE '%#%' THEN 1 ELSE 0 END AS has_temp_table
+                CASE WHEN CHARINDEX('#', m.definition) > 0 THEN 1 ELSE 0 END AS has_temp_table
             FROM sys.sql_modules AS m
             WHERE m.object_id = %s
             """,

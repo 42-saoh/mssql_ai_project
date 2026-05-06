@@ -3,8 +3,8 @@ track: P17A
 source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
 source_db: PPM
 platform_db_context: PLF
-generated_at: '2026-05-06T00:00:00+09:00'
-status: BLOCKED_PENDING_HARD_LIVE_RECHECK
+generated_at: '2026-05-06T12:51:33+09:00'
+status: BLOCKED_DEPENDENCY_METADATA_INCOMPLETE
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -50,9 +50,44 @@ implemented_metadata_resolver:
 dependency_metadata:
   blocker_closed: false
   active_blocker: DEPENDENCY_METADATA_INCOMPLETE
-  reason: Hard-live PPM dependency evidence has not been rerun in this work item, so selected table linkage is not upgraded.
+  reason: Hard-live PPM metadata gate passed, but selected stored procedure dependencies still include unresolved, unsupported, and cross-database/server references; selected table linkage is not upgraded.
   selected_manifest_update: not_changed
   selected_table_related_procedures_policy: only_catalog_confirmed_dependencies
+hard_live_recheck:
+  executed_at: '2026-05-06T12:51:33+09:00'
+  command: P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+  result: PASSED
+  source_profile: ppm
+  source_database: PPM
+selected_procedure_dependency_result:
+  - procedure: dbo.GetInspItemsCd
+    dependency_count: 1
+    confirmed_count: 0
+    review_required_count: 1
+    type_counts:
+      UNKNOWN: 1
+    review_required_strategies:
+      UNSUPPORTED_OBJECT_TYPE: 1
+  - procedure: dbo.PAD_GET_BAT_LIST_PRC
+    dependency_count: 4
+    confirmed_count: 0
+    review_required_count: 4
+    type_counts:
+      UNKNOWN: 4
+    review_required_strategies:
+      CROSS_DATABASE_OR_SERVER: 1
+      UNSUPPORTED_OBJECT_TYPE: 3
+  - procedure: dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+    dependency_count: 63
+    confirmed_count: 10
+    review_required_count: 53
+    type_counts:
+      FUNCTION: 13
+      UNKNOWN: 50
+    review_required_strategies:
+      CROSS_DATABASE_OR_SERVER: 35
+      UNSUPPORTED_OBJECT_TYPE: 17
+      AMBIGUOUS_SQL_EXPRESSION: 1
 selected_objects_rules:
   update_selected_objects_yaml: false
   table_related_procedures_added: false
