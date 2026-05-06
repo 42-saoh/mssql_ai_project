@@ -199,6 +199,48 @@ def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch
     assert not any(value in serialized for value in forbidden)
 
 
+def test_procedure_dependency_contract_exposes_resolution_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/get_procedure_dependencies/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "procedureName": "usp_GetOrderSummary",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["data"]["dependencies"]
+    for dependency in payload["data"]["dependencies"]:
+        assert {
+            "objectType",
+            "schema",
+            "name",
+            "dependencyType",
+            "isAmbiguous",
+            "reviewStatus",
+            "resolutionStatus",
+            "resolutionStrategy",
+            "evidenceRefs",
+        } <= set(dependency)
+        assert dependency["reviewStatus"] in {"CONFIRMED", "REVIEW_REQUIRED"}
+        assert dependency["resolutionStatus"] in {"CONFIRMED", "REVIEW_REQUIRED"}
+        assert dependency["evidenceRefs"]
+
+    serialized = response.text.lower()
+    forbidden = ("create procedure", "rowdata", "row_data", "connectionstring", "password")
+    assert not any(value in serialized for value in forbidden)
+
+
 def test_tool_error_response_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     client = TestClient(app)

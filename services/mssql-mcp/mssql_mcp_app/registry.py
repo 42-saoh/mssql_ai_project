@@ -350,6 +350,8 @@ def _dependencies_need_review(dependencies: list[Any]) -> bool:
             continue
         if dependency.get("reviewStatus") == "REVIEW_REQUIRED":
             return True
+        if dependency.get("resolutionStatus") == "REVIEW_REQUIRED":
+            return True
         if dependency.get("isAmbiguous") is True:
             return True
         if dependency.get("objectType") in {None, "", "UNKNOWN"}:

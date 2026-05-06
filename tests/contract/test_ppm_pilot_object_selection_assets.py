@@ -16,8 +16,10 @@ def test_ppm_pilot_selection_assets_exist_and_parse() -> None:
     assert (PILOT_DIR / "README.md").exists()
     assert (PILOT_DIR / "selected_objects.yaml").exists()
     assert (PILOT_DIR / "candidate_inventory_template.yaml").exists()
+    assert (PILOT_DIR / "dependency_evidence_closure_v1.yaml").exists()
     assert isinstance(_yaml("selected_objects.yaml"), dict)
     assert isinstance(_yaml("candidate_inventory_template.yaml"), dict)
+    assert isinstance(_yaml("dependency_evidence_closure_v1.yaml"), dict)
 
 
 def test_selected_objects_records_template_or_live_metadata_selection() -> None:
@@ -98,6 +100,33 @@ def test_candidate_inventory_template_is_metadata_only_and_covers_selection_rule
     table_rules = payload["selection_rules"]["tables"]
     assert table_rules["minimum_recommended"] >= 3
     assert "pk_fk_index_constraint" in table_rules["preferred_features"]
+
+
+def test_dependency_evidence_closure_preserves_blocker_until_hard_live_confirmation() -> None:
+    selected = _yaml("selected_objects.yaml")
+    closure = _yaml("dependency_evidence_closure_v1.yaml")
+
+    assert closure["track"] == "P17A"
+    assert closure["source_db"] == "PPM"
+    assert closure["platform_db_context"] == "PLF"
+    assert closure["policy_boundaries"]["metadata_only"] is True
+    assert closure["policy_boundaries"]["row_data_allowed"] is False
+    assert closure["policy_boundaries"]["procedure_execution_allowed"] is False
+    assert closure["policy_boundaries"]["plf_fallback_allowed"] is False
+    assert closure["implemented_metadata_resolver"]["tool"] == "get_procedure_dependencies"
+    assert closure["implemented_metadata_resolver"]["input_contract_changed"] is False
+
+    selected_blockers = {item["code"] for item in selected["active_blockers"]}
+    if closure["dependency_metadata"]["blocker_closed"]:
+        assert "DEPENDENCY_METADATA_INCOMPLETE" not in selected_blockers
+    else:
+        assert closure["dependency_metadata"]["active_blocker"] == "DEPENDENCY_METADATA_INCOMPLETE"
+        assert "DEPENDENCY_METADATA_INCOMPLETE" in selected_blockers
+
+    for table in selected["tables"]:
+        for related in table.get("related_procedures", []):
+            assert related["resolutionStatus"] == "CONFIRMED"
+            assert related["evidenceRefs"]
 
 
 def test_pilot_assets_do_not_encode_row_data_or_pfl_typo() -> None:

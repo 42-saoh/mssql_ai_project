@@ -81,7 +81,9 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     assert "SQL text" in payload["response"]["error"]["properties"]["error"]["properties"][
         "details"
     ]["description"]
-    search_tool = next(tool for tool in payload["tools"] if tool["name"] == "search_metadata_objects")
+    search_tool = next(
+        tool for tool in payload["tools"] if tool["name"] == "search_metadata_objects"
+    )
     assert search_tool["input"]["required"] == ["dbProfileId", "query"]
     assert search_tool["input"]["properties"]["objectTypes"]["items"]["enum"] == [
         "PROCEDURE",
@@ -89,6 +91,24 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
         "VIEW",
         "FUNCTION",
     ]
+    dependency_item = payload["response"]["dependencyItem"]
+    assert dependency_item["required"] == [
+        "objectType",
+        "schema",
+        "name",
+        "dependencyType",
+        "isAmbiguous",
+        "reviewStatus",
+        "resolutionStatus",
+        "resolutionStrategy",
+        "evidenceRefs",
+    ]
+    dependency_tool = next(
+        tool for tool in payload["tools"] if tool["name"] == "get_procedure_dependencies"
+    )
+    assert dependency_tool["output"]["properties"]["dependencies"]["items"] == {
+        "$ref": "#/response/dependencyItem"
+    }
     for tool in payload["tools"]:
         assert tool["active"] is True
         assert tool["readOnly"] is True

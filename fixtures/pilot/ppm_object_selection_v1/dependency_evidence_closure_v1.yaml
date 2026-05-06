@@ -1,0 +1,68 @@
+version: dependency_evidence_closure_v1
+track: P17A
+source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+source_db: PPM
+platform_db_context: PLF
+generated_at: '2026-05-06T00:00:00+09:00'
+status: BLOCKED_PENDING_HARD_LIVE_RECHECK
+policy_boundaries:
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  ddl_dml_allowed: false
+  plf_fallback_allowed: false
+  raw_definition_text_allowed_in_evidence: false
+implemented_metadata_resolver:
+  tool: get_procedure_dependencies
+  input_contract_changed: false
+  dependency_item_fields:
+    - objectType
+    - schema
+    - name
+    - dependencyType
+    - isAmbiguous
+    - reviewStatus
+    - resolutionStatus
+    - resolutionStrategy
+    - evidenceRefs
+  catalog_sources:
+    - sys.sql_expression_dependencies
+    - sys.objects
+    - sys.schemas
+    - sys.tables
+    - sys.views
+    - sys.procedures
+    - function_type_objects
+    - sys.synonyms
+    - sys.sql_modules_hash_pattern_metadata
+  confirmation_rules:
+    - referenced_id_match_confirms_same_database_catalog_object
+    - referenced_schema_and_entity_match_confirms_same_database_catalog_object
+    - schema_less_entity_match_confirms_only_when_unique_in_same_database_catalog
+  review_required_rules:
+    - cross_database_or_server_reference
+    - ambiguous_catalog_name
+    - synonym_target_review_required
+    - unresolved_catalog_name
+    - caller_dependent_reference
+    - dynamic_sql_pattern
+    - definition_metadata_unavailable
+dependency_metadata:
+  blocker_closed: false
+  active_blocker: DEPENDENCY_METADATA_INCOMPLETE
+  reason: Hard-live PPM dependency evidence has not been rerun in this work item, so selected table linkage is not upgraded.
+  selected_manifest_update: not_changed
+  selected_table_related_procedures_policy: only_catalog_confirmed_dependencies
+selected_objects_rules:
+  update_selected_objects_yaml: false
+  table_related_procedures_added: false
+  preserve_active_blocker_until_hard_live_confirms_all_release_critical_dependencies: true
+verification_required_before_closure:
+  - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+blocker_candidates:
+  - code: PPM_DB_NOT_FOUND
+  - code: PPM_DB_ACCESS_DENIED
+  - code: METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+  - code: SP_DEFINITION_ACCESS_DENIED
+  - code: DEPENDENCY_METADATA_INCOMPLETE
+  - code: LIVE_METADATA_UNAVAILABLE

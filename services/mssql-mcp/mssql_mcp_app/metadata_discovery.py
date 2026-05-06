@@ -131,6 +131,10 @@ def procedure_dependency_summary(
             "dependencyType": dependency.get("dependencyType", "UNKNOWN"),
             "reviewStatus": dependency.get("reviewStatus", "CONFIRMED"),
         }
+        if dependency.get("resolutionStatus") is not None:
+            item["resolutionStatus"] = dependency.get("resolutionStatus")
+        if dependency.get("resolutionStrategy") is not None:
+            item["resolutionStrategy"] = dependency.get("resolutionStrategy")
         if not item["name"]:
             summary["unresolved"].append(item)
         elif object_type == "TABLE":

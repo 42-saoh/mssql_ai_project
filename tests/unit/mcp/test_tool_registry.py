@@ -662,3 +662,260 @@ def test_live_definition_tools_match_fixture_definition_metadata_shape(
     assert isinstance(live_data["detectedPatterns"], list)
     assert isinstance(fixture_data["hasDefinitionAccess"], bool)
     assert isinstance(live_data["hasDefinitionAccess"], bool)
+
+
+def _dependency_row(**overrides: Any) -> dict[str, Any]:
+    row = {
+        "object_id": 900,
+        "referenced_id": None,
+        "referenced_server_name": None,
+        "referenced_database_name": None,
+        "referenced_schema_name": "dbo",
+        "referenced_entity_name": "TB_ORDER",
+        "referenced_class_desc": "OBJECT_OR_COLUMN",
+        "is_ambiguous": 0,
+        "is_caller_dependent": 0,
+        "direct_schema_name": None,
+        "direct_object_name": None,
+        "direct_object_type": None,
+        "catalog_match_count": 0,
+        "matched_schema_name": None,
+        "matched_object_name": None,
+        "matched_object_type": None,
+        "synonym_schema_name": None,
+        "synonym_name": None,
+        "synonym_base_object_name": None,
+    }
+    row.update(overrides)
+    return row
+
+
+class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
+    def __init__(
+        self,
+        *,
+        dependency_rows: list[dict[str, Any]],
+        module_rows: list[dict[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(
+            settings=LiveMetadataSettings(
+                live_metadata_enabled=True,
+                metadata_host="127.0.0.1",
+                metadata_port=1433,
+                metadata_user="readonly_user",
+                metadata_password="secret",
+                metadata_db_fallback="master",
+                default_profile_id="master",
+                profile_file="config/mssql/local_docker_profiles.yaml",
+                connect_timeout_seconds=7,
+            ),
+            profiles=[
+                DbProfile(
+                    id="ppm",
+                    label="Pilot Analysis Target DB (PPM)",
+                    database="PPM",
+                    purpose="pilot-analysis-target",
+                )
+            ],
+        )
+        self.dependency_rows = dependency_rows
+        self.module_rows = module_rows or [
+            {
+                "definition_hash": "ABCDEF",
+                "definition_length": 256,
+                "has_definition_access": 1,
+                "has_dynamic_sql": 0,
+                "has_temp_table": 0,
+            }
+        ]
+        self.queried_databases: list[str] = []
+
+    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+        self.queried_databases.append(database)
+        assert tool_name == "get_procedure_dependencies"
+        if "FROM sys.sql_modules AS m" in sql:
+            return self.module_rows
+        if "FROM sys.sql_expression_dependencies AS dep" in sql:
+            return self.dependency_rows
+        if "FROM sys.objects AS o" in sql:
+            return [{"object_id": 900}]
+        return []
+
+
+@pytest.mark.parametrize(
+    "dependency_row, expected",
+    [
+        (
+            _dependency_row(
+                referenced_id=101,
+                direct_schema_name="dbo",
+                direct_object_name="TB_ORDER",
+                direct_object_type="U",
+            ),
+            {
+                "objectType": "TABLE",
+                "schema": "dbo",
+                "name": "TB_ORDER",
+                "resolutionStatus": "CONFIRMED",
+                "resolutionStrategy": "REFERENCED_ID",
+                "reviewStatus": "CONFIRMED",
+                "isAmbiguous": False,
+            },
+        ),
+        (
+            _dependency_row(
+                catalog_match_count=1,
+                matched_schema_name="dbo",
+                matched_object_name="TB_ORDER",
+                matched_object_type="U",
+            ),
+            {
+                "objectType": "TABLE",
+                "schema": "dbo",
+                "name": "TB_ORDER",
+                "resolutionStatus": "CONFIRMED",
+                "resolutionStrategy": "SAME_DATABASE_SCHEMA_NAME",
+                "reviewStatus": "CONFIRMED",
+                "isAmbiguous": False,
+            },
+        ),
+        (
+            _dependency_row(
+                referenced_schema_name=None,
+                referenced_entity_name="TB_UNIQUE",
+                catalog_match_count=1,
+                matched_schema_name="audit",
+                matched_object_name="TB_UNIQUE",
+                matched_object_type="U",
+            ),
+            {
+                "objectType": "TABLE",
+                "schema": "audit",
+                "name": "TB_UNIQUE",
+                "resolutionStatus": "CONFIRMED",
+                "resolutionStrategy": "SAME_DATABASE_UNIQUE_NAME",
+                "reviewStatus": "CONFIRMED",
+                "isAmbiguous": False,
+            },
+        ),
+        (
+            _dependency_row(referenced_schema_name=None, catalog_match_count=2),
+            {
+                "objectType": "UNKNOWN",
+                "schema": None,
+                "name": "TB_ORDER",
+                "resolutionStatus": "REVIEW_REQUIRED",
+                "resolutionStrategy": "AMBIGUOUS_CATALOG_NAME",
+                "reviewStatus": "REVIEW_REQUIRED",
+                "isAmbiguous": True,
+            },
+        ),
+        (
+            _dependency_row(referenced_database_name="OtherDB"),
+            {
+                "objectType": "UNKNOWN",
+                "schema": "dbo",
+                "name": "TB_ORDER",
+                "resolutionStatus": "REVIEW_REQUIRED",
+                "resolutionStrategy": "CROSS_DATABASE_OR_SERVER",
+                "reviewStatus": "REVIEW_REQUIRED",
+                "isAmbiguous": False,
+            },
+        ),
+        (
+            _dependency_row(
+                referenced_id=202,
+                direct_schema_name="dbo",
+                direct_object_name="SYN_ORDER",
+                direct_object_type="SN",
+                synonym_schema_name="dbo",
+                synonym_name="SYN_ORDER",
+                synonym_base_object_name="[OtherDB].[dbo].[TB_ORDER]",
+            ),
+            {
+                "objectType": "SYNONYM",
+                "schema": "dbo",
+                "name": "SYN_ORDER",
+                "resolutionStatus": "REVIEW_REQUIRED",
+                "resolutionStrategy": "SYNONYM_TARGET_REVIEW_REQUIRED",
+                "reviewStatus": "REVIEW_REQUIRED",
+                "isAmbiguous": True,
+            },
+        ),
+        (
+            _dependency_row(),
+            {
+                "objectType": "UNKNOWN",
+                "schema": "dbo",
+                "name": "TB_ORDER",
+                "resolutionStatus": "REVIEW_REQUIRED",
+                "resolutionStrategy": "UNRESOLVED",
+                "reviewStatus": "REVIEW_REQUIRED",
+                "isAmbiguous": False,
+            },
+        ),
+    ],
+)
+def test_live_procedure_dependency_resolver_statuses(
+    dependency_row: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(dependency_rows=[dependency_row])
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "get_procedure_dependencies",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "schema": "dbo",
+                "procedureName": "usp_Selected",
+            }
+        },
+    )
+
+    dependency = payload["data"]["dependencies"][0]
+    assert {key: dependency[key] for key in expected} == expected
+    assert dependency["dependencyType"] == "REFERENCE"
+    assert dependency["evidenceRefs"]
+    assert payload["data"]["definitionMetadata"] == {
+        "hash": "abcdef",
+        "length": 256,
+        "detectedPatterns": [],
+        "hasDefinitionAccess": True,
+    }
+    assert repository.queried_databases == ["PPM", "PPM", "PPM"]
+
+
+def test_live_procedure_dependency_resolver_marks_dynamic_sql_review_required() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[],
+        module_rows=[
+            {
+                "definition_hash": "012345",
+                "definition_length": 512,
+                "has_definition_access": 1,
+                "has_dynamic_sql": 1,
+                "has_temp_table": 0,
+            }
+        ],
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "get_procedure_dependencies",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "schema": "dbo",
+                "procedureName": "usp_Dynamic",
+            }
+        },
+    )
+
+    dependency = payload["data"]["dependencies"][0]
+    assert dependency["dependencyType"] == "DYNAMIC_SQL"
+    assert dependency["resolutionStrategy"] == "DYNAMIC_SQL_PATTERN"
+    assert dependency["reviewStatus"] == "REVIEW_REQUIRED"
+    assert payload["data"]["caveats"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
+    assert payload["data"]["reviewRequired"] is True
