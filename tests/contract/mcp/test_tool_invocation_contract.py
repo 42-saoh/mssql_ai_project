@@ -223,8 +223,13 @@ def test_procedure_dependency_contract_exposes_resolution_evidence(
     for dependency in payload["data"]["dependencies"]:
         assert {
             "objectType",
+            "database",
+            "server",
             "schema",
             "name",
+            "referencedDatabase",
+            "referencedServer",
+            "sourceScope",
             "dependencyType",
             "isAmbiguous",
             "reviewStatus",

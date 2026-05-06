@@ -1,6 +1,6 @@
 version: pilot_release_readiness_p16_v1
 source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
-manifest_generated_at: '2026-05-05T13:47:24+09:00'
+manifest_generated_at: '2026-05-06T21:52:50+09:00'
 current_manifest:
   selection_mode: live_metadata
   source_db: PPM
@@ -19,7 +19,7 @@ mode_policy:
 release_recommendation:
   live_pilot_release:
     decision: NO_GO
-    reason: active_dependency_metadata_blocker_and_missing_live_release_approval
+    reason: dependency_metadata_majority_gate_passed_but_live_release_validation_and_manual_approval_are_missing
   fixture_first_demo_handoff:
     decision: GO_WITH_LIMITATIONS
     reason: dockerized_fixture_first_workflow_and_demo_docs_are_ready_for_review
@@ -33,10 +33,6 @@ profile_policy:
   procedure_execution_allowed: false
   ddl_dml_allowed: false
 active_blockers:
-  - code: DEPENDENCY_METADATA_INCOMPLETE
-    severity: BLOCKER
-    release_impact: live_pilot_release_no_go
-    description: Procedure dependency metadata has unresolved references and no confirmed procedure-to-table linkage.
   - code: MANUAL_APPROVAL_EVIDENCE_MISSING
     severity: BLOCKER
     release_impact: live_publish_or_export_no_go
@@ -56,29 +52,26 @@ representative_objects:
       complexity: simple
       snapshot_id: live:ppm:2026-05-05T04:47:24Z
       evidence_status: metadata_identity_and_definition_hash_available
-      dependency_status: REVIEW_REQUIRED
-      review_required: true
-      caveats:
-        - table_dependency_links_incomplete
+      dependency_status: CONFIRMED
+      review_required: false
+      caveats: []
     - schema: dbo
       name: PAD_GET_BAT_LIST_PRC
       complexity: medium
       snapshot_id: live:ppm:2026-05-05T04:47:24Z
       evidence_status: metadata_identity_and_definition_hash_available
-      dependency_status: REVIEW_REQUIRED
-      review_required: true
-      caveats:
-        - table_dependency_links_incomplete
+      dependency_status: CONFIRMED
+      review_required: false
+      caveats: []
     - schema: dbo
       name: PCS_PY_ManageInvoiceFldSchd_PRC
       complexity: complex
       snapshot_id: live:ppm:2026-05-05T04:47:24Z
       evidence_status: metadata_identity_and_definition_hash_available
-      dependency_status: REVIEW_REQUIRED
-      review_required: true
+      dependency_status: COMPLEX_SENTINEL_RESIDUAL_REVIEW_ALLOWED
+      review_required: false
       caveats:
-        - ambiguous_dependency_metadata
-        - table_dependency_links_incomplete
+        - complex_sentinel_residual_review
   tables:
     - schema: dbo
       name: PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF
@@ -118,12 +111,12 @@ quality_report:
   evidence_coverage:
     selected_object_identity_coverage: 1.0
     selected_object_metadata_evidence_coverage: 1.0
-    confirmed_procedure_to_table_dependency_coverage: 0.0
-    blocker: DEPENDENCY_METADATA_INCOMPLETE
+    confirmed_procedure_dependency_suite_coverage: 0.857
+    dependency_metadata_gate: PASSED_WITH_COMPLEX_SENTINEL_RESIDUAL_REVIEW
   review_required:
-    stored_procedure_review_required_ratio: 1.0
-    selected_object_review_required_ratio: 0.625
-    reason: dependency_and_description_caveats_remain_open
+    stored_procedure_review_required_ratio: 0.0
+    selected_object_review_required_ratio: 0.25
+    reason: selected table description caveats remain open; complex SP residual review is recorded as a non-blocking sentinel caveat
   validation:
     fixture_workflow_status: REVIEW_REQUIRED
     live_release_validation_status: BLOCKED
@@ -144,8 +137,8 @@ release_checklist:
     status: CONDITIONAL_PASS
     evidence: manifest live_connection_verified true; P15 hard-live eval must pass in target environment
   - id: dependency_evidence
-    status: BLOCKER
-    evidence: DEPENDENCY_METADATA_INCOMPLETE active blocker remains
+    status: PASS
+    evidence: P17A selected stored procedure suite majority dependency metadata gate passed
   - id: validation_result
     status: BLOCKER
     evidence: fixture workflow reaches REVIEW_REQUIRED; no live release PASSED validation evidence
@@ -162,8 +155,8 @@ release_checklist:
     status: PASS
     evidence: docs distinguish implemented, skeleton, stub, fixture-first, optional-live, and not production-ready
 known_limitations:
-  - code: DEPENDENCY_METADATA_INCOMPLETE
-    impact: procedure_to_table_lineage_cannot_be_claimed
+  - code: COMPLEX_SENTINEL_RESIDUAL_REVIEW
+    impact: dbo.PCS_PY_ManageInvoiceFldSchd_PRC keeps two ambiguous function references as non-blocking residual review
   - code: FULL_CANONICAL_MODEL_NOT_IMPLEMENTED
     impact: canonical candidate remains review-required
   - code: WEB_PORTAL_MOCK_FIRST

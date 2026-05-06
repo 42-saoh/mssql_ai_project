@@ -45,16 +45,25 @@ def test_selected_objects_records_template_or_live_metadata_selection() -> None:
             "medium",
             "complex",
         }
+        assert len(payload["stored_procedures"]) >= 7
         assert len(payload["tables"]) >= 3
         assert len(payload["views"]) >= 1
         assert len(payload["functions"]) >= 1
-        assert payload["active_blockers"][0]["code"] == "DEPENDENCY_METADATA_INCOMPLETE"
         for item in payload["stored_procedures"]:
             evidence = item["metadata_evidence"]
             assert evidence["source_profile"] == "ppm"
             assert evidence["source_database"] == "PPM"
             assert evidence["definition_hash"]
             assert "definition" not in item
+        if "dependency_evidence_gate" in payload:
+            gate = payload["dependency_evidence_gate"]
+            assert gate["status"] == "PASSED_WITH_COMPLEX_SENTINEL_RESIDUAL_REVIEW"
+            assert gate["selected_procedure_count"] >= 7
+            assert gate["confirmed_dependency_procedure_count"] / gate[
+                "selected_procedure_count"
+            ] > 0.5
+            assert "dbo.INT_PPM_3003_01" in gate["excluded_procedures"]
+            assert "dbo.INT_PPM_3003_02" in gate["excluded_procedures"]
 
     blockers = {item["code"] for item in payload["blocker_candidates"]}
     assert {
@@ -127,6 +136,42 @@ def test_dependency_evidence_closure_preserves_blocker_until_hard_live_confirmat
         for related in table.get("related_procedures", []):
             assert related["resolutionStatus"] == "CONFIRMED"
             assert related["evidenceRefs"]
+
+
+def test_dependency_evidence_closure_records_majority_suite_without_int_procedures() -> None:
+    selected = _yaml("selected_objects.yaml")
+    closure = _yaml("dependency_evidence_closure_v1.yaml")
+
+    selected_names = {f"{item['schema']}.{item['name']}" for item in selected["stored_procedures"]}
+    assert "dbo.INT_PPM_3003_01" not in selected_names
+    assert "dbo.INT_PPM_3003_02" not in selected_names
+    assert {
+        "dbo.GetInspItemsCd",
+        "dbo.PAD_GET_BAT_LIST_PRC",
+        "dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        "dbo.PAD_REG_BAT_HIS_PRC",
+        "dbo.PAD_SAVE_COM_CD_DTL_PRC",
+        "dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC",
+        "dbo.PCO_BAT_CallSendMail_PRC",
+    } <= selected_names
+
+    gate = closure["majority_gate"]
+    assert gate["passed"] is True
+    assert gate["selected_procedure_count"] == 7
+    assert gate["confirmed_dependency_procedure_count"] == 6
+    assert gate["confirmed_dependency_procedure_count"] / gate["selected_procedure_count"] > 0.5
+    assert closure["dependency_metadata"]["blocker_closed"] is True
+    assert closure["dependency_metadata"]["closed_blocker"] == "DEPENDENCY_METADATA_INCOMPLETE"
+
+    sentinel = next(
+        item
+        for item in selected["stored_procedures"]
+        if item["name"] == "PCS_PY_ManageInvoiceFldSchd_PRC"
+    )
+    assert sentinel["complex_sentinel"] is True
+    assert sentinel["dependency_gate"]["status"] == "COMPLEX_SENTINEL_RESIDUAL_REVIEW_ALLOWED"
+    assert "complex_sentinel_residual_review" in sentinel["caveats"]
+    assert sentinel["review_required"] is False
 
 
 def test_pilot_assets_do_not_encode_row_data_or_pfl_typo() -> None:

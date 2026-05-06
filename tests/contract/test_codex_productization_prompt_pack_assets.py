@@ -194,8 +194,11 @@ def test_productization_readiness_fixture_links_pilot_manifest_to_release_gates(
     assert set(readiness["mode_policy"]) == {"live_metadata", "template_only"}
     assert readiness["mode_policy"]["template_only"]["can_reference_selected_object_identities"] is False
     assert readiness["mode_policy"]["live_metadata"]["can_reference_selected_object_identities"] is True
-    assert "DEPENDENCY_METADATA_INCOMPLETE" in readiness["current_manifest_expectations"][
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in readiness["current_manifest_expectations"][
         "active_blockers_to_carry_forward"
+    ]
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in readiness["current_manifest_expectations"][
+        "closed_blockers"
     ]
     assert pilot["selection_mode"] in readiness["current_manifest_expectations"][
         "allowed_selection_modes"

@@ -38,6 +38,6 @@ P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidenc
 
 - `docs/pilot-release-readiness.md` 는 현재 live pilot release 를 NO-GO 로 판정한다.
 - fixture-first/demo handoff 는 GO WITH LIMITATIONS 이며, 결과물은 계속 draft-only 이다.
-- `DEPENDENCY_METADATA_INCOMPLETE` 가 남아 있으므로 SP 와 table 사이의 확정 dependency 로 해석하면 안 된다.
+- P17A dependency gate 는 selected SP suite majority 기준으로 통과했지만, SP 와 table 사이의 확정 dependency 는 manifest 의 confirmed `related_procedures` evidence 가 있을 때만 해석한다.
 - 승인 화면이나 API decision 기록은 publish, 배포, DDL 적용을 수행하지 않는다.
 - live pilot release 후보는 passed validation 과 human `APPROVE` 가 audit context 와 함께 남은 뒤 다시 검토해야 한다.

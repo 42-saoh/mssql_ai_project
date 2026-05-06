@@ -3,8 +3,8 @@ track: P17A
 source_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
 source_db: PPM
 platform_db_context: PLF
-generated_at: '2026-05-06T12:51:33+09:00'
-status: BLOCKED_DEPENDENCY_METADATA_INCOMPLETE
+generated_at: '2026-05-06T21:52:50+09:00'
+status: PASSED_WITH_COMPLEX_SENTINEL_RESIDUAL_REVIEW
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -17,8 +17,13 @@ implemented_metadata_resolver:
   input_contract_changed: false
   dependency_item_fields:
     - objectType
+    - database
+    - server
     - schema
     - name
+    - referencedDatabase
+    - referencedServer
+    - sourceScope
     - dependencyType
     - isAmbiguous
     - reviewStatus
@@ -34,13 +39,20 @@ implemented_metadata_resolver:
     - sys.procedures
     - function_type_objects
     - sys.synonyms
+    - sys.databases
+    - same_server_cross_database_sys_objects
+    - same_server_cross_database_sys_schemas
+    - same_server_cross_database_sys_synonyms
     - sys.sql_modules_hash_pattern_metadata
   confirmation_rules:
     - referenced_id_match_confirms_same_database_catalog_object
     - referenced_schema_and_entity_match_confirms_same_database_catalog_object
     - schema_less_entity_match_confirms_only_when_unique_in_same_database_catalog
+    - same_server_cross_database_reference_confirms_only_after_sys_databases_validation_and_unique_external_catalog_match
   review_required_rules:
-    - cross_database_or_server_reference
+    - cross_server_reference
+    - same_server_cross_database_not_found_or_inaccessible
+    - ambiguous_cross_database_catalog_name
     - ambiguous_catalog_name
     - synonym_target_review_required
     - unresolved_catalog_name
@@ -48,13 +60,28 @@ implemented_metadata_resolver:
     - dynamic_sql_pattern
     - definition_metadata_unavailable
 dependency_metadata:
-  blocker_closed: false
-  active_blocker: DEPENDENCY_METADATA_INCOMPLETE
-  reason: Hard-live PPM metadata gate passed, but selected stored procedure dependencies still include unresolved, unsupported, and cross-database/server references; selected table linkage is not upgraded.
-  selected_manifest_update: not_changed
+  blocker_closed: true
+  active_blocker: null
+  closed_blocker: DEPENDENCY_METADATA_INCOMPLETE
+  reason: Hard-live PPM metadata gate passed under the selected stored procedure suite majority rule; dbo.PCS_PY_ManageInvoiceFldSchd_PRC remains as an explicit complex sentinel with two ambiguous function references allowed as residual review.
+  selected_manifest_update: updated_to_7_procedure_majority_suite
   selected_table_related_procedures_policy: only_catalog_confirmed_dependencies
+majority_gate:
+  rule: selected_procedure_suite_majority_confirmed
+  threshold: greater_than_0_5
+  selected_procedure_count: 7
+  confirmed_dependency_procedure_count: 6
+  residual_review_allowed_count: 1
+  pass_ratio: 0.857
+  passed: true
+  excluded_procedures:
+    - dbo.INT_PPM_3003_01
+    - dbo.INT_PPM_3003_02
+  complex_sentinel:
+    procedure: dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+    status: COMPLEX_SENTINEL_RESIDUAL_REVIEW_ALLOWED
 hard_live_recheck:
-  executed_at: '2026-05-06T12:51:33+09:00'
+  executed_at: '2026-05-06T21:52:50+09:00'
   command: P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
   result: PASSED
   source_profile: ppm
@@ -62,36 +89,110 @@ hard_live_recheck:
 selected_procedure_dependency_result:
   - procedure: dbo.GetInspItemsCd
     dependency_count: 1
-    confirmed_count: 0
-    review_required_count: 1
+    confirmed_count: 1
+    review_required_count: 0
     type_counts:
-      UNKNOWN: 1
-    review_required_strategies:
-      UNSUPPORTED_OBJECT_TYPE: 1
+      TABLE: 1
+    confirmed_strategies:
+      REFERENCED_ID: 1
+    source_scope_counts:
+      SAME_DATABASE: 1
   - procedure: dbo.PAD_GET_BAT_LIST_PRC
     dependency_count: 4
-    confirmed_count: 0
-    review_required_count: 4
+    confirmed_count: 4
+    review_required_count: 0
     type_counts:
-      UNKNOWN: 4
-    review_required_strategies:
-      CROSS_DATABASE_OR_SERVER: 1
-      UNSUPPORTED_OBJECT_TYPE: 3
+      TABLE: 3
+      VIEW: 1
+    confirmed_strategies:
+      SAME_SERVER_CROSS_DATABASE_CATALOG: 1
+      REFERENCED_ID: 3
+    source_scope_counts:
+      SAME_SERVER_CROSS_DATABASE: 1
+      SAME_DATABASE: 3
   - procedure: dbo.PCS_PY_ManageInvoiceFldSchd_PRC
     dependency_count: 63
-    confirmed_count: 10
-    review_required_count: 53
+    confirmed_count: 61
+    review_required_count: 2
     type_counts:
-      FUNCTION: 13
-      UNKNOWN: 50
+      FUNCTION: 15
+      TABLE: 42
+      PROCEDURE: 5
+      VIEW: 1
+    confirmed_strategies:
+      SAME_SERVER_CROSS_DATABASE_CATALOG: 24
+      REFERENCED_ID: 26
+      SAME_DATABASE_EXPLICIT_DATABASE_CATALOG: 10
+      SAME_DATABASE_UNIQUE_NAME: 1
     review_required_strategies:
-      CROSS_DATABASE_OR_SERVER: 35
-      UNSUPPORTED_OBJECT_TYPE: 17
-      AMBIGUOUS_SQL_EXPRESSION: 1
+      AMBIGUOUS_SQL_EXPRESSION: 2
+    source_scope_counts:
+      SAME_SERVER_CROSS_DATABASE: 24
+      SAME_DATABASE: 39
+    review_required_samples:
+      - database: PPM
+        schema: dbo
+        name: PCS_PY_ChkAccountCode
+        object_type: FUNCTION
+        resolution_strategy: AMBIGUOUS_SQL_EXPRESSION
+      - database: null
+        schema: dbo
+        name: PCS_PY_ChkInvoiceCancelStatus_FNC
+        object_type: FUNCTION
+        resolution_strategy: AMBIGUOUS_SQL_EXPRESSION
+    complex_sentinel_residual_review: true
+    p17a_majority_gate_status: RESIDUAL_REVIEW_ALLOWED
+  - procedure: dbo.PAD_REG_BAT_HIS_PRC
+    dependency_count: 2
+    confirmed_count: 2
+    review_required_count: 0
+    type_counts:
+      TABLE: 2
+    confirmed_strategies:
+      REFERENCED_ID: 2
+    source_scope_counts:
+      SAME_DATABASE: 2
+  - procedure: dbo.PAD_SAVE_COM_CD_DTL_PRC
+    dependency_count: 1
+    confirmed_count: 1
+    review_required_count: 0
+    type_counts:
+      TABLE: 1
+    confirmed_strategies:
+      SAME_SERVER_CROSS_DATABASE_CATALOG: 1
+    source_scope_counts:
+      SAME_SERVER_CROSS_DATABASE: 1
+  - procedure: dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC
+    dependency_count: 3
+    confirmed_count: 3
+    review_required_count: 0
+    type_counts:
+      PROCEDURE: 3
+    confirmed_strategies:
+      REFERENCED_ID: 2
+      SAME_DATABASE_EXPLICIT_DATABASE_CATALOG: 1
+    source_scope_counts:
+      SAME_DATABASE: 3
+  - procedure: dbo.PCO_BAT_CallSendMail_PRC
+    dependency_count: 5
+    confirmed_count: 5
+    review_required_count: 0
+    type_counts:
+      TABLE: 3
+      PROCEDURE: 2
+    confirmed_strategies:
+      REFERENCED_ID: 3
+      SAME_DATABASE_EXPLICIT_DATABASE_CATALOG: 2
+    source_scope_counts:
+      SAME_DATABASE: 5
+selected_table_dependency_links:
+  confirmed_selected_table_links: []
+  reason: Selected table candidates remain metadata-rich standalone selections; hard-live confirmed no selected table as a dependency of the selected stored procedures.
 selected_objects_rules:
-  update_selected_objects_yaml: false
+  update_selected_objects_yaml: true
   table_related_procedures_added: false
-  preserve_active_blocker_until_hard_live_confirms_all_release_critical_dependencies: true
+  preserve_active_blocker_until_hard_live_confirms_all_release_critical_dependencies: false
+  majority_gate_closes_dependency_blocker: true
 verification_required_before_closure:
   - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
 blocker_candidates:

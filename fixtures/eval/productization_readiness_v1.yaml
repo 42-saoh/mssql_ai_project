@@ -23,7 +23,8 @@ current_manifest_expectations:
   allowed_selection_modes:
     - template_only
     - live_metadata
-  active_blockers_to_carry_forward:
+  active_blockers_to_carry_forward: []
+  closed_blockers:
     - DEPENDENCY_METADATA_INCOMPLETE
 milestones:
   P09:

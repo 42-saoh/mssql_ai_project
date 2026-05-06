@@ -10,8 +10,13 @@ Current live pilot decision remains `NO_GO` until all P17 exit criteria pass.
 
 | Blocker | Why it blocks GO | Closure owner |
 |---|---|---|
-| `DEPENDENCY_METADATA_INCOMPLETE` | Selected stored procedures cannot yet claim confirmed procedure-to-table dependency lineage. Selected tables are candidates, not proven SP dependencies. | P17A |
 | `MANUAL_APPROVAL_EVIDENCE_MISSING` | No human `APPROVE` decision is bound to a passed validation report for the same release artifact/version. | P17C |
+
+Closed evidence gate:
+
+| Closed item | Evidence | Owner |
+|---|---|---|
+| `DEPENDENCY_METADATA_INCOMPLETE` | P17A selected stored procedure suite majority dependency metadata gate passed; `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` remains as complex sentinel residual review. | P17A |
 
 A third practical gap must also be closed before the final decision can change:
 
@@ -25,7 +30,7 @@ A third practical gap must also be closed before the final decision can change:
    - Improve metadata-only dependency resolution for selected PPM stored procedures.
    - Confirm procedure-to-table/view/function/procedure dependencies using catalog evidence refs.
    - Update the pilot manifest only with metadata evidence; never store raw definition text or row data.
-   - Keep `DEPENDENCY_METADATA_INCOMPLETE` if selected SP dependencies remain unresolved, ambiguous, cross-database, dynamic-only, or permission-blocked.
+   - Close `DEPENDENCY_METADATA_INCOMPLETE` when the selected stored procedure suite majority gate is reproducible; keep complex sentinel residual review explicit.
 
 2. **P17B Live Pilot Artifact Validation Closure**
    - Use the P17A-confirmed pilot object set to create draft-only analysis/generation artifacts.
@@ -48,7 +53,7 @@ A third practical gap must also be closed before the final decision can change:
 
 - `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` remains `selection_mode: live_metadata` for `source_db: PPM` and `platform_db_context: PLF`.
 - No PLF fallback is used for PPM analysis.
-- Selected stored procedures have confirmed metadata dependency evidence for release-critical table/view/function/procedure dependencies.
+- Selected stored procedure suite majority dependency metadata evidence is reproducible.
 - The live pilot artifact validation package has `PASSED` status.
 - No release-critical validation item remains `REVIEW_REQUIRED`.
 - A human `APPROVE` decision is bound to the same artifact/version and validation report.

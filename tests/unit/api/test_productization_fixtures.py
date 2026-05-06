@@ -20,7 +20,8 @@ def test_ppm_api_productization_fixture_follows_manifest_mode() -> None:
         Path("fixtures") / "pilot" / "ppm_object_selection_v1" / "selected_objects.yaml"
     )
     assert fixture["selection_mode"] == manifest["selection_mode"]
-    assert "DEPENDENCY_METADATA_INCOMPLETE" in fixture["active_blockers"]
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in fixture["active_blockers"]
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in fixture["closed_blockers"]
     assert fixture["profile_policy"]["analysis_db_profile_id"] == "ppm"
     assert fixture["profile_policy"]["plf_fallback_allowed"] is False
 
@@ -74,7 +75,8 @@ def test_p13_validation_approval_audit_fixture_uses_live_manifest_identities() -
     )
     assert fixture["selection_mode"] == manifest["selection_mode"]
     assert fixture["storage_contract"]["schema_change_required"] is False
-    assert "DEPENDENCY_METADATA_INCOMPLETE" in fixture["active_blockers"]
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in fixture["active_blockers"]
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in fixture["closed_blockers"]
     assert fixture["profile_policy"]["analysis_db_profile_id"] == "ppm"
     assert fixture["profile_policy"]["plf_fallback_allowed"] is False
 

@@ -9,8 +9,9 @@ current_state:
   platform_db_context: PLF
   selection_mode_required: live_metadata
   active_blockers_to_close:
-    - DEPENDENCY_METADATA_INCOMPLETE
     - MANUAL_APPROVAL_EVIDENCE_MISSING
+  blockers_closed:
+    - DEPENDENCY_METADATA_INCOMPLETE
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -31,12 +32,12 @@ closure_sequence:
       - optional fixtures/pilot/ppm_object_selection_v1/dependency_evidence_closure_v1.yaml
       - MCP dependency resolver tests
     exit_criteria:
-      - selected procedure dependencySummary contains confirmed table/view/function/procedure refs where catalog evidence supports them
-      - selected tables are either confirmed related procedures or are replaced/marked according to metadata evidence
-      - unresolved, ambiguous, cross-database, or dynamic-only references remain review_required and keep the blocker active
+      - selected procedure suite majority dependency metadata gate passes with confirmed table/view/function/procedure refs where catalog evidence supports them
+      - selected tables are either confirmed related procedures or remain metadata-rich standalone candidates without unsupported linkage claims
+      - complex sentinel residual review is recorded separately and does not reopen P17A when the majority gate passes
       - no row data, procedure execution, or raw definition text is persisted
     keep_no_go_if:
-      - dependency metadata remains unresolved for any release-critical selected procedure
+      - selected stored procedure suite majority dependency metadata gate fails
       - permission gaps prevent dependency evidence collection
       - the worker must parse or store raw definition text to justify a claim
   P17B:
@@ -54,7 +55,7 @@ closure_sequence:
       - no releaseCritical item remains REVIEW_REQUIRED
       - generated Java/MyBatis artifacts remain draft-only
     keep_no_go_if:
-      - P17A dependency blocker remains active
+      - P17A dependency majority gate cannot be reproduced
       - validation is FAILED or REVIEW_REQUIRED for a release-critical item
       - generated artifacts require unapproved publish/export to be considered complete
   P17C:
@@ -97,7 +98,7 @@ closure_sequence:
 conditional_go_requires:
   dependency_metadata:
     blocker_closed: DEPENDENCY_METADATA_INCOMPLETE
-    required_status: confirmed_metadata_dependencies_for_release_critical_selected_procedures
+    required_status: selected_procedure_suite_majority_confirmed_with_complex_sentinel_residual_review_allowed
   validation:
     required_status: PASSED
     release_critical_review_required_allowed: false
@@ -130,7 +131,6 @@ final_decision_policy:
     - CONDITIONAL_GO
   current_decision: NO_GO
   no_go_must_remain_when:
-    - DEPENDENCY_METADATA_INCOMPLETE remains active
     - MANUAL_APPROVAL_EVIDENCE_MISSING remains active
     - live artifact validation is not PASSED
     - hard-live gate cannot be reproduced

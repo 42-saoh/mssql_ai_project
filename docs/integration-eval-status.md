@@ -13,7 +13,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
 | Web portal | stub/skeleton | Next.js shell uses mock data by default. HTTP API smoke is follow-up. |
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
-| Pilot release readiness | not production-ready | P16 records live pilot release as NO-GO because `DEPENDENCY_METADATA_INCOMPLETE` and manual approval evidence gaps remain. |
+| Pilot release readiness | not production-ready | P16 records live pilot release as NO-GO because live release validation and manual approval evidence gaps remain; P17A has closed `DEPENDENCY_METADATA_INCOMPLETE` under the selected SP majority gate. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -40,7 +40,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - eval fixtures parse and match generated workflow summaries
 - P15 hard-live fixture contract, metrics, redaction, permission-check schema, and blocker policy are valid
 - P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing
-- P16 readiness fixture and docs preserve `DEPENDENCY_METADATA_INCOMPLETE`, do not overclaim production readiness, and keep live release NO-GO
+- P16 readiness fixture and docs preserve the P17A dependency closure evidence, do not overclaim production readiness, and keep live release NO-GO
 
 For P15 hard-live validation, run the same suite with `P15_HARD_LIVE_GATE=1` and live PPM read-only metadata access configured:
 

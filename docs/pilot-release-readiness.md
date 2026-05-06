@@ -8,13 +8,15 @@ Fixture-first/demo handoff: GO WITH LIMITATIONS.
 
 No surface is production-ready. The current package is suitable for coordinator/reviewer
 handoff, fixture-first demo review, and blocker triage. It is not suitable for a live pilot
-release because PPM dependency metadata remains incomplete and there is no live release
-approval evidence bound to passed validation.
+release because live release validation and approval evidence are not yet bound to passed
+validation. P17A has closed
+`DEPENDENCY_METADATA_INCOMPLETE` under the selected stored procedure majority gate, with
+`dbo.PCS_PY_ManageInvoiceFldSchd_PRC` retained as a complex sentinel residual-review case.
 
 ## Basis
 
 - PPM manifest: `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml`
-- Manifest timestamp: `2026-05-05T13:47:24+09:00`
+- Manifest timestamp: `2026-05-06T21:52:50+09:00`
 - Selection mode: `live_metadata`
 - Source DB: `PPM`
 - Platform DB context: `PLF`
@@ -22,8 +24,8 @@ approval evidence bound to passed validation.
 - Handoff package: `ops/codex-parallel/P16_PILOT_RELEASE_HANDOFF.md`
 
 Because the manifest is `live_metadata`, this report may reference selected PPM object
-identities. It must still carry `DEPENDENCY_METADATA_INCOMPLETE` and must not claim confirmed
-procedure-to-table linkage.
+identities. It may claim P17A selected stored procedure suite dependency evidence, but it must
+not claim selected table linkage unless `related_procedures` contains catalog-confirmed refs.
 
 ## Readiness Checklist
 
@@ -31,7 +33,7 @@ procedure-to-table linkage.
 |---|---|---|
 | PPM representative object manifest | PASS | Manifest is `live_metadata` and records verified `ppm` to `PPM` metadata context. |
 | Read-only metadata boundary | CONDITIONAL PASS | Manifest and P15 fixture require metadata-only tools, no PLF fallback, and no row data. Target environment still has to pass the hard-live gate. |
-| Procedure dependency evidence | BLOCKER | `DEPENDENCY_METADATA_INCOMPLETE` remains active; selected tables are metadata-rich candidates, not confirmed SP dependencies. |
+| Procedure dependency evidence | PASS | P17A selected SP suite majority gate passed; `DEPENDENCY_METADATA_INCOMPLETE` is closed with complex sentinel residual review recorded. |
 | Validation result | BLOCKER | Fixture workflow reaches `REVIEW_REQUIRED`; no live release `PASSED` validation evidence is recorded. |
 | Manual approval | BLOCKER | `MANUAL_APPROVAL_EVIDENCE_MISSING`; approval recording exists, but no publish-grade human `APPROVE` is bound to passed validation. |
 | Audit trace | CONDITIONAL PASS | Fixture-first audit shape is documented; production persistence depends on externally managed PLF readiness. |
@@ -42,9 +44,9 @@ procedure-to-table linkage.
 
 | Type | Object | Readiness interpretation |
 |---|---|---|
-| Stored procedure | `dbo.GetInspItemsCd` | Simple representative; metadata identity and definition hash exist; dependency linkage is `REVIEW_REQUIRED`. |
-| Stored procedure | `dbo.PAD_GET_BAT_LIST_PRC` | Medium representative; metadata evidence exists; table dependency links remain incomplete. |
-| Stored procedure | `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` | Complex representative; metadata evidence exists; ambiguous dependency metadata and table linkage caveats remain. |
+| Stored procedure | `dbo.GetInspItemsCd` | Simple representative; dependency metadata is catalog-confirmed. |
+| Stored procedure | `dbo.PAD_GET_BAT_LIST_PRC` | Medium representative; same-DB and same-server cross-DB dependencies are catalog-confirmed. |
+| Stored procedure | `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` | Complex sentinel; 61/63 dependencies are confirmed and two ambiguous function refs remain as residual review. |
 | Table | `dbo.PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF` | Metadata-rich candidate; not confirmed as a dependency of selected procedures. |
 | Table | `dbo.PEM_PRV` | Metadata-rich candidate; description review is required; not confirmed as selected SP dependency. |
 | Table | `dbo.PEM_CTRT` | Metadata-rich candidate; description review is required; not confirmed as selected SP dependency. |
@@ -57,15 +59,15 @@ procedure-to-table linkage.
 |---|---|---|
 | Selected object identity coverage | 1.0 | Object identities are manifest-backed in `live_metadata` mode. |
 | Selected object metadata evidence coverage | 1.0 | Metadata evidence is present at identity/hash/summary level. |
-| Confirmed procedure-to-table dependency coverage | 0.0 | Live release blocker; do not claim SP-table lineage. |
-| Stored procedure review-required ratio | 1.0 | All selected SPs need reviewer attention before live pilot use. |
+| Confirmed procedure dependency suite coverage | 0.857 | P17A dependency blocker is closed by majority gate; selected table linkage is still not claimed without related refs. |
+| Stored procedure review-required ratio | 0.0 | Complex sentinel residual review is recorded as a non-blocking caveat for P17A. |
 | Validation pass rate for live release | 0.0 | Current workflow evidence is review-required, not publish-grade passed validation. |
 | Manual approval status | Missing for live release | Approval recording exists, but no passed-validation approval package exists. |
 | Draft artifact completeness | Fixture-first only | Suitable for demo/review handoff, not production release. |
 
 ## Known Limitations And Improvements
 
-- `DEPENDENCY_METADATA_INCOMPLETE`: improve MCP dependency evidence and analysis confidence before live pilot release.
+- `COMPLEX_SENTINEL_RESIDUAL_REVIEW`: `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` keeps two ambiguous function references for reviewer awareness.
 - Full `CanonicalAnalysisModel` is still not implemented; canonical candidates remain `REVIEW_REQUIRED`.
 - Web portal is mock-first/demo-oriented; HTTP adapter and production auth/RBAC are not release evidence yet.
 - Publish/export is intentionally absent. Any future publish route must require passed validation and human approval.
@@ -76,7 +78,7 @@ procedure-to-table linkage.
 Live pilot release remains NO-GO if any of the following are true:
 
 - PPM DB, metadata access, or read-only permission checks fail.
-- `DEPENDENCY_METADATA_INCOMPLETE` remains active for selected procedures.
+- P17A selected stored procedure suite majority dependency evidence cannot be reproduced.
 - Validation remains `REVIEW_REQUIRED` or failed for live pilot artifacts.
 - A human `APPROVE` decision is not bound to the latest passed validation report.
 - Audit evidence lacks correlation, actor, artifact, validation, and approval context.

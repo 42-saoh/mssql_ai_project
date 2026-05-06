@@ -8,8 +8,9 @@ Fixture-first/demo handoff: GO WITH LIMITATIONS.
 
 This handoff is based on `docs/pilot-release-readiness.md` and
 `fixtures/eval/pilot_release_readiness_p16_v1.yaml`. The PPM manifest is `live_metadata`, so
-selected object identities may be referenced, but `DEPENDENCY_METADATA_INCOMPLETE` remains a
-release blocker.
+selected object identities may be referenced. P17A has closed `DEPENDENCY_METADATA_INCOMPLETE`
+under the selected stored procedure suite majority gate; live release remains blocked by
+validation and approval evidence gaps.
 
 ## Evidence Package
 
@@ -24,7 +25,6 @@ release blocker.
 
 | Code | Impact | Owner action |
 |---|---|---|
-| `DEPENDENCY_METADATA_INCOMPLETE` | Blocks live pilot release because selected SPs cannot claim confirmed table lineage. | Harden PPM dependency metadata collection and analysis evidence, then rerun P15/P16 gates. |
 | `MANUAL_APPROVAL_EVIDENCE_MISSING` | Blocks publish/export or live release claims. | Produce artifacts with passed validation, bind human approval, and preserve audit context. |
 
 ## Verification Commands
@@ -60,8 +60,7 @@ switch the analysis profile to PLF.
 
 ## Next Owner Actions
 
-1. Resolve `DEPENDENCY_METADATA_INCOMPLETE` by improving metadata-only dependency evidence.
-2. Add live pilot validation artifacts that can reach `PASSED` without suppressing review markers.
-3. Bind a human `APPROVE` decision to the latest passed validation report for any release candidate.
-4. Confirm audit records include correlation id, actor, target ref, validation ref, and approval ref.
-5. Re-run the full P16 verification set and update the readiness decision only after blockers close.
+1. Add live pilot validation artifacts that can reach `PASSED` without suppressing review markers.
+2. Bind a human `APPROVE` decision to the latest passed validation report for any release candidate.
+3. Confirm audit records include correlation id, actor, target ref, validation ref, and approval ref.
+4. Re-run the full P16 verification set and update the readiness decision only after blockers close.

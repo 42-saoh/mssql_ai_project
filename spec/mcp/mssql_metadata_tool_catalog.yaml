@@ -23,8 +23,13 @@ response:
     type: object
     required:
       - objectType
+      - database
+      - server
       - schema
       - name
+      - referencedDatabase
+      - referencedServer
+      - sourceScope
       - dependencyType
       - isAmbiguous
       - reviewStatus
@@ -35,12 +40,32 @@ response:
       objectType:
         type: string
         description: TABLE, VIEW, FUNCTION, PROCEDURE, SYNONYM, or UNKNOWN.
+      database:
+        type: string
+        nullable: true
+        description: Confirmed catalog database for the dependency object when known.
+      server:
+        type: string
+        nullable: true
+        description: Confirmed catalog server for the dependency object when known; null for same-server metadata.
       schema:
         type: string
         nullable: true
       name:
         type: string
         nullable: true
+      referencedDatabase:
+        type: string
+        nullable: true
+        description: Database name recorded by sys.sql_expression_dependencies, when present.
+      referencedServer:
+        type: string
+        nullable: true
+        description: Server name recorded by sys.sql_expression_dependencies, when present.
+      sourceScope:
+        type: string
+        nullable: true
+        description: SAME_DATABASE or SAME_SERVER_CROSS_DATABASE for catalog-confirmable metadata scopes; null for dynamic or cross-server review items.
       dependencyType:
         type: string
         description: Metadata-only dependency type; defaults to REFERENCE unless deterministic catalog evidence supports a stronger type.
@@ -235,7 +260,7 @@ tools:
   - name: get_procedure_dependencies
     active: true
     readOnly: true
-    description: Return stored procedure dependency metadata with same-database catalog resolution evidence. Raw definition text and row data are never returned by this tool.
+    description: Return stored procedure dependency metadata with same-database and same-server cross-database catalog resolution evidence. Raw definition text and row data are never returned by this tool.
     input:
       type: object
       required: [dbProfileId, schema, procedureName]

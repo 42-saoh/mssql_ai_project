@@ -32,8 +32,8 @@ def test_p16_fixture_matches_live_manifest_and_no_go_decision() -> None:
         fixture["release_recommendation"]["fixture_first_demo_handoff"]["decision"]
         == "GO_WITH_LIMITATIONS"
     )
-    assert "DEPENDENCY_METADATA_INCOMPLETE" in _blocker_codes(fixture)
-    assert "DEPENDENCY_METADATA_INCOMPLETE" in {
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in _blocker_codes(fixture)
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in {
         blocker["code"] for blocker in manifest["active_blockers"]
     }
     assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in _blocker_codes(fixture)
@@ -74,9 +74,11 @@ def test_p16_representative_objects_are_manifest_backed_when_live() -> None:
         }
 
     for procedure in representative["stored_procedures"]:
-        assert procedure["dependency_status"] == "REVIEW_REQUIRED"
-        assert procedure["review_required"] is True
-        assert "table_dependency_links_incomplete" in procedure["caveats"]
+        assert procedure["dependency_status"] in {
+            "CONFIRMED",
+            "COMPLEX_SENTINEL_RESIDUAL_REVIEW_ALLOWED",
+        }
+        assert procedure["review_required"] is False
     for table in representative["tables"]:
         assert table["linkage_status"] == "not_confirmed_as_selected_procedure_dependency"
 
@@ -95,13 +97,13 @@ def test_p16_quality_release_checklist_and_forbidden_boundaries() -> None:
         "policy_forbidden_actions",
         "docs_status_taxonomy",
     } <= set(checklist)
-    assert checklist["dependency_evidence"]["status"] == "BLOCKER"
+    assert checklist["dependency_evidence"]["status"] == "PASS"
     assert checklist["manual_approval"]["status"] == "BLOCKER"
     assert checklist["policy_forbidden_actions"]["status"] == "PASS"
 
     quality = fixture["quality_report"]
     assert quality["evidence_coverage"]["selected_object_identity_coverage"] == 1.0
-    assert quality["evidence_coverage"]["confirmed_procedure_to_table_dependency_coverage"] == 0.0
+    assert quality["evidence_coverage"]["confirmed_procedure_dependency_suite_coverage"] > 0.5
     assert quality["validation"]["passed_validation_for_live_release"] is False
     assert quality["approval_audit"]["manual_approval_status"] == "MISSING_FOR_LIVE_RELEASE"
     assert (

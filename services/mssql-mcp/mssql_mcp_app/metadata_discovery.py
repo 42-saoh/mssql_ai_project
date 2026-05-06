@@ -135,6 +135,15 @@ def procedure_dependency_summary(
             item["resolutionStatus"] = dependency.get("resolutionStatus")
         if dependency.get("resolutionStrategy") is not None:
             item["resolutionStrategy"] = dependency.get("resolutionStrategy")
+        for key in (
+            "database",
+            "server",
+            "referencedDatabase",
+            "referencedServer",
+            "sourceScope",
+        ):
+            if dependency.get(key) is not None:
+                item[key] = dependency.get(key)
         if not item["name"]:
             summary["unresolved"].append(item)
         elif object_type == "TABLE":

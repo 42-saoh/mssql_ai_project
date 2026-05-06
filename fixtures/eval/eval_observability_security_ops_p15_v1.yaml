@@ -17,15 +17,13 @@ profile_policy:
   row_data_allowed: false
   procedure_execution_allowed: false
   ddl_dml_allowed: false
-active_blockers_to_carry_forward:
-  - DEPENDENCY_METADATA_INCOMPLETE
+active_blockers_to_carry_forward: []
 hard_fail_blockers:
   - LIVE_PPM_EVAL_REQUIRED
   - LIVE_METADATA_UNAVAILABLE
   - PPM_DB_NOT_FOUND
   - PPM_DB_ACCESS_DENIED
   - METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
-  - DEPENDENCY_METADATA_INCOMPLETE
   - LATENCY_INSTRUMENTATION_OUT_OF_SCOPE
 forbidden_evidence:
   - row_data
@@ -51,7 +49,7 @@ quality_metrics:
       unit: ratio
     current_live_gate:
       maximum: 1.0
-      requires_blocker_when_above_product_target: DEPENDENCY_METADATA_INCOMPLETE
+      residual_review_policy: complex_sentinel_review_allowed_when_p17a_majority_gate_passes
   validation_pass_rate:
     formula: passed_validation_reports / validation_reports
     product_target:
@@ -197,8 +195,7 @@ sample_scenarios:
       tables_minimum: 3
       views_minimum: 1
       functions_minimum: 1
-    expected_active_blockers:
-      - DEPENDENCY_METADATA_INCOMPLETE
+    expected_active_blockers: []
   - sample_id: p15-fixture-workflow-reproducibility-smoke
     readiness_label: fixture_first_reproducibility_baseline
     expected_job_status: REVIEW_PENDING

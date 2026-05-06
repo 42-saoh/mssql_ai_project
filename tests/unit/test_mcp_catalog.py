@@ -94,8 +94,13 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     dependency_item = payload["response"]["dependencyItem"]
     assert dependency_item["required"] == [
         "objectType",
+        "database",
+        "server",
         "schema",
         "name",
+        "referencedDatabase",
+        "referencedServer",
+        "sourceScope",
         "dependencyType",
         "isAmbiguous",
         "reviewStatus",

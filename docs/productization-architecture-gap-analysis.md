@@ -54,9 +54,9 @@ The P08A pilot manifest is the only source of PPM object identities for producti
 - Current mode: `live_metadata`
 - Source DB: `PPM`
 - Platform DB context: `PLF`
-- Active blocker: `DEPENDENCY_METADATA_INCOMPLETE`
+- Closed dependency evidence gate: `DEPENDENCY_METADATA_INCOMPLETE` is closed by the P17A selected stored procedure suite majority gate.
 
-When `selection_mode` is `live_metadata`, P09-P16 may reference the selected PPM object identities for metadata-only fixtures, demos, and readiness reports. They must still preserve the active dependency blocker and avoid claims that stored procedures are linked to selected tables unless later metadata evidence confirms that relationship.
+When `selection_mode` is `live_metadata`, P09-P16 may reference the selected PPM object identities for metadata-only fixtures, demos, and readiness reports. They must preserve the P17A dependency closure caveats and avoid claims that stored procedures are linked to selected tables unless catalog evidence confirms that relationship.
 
 When `selection_mode` is `template_only`, workers must not invent object names. Eval, demo, and release readiness should remain blocker-dependent and use synthetic/fixture-first samples only.
 
@@ -74,4 +74,3 @@ In both modes, the following remain forbidden: row-data reads, procedure executi
 | P14 | Demo object selector and portal sample requests. | UI labels metadata caveats and never exposes row-data/DDL/publish controls. |
 | P15 | Eval, observability, security, and ops metrics. | Metrics separate fixture-first, optional-live, and blocker-dependent evidence. |
 | P16 | Pilot release readiness and handoff package. | Go/no-go includes PPM access, dependency evidence, validation results, approval/audit, and policy compliance. |
-

@@ -11,7 +11,7 @@
 - `api_productization_ppm_workflow_v1.yaml` — P09 API workflow 의 idempotency/correlation 기대값과 PPM metadata-only request 예시
 - `validation_approval_audit_p13_v1.yaml` — P13 validation report, approval checklist, audit trace, publish/export gate 기대값
 - `eval_observability_security_ops_p15_v1.yaml` — P15 hard-live eval/ops gate. `ppm` → `PPM` live metadata, quality metrics, latency budgets, correlation id, audit stage, redaction, read-only permission check 기대값을 정의한다.
-- `pilot_release_readiness_p16_v1.yaml` — P16 pilot release readiness gate. live pilot release NO-GO, fixture-first/demo handoff GO WITH LIMITATIONS, selected PPM object evidence summary, `DEPENDENCY_METADATA_INCOMPLETE`, manual approval status, release checklist 를 정의한다.
+- `pilot_release_readiness_p16_v1.yaml` — P16 pilot release readiness gate. live pilot release NO-GO, fixture-first/demo handoff GO WITH LIMITATIONS, selected PPM object evidence summary, P17A dependency closure, manual approval status, release checklist 를 정의한다.
 
 P15 fixture 는 `gate_mode: hard_live` 이지만 기본 eval 실행에서는 live PPM 을 호출하지 않는다. `P15_HARD_LIVE_GATE=1` 로 명시 실행할 때 `MSSQL_ENABLE_LIVE_METADATA=1` 과 PPM read-only metadata 권한을 요구한다. PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않고 blocker 로 실패한다.
 

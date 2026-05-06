@@ -133,6 +133,10 @@ class FixtureMetadataRepository:
                     self,
                     procedure.get("dependencies", []),
                     base_path=f"/procedures/{index}/dependencies",
+                    source_database=source_database_for_profile(
+                        arguments["dbProfileId"],
+                        payload=self.payload,
+                    ),
                 ),
             }
             procedures.append(procedure_inventory_item(procedure_item, evidence_refs=[evidence]))
@@ -261,6 +265,7 @@ class FixtureMetadataRepository:
                         self,
                         procedure.get("dependencies", []),
                         base_path=f"/procedures/{index}/dependencies",
+                        source_database=context["sourceDatabase"],
                     ),
                 }
                 item = procedure_inventory_item(procedure_item, evidence_refs=[evidence])
@@ -405,6 +410,10 @@ class FixtureMetadataRepository:
             self,
             procedure.get("dependencies", []),
             base_path=f"/procedures/{index}/dependencies",
+            source_database=source_database_for_profile(
+                arguments["dbProfileId"],
+                payload=self.payload,
+            ),
         )
         evidence = self._evidence(
             "procedure-dependencies",
@@ -796,6 +805,8 @@ class LiveMetadataRepository:
     ) -> None:
         self.settings = settings or load_live_metadata_settings()
         self.profiles = profiles
+        self._catalog_database_cache: dict[str, dict[str, Any]] = {}
+        self._external_dependency_cache: dict[tuple[str, str | None, str], dict[str, Any]] = {}
 
     def invoke(self, tool_name: str, arguments: dict[str, Any]) -> MetadataToolResult:
         handler = getattr(self, f"_handle_{tool_name}", None)
@@ -980,7 +991,15 @@ class LiveMetadataRepository:
             profile=profile,
         )
         parameters_by_object = _group_parameters(parameter_rows)
-        dependencies_by_object = _group_live_dependencies(dependency_rows)
+        dependency_rows = self._resolve_external_dependency_rows(
+            profile,
+            dependency_rows,
+            tool_name="list_procedures",
+        )
+        dependencies_by_object = _group_live_dependencies(
+            dependency_rows,
+            source_database=profile.database,
+        )
         procedures = []
         for row in rows:
             object_id = row["object_id"]
@@ -2181,7 +2200,196 @@ class LiveMetadataRepository:
             tool_name=tool_name,
             profile=profile,
         )
-        return [item for values in _group_live_dependencies(rows).values() for item in values]
+        rows = self._resolve_external_dependency_rows(profile, rows, tool_name=tool_name)
+        return [
+            item
+            for values in _group_live_dependencies(
+                rows,
+                source_database=profile.database,
+            ).values()
+            for item in values
+        ]
+
+    def _resolve_external_dependency_rows(
+        self,
+        profile: DbProfile,
+        rows: list[dict[str, Any]],
+        *,
+        tool_name: str,
+    ) -> list[dict[str, Any]]:
+        resolved = []
+        for row in rows:
+            item = dict(row)
+            database_name = item.get("referenced_database_name")
+            if database_name and not item.get("referenced_server_name"):
+                item.update(
+                    self._external_dependency_resolution(
+                        profile,
+                        database_name=str(database_name),
+                        schema_name=item.get("referenced_schema_name"),
+                        entity_name=item.get("referenced_entity_name"),
+                        tool_name=tool_name,
+                    )
+                )
+            resolved.append(item)
+        return resolved
+
+    def _external_dependency_resolution(
+        self,
+        profile: DbProfile,
+        *,
+        database_name: str,
+        schema_name: Any,
+        entity_name: Any,
+        tool_name: str,
+    ) -> dict[str, Any]:
+        entity = str(entity_name or "").strip()
+        schema = str(schema_name).strip() if schema_name else None
+        cache_key = (database_name.lower(), schema.lower() if schema else None, entity.lower())
+        if cache_key in self._external_dependency_cache:
+            return dict(self._external_dependency_cache[cache_key])
+
+        if not entity:
+            result = {
+                "external_resolution_status": "REVIEW_REQUIRED",
+                "external_resolution_strategy": "CROSS_DATABASE_UNRESOLVED_ENTITY",
+            }
+            self._external_dependency_cache[cache_key] = result
+            return dict(result)
+
+        database_result = self._catalog_database(
+            database_name,
+            profile=profile,
+            tool_name=tool_name,
+        )
+        if database_result.get("external_resolution_status") == "REVIEW_REQUIRED":
+            self._external_dependency_cache[cache_key] = database_result
+            return dict(database_result)
+
+        catalog_database = str(database_result["external_database_name"])
+        quoted_database = _quote_mssql_identifier(catalog_database)
+        try:
+            rows = self._query(
+                "master",
+                f"""
+                SELECT
+                    match_info.match_count AS external_catalog_match_count,
+                    match_s.name AS external_matched_schema_name,
+                    match_o.name AS external_matched_object_name,
+                    match_o.type AS external_matched_object_type,
+                    syn_s.name AS external_synonym_schema_name,
+                    syn.name AS external_synonym_name,
+                    syn.base_object_name AS external_synonym_base_object_name
+                FROM (SELECT 1 AS marker) AS seed
+                OUTER APPLY (
+                    SELECT
+                        COUNT(*) AS match_count,
+                        MIN(candidate.object_id) AS match_object_id
+                    FROM {quoted_database}.sys.objects AS candidate
+                    INNER JOIN {quoted_database}.sys.schemas AS candidate_schema
+                        ON candidate.schema_id = candidate_schema.schema_id
+                    WHERE candidate.is_ms_shipped = 0
+                        AND candidate.type IN (
+                            'U', 'V', 'P', 'PC', 'FN', 'IF', 'TF', 'FS', 'FT', 'SN'
+                        )
+                        AND candidate.name = %s
+                        AND (
+                            %s IS NULL
+                            OR candidate_schema.name = %s
+                        )
+                ) AS match_info
+                LEFT JOIN {quoted_database}.sys.objects AS match_o
+                    ON match_info.match_count = 1
+                    AND match_o.object_id = match_info.match_object_id
+                LEFT JOIN {quoted_database}.sys.schemas AS match_s
+                    ON match_o.schema_id = match_s.schema_id
+                LEFT JOIN {quoted_database}.sys.synonyms AS syn
+                    ON syn.object_id = match_o.object_id
+                LEFT JOIN {quoted_database}.sys.schemas AS syn_s
+                    ON syn.schema_id = syn_s.schema_id
+                """,
+                [entity, schema, schema],
+                tool_name=tool_name,
+                profile=profile,
+            )
+        except MetadataToolError as exc:
+            result = {
+                **database_result,
+                "external_resolution_status": "REVIEW_REQUIRED",
+                "external_resolution_strategy": "CROSS_DATABASE_CATALOG_UNAVAILABLE",
+                "external_resolution_error_code": exc.code,
+            }
+            self._external_dependency_cache[cache_key] = result
+            return dict(result)
+
+        row = rows[0] if rows else {}
+        result = {
+            **database_result,
+            "external_catalog_match_count": int(row.get("external_catalog_match_count") or 0),
+            "external_matched_schema_name": row.get("external_matched_schema_name"),
+            "external_matched_object_name": row.get("external_matched_object_name"),
+            "external_matched_object_type": row.get("external_matched_object_type"),
+            "external_synonym_schema_name": row.get("external_synonym_schema_name"),
+            "external_synonym_name": row.get("external_synonym_name"),
+            "external_synonym_base_object_name": row.get("external_synonym_base_object_name"),
+        }
+        self._external_dependency_cache[cache_key] = result
+        return dict(result)
+
+    def _catalog_database(
+        self,
+        database_name: str,
+        *,
+        profile: DbProfile,
+        tool_name: str,
+    ) -> dict[str, Any]:
+        cache_key = database_name.lower()
+        if cache_key in self._catalog_database_cache:
+            return dict(self._catalog_database_cache[cache_key])
+        try:
+            rows = self._query(
+                "master",
+                """
+                SELECT
+                    name,
+                    state_desc
+                FROM sys.databases
+                WHERE name = %s
+                """,
+                [database_name],
+                tool_name=tool_name,
+                profile=profile,
+            )
+        except MetadataToolError as exc:
+            result = {
+                "external_resolution_status": "REVIEW_REQUIRED",
+                "external_resolution_strategy": "CROSS_DATABASE_CATALOG_UNAVAILABLE",
+                "external_resolution_error_code": exc.code,
+            }
+            self._catalog_database_cache[cache_key] = result
+            return dict(result)
+
+        if not rows:
+            result = {
+                "external_resolution_status": "REVIEW_REQUIRED",
+                "external_resolution_strategy": "CROSS_DATABASE_NOT_FOUND",
+            }
+            self._catalog_database_cache[cache_key] = result
+            return dict(result)
+
+        row = rows[0]
+        if row.get("state_desc") and str(row["state_desc"]).upper() != "ONLINE":
+            result = {
+                "external_database_name": row["name"],
+                "external_resolution_status": "REVIEW_REQUIRED",
+                "external_resolution_strategy": "CROSS_DATABASE_NOT_ONLINE",
+            }
+            self._catalog_database_cache[cache_key] = result
+            return dict(result)
+
+        result = {"external_database_name": row["name"]}
+        self._catalog_database_cache[cache_key] = result
+        return dict(result)
 
     def _module_dependency_metadata(
         self,
@@ -2593,10 +2801,16 @@ def _fixture_dependency_items(
     dependencies: list[dict[str, Any]],
     *,
     base_path: str,
+    source_database: str | None,
 ) -> list[dict[str, Any]]:
     items = []
     for index, dependency in enumerate(dependencies):
         item = dict(dependency)
+        item.setdefault("database", source_database)
+        item.setdefault("server", None)
+        item.setdefault("referencedDatabase", None)
+        item.setdefault("referencedServer", None)
+        item.setdefault("sourceScope", "SAME_DATABASE" if source_database else None)
         item.setdefault("dependencyType", "REFERENCE")
         item["isAmbiguous"] = bool(item.get("isAmbiguous"))
         if _dependency_needs_review(item):
@@ -2628,15 +2842,19 @@ def _fixture_dependency_items(
     return items
 
 
-def _group_live_dependencies(rows: list[dict[str, Any]]) -> dict[Any, list[dict[str, Any]]]:
+def _group_live_dependencies(
+    rows: list[dict[str, Any]],
+    *,
+    source_database: str | None,
+) -> dict[Any, list[dict[str, Any]]]:
     grouped: dict[Any, list[dict[str, Any]]] = {}
     for row in rows:
-        item = _live_dependency_item(row)
+        item = _live_dependency_item(row, source_database=source_database)
         grouped.setdefault(row["object_id"], []).append(item)
     return grouped
 
 
-def _live_dependency_item(row: dict[str, Any]) -> dict[str, Any]:
+def _live_dependency_item(row: dict[str, Any], *, source_database: str | None) -> dict[str, Any]:
     referenced_name = row.get("referenced_entity_name")
     referenced_schema = row.get("referenced_schema_name")
     server_name = row.get("referenced_server_name")
@@ -2651,15 +2869,120 @@ def _live_dependency_item(row: dict[str, Any]) -> dict[str, Any]:
         )
     ]
 
-    if server_name or database_name:
+    if server_name:
         return _dependency_item(
             row,
+            database=database_name,
+            server=server_name,
+            referenced_database=database_name,
+            referenced_server=server_name,
             schema=referenced_schema,
             name=referenced_name,
             object_type=_map_object_type(row.get("direct_object_type")),
             is_ambiguous=is_ambiguous,
             resolution_status="REVIEW_REQUIRED",
-            resolution_strategy="CROSS_DATABASE_OR_SERVER",
+            resolution_strategy="CROSS_SERVER_REFERENCE",
+            source_scope=None,
+            evidence_refs=evidence_refs,
+        )
+
+    if database_name:
+        source_scope = (
+            "SAME_DATABASE"
+            if _same(database_name, source_database)
+            else "SAME_SERVER_CROSS_DATABASE"
+        )
+        evidence_refs.append(
+            _dependency_evidence_ref(
+                row,
+                path="sys.databases",
+                object_type="DATABASE",
+                schema=None,
+                name=database_name,
+            )
+        )
+        external_strategy = row.get("external_resolution_strategy")
+        if external_strategy:
+            return _dependency_item(
+                row,
+                database=row.get("external_database_name") or database_name,
+                server=None,
+                referenced_database=database_name,
+                referenced_server=None,
+                schema=referenced_schema,
+                name=referenced_name,
+                object_type=_map_object_type(row.get("external_matched_object_type")),
+                is_ambiguous=is_ambiguous,
+                resolution_status="REVIEW_REQUIRED",
+                resolution_strategy=external_strategy,
+                source_scope=source_scope,
+                evidence_refs=evidence_refs,
+            )
+        external_match_count = int(row.get("external_catalog_match_count") or 0)
+        if external_match_count == 1 and row.get("external_matched_object_name"):
+            matched_type = _map_object_type(row.get("external_matched_object_type"))
+            evidence_refs.append(
+                _dependency_evidence_ref(
+                    row,
+                    path=(
+                        f"{row.get('external_database_name') or database_name}"
+                        ".sys.objects,sys.schemas:name_resolution"
+                    ),
+                    object_type=matched_type,
+                    schema=row.get("external_matched_schema_name"),
+                    name=row.get("external_matched_object_name"),
+                )
+            )
+            strategy = (
+                "SAME_DATABASE_EXPLICIT_DATABASE_CATALOG"
+                if source_scope == "SAME_DATABASE"
+                else "SAME_SERVER_CROSS_DATABASE_CATALOG"
+            )
+            return _resolved_catalog_dependency_item(
+                row,
+                database=row.get("external_database_name") or database_name,
+                server=None,
+                referenced_database=database_name,
+                referenced_server=None,
+                schema=row.get("external_matched_schema_name"),
+                name=row.get("external_matched_object_name"),
+                object_type=matched_type,
+                is_ambiguous=is_ambiguous,
+                strategy=strategy,
+                source_scope=source_scope,
+                evidence_refs=evidence_refs,
+                synonym_schema=row.get("external_synonym_schema_name"),
+                synonym_name=row.get("external_synonym_name"),
+            )
+        if external_match_count > 1:
+            return _dependency_item(
+                row,
+                database=row.get("external_database_name") or database_name,
+                server=None,
+                referenced_database=database_name,
+                referenced_server=None,
+                schema=referenced_schema,
+                name=referenced_name,
+                object_type="UNKNOWN",
+                is_ambiguous=True,
+                resolution_status="REVIEW_REQUIRED",
+                resolution_strategy="AMBIGUOUS_CROSS_DATABASE_CATALOG_NAME",
+                source_scope=source_scope,
+                evidence_refs=evidence_refs,
+            )
+        return _dependency_item(
+            row,
+            database=row.get("external_database_name") or database_name,
+            server=None,
+            referenced_database=database_name,
+            referenced_server=None,
+            schema=referenced_schema,
+            name=referenced_name,
+            object_type="UNKNOWN",
+            is_ambiguous=is_ambiguous,
+            resolution_status="REVIEW_REQUIRED",
+            resolution_strategy="CROSS_DATABASE_CATALOG_OBJECT_NOT_FOUND",
+            source_scope=source_scope,
             evidence_refs=evidence_refs,
         )
 
@@ -2677,11 +3000,16 @@ def _live_dependency_item(row: dict[str, Any]) -> dict[str, Any]:
         )
         return _resolved_catalog_dependency_item(
             row,
+            database=source_database,
+            server=None,
+            referenced_database=database_name,
+            referenced_server=server_name,
             schema=row.get("direct_schema_name"),
             name=direct_name,
             object_type=direct_type,
             is_ambiguous=is_ambiguous,
             strategy="REFERENCED_ID",
+            source_scope="SAME_DATABASE",
             evidence_refs=evidence_refs,
         )
 
@@ -2703,35 +3031,50 @@ def _live_dependency_item(row: dict[str, Any]) -> dict[str, Any]:
         )
         return _resolved_catalog_dependency_item(
             row,
+            database=source_database,
+            server=None,
+            referenced_database=database_name,
+            referenced_server=server_name,
             schema=row.get("matched_schema_name"),
             name=row.get("matched_object_name"),
             object_type=matched_type,
             is_ambiguous=is_ambiguous,
             strategy=strategy,
+            source_scope="SAME_DATABASE",
             evidence_refs=evidence_refs,
         )
 
     if catalog_match_count > 1:
         return _dependency_item(
             row,
+            database=source_database,
+            server=None,
+            referenced_database=database_name,
+            referenced_server=server_name,
             schema=referenced_schema,
             name=referenced_name,
             object_type="UNKNOWN",
             is_ambiguous=True,
             resolution_status="REVIEW_REQUIRED",
             resolution_strategy="AMBIGUOUS_CATALOG_NAME",
+            source_scope="SAME_DATABASE",
             evidence_refs=evidence_refs,
         )
 
     strategy = "CALLER_DEPENDENT_REFERENCE" if row.get("is_caller_dependent") else "UNRESOLVED"
     return _dependency_item(
         row,
+        database=source_database,
+        server=None,
+        referenced_database=database_name,
+        referenced_server=server_name,
         schema=referenced_schema,
         name=referenced_name,
         object_type="UNKNOWN",
         is_ambiguous=is_ambiguous,
         resolution_status="REVIEW_REQUIRED",
         resolution_strategy=strategy,
+        source_scope="SAME_DATABASE",
         evidence_refs=evidence_refs,
     )
 
@@ -2739,12 +3082,19 @@ def _live_dependency_item(row: dict[str, Any]) -> dict[str, Any]:
 def _resolved_catalog_dependency_item(
     row: dict[str, Any],
     *,
+    database: Any,
+    server: Any,
+    referenced_database: Any,
+    referenced_server: Any,
     schema: Any,
     name: Any,
     object_type: str,
     is_ambiguous: bool,
     strategy: str,
+    source_scope: str | None,
     evidence_refs: list[dict[str, Any]],
+    synonym_schema: Any | None = None,
+    synonym_name: Any | None = None,
 ) -> dict[str, Any]:
     if object_type == "SYNONYM":
         evidence_refs.append(
@@ -2752,39 +3102,54 @@ def _resolved_catalog_dependency_item(
                 row,
                 path="sys.synonyms",
                 object_type="SYNONYM",
-                schema=row.get("synonym_schema_name") or schema,
-                name=row.get("synonym_name") or name,
+                schema=synonym_schema or row.get("synonym_schema_name") or schema,
+                name=synonym_name or row.get("synonym_name") or name,
             )
         )
         return _dependency_item(
             row,
+            database=database,
+            server=server,
+            referenced_database=referenced_database,
+            referenced_server=referenced_server,
             schema=schema,
             name=name,
             object_type=object_type,
             is_ambiguous=True,
             resolution_status="REVIEW_REQUIRED",
             resolution_strategy="SYNONYM_TARGET_REVIEW_REQUIRED",
+            source_scope=source_scope,
             evidence_refs=evidence_refs,
         )
     if object_type == "UNKNOWN":
         return _dependency_item(
             row,
+            database=database,
+            server=server,
+            referenced_database=referenced_database,
+            referenced_server=referenced_server,
             schema=schema,
             name=name,
             object_type=object_type,
             is_ambiguous=is_ambiguous,
             resolution_status="REVIEW_REQUIRED",
             resolution_strategy="UNSUPPORTED_OBJECT_TYPE",
+            source_scope=source_scope,
             evidence_refs=evidence_refs,
         )
     return _dependency_item(
         row,
+        database=database,
+        server=server,
+        referenced_database=referenced_database,
+        referenced_server=referenced_server,
         schema=schema,
         name=name,
         object_type=object_type,
         is_ambiguous=is_ambiguous,
         resolution_status="REVIEW_REQUIRED" if is_ambiguous else "CONFIRMED",
         resolution_strategy="AMBIGUOUS_SQL_EXPRESSION" if is_ambiguous else strategy,
+        source_scope=source_scope,
         evidence_refs=evidence_refs,
     )
 
@@ -2792,18 +3157,28 @@ def _resolved_catalog_dependency_item(
 def _dependency_item(
     row: dict[str, Any],
     *,
+    database: Any,
+    server: Any,
+    referenced_database: Any,
+    referenced_server: Any,
     schema: Any,
     name: Any,
     object_type: str,
     is_ambiguous: bool,
     resolution_status: str,
     resolution_strategy: str,
+    source_scope: str | None,
     evidence_refs: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {
         "objectType": object_type,
+        "database": database,
+        "server": server,
         "schema": schema,
         "name": name,
+        "referencedDatabase": referenced_database,
+        "referencedServer": referenced_server,
+        "sourceScope": source_scope,
         "dependencyType": "REFERENCE",
         "isAmbiguous": bool(is_ambiguous),
         "reviewStatus": "CONFIRMED"
@@ -2818,8 +3193,13 @@ def _dependency_item(
 def _dynamic_sql_dependency_item(evidence_ref: dict[str, Any]) -> dict[str, Any]:
     return {
         "objectType": "UNKNOWN",
+        "database": None,
+        "server": None,
         "schema": None,
         "name": None,
+        "referencedDatabase": None,
+        "referencedServer": None,
+        "sourceScope": None,
         "dependencyType": "DYNAMIC_SQL",
         "isAmbiguous": True,
         "reviewStatus": "REVIEW_REQUIRED",
@@ -2868,6 +3248,7 @@ def _dependency_needs_review(dependency: dict[str, Any]) -> bool:
 
 
 def _map_object_type(sql_server_type: Any) -> str:
+    normalized = str(sql_server_type or "").strip().upper()
     return {
         "U": "TABLE",
         "V": "VIEW",
@@ -2879,7 +3260,13 @@ def _map_object_type(sql_server_type: Any) -> str:
         "FS": "FUNCTION",
         "FT": "FUNCTION",
         "SN": "SYNONYM",
-    }.get(str(sql_server_type), "UNKNOWN")
+    }.get(normalized, "UNKNOWN")
+
+
+def _quote_mssql_identifier(identifier: str) -> str:
+    if not identifier or len(identifier) > 128:
+        raise ValueError("MSSQL identifiers must be non-empty and at most 128 characters.")
+    return f"[{identifier.replace(']', ']]')}]"
 
 
 def _object_type_filter(object_type: str | None) -> str:
