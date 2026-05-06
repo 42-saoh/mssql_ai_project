@@ -1,0 +1,140 @@
+version: live_pilot_blocker_closure_p17_v1
+source_p16_fixture: fixtures/eval/pilot_release_readiness_p16_v1.yaml
+source_pilot_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+source_p15_gate: fixtures/eval/eval_observability_security_ops_p15_v1.yaml
+current_state:
+  live_pilot_release_decision: NO_GO
+  fixture_first_demo_handoff: GO_WITH_LIMITATIONS
+  source_db: PPM
+  platform_db_context: PLF
+  selection_mode_required: live_metadata
+  active_blockers_to_close:
+    - DEPENDENCY_METADATA_INCOMPLETE
+    - MANUAL_APPROVAL_EVIDENCE_MISSING
+policy_boundaries:
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  raw_definition_text_allowed_in_evidence: false
+  ddl_dml_allowed: false
+  plf_fallback_allowed: false
+  generated_artifacts_are_draft_only: true
+  publish_or_export_allowed_without_approval: false
+closure_sequence:
+  P17A:
+    title: Dependency Metadata Evidence Closure
+    owner_role: mcp_engineer
+    primary_blocker: DEPENDENCY_METADATA_INCOMPLETE
+    objective: Confirm selected PPM stored procedure dependencies with metadata-only evidence refs.
+    expected_outputs:
+      - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+      - optional fixtures/pilot/ppm_object_selection_v1/dependency_evidence_closure_v1.yaml
+      - MCP dependency resolver tests
+    exit_criteria:
+      - selected procedure dependencySummary contains confirmed table/view/function/procedure refs where catalog evidence supports them
+      - selected tables are either confirmed related procedures or are replaced/marked according to metadata evidence
+      - unresolved, ambiguous, cross-database, or dynamic-only references remain review_required and keep the blocker active
+      - no row data, procedure execution, or raw definition text is persisted
+    keep_no_go_if:
+      - dependency metadata remains unresolved for any release-critical selected procedure
+      - permission gaps prevent dependency evidence collection
+      - the worker must parse or store raw definition text to justify a claim
+  P17B:
+    title: Live Pilot Artifact Validation Closure
+    owner_role: template_engineer
+    primary_gap: live_release_validation_missing
+    objective: Produce draft-only live pilot artifacts and passed validation evidence for the confirmed PPM object set.
+    expected_outputs:
+      - fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
+      - generation or validation golden/update tests as needed
+    exit_criteria:
+      - validationStatus is PASSED
+      - release candidate artifact set is validated
+      - every result is bound to artifactId, artifactVersion, selectedObjectRef, and evidenceRefs
+      - no releaseCritical item remains REVIEW_REQUIRED
+      - generated Java/MyBatis artifacts remain draft-only
+    keep_no_go_if:
+      - P17A dependency blocker remains active
+      - validation is FAILED or REVIEW_REQUIRED for a release-critical item
+      - generated artifacts require unapproved publish/export to be considered complete
+  P17C:
+    title: Manual Approval And Audit Evidence Binding
+    owner_role: platform_worker
+    primary_blocker: MANUAL_APPROVAL_EVIDENCE_MISSING
+    objective: Bind human APPROVE evidence to the same artifact/version and validation report.
+    expected_outputs:
+      - fixtures/eval/manual_approval_audit_p17_v1.yaml
+      - API approval/audit tests or fixture tests as needed
+    exit_criteria:
+      - approvalDecision is APPROVE from a human reviewer input
+      - not synthesized
+      - approvalRef, validationRef, artifactRef, artifactVersion, actor, timestamp, and correlationId are linked
+      - auditTrail contains the same correlationId and target refs
+      - no publish/export route is introduced without the approval gate
+    keep_no_go_if:
+      - approval is missing, synthetic, not human, or not bound to the latest passed validation report
+      - audit evidence cannot connect actor, artifact, validation, approval, and evidence refs
+  P17D:
+    title: Pilot Release GO Decision Update
+    owner_role: reviewer
+    primary_decision: live_pilot_release_go_no_go
+    objective: Re-run gates and update the release decision only when all blockers are closed.
+    expected_outputs:
+      - docs/pilot-release-readiness.md
+      - fixtures/eval/pilot_release_readiness_p16_v1.yaml
+      - ops/codex-parallel/P16_PILOT_RELEASE_HANDOFF.md
+      - optional docs/live-pilot-blocker-closure-plan.md update
+    exit_criteria:
+      - P17A dependency evidence gate passes
+      - P17B validation gate passes
+      - P17C approval/audit gate passes
+      - hard-live P15/P16 verification passes
+      - decision is NO_GO or CONDITIONAL_GO, never unconditional production-ready
+    keep_no_go_if:
+      - any active blocker remains
+      - hard-live verification cannot be run or fails
+      - evidence refs are not reproducible
+conditional_go_requires:
+  dependency_metadata:
+    blocker_closed: DEPENDENCY_METADATA_INCOMPLETE
+    required_status: confirmed_metadata_dependencies_for_release_critical_selected_procedures
+  validation:
+    required_status: PASSED
+    release_critical_review_required_allowed: false
+  approval:
+    blocker_closed: MANUAL_APPROVAL_EVIDENCE_MISSING
+    required_decision: APPROVE
+    must_be_human_recorded: true
+  audit:
+    requires_correlation_id: true
+    requires_actor: true
+    requires_artifact_ref: true
+    requires_validation_ref: true
+    requires_approval_ref: true
+  hard_live_gate:
+    commands:
+      - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+      - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+forbidden_evidence:
+  - row_data
+  - sample_rows
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - unapproved_publish_or_export
+final_decision_policy:
+  allowed_decisions:
+    - NO_GO
+    - CONDITIONAL_GO
+  current_decision: NO_GO
+  no_go_must_remain_when:
+    - DEPENDENCY_METADATA_INCOMPLETE remains active
+    - MANUAL_APPROVAL_EVIDENCE_MISSING remains active
+    - live artifact validation is not PASSED
+    - hard-live gate cannot be reproduced
+  overclaim_forbidden:
+    - "production-ready: true"
+    - unconditional GO
+    - approved publish/export without evidence

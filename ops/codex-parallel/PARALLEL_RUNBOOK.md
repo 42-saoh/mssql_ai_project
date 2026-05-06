@@ -205,3 +205,25 @@ P08 이후 worker는 `docs/productization-architecture-gap-analysis.md`, `ops/co
 - shared contract/policy/common 파일(`packages/domain`, `spec/openapi`, `spec/policy`, `db/schema`, 루트 정책 문서 등) 변경이 필요하면 worker가 직접 수정하지 않고 coordinator에게 blocker로 보고한다.
 - Java/MyBatis 생성물은 계속 draft-only이며 사람이 최종 검토/승인한다.
 - metadata-only 경계는 유지한다. 실제 row data 조회, procedure 실행, 자동 DDL, 운영 DB 직접 변경은 금지한다.
+
+## 14. P17 Live Pilot Blocker Closure 운영
+
+P16이 `NO_GO`이면 다음 순서로 별도 worktree를 만든다.
+
+```bash
+git worktree add ../wt/p17a-dependency-metadata-evidence -b feat/p17a-dependency-metadata-evidence
+git worktree add ../wt/p17b-live-artifact-validation -b feat/p17b-live-artifact-validation
+git worktree add ../wt/p17c-approval-audit-binding -b feat/p17c-approval-audit-binding
+git worktree add ../wt/p17d-pilot-release-go-decision -b feat/p17d-pilot-release-go-decision
+```
+
+실행 순서는 `P17A -> P17B -> P17C -> P17D`다. `P17A`가 dependency evidence를 닫지 못하면 `P17B`는 live release validation을 `BLOCKED`로 유지한다. `P17B`가 passed validation package를 만들지 못하면 `P17C`는 approval blocker를 닫을 수 없다. `P17C`가 human approval/audit binding을 확보하지 못하면 `P17D`는 `NO_GO`를 유지한다.
+
+P17에서 live readiness claim을 하려면 아래 hard-live gate를 다시 통과해야 한다.
+
+```bash
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+```
+
+금지 사항은 P16과 같다. row data, procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는 publish/export는 허용하지 않는다.
