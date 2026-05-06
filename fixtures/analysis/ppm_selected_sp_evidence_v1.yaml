@@ -1,13 +1,28 @@
 version: ppm_selected_sp_evidence_v1
 sourceManifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+sourceDependencyClosure: fixtures/pilot/ppm_object_selection_v1/dependency_evidence_closure_v1.yaml
 selectionMode: live_metadata
 sourceProfile: ppm
 sourceDatabase: PPM
 platformDbContext: PLF
-snapshotId: live:ppm:2026-05-05T04:47:24Z
+snapshotId: live:ppm:2026-05-06T12:52:24Z
 metadataOnly: true
-activeBlockers:
+activeBlockers: []
+closedBlockers:
   - DEPENDENCY_METADATA_INCOMPLETE
+dependencyEvidenceGate:
+  status: PASSED_WITH_COMPLEX_SENTINEL_RESIDUAL_REVIEW
+  rule: selected_procedure_suite_majority_confirmed
+  selectedProcedureCount: 7
+  confirmedDependencyProcedureCount: 6
+  passRatio: 0.857
+  threshold: greater_than_0_5
+  complexSentinel:
+    procedure: dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+    dependencyCount: 63
+    confirmedCount: 61
+    residualReviewCount: 2
+    residualReviewStatus: allowed_for_p17a_majority_gate
 forbiddenEvidence:
   - sql_definition_text
   - procedure_execution
@@ -20,29 +35,32 @@ storedProcedures:
     name: GetInspItemsCd
     complexity: simple
     objectType: PROCEDURE
-    collectedAt: "2026-05-05T04:47:24Z"
+    collectedAt: "2026-05-06T12:52:24Z"
     evidence:
       sourceProfile: ppm
       sourceDatabase: PPM
-      snapshotId: live:ppm:2026-05-05T04:47:24Z
+      snapshotId: live:ppm:2026-05-06T12:52:24Z
       definitionHash: 999c1f6db938ee3a015b210659b85d9b31db3c66b7d3726a8f1113d46239ea9a
       definitionLength: 636
       parameterCount: 1
       dependencyCount: 1
       detectedPatterns:
         - simple_dml_or_select
-    dependencyCaveats:
-      - table_dependency_links_incomplete
-    reviewRequired: true
+    dependencyGate:
+      status: PASS
+      confirmedCount: 1
+      reviewRequiredCount: 0
+    dependencyCaveats: []
+    reviewRequired: false
   - schema: dbo
     name: PAD_GET_BAT_LIST_PRC
     complexity: medium
     objectType: PROCEDURE
-    collectedAt: "2026-05-05T04:47:24Z"
+    collectedAt: "2026-05-06T12:52:28Z"
     evidence:
       sourceProfile: ppm
       sourceDatabase: PPM
-      snapshotId: live:ppm:2026-05-05T04:47:24Z
+      snapshotId: live:ppm:2026-05-06T12:52:28Z
       definitionHash: 05a14dfe7b10e59f7b87a4497f265a0993587bd2f905771efc908ae8c7a2f7d2
       definitionLength: 8302
       parameterCount: 6
@@ -50,18 +68,21 @@ storedProcedures:
       detectedPatterns:
         - joins_or_branching
         - simple_dml_or_select
-    dependencyCaveats:
-      - table_dependency_links_incomplete
-    reviewRequired: true
+    dependencyGate:
+      status: PASS
+      confirmedCount: 4
+      reviewRequiredCount: 0
+    dependencyCaveats: []
+    reviewRequired: false
   - schema: dbo
     name: PCS_PY_ManageInvoiceFldSchd_PRC
     complexity: complex
     objectType: PROCEDURE
-    collectedAt: "2026-05-05T04:47:24Z"
+    collectedAt: "2026-05-06T12:52:32Z"
     evidence:
       sourceProfile: ppm
       sourceDatabase: PPM
-      snapshotId: live:ppm:2026-05-05T04:47:24Z
+      snapshotId: live:ppm:2026-05-06T12:52:32Z
       definitionHash: 5e41bdded786e9c6c44c726930d923fe134cef24a350613453fd79ca43513345
       definitionLength: 408310
       parameterCount: 10
@@ -71,11 +92,111 @@ storedProcedures:
         - cursor
         - joins_or_branching
         - simple_dml_or_select
+    dependencyGate:
+      status: COMPLEX_SENTINEL_RESIDUAL_REVIEW_ALLOWED
+      confirmedCount: 61
+      reviewRequiredCount: 2
     dependencyCaveats:
-      - ambiguous_dependency_metadata
-      - table_dependency_links_incomplete
-    reviewRequired: true
+      - complex_sentinel_residual_review
+    residualReview:
+      - objectRef: FUNCTION:dbo.PCS_PY_ChkAccountCode
+        resolutionStrategy: AMBIGUOUS_SQL_EXPRESSION
+      - objectRef: FUNCTION:dbo.PCS_PY_ChkInvoiceCancelStatus_FNC
+        resolutionStrategy: AMBIGUOUS_SQL_EXPRESSION
+    reviewRequired: false
+  - schema: dbo
+    name: PAD_REG_BAT_HIS_PRC
+    complexity: medium
+    objectType: PROCEDURE
+    collectedAt: "2026-05-06T12:52:35Z"
+    evidence:
+      sourceProfile: ppm
+      sourceDatabase: PPM
+      snapshotId: live:ppm:2026-05-06T12:52:35Z
+      definitionHash: 8e996776ca7456aff92cd13959d92c8550974e07bffa6a6db599ee52d94a5bf7
+      definitionLength: 6287
+      parameterCount: 6
+      dependencyCount: 2
+      detectedPatterns:
+        - joins_or_branching
+        - simple_dml_or_select
+    dependencyGate:
+      status: PASS
+      confirmedCount: 2
+      reviewRequiredCount: 0
+    dependencyCaveats: []
+    reviewRequired: false
+  - schema: dbo
+    name: PAD_SAVE_COM_CD_DTL_PRC
+    complexity: medium
+    objectType: PROCEDURE
+    collectedAt: "2026-05-06T12:52:39Z"
+    evidence:
+      sourceProfile: ppm
+      sourceDatabase: PPM
+      snapshotId: live:ppm:2026-05-06T12:52:39Z
+      definitionHash: f8c7759ae670391d36741398bfd68addf9d292271675299e88ddef8500215bb8
+      definitionLength: 5527
+      parameterCount: 18
+      dependencyCount: 1
+      detectedPatterns:
+        - joins_or_branching
+        - simple_dml_or_select
+    dependencyGate:
+      status: PASS
+      confirmedCount: 1
+      reviewRequiredCount: 0
+    dependencyCaveats: []
+    reviewRequired: false
+  - schema: dbo
+    name: PCO_BAT_CallDlvgPayAdjCyMail_PRC
+    complexity: complex
+    objectType: PROCEDURE
+    collectedAt: "2026-05-06T12:52:42Z"
+    evidence:
+      sourceProfile: ppm
+      sourceDatabase: PPM
+      snapshotId: live:ppm:2026-05-06T12:52:42Z
+      definitionHash: 73fd2a5f4afcc30a857223b4064e7ac2efa6b0ba4cfb6e2dd97ec93f942a1427
+      definitionLength: 1944
+      parameterCount: 0
+      dependencyCount: 3
+      detectedPatterns:
+        - try_catch
+        - joins_or_branching
+        - simple_dml_or_select
+    dependencyGate:
+      status: PASS
+      confirmedCount: 3
+      reviewRequiredCount: 0
+    dependencyCaveats: []
+    reviewRequired: false
+  - schema: dbo
+    name: PCO_BAT_CallSendMail_PRC
+    complexity: complex
+    objectType: PROCEDURE
+    collectedAt: "2026-05-06T12:52:46Z"
+    evidence:
+      sourceProfile: ppm
+      sourceDatabase: PPM
+      snapshotId: live:ppm:2026-05-06T12:52:46Z
+      definitionHash: bce80ac6f3f85a826c43672dd8e562f4bbd6bb6e677490319f9ae2438112d444
+      definitionLength: 3505
+      parameterCount: 0
+      dependencyCount: 5
+      detectedPatterns:
+        - temp_table
+        - try_catch
+        - joins_or_branching
+        - simple_dml_or_select
+    dependencyGate:
+      status: PASS
+      confirmedCount: 5
+      reviewRequiredCount: 0
+    dependencyCaveats: []
+    reviewRequired: false
 notes:
   - PPM object identities are copied from the read-only pilot manifest.
-  - Procedure text is intentionally omitted; only hash, length, pattern flags, and caveats are retained.
-  - Dependency confidence must remain review-required until P10/P11 metadata evidence confirms links.
+  - Procedure text is intentionally omitted; only hash, length, pattern flags, dependency counts, and caveats are retained.
+  - P17A closed DEPENDENCY_METADATA_INCOMPLETE by selected stored procedure suite majority; the complex sentinel residual review is kept as an explicit caveat.
+  - Selected table linkage remains unclaimed unless selected_objects.yaml records catalog-confirmed related procedures.

@@ -313,10 +313,18 @@ def test_ppm_selected_sp_evidence_fixture_is_metadata_only() -> None:
         payload["sourceManifest"]
         == "fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml"
     )
-    assert payload["activeBlockers"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
+    assert payload["activeBlockers"] == []
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in payload["closedBlockers"]
+    assert payload["dependencyEvidenceGate"]["status"] == (
+        "PASSED_WITH_COMPLEX_SENTINEL_RESIDUAL_REVIEW"
+    )
     assert [procedure["complexity"] for procedure in payload["storedProcedures"]] == [
         "simple",
         "medium",
+        "complex",
+        "medium",
+        "medium",
+        "complex",
         "complex",
     ]
     assert {
@@ -325,7 +333,12 @@ def test_ppm_selected_sp_evidence_fixture_is_metadata_only() -> None:
         "dbo.GetInspItemsCd",
         "dbo.PAD_GET_BAT_LIST_PRC",
         "dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        "dbo.PAD_REG_BAT_HIS_PRC",
+        "dbo.PAD_SAVE_COM_CD_DTL_PRC",
+        "dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC",
+        "dbo.PCO_BAT_CallSendMail_PRC",
     }
+    assert all(procedure["reviewRequired"] is False for procedure in payload["storedProcedures"])
     assert _secret_like_values(payload) == []
     forbidden_text = fixture_path.read_text(encoding="utf-8").lower()
     assert "definition:" not in forbidden_text

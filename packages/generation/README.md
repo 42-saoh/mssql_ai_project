@@ -13,4 +13,4 @@ SP 분석 문서, Mapper XML, Service, DTO/VO/Model, DDL 초안 생성기를 둘
 - renderer 의 requested output type 과 template registry 의 `requestedOutputType` 이 다르면 contract drift 로 보고 렌더링을 차단한다.
 - 모든 draft 출력은 evidence refs, TODO, `REVIEW_REQUIRED` 경계를 포함해야 한다.
 - manifest 는 sanitized input snapshot hash, policy/template/generator version, draft lifecycle, generated file inventory, diff/review checklist, SQL risk marker 를 포함한다.
-- PPM object-name golden 은 field/parameter/result-shape metadata evidence 가 충분할 때만 추가하며, `DEPENDENCY_METADATA_INCOMPLETE` 상태에서는 synthetic 또는 metadata-only golden 만 사용한다.
+- PPM object-name golden 은 field/parameter/result-shape metadata evidence 가 충분할 때만 추가한다. P17B live pilot artifact manifest 는 selected PPM object/evidence refs 만 고정하며, 없는 컬럼/파라미터/결과 형태를 추론해서 Java/MyBatis golden source 로 만들지 않는다.

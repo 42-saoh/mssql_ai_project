@@ -1,0 +1,209 @@
+version: live_pilot_artifact_validation_p17_v1
+track: P17B
+source_p16_fixture: fixtures/eval/pilot_release_readiness_p16_v1.yaml
+source_pilot_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+source_analysis_evidence: fixtures/analysis/ppm_selected_sp_evidence_v1.yaml
+source_dependency_closure: fixtures/pilot/ppm_object_selection_v1/dependency_evidence_closure_v1.yaml
+source_generation_manifest: fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml
+source_db: PPM
+platform_db_context: PLF
+selection_mode: live_metadata
+generated_at: '2026-05-06T22:20:00+09:00'
+validation_status: PASSED
+active_blockers_after_p17b:
+  - MANUAL_APPROVAL_EVIDENCE_MISSING
+closed_blockers:
+  - DEPENDENCY_METADATA_INCOMPLETE
+closed_gaps:
+  - live_release_validation_missing
+live_release_decision_after_p17b:
+  decision: NO_GO
+  reason: P17B artifact validation passed, but P17C human approval and audit binding are still missing.
+policy_boundaries:
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  raw_definition_text_allowed_in_evidence: false
+  ddl_dml_allowed: false
+  plf_fallback_allowed: false
+  publish_or_export_allowed: false
+  generated_artifacts_are_draft_only: true
+artifact_set:
+  artifact_set_id: p17b-live-pilot-artifact-set
+  artifact_set_version: 2026-05-06.p17b.v1
+  artifact_status: DRAFT
+  generation_manifest_ref: fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml
+  validation_report_id: p17b-live-pilot-artifact-validation-report
+artifacts:
+  - artifact_id: p17b-selected-procedure-analysis
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: SP_ANALYSIS_DOC
+    artifact_status: DRAFT
+    draft_only: true
+    metadata_only: true
+    selected_object_refs:
+      - PROCEDURE:dbo.GetInspItemsCd
+      - PROCEDURE:dbo.PAD_GET_BAT_LIST_PRC
+      - PROCEDURE:dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+      - PROCEDURE:dbo.PAD_REG_BAT_HIS_PRC
+      - PROCEDURE:dbo.PAD_SAVE_COM_CD_DTL_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallSendMail_PRC
+    generation_manifest_ref: fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml#artifacts.p17b-selected-procedure-analysis
+    evidence_refs:
+      - evidence_id: p17a-procedure-suite-majority-gate
+        evidence_type: METADATA_DEPENDENCY_GATE
+        object_ref: PROCEDURE_SUITE:selected_ppm_stored_procedures
+        source_ref: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml#dependency_evidence_gate
+        source_profile: ppm
+        source_database: PPM
+        snapshot_id: live:ppm:2026-05-06T12:52:24Z
+      - evidence_id: p17b-selected-sp-evidence
+        evidence_type: METADATA_OBJECT_EVIDENCE
+        object_ref: PROCEDURE_SUITE:selected_ppm_stored_procedures
+        source_ref: fixtures/analysis/ppm_selected_sp_evidence_v1.yaml#storedProcedures
+        source_profile: ppm
+        source_database: PPM
+        snapshot_id: live:ppm:2026-05-06T12:52:24Z
+  - artifact_id: p17b-selected-procedure-dependency-report
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: DEPENDENCY_REPORT
+    artifact_status: DRAFT
+    draft_only: true
+    metadata_only: true
+    selected_object_refs:
+      - PROCEDURE:dbo.GetInspItemsCd
+      - PROCEDURE:dbo.PAD_GET_BAT_LIST_PRC
+      - PROCEDURE:dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+      - PROCEDURE:dbo.PAD_REG_BAT_HIS_PRC
+      - PROCEDURE:dbo.PAD_SAVE_COM_CD_DTL_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallSendMail_PRC
+    generation_manifest_ref: fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml#artifacts.p17b-selected-procedure-dependency-report
+    evidence_refs:
+      - evidence_id: p17a-dependency-evidence-closure
+        evidence_type: METADATA_DEPENDENCY_CLOSURE
+        object_ref: PROCEDURE_SUITE:selected_ppm_stored_procedures
+        source_ref: fixtures/pilot/ppm_object_selection_v1/dependency_evidence_closure_v1.yaml#majority_gate
+        source_profile: ppm
+        source_database: PPM
+        snapshot_id: live:ppm:2026-05-06T12:52:24Z
+      - evidence_id: p17b-selected-sp-dependency-summary
+        evidence_type: METADATA_DEPENDENCY_SUMMARY
+        object_ref: PROCEDURE_SUITE:selected_ppm_stored_procedures
+        source_ref: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml#stored_procedures
+        source_profile: ppm
+        source_database: PPM
+        snapshot_id: live:ppm:2026-05-06T12:52:24Z
+  - artifact_id: p17b-selected-object-metadata-coverage
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: METADATA_QUERY_RESULT
+    artifact_status: DRAFT
+    draft_only: true
+    metadata_only: true
+    selected_object_refs:
+      - TABLE:dbo.PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF
+      - TABLE:dbo.PEM_PRV
+      - TABLE:dbo.PEM_CTRT
+      - VIEW:dbo.PCO_COM_CD_DTL_V
+      - FUNCTION:dbo.GetInitCap
+    generation_manifest_ref: fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml#artifacts.p17b-selected-object-metadata-coverage
+    evidence_refs:
+      - evidence_id: p17b-selected-table-view-function-metadata
+        evidence_type: METADATA_OBJECT_EVIDENCE
+        object_ref: OBJECT_SET:selected_tables_views_functions
+        source_ref: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml#tables_views_functions
+        source_profile: ppm
+        source_database: PPM
+        snapshot_id: live:ppm:2026-05-05T04:47:24Z
+      - evidence_id: p17b-selected-object-manifest
+        evidence_type: METADATA_OBJECT_SELECTION
+        object_ref: OBJECT_SET:selected_ppm_objects
+        source_ref: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        source_profile: ppm
+        source_database: PPM
+        snapshot_id: live:ppm:2026-05-06T12:52:24Z
+validation_results:
+  - rule_id: p17b.dependency_gate.closed
+    severity: BLOCKER
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-selected-procedure-dependency-report
+    evidence_refs:
+      - p17a-dependency-evidence-closure
+      - p17a-procedure-suite-majority-gate
+  - rule_id: p17b.artifact.records.complete
+    severity: BLOCKER
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-live-pilot-artifact-set
+    evidence_refs:
+      - p17b-selected-object-manifest
+  - rule_id: p17b.artifact.selected_object_binding
+    severity: BLOCKER
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-live-pilot-artifact-set
+    evidence_refs:
+      - p17b-selected-object-manifest
+      - p17b-selected-sp-evidence
+  - rule_id: p17b.artifact.evidence_binding
+    severity: BLOCKER
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-live-pilot-artifact-set
+    evidence_refs:
+      - p17a-procedure-suite-majority-gate
+      - p17b-selected-table-view-function-metadata
+  - rule_id: p17b.artifact.generation_manifest_binding
+    severity: ERROR
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-live-pilot-artifact-set
+    evidence_refs:
+      - fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml
+  - rule_id: p17b.policy.metadata_only
+    severity: BLOCKER
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-live-pilot-artifact-set
+    evidence_refs:
+      - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml#metadata_access_policy
+  - rule_id: p17b.policy.draft_only_no_publish_export
+    severity: BLOCKER
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-live-pilot-artifact-set
+    evidence_refs:
+      - fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml#policy_boundaries
+  - rule_id: p17b.release_critical.no_review_required_items
+    severity: BLOCKER
+    status: PASSED
+    releaseCritical: true
+    artifact_ref: p17b-live-pilot-artifact-set
+    evidence_refs:
+      - p17b-live-pilot-artifact-validation-report
+quality_report:
+  artifact_count: 3
+  selected_object_ref_coverage: 1.0
+  release_critical_validation_status: PASSED
+  release_critical_failed_count: 0
+  release_critical_review_required_count: 0
+  generated_java_mybatis_files_added: false
+  live_release_decision: NO_GO
+known_limitations:
+  - code: MANUAL_APPROVAL_EVIDENCE_MISSING
+    impact: P17B passed artifact validation, but P17C must still bind human approval and audit evidence before any GO transition.
+  - code: JAVA_MYBATIS_GOLDENS_NOT_ADDED
+    impact: Java/MyBatis source files are not fixed as golden samples because safe parameter, column, and result-shape metadata is not available in the selected PPM fixture.
+  - code: COMPLEX_SENTINEL_RESIDUAL_REVIEW
+    impact: dbo.PCS_PY_ManageInvoiceFldSchd_PRC keeps two residual dependency review refs as a P17A caveat, not a P17B artifact validation failure.
+forbidden_evidence:
+  - row_data
+  - sample_rows
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - unapproved_publish_or_export
