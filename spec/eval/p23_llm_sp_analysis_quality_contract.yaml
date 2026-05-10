@@ -60,6 +60,12 @@ forbidden_behavior:
   raw_openai_response_text_storage: true
   secret_logging: true
 trace_policy:
+  forbidden_trace_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - row_data
+    - secrets
   allowed_model_invocation_fields:
     - provider
     - model

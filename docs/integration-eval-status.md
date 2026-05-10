@@ -2,7 +2,7 @@
 
 ## Summary
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 starts as a split contract/prompt pack for LLM-assisted SP analysis quality eval; fixture authoring and eval runner implementation are separate follow-up tracks. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack plus P23B-authored simple/medium/complex synthetic fixtures and fake-gateway fixture validation; broader scoring runner and optional live quality gate implementation remain follow-up tracks. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
 
 ## Current Boundaries
 
@@ -17,7 +17,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | P18/P19 productization readiness | conditional open | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain deferred future hardening before any production-grade enterprise Auth/RBAC claim. |
 | P21 live portal | explicit live gate | Default eval skips without PLF/PPM access. `P21_LIVE_PORTAL_GATE=1` requires PLF workflow repository and read-only PPM metadata access. Missing env is blocker failure, not skip, and does not imply `production_ready: true`. |
 | P22 LLM runtime | implemented with gates | Default tests use `FakeModelGateway`; remote OpenAI calls require `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, and `OPENAI_API_KEY`. Stored traces contain hashes, model/profile/token/latency/status summaries only, not raw prompt, SP definition, or provider response text. |
-| P23 LLM quality eval | contract planned | `spec/eval/p23_llm_sp_analysis_quality_contract.yaml` and `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` define simple/medium/complex quality eval expectations. P23B/P23C will author fixtures and runner separately; current status remains `production_ready: false`. |
+| P23 LLM quality eval | fixture-first authored | `spec/eval/p23_llm_sp_analysis_quality_contract.yaml` and `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` define and author simple/medium/complex synthetic quality eval fixtures. `tests/eval/test_p23_llm_sp_analysis_quality.py` validates schema, deterministic evidence binding, fake-gateway `gpt-5-nano` execution, no-raw trace storage, and no PPM-to-PLF fallback. P23C broader scoring runner and optional live quality gate remain follow-up work; current status remains `production_ready: false`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -34,7 +34,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/manual_approval_audit_p17_v1.yaml`: P17C human approval and audit binding for the P17B artifact set/version and validation report.
 - `fixtures/eval/productization_gap_closure_p18_v1.yaml`: P18/P19 productization fixture recording P18A canonical closure, P18B HTTP adapter smoke evidence, production auth/RBAC source documentation, fixture-backed enforcement, and the deferred live wiring hardening item.
 - `fixtures/eval/live_portal_no_mock_p21_v1.yaml`: P21 no-mock portal and Python 3.14 contract fixture recording required pages, HTTP-only Web boundary, PLF/PPM prerequisites, live gate blocker behavior, and `production_ready: false`.
-- `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`: P23 contract seed for simple/medium/complex LLM-assisted SP semantic analysis quality eval, including `gpt-5-nano` fast/test profile, `LLM_INFERENCE`, `REVIEW_REQUIRED`, no-raw-trace storage expectations, and `production_ready: false`.
+- `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`: P23B-authored simple/medium/complex synthetic LLM-assisted SP semantic analysis quality fixtures, including deterministic facts, transient SP definition input, golden semantic outputs, `gpt-5-nano` fast/test profile, `LLM_INFERENCE`, `REVIEW_REQUIRED`, no-raw-trace storage expectations, and `production_ready: false`.
 - `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`: P23 quality contract that separates P23A contract assets from P23B fixture authoring, P23C eval runner implementation, and P23D readiness documentation.
 
 ## Verification Scope
@@ -54,6 +54,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - P18B HTTP adapter smoke can be run with `python3.14 tests/e2e/web_http_adapter_smoke.py`; the dockerized python test suite may skip this smoke when node/pnpm are unavailable.
 - P19 auth/RBAC enforcement is covered by `tests/integration/api/test_api_auth_rbac.py`, including 401, 403, reviewer success, and reviewer spoofing cases.
 - P21 prompt/fixture/no-mock/Python 3.14 contracts are covered by `tests/contract/test_p21_no_mock_prompt_assets.py` and `tests/unit/web`; default `tests/eval/test_p21_live_portal_no_mock_gate.py` skips unless the live gate is explicitly enabled.
+- P23B LLM quality fixtures are covered by `tests/eval/test_p23_llm_sp_analysis_quality.py`; default execution uses `FakeModelGateway`, `openai_fast_test`, and `gpt-5-nano` without network calls.
 
 For P15 hard-live validation, run the same suite with `P15_HARD_LIVE_GATE=1` and live PPM read-only metadata access configured:
 
@@ -82,13 +83,13 @@ For P22 OpenAI runtime validation, default tests use fake model responses. The o
 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p22_openai_live_agent_gate.py"
 ```
 
-For P23 contract validation, run:
+For P23 fixture-first contract validation, run:
 
 ```bash
-make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py"
+make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/contract/test_p23_llm_eval_contract_prompt_assets.py"
 ```
 
-This checks the P23 contract, seed fixture, manifest split tracks, and prompt pack. It does not call OpenAI and does not claim P23 eval runner readiness.
+This checks the P23 contract, authored P23B fixture suite, manifest split tracks, prompt pack, deterministic evidence binding, and fake-gateway sanitized storage. It does not call OpenAI and does not claim P23C broader eval runner or optional live quality gate readiness.
 
 ## P15 Ops Gate
 
@@ -106,7 +107,7 @@ This checks the P23 contract, seed fixture, manifest split tracks, and prompt pa
 - Validation rules: no rule change. Existing evidence/review-required rules drive e2e/eval expectations.
 - Policy: no policy asset change. Forbidden automatic publish, automatic DDL, and row-data access boundaries remain unchanged.
 - Env/profile: default metadata profile is now consistently `master`; platform DB profile `plf` remains available.
-- LLM eval: P23 introduces contract-only quality evaluation assets. P23B/P23C must keep default tests fake-gateway-only and preserve no-raw-trace storage.
+- LLM eval: P23 includes contract quality assets and P23B-authored synthetic fixtures. P23C must keep default tests fake-gateway-only and preserve no-raw-trace storage.
 
 ## Follow-Up Backlog
 
@@ -119,4 +120,4 @@ This checks the P23 contract, seed fixture, manifest split tracks, and prompt pa
 7. Keep future live pilot reruns evidence-based: if P17B validation, P17C approval/audit binding, or hard-live PPM verification cannot be reproduced, return the scoped candidate to `NO_GO`.
 8. Keep `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` as deferred future hardening until live auth/RBAC wiring closes without mock headers, hardcoded actors, fixture tokens, or committed secrets.
 9. Keep P21 no-mock portal evidence conditional on PLF/PPM prerequisites; do not claim full production readiness from a local controlled live gate.
-10. Implement P23B/P23C fixture authoring and eval runner separately from the P23A contract/prompt pack, then keep P24 document/code generation draft-only in its own wave.
+10. Implement the P23C broader scoring runner and optional live quality gate separately from the P23B fixture-first suite, then keep P24 document/code generation draft-only in its own wave.

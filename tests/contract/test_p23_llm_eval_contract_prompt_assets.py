@@ -102,7 +102,39 @@ def test_p23_fixture_keeps_no_raw_trace_and_fast_test_contract() -> None:
         "secrets",
     ]
     for forbidden in ("raw_prompt", "raw_sp_definition", "raw_openai_response_text"):
-        assert forbidden not in fixture["trace_expectations"]["model_invocation_summary_fields"]
+        assert (
+            forbidden
+            not in fixture["trace_expectations"]["model_invocation_summary_fields"]
+        )
+        assert (
+            forbidden
+            not in fixture["trace_expectations"]["agent_run_summary_fields"]
+        )
+    assert fixture["trace_expectations"]["forbidden_trace_payload_fields"] == [
+        "raw_prompt",
+        "raw_sp_definition",
+        "raw_openai_response_text",
+        "row_data",
+        "secrets",
+    ]
+
+
+def test_p23_contract_trace_policy_forbids_raw_row_and_secret_payloads() -> None:
+    contract = _load_yaml(CONTRACT)
+    forbidden_fields = [
+        "raw_prompt",
+        "raw_sp_definition",
+        "raw_openai_response_text",
+        "row_data",
+        "secrets",
+    ]
+
+    assert (
+        contract["trace_policy"]["forbidden_trace_payload_fields"] == forbidden_fields
+    )
+    for field in forbidden_fields:
+        assert field not in contract["trace_policy"]["allowed_model_invocation_fields"]
+        assert field not in contract["trace_policy"]["allowed_agent_run_fields"]
 
 
 def test_p23_prompts_capture_split_contract_and_policy_rules() -> None:

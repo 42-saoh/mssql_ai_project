@@ -12,6 +12,10 @@ from ai_agent_runtime.models import (
     ModelProfile,
     RenderedPrompt,
 )
+from ai_agent_runtime.quality_eval import (
+    LLM_INFERENCE_EVIDENCE_TYPE,
+    evaluate_p23_semantic_quality,
+)
 from ai_agent_runtime.semantic import (
     build_semantic_analysis_run,
     merge_llm_semantic_analysis,
@@ -20,6 +24,7 @@ from ai_agent_runtime.semantic import (
 __all__ = [
     "AgentRunPayload",
     "FakeModelGateway",
+    "LLM_INFERENCE_EVIDENCE_TYPE",
     "LlmSemanticAnalysisOutput",
     "ModelGateway",
     "ModelGatewayError",
@@ -29,5 +34,6 @@ __all__ = [
     "RenderedPrompt",
     "build_model_gateway_from_env",
     "build_semantic_analysis_run",
+    "evaluate_p23_semantic_quality",
     "merge_llm_semantic_analysis",
 ]
