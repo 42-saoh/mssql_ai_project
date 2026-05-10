@@ -1,12 +1,13 @@
 fixture_suite_id: llm_sp_analysis_quality_p23_v1
 contract_ref: p23_llm_sp_analysis_quality@0.1.0
 phase: P23
-status: planned
+status: authored_p23b
 production_ready: false
 purpose: >
-  Contract seed for the P23 simple/medium/complex LLM-assisted stored procedure
-  semantic analysis evaluation suite. Concrete SP fixtures and golden expected
-  outputs are authored by separated P23 implementation tracks.
+  P23B synthetic simple/medium/complex LLM-assisted stored procedure semantic
+  analysis fixture suite. Each scenario separates deterministic metadata/static
+  facts, transient SP definition model input, golden semantic output, and
+  sanitized trace/storage expectations.
 model_profiles:
   semantic_analysis:
     profile_id: openai_sp_semantic_analysis
@@ -72,7 +73,123 @@ scenarios:
     complexity: simple
     source_kind: synthetic_contract_fixture
     sp_definition_policy: transient_model_input_only
-    fixture_authoring_status: pending_p23b
+    fixture_authoring_status: authored_p23b
+    db_context:
+      metadata_profile_id: ppm
+      target_db: PPM
+      platform_db: PLF
+      plf_fallback: forbidden
+    target_ref: PPM.dbo.usp_P23LookupCustomerStatus
+    deterministic_facts:
+      - id: fact_p23_simple_target
+        source: MSSQL metadata MCP output
+        fact_type: PROCEDURE_IDENTITY
+        summary: Synthetic PPM procedure dbo.usp_P23LookupCustomerStatus.
+      - id: fact_p23_simple_parameters
+        source: deterministic static analysis output
+        fact_type: PROCEDURE_PARAMETERS
+        summary: Inputs are CustomerId int and IncludeInactive bit with a default of 0.
+      - id: fact_p23_simple_customer_read
+        source: deterministic static analysis output
+        fact_type: TABLE_READ
+        summary: Reads dbo.Customer by CustomerId and filters inactive rows unless IncludeInactive is 1.
+      - id: fact_p23_simple_tier_read
+        source: deterministic static analysis output
+        fact_type: TABLE_READ
+        summary: Left joins dbo.CustomerTier for display label shaping.
+      - id: fact_p23_simple_result_shape
+        source: deterministic static analysis output
+        fact_type: RESULT_SHAPE
+        summary: Returns CustomerId, StatusCode, TierName, and LastReviewedAt.
+    transient_model_input:
+      target_ref: PPM.dbo.usp_P23LookupCustomerStatus
+      procedure_definition: |
+        CREATE OR ALTER PROCEDURE dbo.usp_P23LookupCustomerStatus
+          @CustomerId int,
+          @IncludeInactive bit = 0
+        AS
+        BEGIN
+          SET NOCOUNT ON;
+          IF @CustomerId IS NULL OR @CustomerId <= 0
+          BEGIN
+            THROW 51001, 'CustomerId must be positive.', 1;
+          END;
+
+          SELECT
+            c.CustomerId,
+            c.StatusCode,
+            t.TierName,
+            c.LastReviewedAt
+          FROM dbo.Customer AS c
+          LEFT JOIN dbo.CustomerTier AS t
+            ON t.TierId = c.TierId
+          WHERE c.CustomerId = @CustomerId
+            AND (@IncludeInactive = 1 OR c.IsActive = 1);
+        END;
+      static_analysis:
+        fact_ids:
+          - fact_p23_simple_target
+          - fact_p23_simple_parameters
+          - fact_p23_simple_customer_read
+          - fact_p23_simple_tier_read
+          - fact_p23_simple_result_shape
+        patterns:
+          read_only: true
+          transaction: false
+          dynamic_sql: false
+          cross_database_reference: false
+    golden_expected_semantic_output:
+      business_rules:
+        - category: CUSTOMER_LOOKUP_VISIBILITY
+          summary: Customer lookup returns only the requested customer and hides inactive rows unless IncludeInactive is enabled.
+          status: INFERRED_DESCRIPTION
+          evidence_refs:
+            - fact_p23_simple_parameters
+            - fact_p23_simple_customer_read
+      modernization_points:
+        - code: MAP_SINGLE_LOOKUP_TO_QUERY_SERVICE
+          summary: Convert the read-only lookup to a parameterized query service and preserve the inactive-row filter.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_simple_customer_read
+            - fact_p23_simple_result_shape
+      risk_flags: []
+      review_markers: []
+      assumptions: []
+    llm_evidence_expectation:
+      evidence_type: LLM_INFERENCE
+      accepted_without_review: false
+    unsupported_claim_expectations: []
+    trace_storage_expectations:
+      model_invocation_summary_fields:
+        - provider
+        - model
+        - model_profile_id
+        - reasoning_effort
+        - request_hash
+        - prompt_hash
+        - response_hash
+        - input_token_count
+        - output_token_count
+        - total_token_count
+        - latency_ms
+        - status
+      agent_run_summary_fields:
+        - agent_run_id
+        - job_id
+        - runtime_version
+        - prompt_ref
+        - schema_ref
+        - model_profile_id
+        - validation_status
+        - status
+      expected_model_invocation:
+        provider: fake-openai-compatible
+        model: gpt-5-nano
+        model_profile_id: openai_fast_test
+      stored_prompt_text: false
+      stored_procedure_definition_text: false
+      stored_provider_response_text: false
     required_expected_outputs:
       business_rules_min: 1
       modernization_points_min: 1
@@ -87,7 +204,178 @@ scenarios:
     complexity: medium
     source_kind: synthetic_contract_fixture
     sp_definition_policy: transient_model_input_only
-    fixture_authoring_status: pending_p23b
+    fixture_authoring_status: authored_p23b
+    db_context:
+      metadata_profile_id: ppm
+      target_db: PPM
+      platform_db: PLF
+      plf_fallback: forbidden
+    target_ref: PPM.dbo.usp_P23ApplyCreditDecision
+    deterministic_facts:
+      - id: fact_p23_medium_target
+        source: MSSQL metadata MCP output
+        fact_type: PROCEDURE_IDENTITY
+        summary: Synthetic PPM procedure dbo.usp_P23ApplyCreditDecision.
+      - id: fact_p23_medium_parameters
+        source: deterministic static analysis output
+        fact_type: PROCEDURE_PARAMETERS
+        summary: Inputs are AccountId int, DecisionCode nvarchar(20), and ReviewerId int.
+      - id: fact_p23_medium_transaction
+        source: deterministic static analysis output
+        fact_type: TRANSACTION_CONTROL
+        summary: Uses XACT_ABORT, explicit BEGIN TRAN, COMMIT, and CATCH rollback.
+      - id: fact_p23_medium_approve_branch
+        source: deterministic static analysis output
+        fact_type: BRANCH_RULE
+        summary: APPROVE branch updates dbo.CreditAccount to APPROVED with reviewer and timestamp fields.
+      - id: fact_p23_medium_hold_branch
+        source: deterministic static analysis output
+        fact_type: BRANCH_RULE
+        summary: HOLD branch inserts dbo.CreditReviewQueue and leaves the account in manual review.
+      - id: fact_p23_medium_audit_write
+        source: deterministic static analysis output
+        fact_type: TABLE_WRITE
+        summary: Writes dbo.CreditDecisionAudit after the branch-specific action.
+      - id: fact_p23_medium_error_handling
+        source: deterministic static analysis output
+        fact_type: ERROR_HANDLING
+        summary: Unsupported DecisionCode throws and CATCH rethrows after rollback when needed.
+    transient_model_input:
+      target_ref: PPM.dbo.usp_P23ApplyCreditDecision
+      procedure_definition: |
+        CREATE OR ALTER PROCEDURE dbo.usp_P23ApplyCreditDecision
+          @AccountId int,
+          @DecisionCode nvarchar(20),
+          @ReviewerId int
+        AS
+        BEGIN
+          SET NOCOUNT ON;
+          SET XACT_ABORT ON;
+
+          BEGIN TRY
+            BEGIN TRAN;
+
+            IF @DecisionCode = N'APPROVE'
+            BEGIN
+              UPDATE dbo.CreditAccount
+                 SET StatusCode = N'APPROVED',
+                     ApprovedBy = @ReviewerId,
+                     ApprovedAt = SYSUTCDATETIME()
+               WHERE AccountId = @AccountId;
+            END
+            ELSE IF @DecisionCode = N'HOLD'
+            BEGIN
+              INSERT dbo.CreditReviewQueue(AccountId, RequestedBy, ReasonCode)
+              VALUES (@AccountId, @ReviewerId, N'MANUAL_REVIEW');
+            END
+            ELSE
+            BEGIN
+              THROW 51002, 'Unsupported credit decision.', 1;
+            END;
+
+            INSERT dbo.CreditDecisionAudit(AccountId, DecisionCode, ReviewerId, CreatedAt)
+            VALUES (@AccountId, @DecisionCode, @ReviewerId, SYSUTCDATETIME());
+
+            COMMIT;
+          END TRY
+          BEGIN CATCH
+            IF @@TRANCOUNT > 0
+              ROLLBACK;
+            THROW;
+          END CATCH;
+        END;
+      static_analysis:
+        fact_ids:
+          - fact_p23_medium_target
+          - fact_p23_medium_parameters
+          - fact_p23_medium_transaction
+          - fact_p23_medium_approve_branch
+          - fact_p23_medium_hold_branch
+          - fact_p23_medium_audit_write
+          - fact_p23_medium_error_handling
+        patterns:
+          read_only: false
+          transaction: true
+          try_catch: true
+          dml_write: true
+          dynamic_sql: false
+          cross_database_reference: false
+    golden_expected_semantic_output:
+      business_rules:
+        - category: CREDIT_APPROVAL_DECISION
+          summary: APPROVE records an approved account state with reviewer attribution.
+          status: INFERRED_DESCRIPTION
+          evidence_refs:
+            - fact_p23_medium_approve_branch
+            - fact_p23_medium_parameters
+        - category: CREDIT_HOLD_DECISION
+          summary: HOLD routes the account to manual review instead of approving it directly.
+          status: INFERRED_DESCRIPTION
+          evidence_refs:
+            - fact_p23_medium_hold_branch
+            - fact_p23_medium_parameters
+      modernization_points:
+        - code: PRESERVE_TRANSACTION_BOUNDARY
+          summary: Preserve the branch-specific write sequence, audit insert, and rollback behavior when converting the procedure.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_medium_transaction
+            - fact_p23_medium_audit_write
+            - fact_p23_medium_error_handling
+      risk_flags:
+        - code: TRANSACTIONAL_SIDE_EFFECTS_REQUIRE_REVIEW
+          severity: WARNING
+          summary: The procedure writes multiple business tables inside one transaction and must remain draft-only until reviewed.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_medium_transaction
+            - fact_p23_medium_approve_branch
+            - fact_p23_medium_hold_branch
+            - fact_p23_medium_audit_write
+      review_markers:
+        - code: CONFIRM_DML_SIDE_EFFECTS
+          message: Human review must confirm account update, queue insert, and audit write semantics before migration.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_medium_approve_branch
+            - fact_p23_medium_hold_branch
+            - fact_p23_medium_audit_write
+      assumptions:
+        - No row data is available; branch meanings are inferred from synthetic names and deterministic static facts only.
+    llm_evidence_expectation:
+      evidence_type: LLM_INFERENCE
+      accepted_without_review: false
+    unsupported_claim_expectations: []
+    trace_storage_expectations:
+      model_invocation_summary_fields:
+        - provider
+        - model
+        - model_profile_id
+        - reasoning_effort
+        - request_hash
+        - prompt_hash
+        - response_hash
+        - input_token_count
+        - output_token_count
+        - total_token_count
+        - latency_ms
+        - status
+      agent_run_summary_fields:
+        - agent_run_id
+        - job_id
+        - runtime_version
+        - prompt_ref
+        - schema_ref
+        - model_profile_id
+        - validation_status
+        - status
+      expected_model_invocation:
+        provider: fake-openai-compatible
+        model: gpt-5-nano
+        model_profile_id: openai_fast_test
+      stored_prompt_text: false
+      stored_procedure_definition_text: false
+      stored_provider_response_text: false
     required_expected_outputs:
       business_rules_min: 2
       modernization_points_min: 1
@@ -102,7 +390,191 @@ scenarios:
     complexity: complex
     source_kind: synthetic_contract_fixture
     sp_definition_policy: transient_model_input_only
-    fixture_authoring_status: pending_p23b
+    fixture_authoring_status: authored_p23b
+    db_context:
+      metadata_profile_id: ppm
+      target_db: PPM
+      platform_db: PLF
+      plf_fallback: forbidden
+    target_ref: PPM.dbo.usp_P23CrossDbDynamicExtract
+    deterministic_facts:
+      - id: fact_p23_complex_target
+        source: MSSQL metadata MCP output
+        fact_type: PROCEDURE_IDENTITY
+        summary: Synthetic PPM procedure dbo.usp_P23CrossDbDynamicExtract.
+      - id: fact_p23_complex_parameters
+        source: deterministic static analysis output
+        fact_type: PROCEDURE_PARAMETERS
+        summary: Inputs include TenantDb sysname, SchemaName sysname, and FromDate date.
+      - id: fact_p23_complex_dynamic_sql_unresolved
+        source: deterministic static analysis output
+        fact_type: DYNAMIC_SQL
+        summary: Builds a dynamic SELECT using QUOTENAME around database and schema identifiers.
+      - id: fact_p23_complex_cross_db_dynamic
+        source: deterministic static analysis output
+        fact_type: CROSS_DATABASE_REFERENCE
+        summary: Dynamic query can target a tenant database supplied by parameter.
+      - id: fact_p23_complex_sp_executesql
+        source: deterministic static analysis output
+        fact_type: PROCEDURE_CALL
+        summary: Executes the dynamic statement through sys.sp_executesql with a typed FromDate parameter.
+      - id: fact_p23_complex_reporting_audit
+        source: deterministic static analysis output
+        fact_type: TABLE_WRITE
+        summary: Conditionally inserts into PPMReporting.dbo.ExtractAudit when that table exists.
+      - id: fact_p23_complex_result_uncertain
+        source: deterministic static analysis output
+        fact_type: RESULT_SHAPE_UNCERTAIN
+        summary: Dynamic SELECT result columns are inferred from string construction and require review.
+    transient_model_input:
+      target_ref: PPM.dbo.usp_P23CrossDbDynamicExtract
+      procedure_definition: |
+        CREATE OR ALTER PROCEDURE dbo.usp_P23CrossDbDynamicExtract
+          @TenantDb sysname,
+          @SchemaName sysname = N'dbo',
+          @FromDate date
+        AS
+        BEGIN
+          SET NOCOUNT ON;
+
+          DECLARE @sql nvarchar(max) =
+            N'SELECT o.OrderId, o.TotalAmount, o.CreatedAt FROM '
+            + QUOTENAME(@TenantDb) + N'.' + QUOTENAME(@SchemaName)
+            + N'.Orders AS o WHERE o.CreatedAt >= @FromDate;';
+
+          EXEC sys.sp_executesql
+            @sql,
+            N'@FromDate date',
+            @FromDate = @FromDate;
+
+          IF OBJECT_ID(N'PPMReporting.dbo.ExtractAudit', N'U') IS NOT NULL
+          BEGIN
+            INSERT PPMReporting.dbo.ExtractAudit(TargetDb, StartedFromDate, CreatedAt)
+            VALUES (@TenantDb, @FromDate, SYSUTCDATETIME());
+          END;
+        END;
+      static_analysis:
+        fact_ids:
+          - fact_p23_complex_target
+          - fact_p23_complex_parameters
+          - fact_p23_complex_dynamic_sql_unresolved
+          - fact_p23_complex_cross_db_dynamic
+          - fact_p23_complex_sp_executesql
+          - fact_p23_complex_reporting_audit
+          - fact_p23_complex_result_uncertain
+        patterns:
+          read_only: false
+          transaction: false
+          dynamic_sql: true
+          cross_database_reference: true
+          unsupported_dependency_claims_possible: true
+    golden_expected_semantic_output:
+      business_rules:
+        - category: TENANT_SCOPED_EXTRACT
+          summary: The procedure appears to extract order rows from a caller-selected tenant database.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+            - fact_p23_complex_cross_db_dynamic
+        - category: EXTRACT_AUDIT_ATTEMPT
+          summary: The procedure records an extract audit entry only when the reporting audit table exists.
+          status: INFERRED_DESCRIPTION
+          evidence_refs:
+            - fact_p23_complex_reporting_audit
+      modernization_points:
+        - code: REPLACE_DYNAMIC_CROSS_DB_QUERY_WITH_REVIEWED_ACCESS_PATTERN
+          summary: Replace dynamic cross-database string execution with a reviewed metadata-driven access pattern.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+            - fact_p23_complex_cross_db_dynamic
+        - code: ISOLATE_AUDIT_WRITE_FROM_EXTRACT_QUERY
+          summary: Model the optional reporting audit write separately from the extract query behavior.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_reporting_audit
+      risk_flags:
+        - code: DYNAMIC_SQL_RESULT_SHAPE_UNCERTAIN
+          severity: ERROR
+          summary: Result columns and target table identity come from dynamic SQL and cannot be confirmed as metadata facts.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+            - fact_p23_complex_result_uncertain
+        - code: CROSS_DATABASE_DEPENDENCY_REQUIRES_PPM_METADATA_REVIEW
+          severity: WARNING
+          summary: The tenant database target is parameterized, and PPM metadata must be reviewed without falling back to PLF.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_cross_db_dynamic
+      review_markers:
+        - code: UNSUPPORTED_TABLE_CLAIM_REVIEW
+          message: Any inferred concrete tenant Orders table dependency must remain REVIEW_REQUIRED until deterministic PPM metadata confirms it.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+            - fact_p23_complex_cross_db_dynamic
+        - code: UNSUPPORTED_FUNCTION_CLAIM_REVIEW
+          message: Any inferred helper function dependency must remain REVIEW_REQUIRED because deterministic facts do not confirm one.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+        - code: UNSUPPORTED_PROCEDURE_CLAIM_REVIEW
+          message: sys.sp_executesql is the only confirmed procedure call; additional procedure dependencies require review.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_sp_executesql
+      assumptions:
+        - The dynamic SELECT target table and result semantics are inferred from synthetic static SQL text and not confirmed through row data or procedure execution.
+    llm_evidence_expectation:
+      evidence_type: LLM_INFERENCE
+      accepted_without_review: false
+    unsupported_claim_expectations:
+      - claim_type: table
+        claim_code: UNSUPPORTED_TABLE_CLAIM_REVIEW
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - fact_p23_complex_dynamic_sql_unresolved
+      - claim_type: function
+        claim_code: UNSUPPORTED_FUNCTION_CLAIM_REVIEW
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - fact_p23_complex_dynamic_sql_unresolved
+      - claim_type: dependency
+        claim_code: UNSUPPORTED_PROCEDURE_CLAIM_REVIEW
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - fact_p23_complex_sp_executesql
+    trace_storage_expectations:
+      model_invocation_summary_fields:
+        - provider
+        - model
+        - model_profile_id
+        - reasoning_effort
+        - request_hash
+        - prompt_hash
+        - response_hash
+        - input_token_count
+        - output_token_count
+        - total_token_count
+        - latency_ms
+        - status
+      agent_run_summary_fields:
+        - agent_run_id
+        - job_id
+        - runtime_version
+        - prompt_ref
+        - schema_ref
+        - model_profile_id
+        - validation_status
+        - status
+      expected_model_invocation:
+        provider: fake-openai-compatible
+        model: gpt-5-nano
+        model_profile_id: openai_fast_test
+      stored_prompt_text: false
+      stored_procedure_definition_text: false
+      stored_provider_response_text: false
     required_expected_outputs:
       business_rules_min: 2
       modernization_points_min: 2
@@ -122,7 +594,7 @@ quality_thresholds:
 verification_commands:
   contract_default:
     - make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py"
-  later_fake_eval:
+  fake_eval:
     - make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py"
   optional_live_gate:
     - LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"

@@ -189,12 +189,14 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 대상:
 - `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`
 - `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`
+- `tests/eval/test_p23_llm_sp_analysis_quality.py`
 - `ops/codex-parallel/prompts/23*.md`
 - P23A~P23D split execution manifest
 
 필수 체크:
-- P23 은 P22 runtime 이후의 평가 확장으로 분리하고, P23A 는 계약/프롬프트 자산만 만든다
-- simple/medium/complex stored procedure scenario matrix 를 선언한다
+- P23 은 P22 runtime 이후의 평가 확장으로 분리한다
+- P23A 는 계약/프롬프트 자산을 만들고, P23B 는 synthetic simple/medium/complex fixture 와 fake-gateway 검증을 추가한다
+- simple/medium/complex stored procedure scenario matrix 와 authored fixture 를 유지한다
 - fast/test profile 은 `gpt-5-nano` 로 고정한다
 - LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 로 제한한다
 - `LLM_INFERENCE` evidence 와 unsupported dependency/table/function claim 의 `REVIEW_REQUIRED` 처리 기준을 둔다
@@ -202,8 +204,9 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
 
 통과 기준:
-- `make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 통과
+- `make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 통과
 - P23A -> P23B -> P23C -> P23D 병합 순서가 manifest 에 명시됨
+- P23C broader scoring runner 와 optional live quality gate 는 별도 후속 작업으로 유지됨
 - P23 완료 전까지 `production_ready: false` 유지
 
 ## 초기 fixture 세트
