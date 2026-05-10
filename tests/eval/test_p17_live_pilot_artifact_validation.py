@@ -122,7 +122,7 @@ def test_p17b_release_critical_validation_items_all_pass_without_overclaim() -> 
     assert "PUBLISHED" not in P17B_FIXTURE.read_text(encoding="utf-8")
 
 
-def test_p17c_missing_approval_template_binds_p17b_targets_without_closing_blocker() -> None:
+def test_p17c_human_approval_binds_p17b_targets_and_closes_blocker() -> None:
     fixture = _yaml(P17C_FIXTURE)
     p17b = _yaml(P17B_FIXTURE)
 
@@ -133,15 +133,28 @@ def test_p17c_missing_approval_template_binds_p17b_targets_without_closing_block
     )
     assert fixture["source_db"] == "PPM"
     assert fixture["platform_db_context"] == "PLF"
-    assert fixture["approvalDecision"] == "MISSING"
-    assert fixture["approval_status"] == "MISSING_HUMAN_INPUT"
-    assert fixture["human_approval_recorded"] is False
-    assert fixture["active_blockers_after_p17c"] == [
-        "MANUAL_APPROVAL_EVIDENCE_MISSING"
-    ]
-    assert fixture["completion_status"]["blocker_closed"] is False
+    assert fixture["approvalDecision"] == "APPROVE"
+    assert fixture["approval_status"] == "HUMAN_APPROVED"
+    assert fixture["human_approval_recorded"] is True
+    assert fixture["active_blockers_after_p17c"] == []
+    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in fixture["closed_blockers_after_p17c"]
+    assert fixture["completion_status"]["blocker_closed"] is True
     assert fixture["completion_status"]["no_go_preserved"] is True
     assert fixture["live_release_decision_after_p17c"]["decision"] == "NO_GO"
+    assert fixture["known_limitations"][0]["code"] == "P17D_RELEASE_DECISION_PENDING"
+
+    approval = fixture["approval_record"]
+    assert approval["approval_ref"] == "p17c-human-approval-saoh-20260510"
+    assert approval["decision"] == "APPROVE"
+    assert approval["actor"] == "saoh"
+    assert approval["timestamp"] == "2026-05-10T13:15:00+09:00"
+    assert approval["correlation_id"] == "corr-p17c-human-approval-20260510"
+    assert approval["not_synthesized"] is True
+    assert approval["approved_artifact_set"] == {
+        "artifactSetId": "p17b-live-pilot-artifact-set",
+        "artifactSetVersion": "2026-05-06.p17b.v1",
+        "validationReportId": "p17b-live-pilot-artifact-validation-report",
+    }
 
     binding = fixture["validation_package_binding"]
     assert binding["validation_status"] == p17b["validation_status"]
@@ -172,9 +185,20 @@ def test_p17c_missing_approval_template_binds_p17b_targets_without_closing_block
             ref["evidence_id"] for ref in source["evidence_refs"]
         }
 
-    required_audit_fields = set(
-        fixture["audit_event_template"]["required_fields_when_human_approval_exists"]
-    )
+    audit = fixture["audit_event_binding"]
+    assert audit["action"] == "APPROVAL_DECISION_RECORDED"
+    assert audit["actor"] == "saoh"
+    assert audit["approval_ref"] == approval["approval_ref"]
+    assert audit["validation_ref"] == p17b["artifact_set"]["validation_report_id"]
+    assert audit["correlation_id"] == approval["correlation_id"]
+    assert set(audit["artifact_refs"]) == {
+        f"{target['artifact_id']}@{target['artifact_version']}"
+        for target in fixture["binding_targets"]
+    }
+    assert audit["selected_object_refs_source"] == "binding_targets.selected_object_refs"
+    assert audit["evidence_refs_source"] == "binding_targets.evidence_refs"
+    assert audit["audit_trail"]
+    required_audit_fields = set(audit["required_fields"])
     assert {
         "actor",
         "action",
@@ -189,23 +213,24 @@ def test_p17c_missing_approval_template_binds_p17b_targets_without_closing_block
     } <= required_audit_fields
 
     text = P17C_FIXTURE.read_text(encoding="utf-8")
-    assert "approvalDecision: APPROVE" not in text
     assert "production-ready: true" not in text
     assert "PUBLISHED" not in text
 
 
-def test_p17_blocker_fixture_references_p17c_missing_template() -> None:
+def test_p17_blocker_fixture_references_p17c_human_approval_binding() -> None:
     fixture = _yaml(P17_BLOCKER_FIXTURE)
 
     assert fixture["current_state"]["p17c_manual_approval_audit_fixture"] == (
         "fixtures/eval/manual_approval_audit_p17_v1.yaml"
     )
     assert fixture["current_state"]["p17c_manual_approval_status"] == (
-        "MISSING_HUMAN_INPUT"
+        "HUMAN_APPROVED"
     )
-    assert fixture["current_state"]["p17c_blocker_closed"] is False
+    assert fixture["current_state"]["p17c_blocker_closed"] is True
+    assert fixture["current_state"]["p17d_release_decision_pending"] is True
+    assert fixture["current_state"]["active_blockers_to_close"] == []
     assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in fixture["current_state"][
-        "active_blockers_to_close"
+        "blockers_closed"
     ]
 
 

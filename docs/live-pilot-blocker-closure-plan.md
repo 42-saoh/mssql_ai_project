@@ -6,16 +6,19 @@ P16 correctly keeps the live pilot release at `NO_GO`. The hard-live metadata co
 
 Current live pilot decision remains `NO_GO` until all P17 exit criteria pass.
 
-## Current Active Blockers
+## Current Blocker Status
 
-| Blocker | Why it blocks GO | Closure owner |
+There are no remaining P17C manual approval blockers. The human approval evidence from
+`saoh` is bound in `fixtures/eval/manual_approval_audit_p17_v1.yaml` with
+`approvalDecision: APPROVE`, timestamp `2026-05-10T13:15:00+09:00`, and correlation id
+`corr-p17c-human-approval-20260510`.
+
+Current live pilot decision still remains `NO_GO` until P17D runs the hard-live gates and
+updates the final release decision.
+
+| Closed blocker | Evidence | Owner |
 |---|---|---|
-| `MANUAL_APPROVAL_EVIDENCE_MISSING` | No human `APPROVE` decision is bound to a passed validation report for the same release artifact/version. | P17C |
-
-P17C currently has a missing-evidence template at
-`fixtures/eval/manual_approval_audit_p17_v1.yaml`. It binds the P17B artifact/version and
-validation targets that a future human approval must reference, but it deliberately keeps
-`approvalDecision: MISSING` and does not close the blocker.
+| `MANUAL_APPROVAL_EVIDENCE_MISSING` | Human `APPROVE` decision is bound to the P17B artifact set/version and passed validation report. | P17C |
 
 Closed evidence gate:
 
@@ -46,7 +49,7 @@ A third practical gap must also be closed before the final decision can change:
    - Record a human `APPROVE` decision only after P17B has a passed validation package.
    - Bind approval, validation, artifact version, actor, timestamp, correlation id, and audit event refs.
    - Do not synthesize reviewer approval. If no reviewer approval is provided, keep the blocker active.
-   - Current P17C status is `MISSING_HUMAN_INPUT`; the template records required future audit fields but does not claim approval.
+   - Current P17C status is `HUMAN_APPROVED`; it closes the manual approval blocker but does not authorize publish/export or production deployment.
 
 4. **P17D Pilot Release GO Decision Update**
    - Re-run the hard-live gates.
@@ -91,7 +94,7 @@ If PPM access, metadata permissions, or live configuration fail, keep `NO_GO`. D
 
 P17 can produce one of two final outcomes:
 
-- `NO_GO`: at least one release-critical blocker remains active.
+- `NO_GO`: at least one release-critical blocker remains active, or P17D hard-live verification / final release decision is still pending.
 - `CONDITIONAL_GO`: all evidence gates pass, but generated Java/MyBatis artifacts remain draft-only and still require human ownership for any downstream deployment.
 
 P17 must not label the whole platform as `production-ready`. It can only state that the scoped live pilot release candidate has enough evidence for conditional reviewer approval.

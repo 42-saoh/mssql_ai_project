@@ -8,13 +8,14 @@ current_state:
   source_db: PPM
   platform_db_context: PLF
   selection_mode_required: live_metadata
-  active_blockers_to_close:
-    - MANUAL_APPROVAL_EVIDENCE_MISSING
+  active_blockers_to_close: []
   blockers_closed:
     - DEPENDENCY_METADATA_INCOMPLETE
+    - MANUAL_APPROVAL_EVIDENCE_MISSING
   p17c_manual_approval_audit_fixture: fixtures/eval/manual_approval_audit_p17_v1.yaml
-  p17c_manual_approval_status: MISSING_HUMAN_INPUT
-  p17c_blocker_closed: false
+  p17c_manual_approval_status: HUMAN_APPROVED
+  p17c_blocker_closed: true
+  p17d_release_decision_pending: true
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -134,9 +135,8 @@ final_decision_policy:
     - CONDITIONAL_GO
   current_decision: NO_GO
   no_go_must_remain_when:
-    - MANUAL_APPROVAL_EVIDENCE_MISSING remains active
     - live artifact validation is not PASSED
-    - hard-live gate cannot be reproduced
+    - P17D hard-live gate has not run or cannot be reproduced
   overclaim_forbidden:
     - "production-ready: true"
     - unconditional GO

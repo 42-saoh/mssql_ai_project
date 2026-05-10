@@ -88,11 +88,17 @@ def test_p17_fixture_keeps_no_go_until_all_release_evidence_is_bound() -> None:
     assert pilot["selection_mode"] == fixture["current_state"]["selection_mode_required"]
 
     blockers = set(fixture["current_state"]["active_blockers_to_close"])
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in blockers
+    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" not in blockers
     assert "DEPENDENCY_METADATA_INCOMPLETE" not in blockers
+    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in set(
+        fixture["current_state"].get("blockers_closed", [])
+    )
     assert "DEPENDENCY_METADATA_INCOMPLETE" in set(
         fixture["current_state"].get("blockers_closed", [])
     )
+    assert fixture["current_state"]["p17c_manual_approval_status"] == "HUMAN_APPROVED"
+    assert fixture["current_state"]["p17c_blocker_closed"] is True
+    assert fixture["current_state"]["p17d_release_decision_pending"] is True
 
     assert fixture["policy_boundaries"]["metadata_only"] is True
     assert fixture["policy_boundaries"]["row_data_allowed"] is False
@@ -151,6 +157,7 @@ def test_p17_docs_explain_what_to_do_without_claiming_go() -> None:
     assert "CONDITIONAL_GO" in combined
     assert "DEPENDENCY_METADATA_INCOMPLETE" in combined
     assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in combined
+    assert "approvalDecision: APPROVE" in text
     assert "PLF로 대체하지" in combined or "PLF로 대체" in combined
     assert "PFL" not in combined
 

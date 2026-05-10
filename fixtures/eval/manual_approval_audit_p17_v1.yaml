@@ -7,17 +7,17 @@ source_generation_manifest: fixtures/generation/live_pilot_artifacts_p17_v1/mani
 source_db: PPM
 platform_db_context: PLF
 selection_mode: live_metadata
-generated_at: '2026-05-06T22:45:00+09:00'
-approvalDecision: MISSING
-approval_status: MISSING_HUMAN_INPUT
-human_approval_recorded: false
-active_blockers_after_p17c:
-  - MANUAL_APPROVAL_EVIDENCE_MISSING
+generated_at: '2026-05-10T13:15:00+09:00'
+approvalDecision: APPROVE
+approval_status: HUMAN_APPROVED
+human_approval_recorded: true
+active_blockers_after_p17c: []
 closed_blockers_after_p17c:
   - DEPENDENCY_METADATA_INCOMPLETE
+  - MANUAL_APPROVAL_EVIDENCE_MISSING
 live_release_decision_after_p17c:
   decision: NO_GO
-  reason: P17B validation passed, but no explicit human APPROVE decision was provided for P17C.
+  reason: P17C approval/audit evidence is bound, but P17D hard-live verification and final release decision have not run.
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -86,30 +86,61 @@ binding_targets:
     evidence_refs:
       - p17b-selected-table-view-function-metadata
       - p17b-selected-object-manifest
-approval_record_template:
-  current_status: MISSING
-  approval_ref: MISSING
-  actor: MISSING
-  timestamp: MISSING
-  correlation_id: MISSING
-  future_required_decision: APPROVE
+approval_record:
+  current_status: BOUND
+  approval_ref: p17c-human-approval-saoh-20260510
+  decision: APPROVE
+  storage_decision: APPROVED
+  actor: saoh
+  reviewer: saoh
+  timestamp: '2026-05-10T13:15:00+09:00'
+  correlation_id: corr-p17c-human-approval-20260510
+  not_synthesized: true
+  source: user_provided_human_approval_message
+  comment: I approve the P17B passed validation package as draft-only live pilot approval evidence. This does not authorize publish, export, DDL/DML execution, production deployment, row data access, or PLF fallback.
+  approved_artifact_set:
+    artifactSetId: p17b-live-pilot-artifact-set
+    artifactSetVersion: 2026-05-06.p17b.v1
+    validationReportId: p17b-live-pilot-artifact-validation-report
   required_human_input_fields:
     - actor
     - decision
     - comment
     - timestamp
     - correlationId
-  must_bind_to:
+  bound_to:
     - artifactRef
     - artifactVersion
     - validationRef
     - selectedObjectRefs
     - evidenceRefs
-audit_event_template:
-  current_status: MISSING
-  expected_action: APPROVAL_DECISION_RECORDED
-  audit_trail: []
-  required_fields_when_human_approval_exists:
+audit_event_binding:
+  current_status: BOUND
+  action: APPROVAL_DECISION_RECORDED
+  actor: saoh
+  timestamp: '2026-05-10T13:15:00+09:00'
+  correlation_id: corr-p17c-human-approval-20260510
+  approval_ref: p17c-human-approval-saoh-20260510
+  validation_ref: p17b-live-pilot-artifact-validation-report
+  artifact_set_ref: p17b-live-pilot-artifact-set@2026-05-06.p17b.v1
+  artifact_refs:
+    - p17b-selected-procedure-analysis@2026-05-06.p17b.v1
+    - p17b-selected-procedure-dependency-report@2026-05-06.p17b.v1
+    - p17b-selected-object-metadata-coverage@2026-05-06.p17b.v1
+  selected_object_refs_source: binding_targets.selected_object_refs
+  evidence_refs_source: binding_targets.evidence_refs
+  audit_trail:
+    - audit_id: p17c-audit-human-approval-saoh-20260510
+      action: APPROVAL_DECISION_RECORDED
+      actor: saoh
+      approval_ref: p17c-human-approval-saoh-20260510
+      validation_ref: p17b-live-pilot-artifact-validation-report
+      artifact_set_ref: p17b-live-pilot-artifact-set@2026-05-06.p17b.v1
+      correlation_id: corr-p17c-human-approval-20260510
+      timestamp: '2026-05-10T13:15:00+09:00'
+      selected_object_refs_source: binding_targets.selected_object_refs
+      evidence_refs_source: binding_targets.evidence_refs
+  required_fields:
     - actor
     - action
     - artifactRef
@@ -121,8 +152,8 @@ audit_event_template:
     - timestamp
     - correlationId
 completion_status:
-  p17c_status: BLOCKED_PENDING_HUMAN_APPROVAL
-  blocker_closed: false
+  p17c_status: PASSED_HUMAN_APPROVAL_BOUND
+  blocker_closed: true
   no_go_preserved: true
   publish_or_export_endpoint_added: false
   schema_change_required: false
@@ -137,5 +168,5 @@ forbidden_evidence:
   - synthetic_human_approval
   - unapproved_publish_or_export
 known_limitations:
-  - code: MANUAL_APPROVAL_EVIDENCE_MISSING
-    impact: P17C did not receive explicit human approval input, so release decision remains NO_GO.
+  - code: P17D_RELEASE_DECISION_PENDING
+    impact: P17C approval/audit evidence is bound, but final live release decision still requires P17D hard-live verification.
