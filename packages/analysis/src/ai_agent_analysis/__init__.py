@@ -1,5 +1,9 @@
 from ai_agent_analysis.analyzer import analyze_stored_procedure, analyze_stored_procedure_file
-from ai_agent_analysis.canonical import canonical_conversion_blockers, to_canonical_candidate
+from ai_agent_analysis.canonical import (
+    canonical_conversion_blockers,
+    to_canonical_analysis_model,
+    to_canonical_candidate,
+)
 from ai_agent_analysis.dependencies import extract_dependencies
 from ai_agent_analysis.detectors import detect_patterns, detect_temp_tables
 from ai_agent_analysis.enrichment import (
@@ -20,5 +24,6 @@ __all__ = [
     "extract_dependencies",
     "load_schema_search_fixture",
     "parse_procedure_signature",
+    "to_canonical_analysis_model",
     "to_canonical_candidate",
 ]

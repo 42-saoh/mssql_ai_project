@@ -9,8 +9,9 @@ Stored Procedure 분석의 fixture-first 구현을 둔다.
 - transaction, TRY/CATCH, dynamic SQL, temp table, cursor, multi-result-set detector
 - static result-set hint extraction
 - business-rule summary, confidence, TODO, review marker, evidence assessment
+- modernization point review markers
 - schema-search fixture enrichment
-- `CanonicalAnalysisModel` compatible local candidate export
+- `CanonicalAnalysisModel` deterministic mapping when snapshot id and registry refs are bound
 
 Reconciliation notes:
 
@@ -19,5 +20,5 @@ Reconciliation notes:
   dependency 로 보고하지 않는다.
 - PPM selected SP fixture 는 metadata-only evidence 만 유지한다. Procedure definition
   text, row data, procedure execution evidence 는 fixture 에 넣지 않는다.
-- Full `CanonicalAnalysisModel` 확장은 `packages/domain/**` 변경이 필요하므로
-  이 패키지에서는 `DOMAIN_CONTRACT_MISSING` blocker 로 보고한다.
+- Canonical mapping 에 필요한 snapshot id, registry version refs, evidence refs 가 없으면
+  `SNAPSHOT_ID_BINDING_MISSING`, `REGISTRY_VERSION_REFS_MISSING` 같은 정확한 blocker 로 보고한다.

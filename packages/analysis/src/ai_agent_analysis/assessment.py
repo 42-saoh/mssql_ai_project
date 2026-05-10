@@ -12,6 +12,7 @@ from ai_agent_analysis.models import (
     EvidenceAssessment,
     EvidenceRef,
     EvidenceStatus,
+    ModernizationPoint,
     PatternSummary,
     ProcedureSignature,
     ResultSetHint,
@@ -101,6 +102,49 @@ def summarize_business_rules(
             )
         )
     return summaries
+
+
+def summarize_modernization_points(
+    dependencies: DependencySummary,
+    patterns: PatternSummary,
+) -> list[ModernizationPoint]:
+    points: list[ModernizationPoint] = []
+    if patterns.dynamic_sql.detected:
+        points.append(
+            ModernizationPoint(
+                code="DYNAMIC_SQL_MODERNIZATION_REVIEW",
+                summary="Dynamic SQL migration strategy requires manual review.",
+                status=EvidenceStatus.REVIEW_REQUIRED,
+                evidence=patterns.dynamic_sql.evidence,
+                inferred_from=["dynamic_sql"],
+            )
+        )
+    if patterns.cursor.detected:
+        points.append(
+            ModernizationPoint(
+                code="CURSOR_MODERNIZATION_REVIEW",
+                summary="Cursor-based iteration should be reviewed before Java/MyBatis draft adoption.",
+                status=EvidenceStatus.REVIEW_REQUIRED,
+                evidence=patterns.cursor.evidence,
+                inferred_from=["cursor"],
+            )
+        )
+    if dependencies.temp_tables:
+        evidence = [
+            evidence
+            for temp_table in dependencies.temp_tables
+            for evidence in temp_table.evidence
+        ]
+        points.append(
+            ModernizationPoint(
+                code="TEMP_TABLE_STAGING_REVIEW",
+                summary="Temporary table staging should be reviewed for equivalent application flow.",
+                status=EvidenceStatus.REVIEW_REQUIRED,
+                evidence=evidence,
+                inferred_from=["temp_table"],
+            )
+        )
+    return points
 
 
 def build_todos(
@@ -196,7 +240,7 @@ def calculate_overall_confidence(
         factors.append("analysis emitted review markers")
     if blockers:
         score -= 0.05
-        factors.append("full CanonicalAnalysisModel contract remains blocked")
+        factors.append("canonical conversion bindings remain blocked")
     if todos:
         score -= min(0.15, 0.03 * len(todos))
         factors.append("manual TODOs remain")

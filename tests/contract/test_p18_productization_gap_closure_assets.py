@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import yaml
+from ai_agent_domain import CanonicalAnalysisModel
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "ops" / "codex-parallel" / "prompts"
 MANIFEST = ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml"
 P18_FIXTURE = ROOT / "fixtures" / "eval" / "productization_gap_closure_p18_v1.yaml"
+CANONICAL_CANDIDATE = ROOT / "fixtures" / "eval" / "canonical_analysis_candidate.json"
 P18_PROMPTS = {
     "P18A": "18a_canonical_analysis_model_closure.md",
     "P18B": "18b_web_http_auth_rbac_evidence.md",
@@ -69,7 +72,7 @@ def test_p18_manifest_declares_parallel_post_p17_gap_closure_wave() -> None:
     assert order.index("P17D") < order.index("P18B")
 
 
-def test_p18_fixture_records_no_go_productization_until_canonical_and_auth_close() -> None:
+def test_p18_fixture_records_no_go_productization_until_web_and_auth_close() -> None:
     fixture = _yaml(P18_FIXTURE)
 
     assert fixture["version"] == "productization_gap_closure_p18_v1"
@@ -80,12 +83,37 @@ def test_p18_fixture_records_no_go_productization_until_canonical_and_auth_close
     assert fixture["current_state"]["p18_productization_decision"] == "NO_GO"
     assert fixture["current_state"]["production_ready"] is False
 
-    assert fixture["p18a_canonical_analysis_model"]["current_status"] == "REVIEW_REQUIRED"
+    assert fixture["p18a_canonical_analysis_model"]["current_status"] == "CONTRACT_CLOSED"
+    assert fixture["p18a_canonical_analysis_model"]["current_blockers"] == []
     assert fixture["p18b_web_http_auth_rbac"]["auth_rbac"]["blocker"] == (
         "AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED"
     )
     assert fixture["p18_final_gate"]["current_productization_decision"] == "NO_GO"
     assert "production_ready_claim_allowed" in fixture["policy_boundaries"]
+
+
+def test_p18a_canonical_candidate_validates_versioned_domain_contract() -> None:
+    candidate = json.loads(CANONICAL_CANDIDATE.read_text(encoding="utf-8"))
+    model = CanonicalAnalysisModel.model_validate(candidate["analysis_local"])
+
+    assert candidate["status"] == "CONTRACT_CLOSED"
+    assert candidate["analysis_status"] == "REVIEW_REQUIRED"
+    assert candidate["blockers"] == []
+    assert model.schema_version == "CanonicalAnalysisModel.v1"
+    assert model.snapshot_id == "mcp-fixture-snapshot-0001"
+    assert {ref.registry_type for ref in model.registry_version_refs} == {
+        "PROMPT",
+        "TEMPLATE",
+        "POLICY",
+    }
+    assert model.evidence_refs
+    assert model.modernization_points == []
+    assert model.dependencies.table_references[1].status == "REVIEW_REQUIRED"
+    serialized = CANONICAL_CANDIDATE.read_text(encoding="utf-8").lower()
+    assert "row_data" not in serialized
+    assert "sample_rows" not in serialized
+    assert "procedure_execution" not in serialized
+    assert "raw_definition_text" not in serialized
 
 
 def test_p18_docs_and_readiness_assets_reference_gap_closure_without_overclaim() -> None:

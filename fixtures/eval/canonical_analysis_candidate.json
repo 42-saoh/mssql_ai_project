@@ -1,20 +1,32 @@
 {
   "sampleId": "p06-fixture-workflow-master-order-summary-v1",
   "target_contract": "CanonicalAnalysisModel",
-  "status": "REVIEW_REQUIRED",
-  "blockers": [
-    {
-      "code": "DOMAIN_CONTRACT_MISSING",
-      "message": "Full CanonicalAnalysisModel expansion remains a follow-up; this fixture records a compatible local candidate only.",
-      "target_path": "packages/domain/src/ai_agent_domain/models.py",
-      "status": "REVIEW_REQUIRED"
-    }
-  ],
+  "status": "CONTRACT_CLOSED",
+  "analysis_status": "REVIEW_REQUIRED",
+  "blockers": [],
   "analysis_local": {
     "analysis_version": "analysis-local-v0.2",
-    "contract_target": "CanonicalAnalysisModel-compatible-local-v0.2",
+    "contract_target": "CanonicalAnalysisModel",
     "source_name": "fixtures/mcp/metadata_snapshot.json#/procedures/0",
     "source_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "snapshot_id": "mcp-fixture-snapshot-0001",
+    "registry_version_refs": [
+      {
+        "registry_type": "PROMPT",
+        "version": "prompt:sp_analysis@0.1.0",
+        "active": true
+      },
+      {
+        "registry_type": "TEMPLATE",
+        "version": "template:sp_analysis_doc@0.1.0",
+        "active": true
+      },
+      {
+        "registry_type": "POLICY",
+        "version": "policy:analysis_static_rules@0.1.0",
+        "active": true
+      }
+    ],
     "procedure": {
       "identifier": {
         "schema_name": "dbo",
@@ -233,6 +245,63 @@
         ]
       }
     ],
+    "modernization_points": [],
+    "evidence_refs": [
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/parameters/0",
+        "status": "OBSERVED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/parameters/1",
+        "status": "OBSERVED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/dependencies/0",
+        "status": "OBSERVED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/dependencies/1",
+        "status": "REVIEW_REQUIRED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/resultSetHints/0/columns/0",
+        "status": "OBSERVED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/resultSetHints/0/columns/1",
+        "status": "OBSERVED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/resultSetHints/0/columns/2",
+        "status": "OBSERVED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/resultSetHints/0/columns/3",
+        "status": "OBSERVED"
+      },
+      {
+        "source": "fixtures/mcp/metadata_snapshot.json",
+        "line": null,
+        "snippet": "/procedures/0/resultSetHints/0",
+        "status": "OBSERVED"
+      }
+    ],
     "todos": [
       {
         "code": "DEPENDENCY_METADATA_REVIEW",
@@ -246,12 +315,6 @@
             "status": "REVIEW_REQUIRED"
           }
         ]
-      },
-      {
-        "code": "DOMAIN_CONTRACT_MISSING",
-        "message": "Full CanonicalAnalysisModel expansion remains a follow-up.",
-        "status": "REVIEW_REQUIRED",
-        "evidence": []
       }
     ],
     "evidence_assessment": {
@@ -260,21 +323,19 @@
       "evidence_ref_count": 9,
       "observed_ref_count": 8,
       "review_required_ref_count": 1,
-      "todo_count": 2,
+      "todo_count": 1,
       "notes": [
-        "Ambiguous dependency metadata remains review-required.",
-        "Full domain canonical contract remains blocked."
+        "Ambiguous dependency metadata remains review-required."
       ]
     },
     "overall_confidence": {
-      "score": 0.72,
+      "score": 0.77,
       "status": "REVIEW_REQUIRED",
-      "rationale": "Metadata-backed candidate with one ambiguous dependency and a domain contract blocker.",
+      "rationale": "Metadata-backed CanonicalAnalysisModel with one ambiguous dependency.",
       "factors": [
         "procedure identity and parameters are metadata-backed",
         "result-set hint is metadata-backed",
-        "one dependency remains review-required",
-        "full CanonicalAnalysisModel contract is not implemented"
+        "one dependency remains review-required"
       ]
     },
     "review_markers": [
@@ -292,13 +353,6 @@
         ]
       }
     ],
-    "canonical_conversion_blockers": [
-      {
-        "code": "DOMAIN_CONTRACT_MISSING",
-        "message": "Full CanonicalAnalysisModel is not implemented in this slice.",
-        "target_path": "packages/domain/src/ai_agent_domain/models.py",
-        "status": "REVIEW_REQUIRED"
-      }
-    ]
+    "canonical_conversion_blockers": []
   }
 }

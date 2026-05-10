@@ -5,9 +5,9 @@
 P00-P07 produced a starter/MVP baseline for a metadata-only MSSQL analysis, documentation, and Java/MyBatis draft-generation platform. P08 converts that baseline into productization targets for P09-P16 without changing shared contracts or implementation code.
 
 No current surface is classified as `production-ready`. P17D has enough evidence for a scoped
-draft-only live pilot `CONDITIONAL_GO`, but product release readiness still depends on P18
-closure of the full `CanonicalAnalysisModel`, web HTTP adapter evidence, and production
-auth/RBAC boundaries.
+draft-only live pilot `CONDITIONAL_GO`. P18A closes the minimal versioned
+`CanonicalAnalysisModel` contract, but product release readiness still depends on web HTTP
+adapter release evidence and production auth/RBAC boundaries.
 
 ## Status Taxonomy
 
@@ -29,14 +29,14 @@ auth/RBAC boundaries.
 | Platform DB repository | `stub` | MSSQL persistence adapter exists, but DB lifecycle and schema apply are explicitly external/manual. | P09/P13 must verify storage behavior against manually prepared PLF and report schema blockers instead of editing DDL. |
 | MSSQL Metadata MCP | `fixture-first` plus `optional-live` | Tool catalog, structured invocation, read-only guard, fixture repository, PPM discovery surface, and live readiness boundary exist. | P10 must productize live read-only metadata queries, timeout/error handling, evidence caveats, and fixture/live separation. |
 | PPM pilot object set | `optional-live` | `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` is `selection_mode: live_metadata` with PPM object identities. | Dependency metadata is incomplete; SP-to-table linkage must stay `REVIEW_REQUIRED` until P10/P11 improve evidence. |
-| Analysis engine | `stub` to `fixture-first` | Parser/detector helpers and canonical candidate fixture exist with `REVIEW_REQUIRED` blockers. | P11 must standardize evidence refs, confidence, dynamic SQL/temp/cursor handling, call graph, and canonical output boundaries. |
-| CanonicalAnalysisModel | `skeleton` | Domain package defines enums and output mappings, but full canonical model is not implemented. | P11 must either work within a local candidate shape or raise a coordinator blocker for domain contract expansion. |
+| Analysis engine | `fixture-first` | Parser/detector helpers map deterministically to `CanonicalAnalysisModel` when snapshot id and registry refs are bound; uncertain findings remain `REVIEW_REQUIRED`. | Broader live analysis coverage still needs PPM evidence and review, especially dynamic SQL and ambiguous dependencies. |
+| CanonicalAnalysisModel | `fixture-first` | Domain package now defines a minimal versioned canonical contract with snapshot id, registry refs, evidence refs, dependencies, patterns, result sets, business rules, and modernization points. | Productization still needs downstream web/auth release evidence; field-level uncertainty is allowed only as explicit `REVIEW_REQUIRED`. |
 | Generation factory | `fixture-first` | SP analysis doc, dependency report, and Java/MyBatis SP wrapper drafts render deterministically with review markers. | P12 must expand template registry, manifest, golden samples, policy-based naming, and draft review checklists. |
 | Validation engine | `fixture-first` | Validation rules load from spec and enforce evidence/review markers; publish gate helper requires passed validation plus approval. | P13 must productize rule taxonomy, reviewer checklist, audit linkage, and storage mappings without changing shared specs directly. |
 | Web portal | `stub` | Next.js shell uses mock adapter and provides request/job/artifact preview surfaces. | P14 must add product demo flows, metadata search, API adapter smoke, blocker display, and PPM sample handling. |
 | Eval/ops/readiness | `fixture-first` | P06 fixture eval covers one happy path and forbidden operations. | P15/P16 must define product metrics, observability/security checks, PPM scenarios, and go/no-go handoff package. |
 | P17 scoped pilot release | `conditional-live` | P17D records `CONDITIONAL_GO` for the draft-only scoped candidate. | This does not close productization; P18 must resolve canonical contract and web/auth evidence. |
-| P18 productization closure | `blocked` | `fixtures/eval/productization_gap_closure_p18_v1.yaml` records canonical, HTTP adapter, and auth/RBAC blockers. | Productization remains `NO_GO` until P18A/P18B evidence closes those blockers. |
+| P18 productization closure | `blocked` | `fixtures/eval/productization_gap_closure_p18_v1.yaml` records P18A canonical closure and remaining HTTP adapter/auth/RBAC blockers. | Productization remains `NO_GO` until P18B evidence closes web HTTP release smoke and production auth/RBAC. |
 
 ## Contract Drift Matrix
 
@@ -48,7 +48,7 @@ auth/RBAC boundaries.
 | Registry type values | API has `PROMPT`, `TEMPLATE`, `POLICY`, `DB_PROFILE`, `GENERATOR`; DDL uses `PROMPT`, `TEMPLATE`, `MODEL_POLICY`, `DB_PROFILE_POLICY`. | API mapping is documented as an adapter concern; shared contract changes are blockers. | P09/P13 |
 | MCP catalog and MCP registry | Catalog includes P08A minimum metadata discovery tools and read-only error codes. | P10 must harden response shape, live query behavior, caveats, timeout/retry, and fixture/live split. | P10 |
 | Validation rules and implementation | Rule IDs cover evidence, publish gate, read-only MCP, uncertainty markers, schema policy, and dockerized tests. | New rule taxonomy or severity changes require spec updates outside worker scope. | P13 |
-| Domain model and analysis/generation | Enums and mappings exist; full canonical model remains a candidate fixture. | P11/P12 must mark canonical gaps `REVIEW_REQUIRED` unless coordinator expands domain contract. | P11/P12 |
+| Domain model and analysis/generation | Minimal `CanonicalAnalysisModel` exists and analysis reports exact blockers when snapshot id, registry refs, or evidence refs are missing. | P11/P12 must keep uncertain dynamic SQL, dependencies, business rules, and modernization points `REVIEW_REQUIRED` instead of confirmed. | P11/P12/P18A |
 | DB schema and repository behavior | Versioned DDL exists; repository does not own DB lifecycle or schema apply. | Product workflows must use externally managed PLF and never auto-apply DDL. | P09/P13/P16 |
 | Policy and implementation | Row data, procedure execution, auto DDL/DML, direct deployment, and unapproved publish remain forbidden. | Any product request that requires those actions is a blocker, not an implementation task. | All |
 
@@ -81,4 +81,4 @@ In both modes, the following remain forbidden: row-data reads, procedure executi
 | P15 | Eval, observability, security, and ops metrics. | Metrics separate fixture-first, optional-live, and blocker-dependent evidence. |
 | P16 | Pilot release readiness and handoff package. | Go/no-go includes PPM access, dependency evidence, validation results, approval/audit, and policy compliance. |
 | P17 | Live pilot blocker closure. | Scoped draft-only candidate can become `CONDITIONAL_GO`; platform production-ready remains forbidden. |
-| P18 | Canonical contract and web/auth productization closure. | Full productization stays `NO_GO` until canonical, HTTP adapter, and auth/RBAC evidence pass. |
+| P18 | Canonical contract and web/auth productization closure. | Full productization stays `NO_GO` until HTTP adapter release smoke and production auth/RBAC evidence pass. |

@@ -13,8 +13,8 @@ current_state:
   p18_tracks:
     P18A:
       title: CanonicalAnalysisModel Contract Closure
-      status: PLANNED
-      release_blocker: CANONICAL_ANALYSIS_MODEL_REVIEW_REQUIRED
+      status: CLOSED
+      release_blocker: null
     P18B:
       title: Web HTTP Adapter And Auth/RBAC Evidence Closure
       status: PLANNED
@@ -30,12 +30,14 @@ policy_boundaries:
   publish_or_export_allowed_without_approval: false
   production_ready_claim_allowed: false
 p18a_canonical_analysis_model:
-  current_candidate_contract: CanonicalAnalysisModel-compatible-local-v0.2
+  current_candidate_contract: CanonicalAnalysisModel
   target_contract: CanonicalAnalysisModel
-  current_status: REVIEW_REQUIRED
-  current_blockers:
-    - DOMAIN_CONTRACT_MISSING
+  current_status: CONTRACT_CLOSED
+  analysis_status: REVIEW_REQUIRED
+  current_blockers: []
   observed_candidate_fields:
+    - snapshot_id
+    - registry_version_refs
     - procedure.identifier
     - procedure.parameters
     - dependencies.table_references
@@ -50,23 +52,18 @@ p18a_canonical_analysis_model:
     - result_sets
     - call_graph
     - business_rules
+    - modernization_points
+    - evidence_refs
     - evidence_assessment
     - overall_confidence
     - todos
     - review_markers
-  exact_contract_blockers:
-    - code: DOMAIN_CANONICAL_SCHEMA_MISSING
-      target_path: packages/domain/src/ai_agent_domain/models.py
-      required_resolution: Add an explicit versioned CanonicalAnalysisModel domain contract or keep productization NO_GO.
-    - code: SNAPSHOT_ID_BINDING_MISSING
-      target_path: packages/analysis/src/ai_agent_analysis/models.py
-      required_resolution: Persist canonical snapshot id binding instead of source_name/source_hash only.
-    - code: REGISTRY_VERSION_REFS_MISSING
-      target_path: packages/analysis/src/ai_agent_analysis/models.py
-      required_resolution: Persist registry version refs required by architecture readiness.
-    - code: MODERNIZATION_POINTS_SCHEMA_MISSING
-      target_path: packages/domain/src/ai_agent_domain/models.py
-      required_resolution: Define modernization point shape or mark it REVIEW_REQUIRED with explicit evidence.
+  exact_contract_blockers: []
+  closed_contract_blockers:
+    - DOMAIN_CANONICAL_SCHEMA_MISSING
+    - SNAPSHOT_ID_BINDING_MISSING
+    - REGISTRY_VERSION_REFS_MISSING
+    - MODERNIZATION_POINTS_SCHEMA_MISSING
   release_critical_review_required_allowed: false
   uncertainty_policy:
     dynamic_sql_unresolved: REVIEW_REQUIRED
@@ -114,12 +111,6 @@ p18b_web_http_auth_rbac:
     - production auth/RBAC is implemented with tests or remains an explicit blocker
     - no publish/export, row data, procedure execution, DDL/DML, or PLF fallback path appears
 active_productization_blockers:
-  - code: CANONICAL_ANALYSIS_MODEL_REVIEW_REQUIRED
-    owner_track: P18A
-    severity: BLOCKER
-  - code: DOMAIN_CANONICAL_SCHEMA_MISSING
-    owner_track: P18A
-    severity: BLOCKER
   - code: WEB_HTTP_RELEASE_SMOKE_MISSING
     owner_track: P18B
     severity: BLOCKER
@@ -132,7 +123,6 @@ p18_final_gate:
     - CONDITIONAL_GO
   current_productization_decision: NO_GO
   no_go_must_remain_when:
-    - CanonicalAnalysisModel contract remains REVIEW_REQUIRED
     - HTTP adapter release smoke is missing
     - production auth/RBAC source is unresolved
     - any forbidden evidence or action is required

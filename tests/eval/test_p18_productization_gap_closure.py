@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from ai_agent_domain import CanonicalAnalysisModel
 
 ROOT = Path(__file__).resolve().parents[2]
 P18_FIXTURE = ROOT / "fixtures" / "eval" / "productization_gap_closure_p18_v1.yaml"
@@ -27,12 +28,10 @@ def test_p18_fixture_preserves_p17_conditional_go_but_keeps_productization_no_go
     assert fixture["p18_final_gate"]["current_productization_decision"] == "NO_GO"
 
     blockers = {blocker["code"] for blocker in fixture["active_productization_blockers"]}
-    assert {
-        "CANONICAL_ANALYSIS_MODEL_REVIEW_REQUIRED",
-        "DOMAIN_CANONICAL_SCHEMA_MISSING",
+    assert blockers == {
         "WEB_HTTP_RELEASE_SMOKE_MISSING",
         "AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED",
-    } <= blockers
+    }
 
 
 def test_p18a_canonical_contract_gap_is_exact_and_evidence_safe() -> None:
@@ -44,17 +43,22 @@ def test_p18a_canonical_contract_gap_is_exact_and_evidence_safe() -> None:
         "contract_target"
     ]
     assert p18a["target_contract"] == canonical["target_contract"]
-    assert p18a["current_status"] == canonical["status"] == "REVIEW_REQUIRED"
-    assert "DOMAIN_CONTRACT_MISSING" in p18a["current_blockers"]
-    assert canonical["blockers"][0]["code"] == "DOMAIN_CONTRACT_MISSING"
-
-    blocker_codes = {blocker["code"] for blocker in p18a["exact_contract_blockers"]}
+    assert p18a["current_status"] == canonical["status"] == "CONTRACT_CLOSED"
+    assert p18a["analysis_status"] == canonical["analysis_status"] == "REVIEW_REQUIRED"
+    assert p18a["current_blockers"] == []
+    assert canonical["blockers"] == []
+    assert p18a["exact_contract_blockers"] == []
     assert {
         "DOMAIN_CANONICAL_SCHEMA_MISSING",
         "SNAPSHOT_ID_BINDING_MISSING",
         "REGISTRY_VERSION_REFS_MISSING",
         "MODERNIZATION_POINTS_SCHEMA_MISSING",
-    } == blocker_codes
+    } == set(p18a["closed_contract_blockers"])
+    model = CanonicalAnalysisModel.model_validate(canonical["analysis_local"])
+    assert model.snapshot_id == "mcp-fixture-snapshot-0001"
+    assert model.registry_version_refs
+    assert model.evidence_refs
+    assert "modernization_points" in canonical["analysis_local"]
     assert p18a["uncertainty_policy"]["dynamic_sql_unresolved"] == "REVIEW_REQUIRED"
     assert p18a["release_critical_review_required_allowed"] is False
 

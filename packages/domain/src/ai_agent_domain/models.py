@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JobStatus(StrEnum):
@@ -92,3 +92,216 @@ class JobSummary(BaseModel):
     job_id: str
     status: JobStatus
     request_id: str
+
+
+CANONICAL_ANALYSIS_MODEL_SCHEMA_VERSION = "CanonicalAnalysisModel.v1"
+
+
+class CanonicalEvidenceStatus(StrEnum):
+    OBSERVED = "OBSERVED"
+    INFERRED_DESCRIPTION = "INFERRED_DESCRIPTION"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class CanonicalObjectType(StrEnum):
+    PROCEDURE = "PROCEDURE"
+    SYSTEM_PROCEDURE = "SYSTEM_PROCEDURE"
+    TABLE = "TABLE"
+    VIEW = "VIEW"
+    FUNCTION = "FUNCTION"
+    TEMP_TABLE = "TEMP_TABLE"
+
+
+class CanonicalDependencyOperation(StrEnum):
+    READ = "READ"
+    WRITE = "WRITE"
+    EXECUTE = "EXECUTE"
+    DECLARE = "DECLARE"
+    UNKNOWN = "UNKNOWN"
+
+
+class CanonicalParameterDirection(StrEnum):
+    INPUT = "INPUT"
+    OUTPUT = "OUTPUT"
+    INPUT_OUTPUT = "INPUT_OUTPUT"
+
+
+class CanonicalEvidenceRef(BaseModel):
+    source: str
+    line: int | None = None
+    snippet: str
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+
+
+class CanonicalRegistryVersionRef(BaseModel):
+    registry_type: str
+    version: str
+    active: bool = True
+
+
+class CanonicalReviewMarker(BaseModel):
+    code: str
+    message: str
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+
+
+class CanonicalTodoItem(BaseModel):
+    code: str
+    message: str
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+
+
+class CanonicalConfidenceScore(BaseModel):
+    score: float = Field(ge=0.0, le=1.0)
+    status: CanonicalEvidenceStatus
+    rationale: str
+    factors: list[str] = Field(default_factory=list)
+
+
+class CanonicalEvidenceAssessment(BaseModel):
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    review_required: bool = False
+    evidence_ref_count: int = 0
+    observed_ref_count: int = 0
+    review_required_ref_count: int = 0
+    todo_count: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
+class CanonicalProcedureIdentifier(BaseModel):
+    schema_name: str | None = None
+    procedure_name: str
+    full_name: str
+
+
+class CanonicalProcedureParameter(BaseModel):
+    name: str
+    data_type: str
+    default: str | None = None
+    direction: CanonicalParameterDirection = CanonicalParameterDirection.INPUT
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+
+
+class CanonicalProcedureSignature(BaseModel):
+    identifier: CanonicalProcedureIdentifier
+    parameters: list[CanonicalProcedureParameter] = Field(default_factory=list)
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+
+
+class CanonicalObjectReference(BaseModel):
+    schema_name: str | None = None
+    object_name: str
+    full_name: str
+    object_type: CanonicalObjectType
+    operation: CanonicalDependencyOperation
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+
+
+class CanonicalProcedureCall(BaseModel):
+    schema_name: str | None = None
+    procedure_name: str
+    full_name: str
+    object_type: CanonicalObjectType = CanonicalObjectType.PROCEDURE
+    operation: CanonicalDependencyOperation = CanonicalDependencyOperation.EXECUTE
+    is_dynamic_sql_executor: bool = False
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+    review_notes: list[str] = Field(default_factory=list)
+
+
+class CanonicalTempTableFinding(BaseModel):
+    name: str
+    columns: list[str] = Field(default_factory=list)
+    operation: CanonicalDependencyOperation = CanonicalDependencyOperation.DECLARE
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+
+
+class CanonicalDependencySummary(BaseModel):
+    table_references: list[CanonicalObjectReference] = Field(default_factory=list)
+    view_references: list[CanonicalObjectReference] = Field(default_factory=list)
+    function_references: list[CanonicalObjectReference] = Field(default_factory=list)
+    called_procedures: list[CanonicalProcedureCall] = Field(default_factory=list)
+    temp_tables: list[CanonicalTempTableFinding] = Field(default_factory=list)
+
+
+class CanonicalPatternFinding(BaseModel):
+    name: str
+    detected: bool
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+    details: dict[str, object] = Field(default_factory=dict)
+
+
+class CanonicalPatternSummary(BaseModel):
+    transaction: CanonicalPatternFinding
+    try_catch: CanonicalPatternFinding
+    dynamic_sql: CanonicalPatternFinding
+    temp_table: CanonicalPatternFinding
+    cursor: CanonicalPatternFinding
+    multi_result_set: CanonicalPatternFinding
+
+
+class CanonicalResultSetColumnHint(BaseModel):
+    name: str | None = None
+    expression: str
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+    review_notes: list[str] = Field(default_factory=list)
+
+
+class CanonicalResultSetHint(BaseModel):
+    ordinal: int
+    source: str = "STATIC_SELECT"
+    columns: list[CanonicalResultSetColumnHint] = Field(default_factory=list)
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+    review_notes: list[str] = Field(default_factory=list)
+
+
+class CanonicalCallGraphEdge(BaseModel):
+    caller: str
+    callee: str
+    operation: CanonicalDependencyOperation = CanonicalDependencyOperation.EXECUTE
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+    review_notes: list[str] = Field(default_factory=list)
+
+
+class CanonicalBusinessRuleSummary(BaseModel):
+    category: str
+    summary: str
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.OBSERVED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+    inferred_from: list[str] = Field(default_factory=list)
+
+
+class CanonicalModernizationPoint(BaseModel):
+    code: str
+    summary: str
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+    evidence: list[CanonicalEvidenceRef] = Field(default_factory=list)
+    inferred_from: list[str] = Field(default_factory=list)
+
+
+class CanonicalAnalysisModel(BaseModel):
+    schema_version: str = CANONICAL_ANALYSIS_MODEL_SCHEMA_VERSION
+    analysis_version: str
+    contract_target: str = "CanonicalAnalysisModel"
+    snapshot_id: str
+    registry_version_refs: list[CanonicalRegistryVersionRef] = Field(min_length=1)
+    procedure: CanonicalProcedureSignature
+    dependencies: CanonicalDependencySummary
+    patterns: CanonicalPatternSummary
+    result_sets: list[CanonicalResultSetHint] = Field(default_factory=list)
+    call_graph: list[CanonicalCallGraphEdge] = Field(default_factory=list)
+    business_rules: list[CanonicalBusinessRuleSummary] = Field(default_factory=list)
+    modernization_points: list[CanonicalModernizationPoint] = Field(default_factory=list)
+    evidence_refs: list[CanonicalEvidenceRef] = Field(min_length=1)
+    review_markers: list[CanonicalReviewMarker] = Field(default_factory=list)
+    todos: list[CanonicalTodoItem] = Field(default_factory=list)
+    evidence_assessment: CanonicalEvidenceAssessment
+    overall_confidence: CanonicalConfidenceScore
