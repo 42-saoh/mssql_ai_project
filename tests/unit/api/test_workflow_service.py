@@ -5,7 +5,7 @@ from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowSte
 from api_app.lifecycle import WorkflowStateError
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
-from api_app.workflow import WorkflowService
+from api_app.workflow import WORKFLOW_METADATA_NOTE, WorkflowService
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
@@ -106,6 +106,18 @@ def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> 
     assert len(artifact_created) == len(repository.artifacts)
     assert all(event.payload["stage"] == "ARTIFACT" for event in artifact_created)
     assert all(event.payload["targetRef"]["type"] == "ARTIFACT" for event in artifact_created)
+
+
+def test_generated_artifact_assumptions_are_deduped() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    service.submit_sp_analysis(_request())
+
+    assert repository.artifacts
+    for artifact in repository.artifacts.values():
+        assert len(artifact.assumptions) == len(set(artifact.assumptions))
+        assert artifact.assumptions.count(WORKFLOW_METADATA_NOTE) == 1
 
 
 def test_submit_replays_same_idempotency_key_for_same_payload() -> None:

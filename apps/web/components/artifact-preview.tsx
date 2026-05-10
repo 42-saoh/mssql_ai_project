@@ -15,6 +15,8 @@ const reviewChecklist = [
   "No screen in this shell executes SQL, publishes code, or mutates business data.",
 ];
 
+const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
+
 export function ArtifactPreview({
   artifact,
   validation,
@@ -78,8 +80,8 @@ export function ArtifactPreview({
           <div className="callout">
             <strong>Caveats</strong>
             <ul>
-              {artifact.caveats.map((caveat) => (
-                <li key={caveat}>{caveat}</li>
+              {artifact.caveats.map((caveat, index) => (
+                <li key={listItemKey("artifact-caveat", index)}>{caveat}</li>
               ))}
             </ul>
           </div>
@@ -128,8 +130,8 @@ export function ArtifactPreview({
           <div className="callout callout--warning">
             <strong>Missing evidence</strong>
             <ul>
-              {validation?.missingEvidence?.map((item) => (
-                <li key={item}>{item}</li>
+              {validation?.missingEvidence?.map((item, index) => (
+                <li key={listItemKey("missing-evidence", index)}>{item}</li>
               ))}
             </ul>
           </div>
@@ -180,8 +182,8 @@ export function ArtifactPreview({
             <div className="callout">
               <strong>Manual review points</strong>
               <ul>
-                {validation?.manualReviewPoints?.map((item) => (
-                  <li key={item}>{item}</li>
+                {validation?.manualReviewPoints?.map((item, index) => (
+                  <li key={listItemKey("manual-review-point", index)}>{item}</li>
                 ))}
               </ul>
             </div>
@@ -191,8 +193,8 @@ export function ArtifactPreview({
             <div className="callout">
               <strong>Assumptions</strong>
               <ul>
-                {artifact.assumptions?.map((item) => (
-                  <li key={item}>{item}</li>
+                {artifact.assumptions?.map((item, index) => (
+                  <li key={listItemKey("artifact-assumption", index)}>{item}</li>
                 ))}
               </ul>
             </div>
@@ -202,8 +204,8 @@ export function ArtifactPreview({
             <div className="callout callout--warning">
               <strong>TODO / REVIEW_REQUIRED</strong>
               <ul>
-                {artifact.todos?.map((item) => (
-                  <li key={item}>{item}</li>
+                {artifact.todos?.map((item, index) => (
+                  <li key={listItemKey("artifact-todo", index)}>{item}</li>
                 ))}
               </ul>
             </div>

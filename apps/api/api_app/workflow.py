@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 from ai_agent_domain import ArtifactType, JobStatus, RequestedOutputType, WorkflowStepType
 from ai_agent_generation import (
@@ -43,6 +44,17 @@ WORKFLOW_METADATA_NOTE = (
     "REVIEW_REQUIRED: metadata is collected through the MSSQL MCP registry boundary "
     "and persisted through the platform DB workflow repository for this integration slice."
 )
+
+
+def dedupe_strings(items: Iterable[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    deduped = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return tuple(deduped)
 
 
 class WorkflowService:
@@ -328,7 +340,9 @@ class WorkflowService:
             evidence_refs=[ref.as_dict() for ref in rendered.evidence_refs],
             generator_version=rendered.generator_version,
             registry_refs=tuple(rendered.registry_refs),
-            assumptions=tuple(rendered.assumptions) + (WORKFLOW_METADATA_NOTE,),
+            assumptions=dedupe_strings(
+                tuple(rendered.assumptions) + (WORKFLOW_METADATA_NOTE,)
+            ),
             review_required=rendered.review_required,
             extra=dict(rendered.extra),
         )
@@ -338,7 +352,7 @@ class WorkflowService:
         job_id: str,
         bundle: RenderedBundle,
     ) -> list[ArtifactRecord]:
-        assumptions = (
+        assumptions = dedupe_strings(
             tuple(bundle.manifest.assumptions)
             + tuple(bundle.blockers)
             + (WORKFLOW_METADATA_NOTE,)
