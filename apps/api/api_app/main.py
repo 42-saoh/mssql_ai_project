@@ -65,5 +65,5 @@ async def request_validation_error_handler(_request: Request, _exc: RequestValid
 async def platform_persistence_error_handler(_request: Request, exc: PlatformPersistenceError):
     return JSONResponse(
         status_code=503,
-        content=error_payload(str(exc), "DEPENDENCY_BLOCKED"),
+        content=error_payload(str(exc), exc.code),
     )

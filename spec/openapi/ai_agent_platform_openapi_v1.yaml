@@ -838,3 +838,10 @@ components:
           type: string
         code:
           type: string
+          examples:
+            - DEPENDENCY_BLOCKED
+            - P21_LIVE_PORTAL_REQUIRED_ENV_MISSING
+            - P21_LIVE_PLF_UNAVAILABLE
+            - P21_LIVE_PPM_REQUIRED
+            - PPM_DB_ACCESS_DENIED
+            - PPM_DB_NOT_FOUND

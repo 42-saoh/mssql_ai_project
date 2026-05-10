@@ -19,6 +19,11 @@ from api_app.lifecycle import (
     ensure_artifact_can_change,
     ensure_job_transition,
 )
+from api_app.live_gate import (
+    P21_LIVE_PLF_UNAVAILABLE,
+    P21_LIVE_PORTAL_REQUIRED_ENV_MISSING,
+    p21_live_portal_enabled,
+)
 from api_app.repositories import (
     ApprovalRecordData,
     ArtifactRecord,
@@ -41,6 +46,10 @@ STORAGE_NAMESPACE = UUID("a8e6e20c-0158-5d6f-8a39-a97f7325c6a2")
 
 class PlatformPersistenceError(RuntimeError):
     """Raised when platform DB persistence cannot safely continue."""
+
+    def __init__(self, message: str, *, code: str = "DEPENDENCY_BLOCKED") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -85,11 +94,27 @@ def load_platform_db_settings() -> PlatformDbSettings:
 def build_platform_repository() -> WorkflowRepository:
     settings = load_platform_db_settings()
     if not settings.configured:
-        raise PlatformPersistenceError(
-            "Platform MSSQL repository requires PLATFORM_DB_HOST, PLATFORM_DB_USER, "
-            "PLATFORM_DB_PASSWORD, and PLATFORM_DB_NAME."
-        )
+        raise platform_missing_env_error()
     return MssqlPlatformRepository(settings)
+
+
+def platform_missing_env_error() -> PlatformPersistenceError:
+    return PlatformPersistenceError(
+        "Platform MSSQL repository requires PLATFORM_DB_HOST, PLATFORM_DB_USER, "
+        "PLATFORM_DB_PASSWORD, and PLATFORM_DB_NAME.",
+        code=(
+            P21_LIVE_PORTAL_REQUIRED_ENV_MISSING
+            if p21_live_portal_enabled()
+            else "DEPENDENCY_BLOCKED"
+        ),
+    )
+
+
+def platform_unavailable_error(message: str) -> PlatformPersistenceError:
+    return PlatformPersistenceError(
+        message,
+        code=P21_LIVE_PLF_UNAVAILABLE if p21_live_portal_enabled() else "DEPENDENCY_BLOCKED",
+    )
 
 
 class MssqlPlatformRepository:
@@ -943,7 +968,7 @@ class MssqlPlatformRepository:
     def _resolve_user_id(self, login_or_email: str) -> str:
         user_id = self._try_resolve_user_id(login_or_email)
         if user_id is None:
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB repository requires a matching AUTH_USERS row. "
                 "Seed the local platform DB manually first."
             )
@@ -971,7 +996,7 @@ class MssqlPlatformRepository:
             (profile_id_or_name, profile_id_or_name),
         )
         if db_profile_id is None:
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB repository requires a matching CORE_DB_PROFILES row. "
                 "Seed the local platform DB manually first."
             )
@@ -1004,7 +1029,7 @@ class MssqlPlatformRepository:
         except PlatformPersistenceError:
             raise
         except Exception:  # pragma: no cover - requires live SQL Server
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB operation failed. Check schema and seed prerequisites."
             ) from None
         finally:
@@ -1018,7 +1043,7 @@ class MssqlPlatformRepository:
         except PlatformPersistenceError:
             raise
         except Exception:  # pragma: no cover - requires live SQL Server
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB operation failed. Check schema and seed prerequisites."
             ) from None
         finally:
@@ -1026,14 +1051,11 @@ class MssqlPlatformRepository:
 
     def _connect(self):
         if not self.settings.configured:
-            raise PlatformPersistenceError(
-                "Platform MSSQL repository requires PLATFORM_DB_HOST, PLATFORM_DB_USER, "
-                "PLATFORM_DB_PASSWORD, and PLATFORM_DB_NAME."
-            )
+            raise platform_missing_env_error()
         try:
             import pytds
         except Exception:  # pragma: no cover - dependency/runtime issue
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "python-tds is required for platform DB persistence."
             ) from None
         try:
@@ -1050,7 +1072,7 @@ class MssqlPlatformRepository:
                 use_mars=False,
             )
         except Exception:  # pragma: no cover - requires live SQL Server
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Could not connect to platform DB. Check PLATFORM_DB_* settings and "
                 "external DB readiness."
             ) from None

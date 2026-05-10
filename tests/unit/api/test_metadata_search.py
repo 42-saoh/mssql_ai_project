@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import pytest
-
 import api_app.metadata_service as metadata_service
+import pytest
+from api_app.live_gate import P21_LIVE_PPM_REQUIRED
 from api_app.metadata_service import (
     METADATA_SEARCH_MCP_TOOL_MISSING,
     METADATA_SEARCH_TOOL_NAME,
@@ -13,6 +13,7 @@ from api_app.metadata_service import (
     normalize_metadata_search_object_types,
     search_metadata_objects,
 )
+from mssql_mcp_app.errors import PPM_DB_ACCESS_DENIED, MetadataToolError
 from mssql_mcp_app.profiles import DbProfile
 from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
 from mssql_mcp_app.settings import LiveMetadataSettings
@@ -280,3 +281,54 @@ def test_missing_mcp_inventory_capability_returns_search_blocker(
         )
 
     assert exc_info.value.code == METADATA_SEARCH_MCP_TOOL_MISSING
+
+
+def test_p21_live_gate_rejects_ppm_profile_not_mapped_to_ppm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "1")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "1")
+    monkeypatch.setattr(metadata_service, "ppm_manifest_selection_mode", lambda: "live_metadata")
+    monkeypatch.setattr(
+        metadata_service,
+        "load_db_profiles",
+        lambda _settings, *, repo_root: [
+            DbProfile(
+                id="ppm",
+                label="Misconfigured PPM",
+                database="PLF",
+                purpose="pilot-analysis-target",
+            )
+        ],
+    )
+
+    with pytest.raises(MetadataSearchDependencyError) as exc_info:
+        search_metadata_objects(db_profile_id="ppm", query="order")
+
+    assert exc_info.value.code == P21_LIVE_PPM_REQUIRED
+
+
+def test_p21_live_metadata_search_preserves_mcp_blocker_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DeniedSearchRegistry:
+        def invoke_payload(self, _tool_name: str, _payload: dict) -> dict:
+            raise MetadataToolError(
+                PPM_DB_ACCESS_DENIED,
+                "Live metadata connection could not be established.",
+                {"dbProfileId": "ppm", "database": "PPM"},
+            )
+
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "1")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "1")
+    monkeypatch.setattr(metadata_service, "ppm_manifest_selection_mode", lambda: "live_metadata")
+    monkeypatch.setattr(
+        metadata_service,
+        "build_tool_registry",
+        lambda **_kwargs: DeniedSearchRegistry(),
+    )
+
+    with pytest.raises(MetadataToolError) as exc_info:
+        search_metadata_objects(db_profile_id="ppm", query="order")
+
+    assert exc_info.value.code == PPM_DB_ACCESS_DENIED

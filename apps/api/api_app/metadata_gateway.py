@@ -4,23 +4,28 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mssql_mcp_app.errors import MetadataToolError
-from mssql_mcp_app.profiles import load_db_profiles
 from mssql_mcp_app.registry import build_tool_registry
 from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
 from mssql_mcp_app.settings import load_live_metadata_settings
 
+from api_app.live_gate import P21_LIVE_PPM_REQUIRED
 from api_app.metadata_service import (
     METADATA_BLOCKER_MESSAGES,
-    P21_LIVE_PPM_REQUIRED,
+    MetadataSearchDependencyError,
+    load_profiles_for_metadata_request,
     p21_live_portal_enabled,
-    repo_root,
 )
 
 
 class P21LivePortalPrerequisiteError(RuntimeError):
-    def __init__(self) -> None:
-        super().__init__(METADATA_BLOCKER_MESSAGES[P21_LIVE_PPM_REQUIRED])
-        self.code = P21_LIVE_PPM_REQUIRED
+    def __init__(
+        self,
+        detail: str | None = None,
+        *,
+        code: str = P21_LIVE_PPM_REQUIRED,
+    ) -> None:
+        super().__init__(detail or METADATA_BLOCKER_MESSAGES[P21_LIVE_PPM_REQUIRED])
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -93,11 +98,11 @@ class McpMetadataGateway(MetadataGateway):
     ) -> MetadataCollectionResult:
         object_ref = f"{schema}.{procedure_name}"
         settings = load_live_metadata_settings()
-        if p21_live_portal_enabled() and (
-            not settings.live_metadata_enabled or db_profile_id != "ppm"
-        ):
-            raise P21LivePortalPrerequisiteError()
-        profiles = load_db_profiles(settings, repo_root=repo_root())
+        is_p21_live = p21_live_portal_enabled()
+        try:
+            profiles = load_profiles_for_metadata_request(settings, db_profile_id=db_profile_id)
+        except MetadataSearchDependencyError as exc:
+            raise P21LivePortalPrerequisiteError(exc.detail, code=exc.code) from exc
         repository = (
             LiveMetadataRepository(settings=settings, profiles=profiles)
             if settings.live_metadata_enabled
@@ -140,6 +145,19 @@ class McpMetadataGateway(MetadataGateway):
             evidence_refs,
             errors,
         )
+        if is_p21_live and (
+            definition is None or parameters is None or dependencies is None
+        ):
+            error = errors[0] if errors else {}
+            code = str(error.get("code") or P21_LIVE_PPM_REQUIRED)
+            tool_name = str(error.get("toolName") or "required_procedure_metadata")
+            raise P21LivePortalPrerequisiteError(
+                (
+                    "P21 live portal gate requires live PPM procedure metadata; "
+                    f"{tool_name} failed with {code}."
+                ),
+                code=code,
+            )
         table_schemas = tuple(
             table_schema
             for table_schema in (
