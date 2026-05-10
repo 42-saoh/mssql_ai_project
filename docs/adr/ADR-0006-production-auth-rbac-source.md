@@ -9,7 +9,7 @@ Accepted
 - Production role source 는 PLF platform DB 의 `AUTH_USERS`, `AUTH_ROLES`, `AUTH_USER_ROLES` 이다.
 - Canonical role name 은 DDL seed 와 동일한 `USER`, `REVIEWER`, `ADMIN`, `AUDITOR` 로 유지한다.
 - P19 는 `AUTH_RBAC_ENFORCEMENT=1` 일 때 validation/approval route 에 OIDC/JWT 검증과 PLF role lookup 기반 enforcement 를 적용한다.
-- Live IdP/JWKS 와 PLF role membership 이 승인된 환경에서 검증되기 전까지 productization 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` blocker 로 `NO_GO` 를 유지한다.
+- Live IdP/JWKS 와 PLF role membership 검증은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태를 유지한다. 이 검증은 production-grade enterprise Auth/RBAC 를 주장하기 전 필요하지만, 현재 controlled conditional open 의 active productization blocker 로 취급하지 않는다.
 
 ## 이유
 - OIDC/JWT 는 production identity 검증을 app-local password 나 mock header 에 두지 않게 한다.
@@ -26,3 +26,4 @@ Accepted
 - `401 Unauthorized` 는 verified identity 가 없거나 active user mapping 이 실패할 때 반환한다.
 - `403 Forbidden` 은 verified identity 가 있지만 role-to-action matrix 를 만족하지 못할 때 반환한다.
 - Validation/approval action 은 unauthorized negative test 와 reviewer spoofing negative test 로 보호한다.
+- Live wiring gate 가 통과하기 전까지 `production_ready: true` 또는 enterprise production Auth/RBAC 완료 주장은 금지한다.

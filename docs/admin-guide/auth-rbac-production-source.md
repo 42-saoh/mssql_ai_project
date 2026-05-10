@@ -2,7 +2,7 @@
 
 ## Status
 
-Production actor and role source is documented for P18B. P19 adds fixture-covered API enforcement for validation and approval actions. Productization remains `NO_GO` until live IdP/JWKS and PLF role lookup wiring is verified, tracked as `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED`.
+Production actor and role source is documented for P18B. P19 adds fixture-covered API enforcement for validation and approval actions. Live IdP/JWKS and PLF role lookup wiring is deferred future hardening, tracked as `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED`. The current platform may be opened for controlled conditional use, but it must not be described as production-grade enterprise Auth/RBAC or `production_ready: true`.
 
 ## Identity Source
 
@@ -58,4 +58,47 @@ Both actions require `REVIEWER` or `ADMIN`. Approval decisions also require the 
 
 Negative route coverage lives in `tests/integration/api/test_api_auth_rbac.py`. The tests generate ephemeral JWT signing material at runtime and do not commit tokens or fixture secrets.
 
-Live production wiring remains blocked until an approved IdP/JWKS endpoint and PLF role membership are verified outside the fixture-backed test path.
+Live production wiring remains deferred until an approved IdP/JWKS endpoint and PLF role membership are verified outside the fixture-backed test path. This is not an active blocker for controlled conditional open; it is required before claiming production-grade enterprise Auth/RBAC.
+
+## P20 Live Wiring Gate
+
+The hard-live gate is opt-in future hardening. `AUTH_RBAC_LIVE_GATE=1` and `AUTH_RBAC_ENFORCEMENT=1`
+must both be set before the repository contacts the approved IdP/JWKS endpoint or PLF.
+Default tests remain fixture-first and do not access production identity infrastructure.
+
+Required local or secret-manager inputs:
+
+- `OIDC_ISSUER`
+- `OIDC_AUDIENCE`
+- `OIDC_JWKS_URL`
+- `OIDC_REVIEWER_BEARER_TOKEN`
+- `OIDC_USER_BEARER_TOKEN`
+- `PLATFORM_DB_HOST`, `PLATFORM_DB_PORT`, `PLATFORM_DB_USER`,
+  `PLATFORM_DB_PASSWORD`, `PLATFORM_DB_NAME`
+
+Run:
+
+```bash
+AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/test_p20_auth_rbac_live_gate.py"
+```
+
+The helper `apps/api/scripts/auth_rbac_live_probe.py` performs only JWT verification and
+PLF role lookup. It does not call validation/approval routes and does not create workflow,
+approval, validation, or audit writes. A passing result may record only redacted evidence:
+pass/fail, role category, blocker code, and a short summary.
+Missing live env or failed live verification is reported as a deferred prerequisite
+failure, not as closure of a productization blocker.
+
+### Assisted login
+
+Playwright MCP may be used only as an Assisted login preflight for an approved
+non-production/test IdP or dev portal. The operator handles credentials and MFA, then
+places the resulting bearer tokens in local `.env` or an approved secret manager.
+
+Do not use Playwright MCP for arbitrary browser JavaScript token extraction, localStorage
+scraping, cookie scraping, storage-state files, token-bearing screenshots, traces,
+recordings, or chat-pasted secrets.
+
+Until the live gate passes, `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` remains a
+deferred future hardening item. Controlled conditional open remains allowed, but
+production-grade enterprise Auth/RBAC and `production_ready: true` claims remain forbidden.

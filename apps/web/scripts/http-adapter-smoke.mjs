@@ -199,7 +199,7 @@ console.log(
       validationStatus: validation.status,
       approvalDecision: approval.decision,
       observedRequests,
-      activeProductizationBlocker: "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED",
+      deferredProductizationItem: "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED",
     },
     null,
     2,

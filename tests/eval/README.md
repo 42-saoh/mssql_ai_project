@@ -17,3 +17,39 @@ P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e
 ```
 
 fixture-first workflow latency/reproducibility 검증은 계속 synthetic sample 로 수행한다. fixture snapshot 이나 fixture-backed metadata search 를 검증하는 테스트는 필요한 경우 `MSSQL_ENABLE_LIVE_METADATA=0` 을 test 단위에서 고정한다.
+
+## P20 auth/RBAC live gate
+
+P20 auth/RBAC live gate 는 기본 실행에서 skip 되며 IdP/JWKS 또는 PLF 에 접근하지 않는다.
+명시적으로 `AUTH_RBAC_LIVE_GATE=1` 을 켠 경우에만
+`apps/api/scripts/auth_rbac_live_probe.py` 가 `OidcJwtVerifier` 와
+`MssqlPlatformRepository.resolve_actor_roles()` 로 approved test IdP/JWKS token verification
+및 PLF role lookup 을 수행한다.
+
+필수 값:
+
+- `AUTH_RBAC_LIVE_GATE=1`
+- `AUTH_RBAC_ENFORCEMENT=1`
+- `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`
+- `OIDC_REVIEWER_BEARER_TOKEN`, `OIDC_USER_BEARER_TOKEN`
+- 기존 `PLATFORM_DB_*`
+
+실행:
+
+```bash
+AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/test_p20_auth_rbac_live_gate.py"
+```
+
+gate 가 켜졌는데 필수 env 가 없으면 skip 이 아니라 deferred prerequisite failure 로
+처리한다. 성공 전까지 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 의
+`AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` 는 future hardening item 으로 유지한다.
+현재 opening posture 는 controlled `CONDITIONAL_GO` 이지만 `production_ready: false` 이며,
+production-grade enterprise Auth/RBAC 주장은 금지한다.
+
+### Assisted login
+
+Playwright MCP 는 approved non-production/test IdP 또는 dev portal 의 Assisted login
+preflight 에만 사용할 수 있다. 사용자가 credentials/MFA 를 처리하고 token 은 로컬 `.env`
+또는 승인된 secret manager 에 직접 넣는다. localStorage scraping, cookie scraping,
+storage-state files, token-bearing screenshots, traces, recordings, chat-pasted secrets 는
+금지한다.

@@ -9,16 +9,16 @@ STORE_DIR=${PNPM_STORE_DIR:-${NPM_CONFIG_STORE_DIR:-}}
 
 install_with_lockfile() {
   if [ -n "$STORE_DIR" ]; then
-    exec "$PNPM_BIN" install --frozen-lockfile --store-dir "$STORE_DIR"
+    exec env CI="${CI:-true}" "$PNPM_BIN" install --frozen-lockfile --store-dir "$STORE_DIR"
   fi
-  exec "$PNPM_BIN" install --frozen-lockfile
+  exec env CI="${CI:-true}" "$PNPM_BIN" install --frozen-lockfile
 }
 
 install_without_lockfile() {
   if [ -n "$STORE_DIR" ]; then
-    exec "$PNPM_BIN" install --no-frozen-lockfile --store-dir "$STORE_DIR"
+    exec env CI="${CI:-true}" "$PNPM_BIN" install --no-frozen-lockfile --store-dir "$STORE_DIR"
   fi
-  exec "$PNPM_BIN" install --no-frozen-lockfile
+  exec env CI="${CI:-true}" "$PNPM_BIN" install --no-frozen-lockfile
 }
 
 cd "$REPO_ROOT"

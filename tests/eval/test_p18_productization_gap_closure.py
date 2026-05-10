@@ -18,7 +18,7 @@ AUTH_SOURCE_DOC = ROOT / "docs" / "admin-guide" / "auth-rbac-production-source.m
 AUTH_SOURCE_ADR = ROOT / "docs" / "adr" / "ADR-0006-production-auth-rbac-source.md"
 
 
-def test_p18_fixture_preserves_p17_conditional_go_but_keeps_productization_no_go() -> None:
+def test_p18_fixture_preserves_p17_conditional_go_and_defers_live_auth_wiring() -> None:
     fixture = _yaml(P18_FIXTURE)
     p17 = _yaml(P17_FIXTURE)
 
@@ -27,13 +27,15 @@ def test_p18_fixture_preserves_p17_conditional_go_but_keeps_productization_no_go
         p17["final_decision_policy"]["current_decision"]
     )
     assert fixture["current_state"]["p17_scoped_live_pilot_decision"] == "CONDITIONAL_GO"
-    assert fixture["current_state"]["p18_productization_decision"] == "NO_GO"
+    assert fixture["current_state"]["p18_productization_decision"] == "CONDITIONAL_GO"
     assert fixture["current_state"]["production_ready"] is False
     assert fixture["p18_final_gate"]["p17_conditional_go_preserved"] is True
-    assert fixture["p18_final_gate"]["current_productization_decision"] == "NO_GO"
+    assert fixture["p18_final_gate"]["current_productization_decision"] == "CONDITIONAL_GO"
 
     blockers = {blocker["code"] for blocker in fixture["active_productization_blockers"]}
-    assert blockers == {"AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"}
+    assert blockers == set()
+    deferred = {item["code"] for item in fixture["deferred_productization_items"]}
+    assert deferred == {"AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"}
 
 
 def test_p18a_canonical_contract_gap_is_exact_and_evidence_safe() -> None:
@@ -111,20 +113,24 @@ def test_p18b_web_http_and_auth_boundaries_are_explicit() -> None:
     assert "createHttpPortalApi" in smoke_script
     assert "observedRequests" in smoke_script
     assert "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED" in smoke_script
+    assert "deferredProductizationItem" in smoke_script
     assert "smoke:http-adapter" in package_json
     assert "uvicorn.Server" in runner
     assert "MemoryWorkflowRepository" in runner
 
     auth = p18b["auth_rbac"]
     assert auth["current_status"] == (
-        "SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_PENDING"
+        "SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_DEFERRED"
     )
-    assert auth["blocker"] == "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"
+    assert auth["deferred_item"] == "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"
+    assert auth["non_blocking_for_conditional_open"] is True
     assert auth["enforcement"]["enabled_by_env"] == "AUTH_RBAC_ENFORCEMENT"
     assert auth["enforcement"]["unauthorized_negative_tests"] == (
         "tests/integration/api/test_api_auth_rbac.py"
     )
-    assert auth["enforcement"]["live_wiring_status"] == "UNVERIFIED"
+    assert auth["enforcement"]["live_wiring_status"] == (
+        "DEFERRED_OPTIONAL_FUTURE_HARDENING"
+    )
     assert auth["must_not_fake_with_mock_headers"] is True
     assert auth["documented_source"]["identity_source"].startswith("verified OIDC/JWT")
     assert auth["documented_source"]["role_source"] == (
@@ -158,6 +164,8 @@ def test_p18b_auth_source_docs_define_identity_roles_and_denials() -> None:
         "401 Unauthorized",
         "403 Forbidden",
         "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED",
+        "future hardening",
+        "conditional open",
     ):
         assert phrase in combined
 

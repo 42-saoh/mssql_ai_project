@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
+import type {
+  ArtifactSummary,
+  Job,
+  MetadataSearchResponse,
+  RegistryVersion,
+} from "@/lib/api/types";
 import {
   artifactStatusLabels,
   artifactTypeLabels,
@@ -8,11 +14,23 @@ import {
   jobStatusLabels,
 } from "@/lib/presentation";
 
+const demoJobId = "job_demo_review_pending";
+
+function fulfilledValue<T>(result: PromiseSettledResult<T>): T | null {
+  return result.status === "fulfilled" ? result.value : null;
+}
+
+function rejectedMessage(result: PromiseSettledResult<unknown>): string | null {
+  return result.status === "rejected" && result.reason instanceof Error
+    ? result.reason.message
+    : null;
+}
+
 export default async function HomePage() {
   const api = getPortalApi();
-  const [job, artifactResponse, registryResponse, metadataSearch] = await Promise.all([
-    api.getJob("job_demo_review_pending"),
-    api.listJobArtifacts("job_demo_review_pending"),
+  const [jobResult, artifactResult, registryResult, metadataResult] = await Promise.allSettled([
+    api.getJob(demoJobId),
+    api.listJobArtifacts(demoJobId),
     api.listRegistryVersions(),
     api.searchMetadataObjects({
       dbProfileId: "ppm",
@@ -21,6 +39,19 @@ export default async function HomePage() {
       limit: 6,
     }),
   ]);
+  const job = fulfilledValue<Job>(jobResult);
+  const artifacts = fulfilledValue<{ jobId: string; artifacts: ArtifactSummary[] }>(
+    artifactResult,
+  )?.artifacts ?? [];
+  const registryVersions =
+    fulfilledValue<{ versions: RegistryVersion[] }>(registryResult)?.versions ?? [];
+  const metadataSearch = fulfilledValue<MetadataSearchResponse>(metadataResult);
+  const apiWarnings = [
+    rejectedMessage(jobResult),
+    rejectedMessage(artifactResult),
+    rejectedMessage(registryResult),
+    rejectedMessage(metadataResult),
+  ].filter((message): message is string => Boolean(message));
 
   return (
     <div className="stack">
@@ -30,7 +61,7 @@ export default async function HomePage() {
             <p className="eyebrow">Central portal shell</p>
             <h1>Analyze, validate, review</h1>
           </div>
-          <span className="quiet-label">Mock data boundary</span>
+          <span className="quiet-label">{job ? "Mock data boundary" : "HTTP API boundary"}</span>
         </div>
         <p className="lede">
           Product-demo App Router shell for MSSQL stored procedure request intake, read-only
@@ -44,9 +75,11 @@ export default async function HomePage() {
           <Link className="secondary-action" href="/metadata/search">
             Search metadata
           </Link>
-          <Link className="secondary-action" href="/jobs/job_demo_review_pending">
-            Inspect review job
-          </Link>
+          {job ? (
+            <Link className="secondary-action" href={`/jobs/${job.jobId}`}>
+              Inspect review job
+            </Link>
+          ) : null}
         </div>
       </section>
 
@@ -55,21 +88,32 @@ export default async function HomePage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Job status</p>
-              <h2>{job.jobId}</h2>
+              <h2>{job?.jobId ?? "No demo job"}</h2>
             </div>
-            <StatusPill value={job.status} label={jobStatusLabels[job.status]} />
+            {job ? <StatusPill value={job.status} label={jobStatusLabels[job.status]} /> : null}
           </div>
-          <dl className="metric-grid">
-            <div>
-              <dt>Request</dt>
-              <dd>{job.requestId}</dd>
-            </div>
-            <div>
-              <dt>Current gate</dt>
-              <dd>{job.currentStep ?? "Draft intake"}</dd>
-            </div>
-          </dl>
-          <Link href={`/jobs/${job.jobId}`}>Open job detail</Link>
+          {job ? (
+            <>
+              <dl className="metric-grid">
+                <div>
+                  <dt>Request</dt>
+                  <dd>{job.requestId}</dd>
+                </div>
+                <div>
+                  <dt>Current gate</dt>
+                  <dd>{job.currentStep ?? "Draft intake"}</dd>
+                </div>
+              </dl>
+              <Link href={`/jobs/${job.jobId}`}>Open job detail</Link>
+            </>
+          ) : (
+            <>
+              <p className="lede">
+                The connected API is live, but it does not seed the mock demo job.
+              </p>
+              <Link href="/requests/new">Create request</Link>
+            </>
+          )}
         </div>
 
         <div className="panel">
@@ -80,13 +124,16 @@ export default async function HomePage() {
             </div>
           </div>
           <div className="registry-list">
-            {registryResponse.versions.map((version) => (
+            {registryVersions.map((version) => (
               <div key={`${version.registryType}-${version.version}`}>
                 <strong>{version.registryType}</strong>
                 <code>{version.version}</code>
               </div>
             ))}
           </div>
+          {registryVersions.length === 0 ? (
+            <p className="lede">Registry versions are unavailable from the connected API.</p>
+          ) : null}
         </div>
       </section>
 
@@ -97,35 +144,43 @@ export default async function HomePage() {
               <p className="eyebrow">Metadata search</p>
               <h2>PPM identities</h2>
             </div>
-            <StatusPill
-              value={metadataSearch.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-              label={metadataSearch.reviewRequired ? "Review required" : "Evidence only"}
-            />
+            {metadataSearch ? (
+              <StatusPill
+                value={metadataSearch.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+                label={metadataSearch.reviewRequired ? "Review required" : "Evidence only"}
+              />
+            ) : null}
           </div>
-          <dl className="metric-grid">
-            <div>
-              <dt>Profile</dt>
-              <dd>{metadataSearch.sourceProfile}</dd>
-            </div>
-            <div>
-              <dt>Database</dt>
-              <dd>{metadataSearch.sourceDatabase}</dd>
-            </div>
-            <div>
-              <dt>Results</dt>
-              <dd>{metadataSearch.results.length}</dd>
-            </div>
-          </dl>
-          {metadataSearch.blockers.length > 0 ? (
-            <div className="blocker-list">
-              {metadataSearch.blockers.map((blocker) => (
-                <article className="blocker-row" key={blocker.code}>
-                  <strong>{blocker.code}</strong>
-                  <span>{blocker.message}</span>
-                </article>
-              ))}
-            </div>
-          ) : null}
+          {metadataSearch ? (
+            <>
+              <dl className="metric-grid">
+                <div>
+                  <dt>Profile</dt>
+                  <dd>{metadataSearch.sourceProfile}</dd>
+                </div>
+                <div>
+                  <dt>Database</dt>
+                  <dd>{metadataSearch.sourceDatabase}</dd>
+                </div>
+                <div>
+                  <dt>Results</dt>
+                  <dd>{metadataSearch.results.length}</dd>
+                </div>
+              </dl>
+              {metadataSearch.blockers.length > 0 ? (
+                <div className="blocker-list">
+                  {metadataSearch.blockers.map((blocker) => (
+                    <article className="blocker-row" key={blocker.code}>
+                      <strong>{blocker.code}</strong>
+                      <span>{blocker.message}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="lede">Metadata search is unavailable from the connected API.</p>
+          )}
           <Link href="/metadata/search">Open metadata search</Link>
         </div>
 
@@ -160,7 +215,7 @@ export default async function HomePage() {
           </div>
         </div>
         <div className="artifact-list">
-          {artifactResponse.artifacts.map((artifact) => (
+          {artifacts.map((artifact) => (
             <article className="artifact-row" key={artifact.artifactId}>
               <div>
                 <h3>{artifact.title ?? artifactTypeLabels[artifact.type]}</h3>
@@ -179,7 +234,29 @@ export default async function HomePage() {
             </article>
           ))}
         </div>
+        {artifacts.length === 0 ? (
+          <p className="lede">Draft artifacts are unavailable until the connected API has a job.</p>
+        ) : null}
       </section>
+
+      {apiWarnings.length > 0 ? (
+        <section className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">HTTP adapter</p>
+              <h2>Connected API notes</h2>
+            </div>
+          </div>
+          <div className="blocker-list">
+            {[...new Set(apiWarnings)].map((message) => (
+              <article className="blocker-row" key={message}>
+                <strong>HTTP_API_RESPONSE</strong>
+                <span>{message}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

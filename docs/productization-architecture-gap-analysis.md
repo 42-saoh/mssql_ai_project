@@ -8,8 +8,9 @@ No current surface is classified as `production-ready`. P17D has enough evidence
 draft-only live pilot `CONDITIONAL_GO`. P18A closes the minimal versioned
 `CanonicalAnalysisModel` contract. P18B records web HTTP adapter smoke and documents
 production auth/RBAC source of truth. P19 adds fixture-backed auth/RBAC enforcement,
-but product release readiness still depends on live IdP/JWKS and PLF role lookup
-verification.
+while live IdP/JWKS and PLF role lookup verification is deferred future hardening.
+The current opening posture is `CONDITIONAL_GO` for controlled use, with
+`production_ready: false` still explicit.
 
 ## Status Taxonomy
 
@@ -38,7 +39,7 @@ verification.
 | Web portal | `stub` | Next.js shell uses mock adapter and provides request/job/artifact preview surfaces. | P14 must add product demo flows, metadata search, API adapter smoke, blocker display, and PPM sample handling. |
 | Eval/ops/readiness | `fixture-first` | P06 fixture eval covers one happy path and forbidden operations. | P15/P16 must define product metrics, observability/security checks, PPM scenarios, and go/no-go handoff package. |
 | P17 scoped pilot release | `conditional-live` | P17D records `CONDITIONAL_GO` for the draft-only scoped candidate. | This does not close productization; P18 must resolve canonical contract and web/auth evidence. |
-| P18/P19 productization closure | `blocked` | `fixtures/eval/productization_gap_closure_p18_v1.yaml` records P18A canonical closure, web HTTP adapter smoke, auth/RBAC source documentation, and fixture-backed enforcement. | Productization remains `NO_GO` until `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` closes with approved live IdP/JWKS and PLF role membership verification. |
+| P18/P19 productization closure | `conditional-live` | `fixtures/eval/productization_gap_closure_p18_v1.yaml` records P18A canonical closure, web HTTP adapter smoke, auth/RBAC source documentation, fixture-backed enforcement, and deferred live wiring hardening. | Controlled conditional open is allowed, but `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` remains required before claiming production-grade enterprise Auth/RBAC. |
 
 ## Contract Drift Matrix
 
@@ -83,4 +84,4 @@ In both modes, the following remain forbidden: row-data reads, procedure executi
 | P15 | Eval, observability, security, and ops metrics. | Metrics separate fixture-first, optional-live, and blocker-dependent evidence. |
 | P16 | Pilot release readiness and handoff package. | Go/no-go includes PPM access, dependency evidence, validation results, approval/audit, and policy compliance. |
 | P17 | Live pilot blocker closure. | Scoped draft-only candidate can become `CONDITIONAL_GO`; platform production-ready remains forbidden. |
-| P18/P19 | Canonical contract, web HTTP smoke, and auth/RBAC productization closure. | Full productization stays `NO_GO` until live IdP/JWKS and PLF role lookup evidence passes. |
+| P18/P19 | Canonical contract, web HTTP smoke, and auth/RBAC productization closure. | Conditional open is allowed with live IdP/JWKS and PLF role lookup deferred; production-grade enterprise Auth/RBAC claims require that evidence to pass first. |

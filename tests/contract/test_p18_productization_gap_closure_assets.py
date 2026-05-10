@@ -76,7 +76,7 @@ def test_p18_manifest_declares_parallel_post_p17_gap_closure_wave() -> None:
     assert order.index("P17D") < order.index("P18B")
 
 
-def test_p18_fixture_records_no_go_productization_until_web_and_auth_close() -> None:
+def test_p18_fixture_records_conditional_open_with_live_auth_wiring_deferred() -> None:
     fixture = _yaml(P18_FIXTURE)
 
     assert fixture["version"] == "productization_gap_closure_p18_v1"
@@ -84,18 +84,25 @@ def test_p18_fixture_records_no_go_productization_until_web_and_auth_close() -> 
         "fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml"
     )
     assert fixture["current_state"]["p17_scoped_live_pilot_decision"] == "CONDITIONAL_GO"
-    assert fixture["current_state"]["p18_productization_decision"] == "NO_GO"
+    assert fixture["current_state"]["p18_productization_decision"] == "CONDITIONAL_GO"
     assert fixture["current_state"]["production_ready"] is False
 
     assert fixture["p18a_canonical_analysis_model"]["current_status"] == "CONTRACT_CLOSED"
     assert fixture["p18a_canonical_analysis_model"]["current_blockers"] == []
     assert fixture["p18b_web_http_auth_rbac"]["auth_rbac"]["current_status"] == (
-        "SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_PENDING"
+        "SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_DEFERRED"
     )
-    assert fixture["p18b_web_http_auth_rbac"]["auth_rbac"]["blocker"] == (
+    assert fixture["p18b_web_http_auth_rbac"]["auth_rbac"]["deferred_item"] == (
         "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"
     )
-    assert fixture["p18_final_gate"]["current_productization_decision"] == "NO_GO"
+    assert fixture["active_productization_blockers"] == []
+    assert fixture["deferred_productization_items"][0]["code"] == (
+        "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"
+    )
+    assert fixture["deferred_productization_items"][0][
+        "non_blocking_for_conditional_open"
+    ] is True
+    assert fixture["p18_final_gate"]["current_productization_decision"] == "CONDITIONAL_GO"
     assert "production_ready_claim_allowed" in fixture["policy_boundaries"]
 
 
@@ -140,8 +147,10 @@ def test_p18_docs_and_readiness_assets_reference_gap_closure_without_overclaim()
     assert "P18 Productization Gap Closure" in combined
     assert "productization_gap_closure_p18_v1.yaml" in combined
     assert "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED" in combined
+    assert "future hardening" in combined
     assert "CanonicalAnalysisModel" in combined
     assert "CONDITIONAL_GO" in combined
+    assert "productization remains `NO_GO` until" not in combined
     assert "production-ready: true" not in combined
     assert "SELECT * FROM PPM" not in combined
     assert "COUNT(*)" not in combined

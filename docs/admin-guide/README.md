@@ -11,10 +11,10 @@
 
 - implemented: API route surface, workflow state 기록, validation report 저장, approval decision 기록, audit event 기록.
 - fixture-first: metadata collection 과 e2e/eval 기본 경로.
-- stub/skeleton: Platform DB live wiring verification, publish route, full registry admin.
+- stub/skeleton: publish route, full registry admin.
 - optional live: MSSQL MCP readiness probe. live metadata query execution 은 아직 completed feature 가 아니다.
-- follow-up: published version 승격 UI/API, 운영 권한 모델, live read-only metadata adapter.
-- not production-ready: P17D live pilot release 는 scoped draft-only candidate 로만 CONDITIONAL_GO 이며, P19 auth/RBAC enforcement 뒤에도 live IdP/JWKS 와 운영 PLF role membership 검증 전까지 전체 플랫폼 production-ready 로 보지 않는다.
+- follow-up: published version 승격 UI/API, live auth/RBAC wiring verification, live read-only metadata adapter.
+- not production-ready: P17D live pilot release 와 P18/P19 opening posture 는 scoped/controlled CONDITIONAL_GO 이며, P20 live IdP/JWKS 와 운영 PLF role membership 검증 전까지 production-grade enterprise Auth/RBAC 또는 `production_ready: true` 로 보지 않는다.
 - auth/RBAC source: production actor identity 는 verified OIDC/JWT 이고 role source 는 PLF `AUTH_USERS`, `AUTH_ROLES`, `AUTH_USER_ROLES` 이다. 상세 기준은 `docs/admin-guide/auth-rbac-production-source.md` 를 따른다.
 
 ## 기본 운영 절차
@@ -43,7 +43,7 @@
 - P17A 는 selected stored procedure suite majority 기준으로 `DEPENDENCY_METADATA_INCOMPLETE` 를 닫았지만, selected table 은 confirmed `related_procedures` evidence 가 있을 때만 selected procedure dependency 로 주장한다.
 - P17D 이후 live pilot release 는 scoped draft-only candidate 에 한해 CONDITIONAL_GO 이며, fixture-first/demo handoff 는 계속 GO WITH LIMITATIONS 이다.
 - live pilot 조건을 유지하려면 PPM hard-live 검증, passed validation, human `APPROVE`, audit trace 가 같은 artifact/version 에 묶여야 한다.
-- P18/P19 productization readiness 는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 의 HTTP adapter smoke evidence, auth/RBAC source 문서화, fixture-backed enforcement 를 반영하되, live IdP/JWKS 와 PLF role lookup 검증 전까지 NO-GO 다.
+- P18/P19 productization readiness 는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 의 HTTP adapter smoke evidence, auth/RBAC source 문서화, fixture-backed enforcement 를 반영해 controlled conditional open 으로 해석한다. Live IdP/JWKS 와 PLF role lookup 검증은 production-grade enterprise Auth/RBAC claim 전 future hardening 이다.
 
 ## 스키마 변경 운영
 

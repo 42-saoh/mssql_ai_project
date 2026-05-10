@@ -8,7 +8,7 @@ platform_db_context: PLF
 current_state:
   p17_scoped_live_pilot_decision: CONDITIONAL_GO
   p17_scope: scoped_live_pilot_candidate_only
-  p18_productization_decision: NO_GO
+  p18_productization_decision: CONDITIONAL_GO
   production_ready: false
   p18_tracks:
     P18A:
@@ -17,8 +17,8 @@ current_state:
       release_blocker: null
     P18B:
       title: Web HTTP Adapter And Auth/RBAC Evidence Closure
-      status: HTTP_RELEASE_SMOKE_AND_AUTH_ENFORCEMENT_FIXTURE_COVERED_LIVE_WIRING_BLOCKED
-      release_blocker: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
+      status: HTTP_RELEASE_SMOKE_AND_AUTH_ENFORCEMENT_FIXTURE_COVERED_LIVE_WIRING_DEFERRED
+      release_blocker: null
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -101,7 +101,7 @@ p18b_web_http_auth_rbac:
       - HTTP_ADAPTER_DIVERGES_FROM_PORTAL_API_INTERFACE
       - UI_ACTION_IMPLIES_PUBLISH_EXPORT_OR_DEPLOY
   auth_rbac:
-    current_status: SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_PENDING
+    current_status: SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_DEFERRED
     documented_source:
       identity_source: verified OIDC/JWT from external IdP or API gateway
       role_source: PLF AUTH_USERS, AUTH_ROLES, AUTH_USER_ROLES
@@ -122,30 +122,38 @@ p18b_web_http_auth_rbac:
         - POST /api/v1/artifacts/{artifactId}/validation
         - POST /api/v1/artifacts/{artifactId}/approval-decisions
       unauthorized_negative_tests: tests/integration/api/test_api_auth_rbac.py
-      live_wiring_status: UNVERIFIED
-    blocker: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
+      live_wiring_status: DEFERRED_OPTIONAL_FUTURE_HARDENING
+    deferred_item: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
+    non_blocking_for_conditional_open: true
     must_not_fake_with_mock_headers: true
-    required_resolution:
+    future_hardening_resolution:
       - verify production OIDC/JWKS settings against an approved IdP
       - verify PLF AUTH_USERS/AUTH_ROLES/AUTH_USER_ROLES membership in an approved environment
   exit_criteria:
     - mock adapter remains available for demo/dev
     - HTTP adapter smoke proves the same PortalApi flow against local API routes
-    - production auth/RBAC is implemented with tests or remains an explicit blocker
+    - fixture-backed auth/RBAC enforcement remains covered while live wiring is documented as deferred
     - no publish/export, row data, procedure execution, DDL/DML, or PLF fallback path appears
-active_productization_blockers:
+active_productization_blockers: []
+deferred_productization_items:
   - code: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
     owner_track: P18B
-    severity: BLOCKER
+    severity: FUTURE_HARDENING
+    status: DEFERRED
+    non_blocking_for_conditional_open: true
+    required_before_claiming: production-grade enterprise Auth/RBAC
 p18_final_gate:
   allowed_decisions:
     - NO_GO
     - CONDITIONAL_GO
-  current_productization_decision: NO_GO
+  current_productization_decision: CONDITIONAL_GO
   no_go_must_remain_when:
     - HTTP adapter release smoke regresses or is missing
-    - production OIDC/JWKS and PLF role lookup live wiring is unverified
     - any forbidden evidence or action is required
+  conditional_go_boundaries:
+    - production_ready remains false
+    - Auth/RBAC live IdP/JWKS and PLF wiring is deferred future hardening
+    - fixture-backed 401/403 enforcement remains covered
   p17_conditional_go_preserved: true
 forbidden_evidence:
   - row_data

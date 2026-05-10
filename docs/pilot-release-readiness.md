@@ -76,7 +76,7 @@ not claim selected table linkage unless `related_procedures` contains catalog-co
 - `COMPLEX_SENTINEL_RESIDUAL_REVIEW`: `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` keeps two ambiguous function references for reviewer awareness.
 - Full `CanonicalAnalysisModel` is still not implemented; canonical candidates remain `REVIEW_REQUIRED`.
 - Web portal is mock-first/demo-oriented; P18B HTTP adapter smoke is local route evidence, not a production deployment claim.
-- P18/P19 tracks productization blockers in `fixtures/eval/productization_gap_closure_p18_v1.yaml`; until live IdP/JWKS and PLF role lookup evidence closes, the overall platform remains not production-ready.
+- P18/P19 records controlled conditional opening in `fixtures/eval/productization_gap_closure_p18_v1.yaml`; live IdP/JWKS and PLF role lookup evidence remains deferred future hardening before any production-grade enterprise Auth/RBAC claim.
 - Publish/export is intentionally absent. Any future publish route must require passed validation and human approval.
 - Platform DB persistence depends on externally managed PLF schema and data readiness; the repo does not apply schema or manage DB lifecycle.
 

@@ -244,7 +244,8 @@ production auth/RBAC source of truth 를 검증한다. auth/RBAC 출처가 없�
 대체하지 말고 `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED` 로 보고한다.
 
 P18 기준 fixture 는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 이다. P18의
-productization decision 은 두 트랙이 모두 evidence 를 제출하기 전까지 `NO_GO` 로 유지한다.
+productization decision 은 evidence 제출 후 controlled `CONDITIONAL_GO` 로 해석하되,
+`production_ready: false` 와 deferred future hardening item 을 명시한다.
 
 검증 기준:
 

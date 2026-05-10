@@ -71,10 +71,10 @@ P17 기준 문서는 `docs/live-pilot-blocker-closure-plan.md`, machine-readable
 ## P18 Productization Gap Closure Prompt Pack
 
 P17D 이후 scoped live pilot candidate 가 `CONDITIONAL_GO` 여도 production-ready 는 아니다.
-P18은 남은 productization gap 을 닫거나 명확한 blocker 로 고정한다.
+P18은 남은 productization gap 을 닫거나 future hardening/deferred item 으로 명확히 분류한다.
 
 - `prompts/18a_canonical_analysis_model_closure.md` — full `CanonicalAnalysisModel` contract closure 또는 정확한 domain blocker 기록
-- `prompts/18b_web_http_auth_rbac_evidence.md` — web HTTP adapter release smoke 와 production auth/RBAC evidence/blocker 정리
+- `prompts/18b_web_http_auth_rbac_evidence.md` — web HTTP adapter release smoke 와 production auth/RBAC evidence/deferred hardening 정리
 
 P18 기준 fixture는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 이다. P18도 row data,
 procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는

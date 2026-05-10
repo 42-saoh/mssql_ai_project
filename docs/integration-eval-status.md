@@ -2,7 +2,7 @@
 
 ## Summary
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. The suite documents what is implemented now and separates stubs, fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, productization blockers, and follow-up slices.
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. The suite documents what is implemented now and separates stubs, fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
 
 ## Current Boundaries
 
@@ -14,7 +14,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | Web portal | HTTP smoke recorded | Next.js shell uses mock data by default. P18B adds local `PORTAL_API_MODE=http` adapter smoke against fixture-backed API routes. |
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | conditional scoped candidate | P17D records live pilot release as `CONDITIONAL_GO` only for the draft-only scoped candidate. This does not make the platform production-ready and does not authorize publish/export, DDL/DML, row-data access, procedure execution, deployment, or PLF fallback. |
-| P18/P19 productization readiness | blocked | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain unverified. |
+| P18/P19 productization readiness | conditional open | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain deferred future hardening before any production-grade enterprise Auth/RBAC claim. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -29,7 +29,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/pilot_release_readiness_p16_v1.yaml`: P16/P17D pilot release checklist, quality report, selected object evidence summary, P17B validation binding, P17C approval/audit status, P17D hard-live evidence, and go/no-go recommendation.
 - `fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml`: P17B draft-only live pilot artifact validation package with passed release-critical checks.
 - `fixtures/eval/manual_approval_audit_p17_v1.yaml`: P17C human approval and audit binding for the P17B artifact set/version and validation report.
-- `fixtures/eval/productization_gap_closure_p18_v1.yaml`: P18/P19 productization fixture recording P18A canonical closure, P18B HTTP adapter smoke evidence, production auth/RBAC source documentation, fixture-backed enforcement, and the remaining live wiring blocker.
+- `fixtures/eval/productization_gap_closure_p18_v1.yaml`: P18/P19 productization fixture recording P18A canonical closure, P18B HTTP adapter smoke evidence, production auth/RBAC source documentation, fixture-backed enforcement, and the deferred live wiring hardening item.
 
 ## Verification Scope
 
@@ -82,8 +82,8 @@ The full default suite remains fixture-first/reproducible. Tests that assert fix
 1. Implement real read-only live metadata adapter queries behind the MCP boundary.
 2. Broaden CanonicalAnalysisModel coverage beyond the minimal P18A fixture-first contract.
 3. Add publish API only after validation/approval semantics are fully enforced.
-4. Verify auth/RBAC live wiring against an approved IdP/JWKS endpoint and PLF role membership source.
+4. Verify auth/RBAC live wiring against an approved IdP/JWKS endpoint and PLF role membership source before claiming production-grade enterprise Auth/RBAC.
 5. Expand eval fixtures beyond the single happy path to dynamic SQL, temp tables, transaction/TRY-CATCH, DDL drafts, and failure paths.
 6. Mature DDL draft renderer while keeping schema apply/manual review outside automation.
 7. Keep future live pilot reruns evidence-based: if P17B validation, P17C approval/audit binding, or hard-live PPM verification cannot be reproduced, return the scoped candidate to `NO_GO`.
-8. Keep productization `NO_GO` until live auth/RBAC wiring closes without mock headers, hardcoded actors, fixture tokens, or committed secrets.
+8. Keep `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` as deferred future hardening until live auth/RBAC wiring closes without mock headers, hardcoded actors, fixture tokens, or committed secrets.

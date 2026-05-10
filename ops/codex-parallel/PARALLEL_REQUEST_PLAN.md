@@ -381,7 +381,7 @@ PPM 접근 실패 시 PLF로 대체하지 않는다. P17도 전체 플랫폼을 
 
 ## P18 Productization Gap Closure Wave
 
-P17D 이후에도 전체 플랫폼은 production-ready 가 아니다. P18은 P17의 scoped `CONDITIONAL_GO` 범위 밖에 남은 두 productization gap 을 닫거나 정확한 blocker 로 고정하는 후속 wave 다.
+P17D 이후에도 전체 플랫폼은 production-ready 가 아니다. P18은 P17의 scoped `CONDITIONAL_GO` 범위 밖에 남은 두 productization gap 을 닫거나 deferred future hardening item 으로 정확히 분류하는 후속 wave 다.
 
 ### P18 실행 순서
 
@@ -392,7 +392,7 @@ P17D 이후에도 전체 플랫폼은 production-ready 가 아니다. P18은 P17
 2. `P18B` — Web HTTP adapter and auth/RBAC evidence closure
    - 기존 `PORTAL_API_MODE=http` 경로를 local API route smoke 로 검증 가능한 release evidence 로 만든다.
    - mock adapter 는 demo/dev 기본값으로 유지하되 release evidence 와 구분한다.
-   - production auth/RBAC source of truth 가 없으면 `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED` blocker 를 유지한다.
+   - production auth/RBAC source of truth 가 없으면 `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED` blocker 를 유지한다. Source 는 문서화되었지만 live IdP/JWKS/PLF wiring 이 없으면 production-grade enterprise Auth/RBAC claim 전 deferred future hardening 으로 분류한다.
 
 ### P18 검증
 
@@ -406,4 +406,4 @@ make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
 python3 -m compileall apps services packages tests
 ```
 
-P18도 row data, procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는 publish/export 를 허용하지 않는다. production auth/RBAC 를 mock header 로 가장해야만 통과할 수 있다면 productization decision 은 `NO_GO` 로 유지한다.
+P18도 row data, procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는 publish/export 를 허용하지 않는다. production auth/RBAC 를 mock header 로 가장해야만 통과할 수 있다면 productization decision 은 `NO_GO` 로 유지한다. Live wiring 미검증만 남은 경우에는 controlled `CONDITIONAL_GO` 와 deferred future hardening 으로 분리한다.
