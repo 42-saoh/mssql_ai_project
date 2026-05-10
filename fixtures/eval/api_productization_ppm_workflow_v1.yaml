@@ -14,7 +14,8 @@ tracking_contract:
     correlation_id: X-Correlation-ID
   idempotency_replay: same_key_same_normalized_payload_returns_same_request_and_job
   idempotency_conflict: same_key_different_normalized_payload_returns_IDEMPOTENCY_CONFLICT
-active_blockers:
+active_blockers: []
+closed_blockers:
   - DEPENDENCY_METADATA_INCOMPLETE
 forbidden_evidence:
   - row_data
@@ -48,9 +49,8 @@ sample_requests:
         - REJECTED
       artifact_statuses_forbidden:
         - PUBLISHED
-      caveats:
-        - table_dependency_links_incomplete
-      review_required: true
+      caveats: []
+      review_required: false
   - sample_id: p09-api-ppm-medium-procedure
     readiness_label: optional_live_metadata_evidence
     request:
@@ -69,9 +69,8 @@ sample_requests:
       current_step: VALIDATE
       artifact_statuses_forbidden:
         - PUBLISHED
-      caveats:
-        - table_dependency_links_incomplete
-      review_required: true
+      caveats: []
+      review_required: false
   - sample_id: p09-api-ppm-complex-procedure
     readiness_label: optional_live_metadata_evidence
     request:
@@ -93,5 +92,5 @@ sample_requests:
         - PUBLISHED
       caveats:
         - ambiguous_dependency_metadata
-        - table_dependency_links_incomplete
+        - complex_sentinel_residual_review
       review_required: true

@@ -2,14 +2,16 @@
 
 ## Decision
 
-Live pilot release: NO-GO.
+Live pilot release: CONDITIONAL_GO.
 
 Fixture-first/demo handoff: GO WITH LIMITATIONS.
 
 This handoff is based on `docs/pilot-release-readiness.md` and
 `fixtures/eval/pilot_release_readiness_p16_v1.yaml`. The PPM manifest is `live_metadata`, so
-selected object identities may be referenced, but `DEPENDENCY_METADATA_INCOMPLETE` remains a
-release blocker.
+selected object identities may be referenced. P17A has closed `DEPENDENCY_METADATA_INCOMPLETE`
+under the selected stored procedure suite majority gate. P17B passed live pilot artifact
+validation, P17C bound human approval/audit evidence, and P17D hard-live gates passed, so the
+scoped draft-only live pilot candidate is now `CONDITIONAL_GO`.
 
 ## Evidence Package
 
@@ -17,15 +19,15 @@ release blocker.
 - Machine-readable gate: `fixtures/eval/pilot_release_readiness_p16_v1.yaml`
 - Pilot object manifest: `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml`
 - P15 eval/ops gate: `fixtures/eval/eval_observability_security_ops_p15_v1.yaml`
+- P17B validation package: `fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml`
+- P17C approval/audit package: `fixtures/eval/manual_approval_audit_p17_v1.yaml`
 - P13 validation/approval/audit fixture: `fixtures/eval/validation_approval_audit_p13_v1.yaml`
 - Productization backlog: `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
 
 ## Active Blockers
 
-| Code | Impact | Owner action |
-|---|---|---|
-| `DEPENDENCY_METADATA_INCOMPLETE` | Blocks live pilot release because selected SPs cannot claim confirmed table lineage. | Harden PPM dependency metadata collection and analysis evidence, then rerun P15/P16 gates. |
-| `MANUAL_APPROVAL_EVIDENCE_MISSING` | Blocks publish/export or live release claims. | Produce artifacts with passed validation, bind human approval, and preserve audit context. |
+None for the scoped draft-only live pilot candidate. If P17B validation, P17C approval/audit
+binding, or P17D hard-live verification cannot be reproduced, the decision returns to `NO_GO`.
 
 ## Verification Commands
 
@@ -35,7 +37,7 @@ Run the default reproducibility gate from the repository root:
 make test
 make test-web-smoke
 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
-python -m compileall apps services packages tests
+python3 -m compileall apps services packages tests
 ```
 
 Run the explicit hard-live gate before making any live PPM readiness claim:
@@ -58,10 +60,9 @@ switch the analysis profile to PLF.
 - Do not commit credentials or raw definition text.
 - Do not change `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` in P16.
 
-## Next Owner Actions
+## Conditional Scope
 
-1. Resolve `DEPENDENCY_METADATA_INCOMPLETE` by improving metadata-only dependency evidence.
-2. Add live pilot validation artifacts that can reach `PASSED` without suppressing review markers.
-3. Bind a human `APPROVE` decision to the latest passed validation report for any release candidate.
-4. Confirm audit records include correlation id, actor, target ref, validation ref, and approval ref.
-5. Re-run the full P16 verification set and update the readiness decision only after blockers close.
+- Generated artifacts remain draft-only.
+- No publish/export, deployment, DDL/DML execution, row-data access, procedure execution, or PLF fallback is authorized.
+- The platform is not production-ready; this is only a scoped live pilot candidate decision.
+- Future reruns must keep PPM read-only metadata access available and must not replace PPM with PLF.

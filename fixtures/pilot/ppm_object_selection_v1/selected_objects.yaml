@@ -2,7 +2,7 @@ selection_version: ppm_object_selection_v1
 source_db: PPM
 platform_db_context: PLF
 selection_mode: live_metadata
-generated_at: '2026-05-05T13:47:24+09:00'
+generated_at: '2026-05-06T21:52:50+09:00'
 connection_profile_used:
   profile_id: ppm
   database: PPM
@@ -64,9 +64,30 @@ live_metadata_summary:
     functions: 293
     procedures: 0
     unresolved: 2887
-active_blockers:
-  - code: DEPENDENCY_METADATA_INCOMPLETE
-    description: Live sys.sql_expression_dependencies was readable, but table dependencies were not typed as TABLE and 2887 dependency refs remained unresolved; table selections are therefore metadata-rich candidates rather than SP-linked confirmed dependencies.
+active_blockers: []
+dependency_evidence_gate:
+  status: PASSED_WITH_COMPLEX_SENTINEL_RESIDUAL_REVIEW
+  rule: selected_procedure_suite_majority_confirmed
+  selected_procedure_count: 7
+  confirmed_dependency_procedure_count: 6
+  pass_ratio: 0.857
+  threshold: greater_than_0_5
+  excluded_procedures:
+    - dbo.INT_PPM_3003_01
+    - dbo.INT_PPM_3003_02
+  complex_sentinel:
+    procedure: dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+    dependency_count: 63
+    confirmed_count: 61
+    residual_review_count: 2
+    residual_review_status: allowed_for_p17a_majority_gate
+  selected_suite_dependency_summary_counts:
+    tables: 52
+    views: 2
+    functions: 15
+    procedures: 10
+    residual_review: 2
+  selected_table_related_procedures_policy: only_catalog_confirmed_dependencies
 stored_procedures:
   - schema: dbo
     name: GetInspItemsCd
@@ -75,12 +96,12 @@ stored_procedures:
     selection_reason:
       - simple_bucket_representative
       - metadata_definition_available
-      - dependency_summary_available_but_table_links_incomplete
+      - dependency_metadata_confirmed
     metadata_evidence:
       source_profile: ppm
       source_database: PPM
-      snapshot_id: live:ppm:2026-05-05T04:47:24Z
-      collected_at: '2026-05-05T04:47:24Z'
+      snapshot_id: live:ppm:2026-05-06T12:52:24Z
+      collected_at: '2026-05-06T12:52:24Z'
       definition_access: true
       definition_hash: 999c1f6db938ee3a015b210659b85d9b31db3c66b7d3726a8f1113d46239ea9a
       definition_length: 636
@@ -89,19 +110,23 @@ stored_procedures:
       parameter_count: 1
       dependency_count: 1
     dependency_summary:
-      tables: []
-      views: []
-      functions: []
-      procedures: []
-      unresolved_count: 1
-      unresolved_sample:
-        - schema: dbo
+      tables:
+        - database: PPM
+          schema: dbo
           name: PEX_INSP_ITEMS
           dependency_type: REFERENCE
           review_status: CONFIRMED
-    caveats:
-      - table_dependency_links_incomplete
-    review_required: true
+          resolution_status: CONFIRMED
+      views: []
+      functions: []
+      procedures: []
+      unresolved_count: 0
+    dependency_gate:
+      status: PASS
+      confirmed_count: 1
+      review_required_count: 0
+    caveats: []
+    review_required: false
   - schema: dbo
     name: PAD_GET_BAT_LIST_PRC
     object_type: PROCEDURE
@@ -109,12 +134,12 @@ stored_procedures:
     selection_reason:
       - medium_bucket_representative
       - metadata_definition_available
-      - dependency_summary_available_but_table_links_incomplete
+      - dependency_metadata_confirmed
     metadata_evidence:
       source_profile: ppm
       source_database: PPM
-      snapshot_id: live:ppm:2026-05-05T04:47:24Z
-      collected_at: '2026-05-05T04:47:24Z'
+      snapshot_id: live:ppm:2026-05-06T12:52:28Z
+      collected_at: '2026-05-06T12:52:28Z'
       definition_access: true
       definition_hash: 05a14dfe7b10e59f7b87a4497f265a0993587bd2f905771efc908ae8c7a2f7d2
       definition_length: 8302
@@ -124,31 +149,41 @@ stored_procedures:
       parameter_count: 6
       dependency_count: 4
     dependency_summary:
-      tables: []
-      views: []
-      functions: []
-      procedures: []
-      unresolved_count: 4
-      unresolved_sample:
-        - schema: dbo
+      tables:
+        - database: HRM
+          schema: dbo
           name: EHRTB_IFEmployee
           dependency_type: REFERENCE
           review_status: CONFIRMED
-        - schema: dbo
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
           name: PAD_BAT_HIS
           dependency_type: REFERENCE
           review_status: CONFIRMED
-        - schema: dbo
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
           name: PAD_BAT_MGMT
           dependency_type: REFERENCE
           review_status: CONFIRMED
-        - schema: dbo
+          resolution_status: CONFIRMED
+      views:
+        - database: PPM
+          schema: dbo
           name: PCO_COM_CD_DTL_V
           dependency_type: REFERENCE
           review_status: CONFIRMED
-    caveats:
-      - table_dependency_links_incomplete
-    review_required: true
+          resolution_status: CONFIRMED
+      functions: []
+      procedures: []
+      unresolved_count: 0
+    dependency_gate:
+      status: PASS
+      confirmed_count: 4
+      review_required_count: 0
+    caveats: []
+    review_required: false
   - schema: dbo
     name: PCS_PY_ManageInvoiceFldSchd_PRC
     object_type: PROCEDURE
@@ -156,12 +191,12 @@ stored_procedures:
     selection_reason:
       - complex_bucket_representative
       - metadata_definition_available
-      - dependency_summary_available_but_table_links_incomplete
+      - complex_sentinel_residual_review_allowed
     metadata_evidence:
       source_profile: ppm
       source_database: PPM
-      snapshot_id: live:ppm:2026-05-05T04:47:24Z
-      collected_at: '2026-05-05T04:47:24Z'
+      snapshot_id: live:ppm:2026-05-06T12:52:32Z
+      collected_at: '2026-05-06T12:52:32Z'
       definition_access: true
       definition_hash: 5e41bdded786e9c6c44c726930d923fe134cef24a350613453fd79ca43513345
       definition_length: 408310
@@ -172,49 +207,305 @@ stored_procedures:
         - simple_dml_or_select
       parameter_count: 10
       dependency_count: 63
+    complex_sentinel: true
     dependency_summary:
-      tables: []
-      views: []
-      functions:
-        - schema: dbo
-          name: PCO_CO_GetCurCodeCipher_FNC
-          dependency_type: REFERENCE
-          review_status: CONFIRMED
-        - schema: dbo
-          name: PCO_CO_GetFormatNumAndSubZeroDigits_FNC
-          dependency_type: REFERENCE
-          review_status: CONFIRMED
-        - schema: dbo
-          name: PCO_CO_GetInvoiceNo_FNC
-          dependency_type: REFERENCE
-          review_status: CONFIRMED
-      procedures: []
-      unresolved_count: 50
-      unresolved_sample:
-        - schema: null
-          name: PCS_PY_ManageInvoiceAssetAddition_PRC
-          dependency_type: REFERENCE
-          review_status: CONFIRMED
-        - schema: dbo
-          name: Check_Project_Tax
-          dependency_type: REFERENCE
-          review_status: CONFIRMED
-        - schema: dbo
+      tables:
+        - database: GMS
+          schema: dbo
           name: CPBTB_ContractSummary
           dependency_type: REFERENCE
           review_status: CONFIRMED
-        - schema: dbo
+          resolution_status: CONFIRMED
+        - database: GMS
+          schema: dbo
           name: CPBTB_ProjectSummary
           dependency_type: REFERENCE
           review_status: CONFIRMED
-        - schema: dbo
+          resolution_status: CONFIRMED
+        - database: GMS
+          schema: dbo
           name: CPITB_SubcontSchd
           dependency_type: REFERENCE
           review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: HRM
+          schema: dbo
+          name: EHRTB_IFEmployee
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      views:
+        - database: ERP
+          schema: dbo
+          name: XXEAI_PROJECTS_IV
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      functions:
+        - database: ERP
+          schema: dbo
+          name: Check_Project_Tax
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PCO_CO_GetCurCodeCipher_FNC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PCO_CO_GetFormatNumAndSubZeroDigits_FNC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PCO_CO_GetInvoiceNo_FNC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      procedures:
+        - database: GMS
+          schema: dbo
+          name: CPIUP_CB_SQL_GMS_0008_Recv
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: ERP
+          schema: dbo
+          name: get_account_check
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: ERP
+          schema: dbo
+          name: get_execute_budget
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      unresolved_count: 0
+      residual_review:
+        - database: PPM
+          schema: dbo
+          name: PCS_PY_ChkAccountCode
+          object_type: FUNCTION
+          dependency_type: REFERENCE
+          review_status: REVIEW_REQUIRED
+          resolution_status: REVIEW_REQUIRED
+          resolution_strategy: AMBIGUOUS_SQL_EXPRESSION
+        - database: null
+          schema: dbo
+          name: PCS_PY_ChkInvoiceCancelStatus_FNC
+          object_type: FUNCTION
+          dependency_type: REFERENCE
+          review_status: REVIEW_REQUIRED
+          resolution_status: REVIEW_REQUIRED
+          resolution_strategy: AMBIGUOUS_SQL_EXPRESSION
+    dependency_gate:
+      status: COMPLEX_SENTINEL_RESIDUAL_REVIEW_ALLOWED
+      confirmed_count: 61
+      review_required_count: 2
     caveats:
-      - ambiguous_dependency_metadata
-      - table_dependency_links_incomplete
-    review_required: true
+      - complex_sentinel_residual_review
+    review_required: false
+  - schema: dbo
+    name: PAD_REG_BAT_HIS_PRC
+    object_type: PROCEDURE
+    complexity: medium
+    selection_reason:
+      - metadata_definition_available
+      - dependency_metadata_confirmed
+      - replacement_majority_gate_candidate
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-06T12:52:35Z
+      collected_at: '2026-05-06T12:52:35Z'
+      definition_access: true
+      definition_hash: 8e996776ca7456aff92cd13959d92c8550974e07bffa6a6db599ee52d94a5bf7
+      definition_length: 6287
+      detected_patterns:
+        - joins_or_branching
+        - simple_dml_or_select
+      parameter_count: 6
+      dependency_count: 2
+    dependency_summary:
+      tables:
+        - database: PPM
+          schema: dbo
+          name: PAD_BAT_HIS
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PAD_BAT_MGMT
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      views: []
+      functions: []
+      procedures: []
+      unresolved_count: 0
+    dependency_gate:
+      status: PASS
+      confirmed_count: 2
+      review_required_count: 0
+    caveats: []
+    review_required: false
+  - schema: dbo
+    name: PAD_SAVE_COM_CD_DTL_PRC
+    object_type: PROCEDURE
+    complexity: medium
+    selection_reason:
+      - metadata_definition_available
+      - dependency_metadata_confirmed
+      - same_server_cross_database_dependency_confirmed
+      - replacement_majority_gate_candidate
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-06T12:52:39Z
+      collected_at: '2026-05-06T12:52:39Z'
+      definition_access: true
+      definition_hash: f8c7759ae670391d36741398bfd68addf9d292271675299e88ddef8500215bb8
+      definition_length: 5527
+      detected_patterns:
+        - joins_or_branching
+        - simple_dml_or_select
+      parameter_count: 18
+      dependency_count: 1
+    dependency_summary:
+      tables:
+        - database: TCM
+          schema: dbo
+          name: TCM_COM_CD_DTL
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      views: []
+      functions: []
+      procedures: []
+      unresolved_count: 0
+    dependency_gate:
+      status: PASS
+      confirmed_count: 1
+      review_required_count: 0
+    caveats: []
+    review_required: false
+  - schema: dbo
+    name: PCO_BAT_CallDlvgPayAdjCyMail_PRC
+    object_type: PROCEDURE
+    complexity: complex
+    selection_reason:
+      - metadata_definition_available
+      - dependency_metadata_confirmed
+      - replacement_majority_gate_candidate
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-06T12:52:42Z
+      collected_at: '2026-05-06T12:52:42Z'
+      definition_access: true
+      definition_hash: 73fd2a5f4afcc30a857223b4064e7ac2efa6b0ba4cfb6e2dd97ec93f942a1427
+      definition_length: 1944
+      detected_patterns:
+        - try_catch
+        - joins_or_branching
+        - simple_dml_or_select
+      parameter_count: 0
+      dependency_count: 3
+    dependency_summary:
+      tables: []
+      views: []
+      functions: []
+      procedures:
+        - database: PPM
+          schema: dbo
+          name: PAD_REG_BAT_HIS_PRC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PCO_CO_GetMessage_PRC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PCO_DP_GetDlvgPayAdjCyList_PRC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      unresolved_count: 0
+    dependency_gate:
+      status: PASS
+      confirmed_count: 3
+      review_required_count: 0
+    caveats: []
+    review_required: false
+  - schema: dbo
+    name: PCO_BAT_CallSendMail_PRC
+    object_type: PROCEDURE
+    complexity: complex
+    selection_reason:
+      - metadata_definition_available
+      - dependency_metadata_confirmed
+      - replacement_majority_gate_candidate
+    metadata_evidence:
+      source_profile: ppm
+      source_database: PPM
+      snapshot_id: live:ppm:2026-05-06T12:52:46Z
+      collected_at: '2026-05-06T12:52:46Z'
+      definition_access: true
+      definition_hash: bce80ac6f3f85a826c43672dd8e562f4bbd6bb6e677490319f9ae2438112d444
+      definition_length: 3505
+      detected_patterns:
+        - temp_table
+        - try_catch
+        - joins_or_branching
+        - simple_dml_or_select
+      parameter_count: 0
+      dependency_count: 5
+    dependency_summary:
+      tables:
+        - database: PPM
+          schema: dbo
+          name: PCO_MSG_RCVR
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PCO_MSG_SND_HIS
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      views: []
+      functions: []
+      procedures:
+        - database: PPM
+          schema: dbo
+          name: PAD_REG_BAT_HIS_PRC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+        - database: PPM
+          schema: dbo
+          name: PCO_CO_GetMessage_PRC
+          dependency_type: REFERENCE
+          review_status: CONFIRMED
+          resolution_status: CONFIRMED
+      unresolved_count: 0
+    dependency_gate:
+      status: PASS
+      confirmed_count: 5
+      review_required_count: 0
+    caveats: []
+    review_required: false
 tables:
   - schema: dbo
     name: PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF
@@ -335,8 +626,10 @@ functions:
 known_limitations:
   - code: NO_ROW_DATA
     description: This manifest intentionally contains only metadata and object identity fields; row data samples are forbidden.
-  - code: DEPENDENCY_METADATA_INCOMPLETE
-    description: Procedure-to-table links could not be confirmed from live dependency metadata, so table selections are metadata-rich candidates and require review.
+  - code: COMPLEX_SENTINEL_RESIDUAL_REVIEW
+    description: dbo.PCS_PY_ManageInvoiceFldSchd_PRC remains a complex sentinel with two ambiguous function references, but the selected stored procedure suite passes the P17A majority dependency evidence gate.
+  - code: SELECTED_TABLE_LINKAGE_NOT_CLAIMED
+    description: Selected table candidates remain metadata-rich standalone selections unless catalog-confirmed related procedures are present.
 blocker_candidates:
   - code: PPM_DB_NOT_FOUND
     when: sys.databases lookup cannot find database name PPM on the configured local SQL Server instance.
@@ -357,4 +650,5 @@ blocker_candidates:
 review_notes:
   - Live PPM metadata connection succeeded with dbProfileId=ppm and source database PPM.
   - Selected object identities are real metadata object names from PPM, but no row data or definition text is stored.
-  - Procedure dependency metadata requires review before claiming table linkage because table dependency counts were zero and unresolved dependency refs were high.
+  - P17A dependency metadata evidence passes by selected stored procedure suite majority; complex sentinel residual review is documented separately.
+  - Selected table linkage is not claimed unless a related procedure link has confirmed catalog evidence.

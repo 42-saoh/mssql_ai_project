@@ -6,7 +6,8 @@ profile_policy:
   source_database: PPM
   platform_db_context: PLF
   plf_fallback_allowed: false
-active_blockers:
+active_blockers: []
+closed_blockers:
   - DEPENDENCY_METADATA_INCOMPLETE
 public_api_contract:
   approval_checklist_exposed_as_response_fields: false

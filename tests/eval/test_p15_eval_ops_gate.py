@@ -53,8 +53,8 @@ def test_p15_hard_live_fixture_contract_matches_manifest() -> None:
     assert profile_policy["procedure_execution_allowed"] is False
     assert profile_policy["ddl_dml_allowed"] is False
 
-    assert "DEPENDENCY_METADATA_INCOMPLETE" in fixture["active_blockers_to_carry_forward"]
-    assert "DEPENDENCY_METADATA_INCOMPLETE" in {
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in fixture["active_blockers_to_carry_forward"]
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in {
         blocker["code"] for blocker in manifest["active_blockers"]
     }
     assert {
@@ -63,7 +63,6 @@ def test_p15_hard_live_fixture_contract_matches_manifest() -> None:
         "PPM_DB_NOT_FOUND",
         "PPM_DB_ACCESS_DENIED",
         "METADATA_READ_ONLY_PERMISSION_INSUFFICIENT",
-        "DEPENDENCY_METADATA_INCOMPLETE",
         "LATENCY_INSTRUMENTATION_OUT_OF_SCOPE",
     }.issubset(set(fixture["hard_fail_blockers"]))
 
@@ -260,9 +259,9 @@ def test_p15_hard_live_ppm_metadata_gate_enforced() -> None:
     if review_required_ratio > fixture["quality_metrics"]["review_required_ratio"][
         "product_target"
     ]["maximum"]:
-        assert "DEPENDENCY_METADATA_INCOMPLETE" in {
-            blocker["code"] for blocker in manifest["active_blockers"]
-        }
+        assert manifest.get("dependency_evidence_gate", {}).get("status") == (
+            "PASSED_WITH_COMPLEX_SENTINEL_RESIDUAL_REVIEW"
+        )
 
 
 def test_p15_fixture_workflow_latency_reproducibility_and_draft_completeness(

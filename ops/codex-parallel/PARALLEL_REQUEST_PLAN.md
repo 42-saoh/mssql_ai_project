@@ -342,12 +342,14 @@ P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이�
 3. `P09`, `P10`, `P11`, `P12`는 manifest 의존성 기준으로 병렬/순차 실행
 4. `P13`, `P14`, `P15`
 5. `P16`
+6. `P17A`~`P17D`는 P16 live release blocker closure
+7. `P18A`, `P18B`는 P17 이후 production-ready gap closure
 
 ---
 
 ## P17 Live Pilot Blocker Closure Wave
 
-P16 결과가 `NO_GO`이면 P17을 실행한다. P17은 P16을 뒤집기 위한 임의 문서 수정이 아니라, P16의 active blocker를 evidence-first로 닫는 후속 wave다. 현재 live pilot release는 P17D가 모든 evidence gate를 검증하기 전까지 계속 `NO_GO`다.
+P16 결과가 `NO_GO`이면 P17을 실행한다. P17은 P16을 뒤집기 위한 임의 문서 수정이 아니라, P16의 active blocker를 evidence-first로 닫는 후속 wave다. P17D가 모든 evidence gate를 검증하면 scoped live pilot candidate 만 `CONDITIONAL_GO` 로 바꿀 수 있다.
 
 ### P17 실행 순서
 
@@ -374,3 +376,34 @@ P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e
 ```
 
 PPM 접근 실패 시 PLF로 대체하지 않는다. P17도 전체 플랫폼을 production-ready로 선언하지 않고, 조건부 pilot release candidate의 evidence 충족 여부만 판단한다.
+
+---
+
+## P18 Productization Gap Closure Wave
+
+P17D 이후에도 전체 플랫폼은 production-ready 가 아니다. P18은 P17의 scoped `CONDITIONAL_GO` 범위 밖에 남은 두 productization gap 을 닫거나 정확한 blocker 로 고정하는 후속 wave 다.
+
+### P18 실행 순서
+
+1. `P18A` — CanonicalAnalysisModel contract closure
+   - `CanonicalAnalysisModel-compatible-local-v0.2` 후보를 명시적 domain contract 로 승격하거나, 누락 필드를 정확한 blocker 로 기록한다.
+   - release-critical canonical field 는 observed evidence 또는 `REVIEW_REQUIRED` blocker 로 귀결한다.
+   - dynamic SQL, incomplete dependency, 근거 약한 inference 는 확정값으로 만들지 않는다.
+2. `P18B` — Web HTTP adapter and auth/RBAC evidence closure
+   - 기존 `PORTAL_API_MODE=http` 경로를 local API route smoke 로 검증 가능한 release evidence 로 만든다.
+   - mock adapter 는 demo/dev 기본값으로 유지하되 release evidence 와 구분한다.
+   - production auth/RBAC source of truth 가 없으면 `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED` blocker 를 유지한다.
+
+### P18 검증
+
+```bash
+make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
+python3 -m compileall packages/analysis packages/domain tests
+make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
+make test-web-smoke
+make test
+make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+python3 -m compileall apps services packages tests
+```
+
+P18도 row data, procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는 publish/export 를 허용하지 않는다. production auth/RBAC 를 mock header 로 가장해야만 통과할 수 있다면 productization decision 은 `NO_GO` 로 유지한다.

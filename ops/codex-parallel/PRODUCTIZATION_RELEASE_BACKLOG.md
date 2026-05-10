@@ -251,3 +251,58 @@ Blockers:
 - PPM access, definition, dependency, or read-only metadata evidence is inadequate.
 - Validation/approval/audit evidence does not meet release gate.
 - Any requested release path requires automatic DDL, production DB mutation, or unapproved publish.
+
+## P18A CanonicalAnalysisModel Contract Closure
+
+Dependencies: P17D.
+
+Scope:
+
+- Promote `CanonicalAnalysisModel-compatible-local-v0.2` into an explicit domain contract, or record exact contract blockers.
+- Bind release-critical canonical fields to evidence refs and preserve `REVIEW_REQUIRED` for unresolved dynamic SQL, incomplete dependency evidence, and inferred business rules.
+- Keep row data, procedure execution, raw definition text, PLF fallback, and automatic publish/export out of evidence.
+
+Acceptance criteria:
+
+- Required canonical fields are either observed with evidence refs or listed as explicit blockers.
+- `DOMAIN_CANONICAL_SCHEMA_MISSING`, snapshot id, registry version refs, and modernization point gaps are implemented or recorded.
+- Contract/eval tests cover required fields, status mapping, and forbidden evidence.
+
+Verification:
+
+- `make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"`
+- `python3 -m compileall packages/analysis packages/domain tests`
+
+Blockers:
+
+- Shared domain contract change cannot be approved in this slice.
+- Release-critical fields lack evidence refs.
+- Canonical readiness requires row data, procedure execution, raw definition text, PLF fallback, or auto publish/export.
+
+## P18B Web HTTP Adapter And Auth/RBAC Evidence
+
+Dependencies: P17D.
+
+Scope:
+
+- Prove `PORTAL_API_MODE=http` against local API routes for request, job, artifact, validation, approval decision recording, metadata search, and registry versions.
+- Keep mock adapter available for demo/dev but separate it from release evidence.
+- Define production auth/RBAC source of truth, role matrix, enforcement, and negative tests, or keep `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED`.
+
+Acceptance criteria:
+
+- HTTP adapter smoke uses the same `PortalApi` interface as the mock adapter.
+- No UI/API action implies publish/export, deployment, DDL/DML, row-data access, procedure execution, or PLF fallback.
+- Production auth/RBAC is either implemented with tests or blocks productization.
+
+Verification:
+
+- `make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"`
+- `make test-web-smoke`
+- `python3 -m compileall apps/api tests`
+
+Blockers:
+
+- Production actor/role source is unresolved.
+- HTTP adapter cannot pass local API route smoke.
+- Passing the gate would require fake auth/RBAC, row data, procedure execution, raw definition text, PLF fallback, or auto publish/export.

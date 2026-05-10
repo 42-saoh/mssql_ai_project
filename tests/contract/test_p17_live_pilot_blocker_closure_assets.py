@@ -73,7 +73,7 @@ def test_p17_manifest_declares_ordered_blocker_closure_wave() -> None:
         )
 
 
-def test_p17_fixture_keeps_no_go_until_all_release_evidence_is_bound() -> None:
+def test_p17_fixture_records_conditional_go_after_all_release_evidence_is_bound() -> None:
     fixture = _yaml(P17_FIXTURE)
     p16 = _yaml(P16_FIXTURE)
     pilot = _yaml(PILOT_MANIFEST)
@@ -82,13 +82,25 @@ def test_p17_fixture_keeps_no_go_until_all_release_evidence_is_bound() -> None:
     assert fixture["source_p16_fixture"] == "fixtures/eval/pilot_release_readiness_p16_v1.yaml"
     assert fixture["source_pilot_manifest"] == "fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml"
     assert fixture["current_state"]["live_pilot_release_decision"] == p16["release_recommendation"]["live_pilot_release"]["decision"]
-    assert fixture["current_state"]["live_pilot_release_decision"] == "NO_GO"
+    assert fixture["current_state"]["live_pilot_release_decision"] == "CONDITIONAL_GO"
     assert fixture["current_state"]["source_db"] == "PPM"
     assert fixture["current_state"]["platform_db_context"] == "PLF"
     assert pilot["selection_mode"] == fixture["current_state"]["selection_mode_required"]
 
     blockers = set(fixture["current_state"]["active_blockers_to_close"])
-    assert {"DEPENDENCY_METADATA_INCOMPLETE", "MANUAL_APPROVAL_EVIDENCE_MISSING"} <= blockers
+    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" not in blockers
+    assert "DEPENDENCY_METADATA_INCOMPLETE" not in blockers
+    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in set(
+        fixture["current_state"].get("blockers_closed", [])
+    )
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in set(
+        fixture["current_state"].get("blockers_closed", [])
+    )
+    assert fixture["current_state"]["p17c_manual_approval_status"] == "HUMAN_APPROVED"
+    assert fixture["current_state"]["p17c_blocker_closed"] is True
+    assert fixture["current_state"]["p17d_release_decision_pending"] is False
+    assert fixture["current_state"]["p17d_release_decision_completed"] is True
+    assert fixture["current_state"]["p17d_final_decision"] == "CONDITIONAL_GO"
 
     assert fixture["policy_boundaries"]["metadata_only"] is True
     assert fixture["policy_boundaries"]["row_data_allowed"] is False
@@ -96,8 +108,13 @@ def test_p17_fixture_keeps_no_go_until_all_release_evidence_is_bound() -> None:
     assert fixture["policy_boundaries"]["raw_definition_text_allowed_in_evidence"] is False
     assert fixture["policy_boundaries"]["plf_fallback_allowed"] is False
 
-    assert fixture["final_decision_policy"]["current_decision"] == "NO_GO"
+    assert fixture["final_decision_policy"]["current_decision"] == "CONDITIONAL_GO"
+    assert fixture["final_decision_policy"]["conditional_go_scope"] == (
+        "scoped_live_pilot_candidate_only"
+    )
     assert set(fixture["final_decision_policy"]["allowed_decisions"]) == {"NO_GO", "CONDITIONAL_GO"}
+    assert "no_publish_or_export" in fixture["final_decision_policy"]["conditional_go_boundaries"]
+    assert fixture["p17d_hard_live_verification"]["status"] == "PASSED"
     assert "production-ready: true" in fixture["final_decision_policy"]["overclaim_forbidden"]
 
 
@@ -142,11 +159,14 @@ def test_p17_docs_explain_what_to_do_without_claiming_go() -> None:
     combined = "\n".join([text, runbook, readme, plan])
 
     assert "P17 Live Pilot Blocker Closure" in text
-    assert "Current live pilot decision remains `NO_GO`" in text
+    assert "Current live pilot decision is `CONDITIONAL_GO`" in text
     assert "P17A -> P17B -> P17C -> P17D" in runbook
     assert "CONDITIONAL_GO" in combined
     assert "DEPENDENCY_METADATA_INCOMPLETE" in combined
     assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in combined
+    assert "approvalDecision: APPROVE" in text
+    assert "not a production-ready platform claim" in text
+    assert "draft-only" in text
     assert "PLF로 대체하지" in combined or "PLF로 대체" in combined
     assert "PFL" not in combined
 

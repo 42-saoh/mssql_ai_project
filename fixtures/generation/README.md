@@ -12,6 +12,6 @@
 - P05 이후 API/artifact preview 에서도 동일한 예시를 재사용 가능
 
 PPM object-name golden 확장은 field/parameter/result-shape metadata evidence 가
-충분할 때만 추가한다. 현재 PPM manifest 는 `live_metadata` 이지만
-`DEPENDENCY_METADATA_INCOMPLETE` 를 유지하므로, 없는 컬럼/파라미터/결과 형태를
-추론해서 golden 으로 고정하지 않는다.
+충분할 때만 추가한다. P17B 는 `live_metadata` PPM object set 을 draft artifact
+manifest 로 고정하지만, 없는 컬럼/파라미터/결과 형태를 추론해서 Java/MyBatis
+golden source 로 고정하지 않는다.
