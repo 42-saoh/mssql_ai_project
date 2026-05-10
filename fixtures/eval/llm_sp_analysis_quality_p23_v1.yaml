@@ -39,6 +39,12 @@ safety_expectations:
     - automatic_dml
     - auto_apply_artifact
 trace_expectations:
+  forbidden_trace_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - row_data
+    - secrets
   model_invocation_summary_fields:
     - provider
     - model
