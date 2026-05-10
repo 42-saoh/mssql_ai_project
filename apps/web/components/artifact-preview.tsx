@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
-import type { Artifact, ValidationReport } from "@/lib/api/types";
+import type { AgentRunSummary, Artifact, ValidationReport } from "@/lib/api/types";
 import {
   artifactStatusLabels,
   artifactTypeLabels,
@@ -20,10 +20,12 @@ const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
 export function ArtifactPreview({
   artifact,
   validation,
+  agentRuns = [],
   validateAction,
 }: Readonly<{
   artifact: Artifact;
   validation?: ValidationReport | null;
+  agentRuns?: AgentRunSummary[];
   validateAction?: (formData: FormData) => Promise<void>;
 }>) {
   return (
@@ -146,6 +148,36 @@ export function ArtifactPreview({
       </section>
 
       <section className="split-layout">
+        <div className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">LLM trace</p>
+              <h2>Sanitized model run</h2>
+            </div>
+          </div>
+          {agentRuns.length > 0 ? (
+            <div className="evidence-list">
+              {agentRuns.map((run) => (
+                <article className="evidence-row" key={run.agentRunId}>
+                  <strong>{run.modelInvocation.model}</strong>
+                  <span>{run.modelInvocation.promptVersion}</span>
+                  <code>{run.modelInvocation.outputHash}</code>
+                  <small>
+                    {run.status} · input {run.modelInvocation.inputHash} · tokens{" "}
+                    {run.modelInvocation.tokenUsage?.totalTokens ?? 0} · latency{" "}
+                    {run.modelInvocation.latencyMs ?? 0}ms
+                  </small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="callout">
+              <strong>No LLM trace</strong>
+              <p>This artifact was generated without a recorded LLM semantic analysis run.</p>
+            </div>
+          )}
+        </div>
+
         <div className="panel">
           <div className="section-heading">
             <div>

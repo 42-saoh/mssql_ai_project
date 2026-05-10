@@ -79,6 +79,10 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
         assert demo_id not in source
 
     assert "api.createSPAnalysisRequest" in request_page
+    assert "useLlmAnalysis" in request_page
+    assert "allowSpDefinitionToModel" in request_page
+    assert "openai_fast_test" in source
+    assert "api.listJobAgentRuns" in source
     assert "redirect(`/jobs/${response.jobId}`)" in request_page
     assert "api.getLatestValidation(artifactId)" in artifact_page
     assert artifact_page.count("api.validateArtifact(artifactId)") == 1

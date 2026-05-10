@@ -101,12 +101,27 @@
 - 기본 metadata profile id 는 `master` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
 - 현재 local registry 의 `master` profile 은 metadata source 의 `master` database 를, `plf` profile 은 platform DB `PLF` 를, `ppm` profile 은 pilot analysis target DB `PPM` 을 가리킨다. PPM 이 없거나 접근 불가하면 PLF로 임의 대체하지 않는다.
 - P21 no-mock portal 은 `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 을 요구한다. `P21_LIVE_PORTAL_GATE=1` 은 PLF workflow repository 와 read-only PPM metadata access 가 모두 준비된 경우에만 사용한다.
+- P22 OpenAI LLM runtime 은 기본값에서 remote 호출을 하지 않는다. `LLM_ENABLE_REMOTE=1`,
+  `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 모두 준비된 경우에만 SP definition 을 OpenAI
+  Responses API 입력으로 보낼 수 있다.
+
+### OpenAI / LLM runtime
+
+- 기본 semantic analysis model: `OPENAI_MODEL_ANALYSIS=gpt-5.5`
+- fast/test model: `OPENAI_MODEL_FAST_TEST=gpt-5-nano`
+- 기본 adapter: `FakeModelGateway`
+- remote adapter: `OpenAIModelGateway`
+- 구현 package: `packages/agent-runtime/src/ai_agent_runtime`
+- transport: 기존 `httpx` dependency 로 Responses API `/v1/responses` 를 호출한다.
+- SDK 의존성 `openai` 는 아직 추가하지 않았다. 새 dependency/lock 갱신은 별도 승인 대상이다.
 
 ## 로그와 추적
 
 - 모든 장시간 작업은 `request_id`, `job_id`, `artifact_id` 를 로그 문맥에 포함한다.
 - validation / approval / publish 이벤트는 감사 로그 대상이다.
 - 생성 결과에는 `snapshot_id`, `registry_version_refs`, `generator_version` 을 남긴다.
+- LLM trace 에는 raw prompt, raw SP definition, raw provider response text 를 남기지 않는다.
+- LLM trace summary 는 hash/token/latency/status 중심으로 노출한다.
 
 ## 명령 사용 규칙
 
@@ -140,6 +155,7 @@
 - `make test` 는 Python 3.14 컨테이너 안에서 파이썬 테스트를 실행한다.
 - `make test-web-smoke` 는 현재 web 자동 테스트 공백을 보완하는 컨테이너 기반 build smoke 다.
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 은 fixture-first request → job → artifact → validation → approval recording happy path 와 eval fixture 정합성을 검증한다.
+- `LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p22_openai_live_agent_gate.py"` 는 선택적 OpenAI live gate 다. 기본 테스트는 fake gateway 로 수행한다.
 - `scripts/install_web_workspace.sh` 는 docker/test 에서 `/pnpm/store` volume 을 pnpm store 로 사용해 worktree 안에 `.pnpm-store` 를 만들지 않는다.
 - 새 테스트 스위트를 추가할 때는 가능하면 도커 실행 경로를 함께 제공한다.
 - 외부 DB 연결이 필요한 경우 환경변수로 주입하되, 테스트 명령이 DB lifecycle 을 대신 관리하지는 않는다.

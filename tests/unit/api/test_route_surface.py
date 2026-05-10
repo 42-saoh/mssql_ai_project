@@ -17,6 +17,7 @@ def test_openapi_skeleton_routes_are_registered() -> None:
     assert "/api/v1/requests/sp-analysis" in routes
     assert "/api/v1/jobs" in routes
     assert "/api/v1/jobs/{jobId}" in routes
+    assert "/api/v1/jobs/{jobId}/agent-runs" in routes
     assert "/api/v1/jobs/{jobId}/artifacts" in routes
     assert "/api/v1/artifacts/{artifactId}" in routes
     assert "/api/v1/artifacts/{artifactId}/validation" in routes

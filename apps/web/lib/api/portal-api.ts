@@ -1,4 +1,5 @@
 import type {
+  AgentRunSummary,
   Artifact,
   ArtifactSummary,
   ApprovalDecisionRequest,
@@ -17,6 +18,10 @@ export interface PortalApi {
   createSPAnalysisRequest(request: SPAnalysisRequest): Promise<SubmitRequestResponse>;
   listJobs(limit?: number): Promise<{ jobs: Job[] }>;
   getJob(jobId: string): Promise<Job>;
+  listJobAgentRuns(
+    jobId: string,
+    limit?: number,
+  ): Promise<{ jobId: string; agentRuns: AgentRunSummary[] }>;
   listJobArtifacts(jobId: string): Promise<{ jobId: string; artifacts: ArtifactSummary[] }>;
   getArtifact(artifactId: string): Promise<Artifact>;
   getLatestValidation(artifactId: string): Promise<ValidationReport>;

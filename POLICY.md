@@ -43,6 +43,21 @@
 - 외부 SaaS 로 민감 데이터 전송
 - production auth/RBAC 를 mock header, hardcoded actor, fixture token 으로 가장하는 행위
 
+### 외부 LLM / OpenAI 전송 정책
+
+- OpenAI API 호출은 `LLM_ENABLE_REMOTE=1` 이 설정된 경우에만 허용한다.
+- Stored Procedure definition 원문을 모델 입력으로 보내려면 request option
+  `allowSpDefinitionToModel=true` 와 환경변수 `LLM_ALLOW_SP_TEXT=1` 이 모두 필요하다.
+- SP definition 원문은 transient request input 으로만 허용하며 플랫폼 DB, artifact,
+  audit log, test snapshot, API response 에 저장하지 않는다.
+- raw prompt text, raw OpenAI response text, token/secret, provider credential 은 저장하거나
+  노출하지 않는다.
+- 저장 가능한 trace 는 provider, model, model profile, prompt/schema version, input/prompt/output
+  hash, token usage, latency, status, schema-valid structured output 으로 제한한다.
+- LLM inference 는 metadata fact 가 아니며 dependency/table/function/procedure 사실을 확정하는
+  근거로 사용할 수 없다. 해당 보강은 `LLM_INFERENCE` evidence 와 `REVIEW_REQUIRED` 검토점으로
+  남긴다.
+
 ## 생성 결과 정책
 
 - 모든 생성 결과는 초안이다. 승인 전 확정본이 아니다.

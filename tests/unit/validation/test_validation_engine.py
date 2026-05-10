@@ -96,6 +96,59 @@ def test_publish_gate_requires_passed_validation_and_approval() -> None:
     assert allowed.status == ValidationStatus.PASSED
 
 
+def test_llm_inference_evidence_forces_review_required() -> None:
+    report = validate_artifact(
+        {
+            "artifactType": "SP_ANALYSIS_DOC",
+            "content": "\n".join(
+                [
+                    "# Analysis",
+                    "",
+                    "## input_interpretation",
+                    "dbo.usp_demo",
+                    "",
+                    "## analysis_summary",
+                    "LLM Inference enrichment remains REVIEW_REQUIRED.",
+                    "",
+                    "## procedure_signature",
+                    "dbo.usp_demo()",
+                    "",
+                    "## evidence_summary",
+                    "dbo.usp_demo",
+                    "agent_123",
+                    "",
+                    "## assumptions_and_todo",
+                    "REVIEW_REQUIRED: LLM inference must be reviewed.",
+                    "",
+                    "## review_checklist",
+                    "- [ ] reviewer_confirms_llm_inference",
+                ]
+            ),
+            "evidenceRefs": [
+                {
+                    "type": "MSSQL_METADATA",
+                    "objectRef": "dbo.usp_demo",
+                    "locator": "metadata.snapshot",
+                },
+                {
+                    "type": "LLM_INFERENCE",
+                    "objectRef": "agent_123",
+                    "locator": "agent-runtime.modelInvocation.outputHash",
+                },
+            ],
+            "reviewRequired": True,
+        },
+        artifact_id="llm-analysis-doc",
+    )
+
+    assert report.status == ValidationStatus.REVIEW_REQUIRED
+    assert any(
+        check.rule_id == "llm.inference.review_required"
+        and check.result == ValidationCheckResult.REVIEW_REQUIRED
+        for check in report.checks
+    )
+
+
 def test_export_gate_uses_same_approval_rule_without_taxonomy_change() -> None:
     report = validate_publish_gate(
         artifact_id="draft-1",

@@ -25,6 +25,7 @@ from api_app.live_gate import (
     p21_live_portal_enabled,
 )
 from api_app.repositories import (
+    AgentRunRecord,
     ApprovalRecordData,
     ArtifactRecord,
     AuditEventRecord,
@@ -127,7 +128,7 @@ class MssqlPlatformRepository:
         db_profile_id: str,
         target: dict[str, Any],
         outputs: tuple[str, ...],
-        options: dict[str, bool],
+        options: dict[str, Any],
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
@@ -434,6 +435,119 @@ class MssqlPlatformRepository:
             payload=payload,
             created_at=as_datetime(row[4]),
         )
+
+    def save_agent_run(
+        self,
+        *,
+        job_id: str,
+        agent_type: str,
+        status: str,
+        target_ref: str,
+        summary: str,
+        structured_output: dict[str, Any],
+        model_invocation: dict[str, Any],
+    ) -> AgentRunRecord:
+        record = AgentRunRecord(
+            agent_run_id=prefixed_id("agent"),
+            job_id=job_id,
+            agent_type=agent_type,
+            status=status,
+            target_ref=target_ref,
+            summary=summary,
+            structured_output=structured_output,
+            model_invocation=model_invocation,
+        )
+        self._execute(
+            """
+            INSERT INTO dbo.AGENT_RUNS(
+                AGNT_RUN_ID, JOB_ID, AGNT_TP_CD, STAT_CD, TRGT_REF_TXT,
+                SMRY_TXT, STRUCTURED_OUTPUT_JSON, MODEL_INVOCATION_JSON, CRE_DTM
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                storage_uuid(record.agent_run_id),
+                storage_uuid(job_id),
+                agent_type,
+                status,
+                target_ref,
+                summary,
+                json_text(structured_output),
+                json_text(model_invocation),
+                record.created_at,
+            ),
+        )
+        self._execute(
+            """
+            INSERT INTO dbo.MODEL_INVOCATIONS(
+                MDL_INVC_ID, AGNT_RUN_ID, PRVDR_NM, MDL_NM, MDL_PRFL_ID,
+                RSNG_EFFORT_CD, PROMPT_VER_REF, OUTPUT_SCHEMA_VER_REF,
+                INPUT_HASH_SHA256_VAL, PROMPT_HASH_SHA256_VAL, OUTPUT_HASH_SHA256_VAL,
+                TOKEN_USAGE_JSON, LATENCY_MS, STAT_CD, CRE_DTM
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                storage_uuid(f"{record.agent_run_id}:model:1"),
+                storage_uuid(record.agent_run_id),
+                str(model_invocation.get("provider") or ""),
+                str(model_invocation.get("model") or ""),
+                str(model_invocation.get("modelProfileId") or ""),
+                model_invocation.get("reasoningEffort"),
+                str(model_invocation.get("promptVersion") or ""),
+                str(model_invocation.get("outputSchemaVersion") or ""),
+                str(model_invocation.get("inputHash") or ""),
+                str(model_invocation.get("promptHash") or ""),
+                str(model_invocation.get("outputHash") or ""),
+                json_text(model_invocation.get("tokenUsage") or {}),
+                model_invocation.get("latencyMs"),
+                status,
+                record.created_at,
+            ),
+        )
+        job = self.get_job(job_id)
+        self.record_audit_event(
+            action="AGENT_RUN_RECORDED",
+            target_type="JOB",
+            target_ref_id=job_id,
+            payload={
+                "agentRunId": record.agent_run_id,
+                "agentType": agent_type,
+                "status": status,
+                "targetRef": target_ref,
+                "modelInvocation": _public_model_invocation(model_invocation),
+            },
+            correlation_id=job.correlation_id if job else None,
+        )
+        return record
+
+    def list_agent_runs(
+        self,
+        job_id: str,
+        *,
+        limit: int | None = None,
+    ) -> list[AgentRunRecord] | None:
+        if self.get_job(job_id) is None:
+            return None
+        normalized_limit = normalize_list_limit(limit)
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({normalized_limit})
+                CONVERT(NVARCHAR(36), AGNT_RUN_ID),
+                AGNT_TP_CD,
+                STAT_CD,
+                TRGT_REF_TXT,
+                SMRY_TXT,
+                STRUCTURED_OUTPUT_JSON,
+                MODEL_INVOCATION_JSON,
+                CRE_DTM
+            FROM dbo.AGENT_RUNS
+            WHERE JOB_ID = %s
+            ORDER BY CRE_DTM DESC, AGNT_RUN_ID DESC
+            """,
+            (storage_uuid(job_id),),
+        )
+        return [agent_run_from_row(row, job_id) for row in rows]
 
     def add_artifact(
         self,
@@ -1154,6 +1268,20 @@ def approval_from_row(
     )
 
 
+def agent_run_from_row(row: tuple[Any, ...], job_id: str) -> AgentRunRecord:
+    return AgentRunRecord(
+        agent_run_id=str(row[0]),
+        job_id=job_id,
+        agent_type=str(row[1]),
+        status=str(row[2]),
+        target_ref=str(row[3] or ""),
+        summary=str(row[4] or ""),
+        structured_output=dict(parse_json(row[5], {})),
+        model_invocation=dict(parse_json(row[6], {})),
+        created_at=as_datetime(row[7]),
+    )
+
+
 def artifact_binding(record: ArtifactRecord) -> dict[str, Any]:
     return {
         "publicArtifactId": record.artifact_id,
@@ -1243,3 +1371,26 @@ def _env_int(name: str, default: int) -> int:
     if value is None or not value.strip():
         return default
     return int(value)
+
+
+def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if key
+        in {
+            "provider",
+            "model",
+            "modelProfileId",
+            "modelRegistryRef",
+            "reasoningEffort",
+            "promptVersion",
+            "outputSchemaVersion",
+            "inputHash",
+            "promptHash",
+            "outputHash",
+            "status",
+            "tokenUsage",
+            "latencyMs",
+        }
+    }

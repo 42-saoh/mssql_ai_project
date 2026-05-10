@@ -56,6 +56,7 @@ export type ArtifactStatus =
 export type EvidenceRefType =
   | "MSSQL_METADATA"
   | "STATIC_ANALYSIS"
+  | "LLM_INFERENCE"
   | "POLICY"
   | "TEMPLATE"
   | "USER_INPUT";
@@ -65,7 +66,14 @@ export type ValidationSeverity = "INFO" | "WARNING" | "ERROR" | "BLOCKER";
 export type ValidationResult = "PASS" | "FAIL" | "REVIEW_REQUIRED";
 export type ApprovalDecision = "APPROVE" | "REJECT" | "REQUEST_CHANGES";
 
-export type RegistryType = "PROMPT" | "TEMPLATE" | "POLICY" | "DB_PROFILE" | "GENERATOR";
+export type RegistryType =
+  | "PROMPT"
+  | "TEMPLATE"
+  | "POLICY"
+  | "DB_PROFILE"
+  | "GENERATOR"
+  | "MODEL"
+  | "SCHEMA";
 
 export type MetadataSearchObjectType = TargetObjectType;
 
@@ -79,7 +87,15 @@ export interface SPAnalysisRequest {
   dbProfileId: string;
   target: TargetObject;
   outputs: RequestedOutputType[];
-  options?: Record<string, boolean>;
+  options?: SPAnalysisOptions;
+}
+
+export interface SPAnalysisOptions {
+  includeEvidenceRefs?: boolean;
+  includeModernizationHints?: boolean;
+  useLlmAnalysis?: boolean;
+  llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
+  allowSpDefinitionToModel?: boolean;
 }
 
 export interface SubmitRequestResponse {
@@ -100,6 +116,34 @@ export interface Job {
   blockers?: MetadataSearchBlocker[];
   caveats?: string[];
   failureReason?: string;
+}
+
+export interface ModelInvocationSummary {
+  provider: string;
+  model: string;
+  modelProfileId: string;
+  modelRegistryRef?: string;
+  reasoningEffort?: string;
+  promptVersion: string;
+  outputSchemaVersion: string;
+  inputHash: string;
+  promptHash: string;
+  outputHash: string;
+  status: "SUCCEEDED" | "FAILED" | "SKIPPED";
+  tokenUsage?: Record<string, number>;
+  latencyMs?: number | null;
+}
+
+export interface AgentRunSummary {
+  agentRunId: string;
+  jobId: string;
+  agentType: string;
+  status: "SUCCEEDED" | "FAILED" | "SKIPPED";
+  targetRef: string;
+  summary: string;
+  structuredOutput: Record<string, unknown>;
+  modelInvocation: ModelInvocationSummary;
+  createdAt?: string;
 }
 
 export interface ArtifactSummary {

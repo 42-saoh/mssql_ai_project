@@ -87,9 +87,16 @@ def validate_artifact(
             review_required=review_required,
         )
     )
+    llm_check = _llm_inference_review_check(evidence_refs)
+    if llm_check is not None:
+        checks.append(llm_check)
 
     for rule in rules_for_artifact(artifact_type, rules):
-        if rule.id in {"artifact.evidence.required", "generator.uncertainty.marker"}:
+        if rule.id in {
+            "artifact.evidence.required",
+            "generator.uncertainty.marker",
+            "llm.inference.review_required",
+        }:
             continue
         checks.append(
             ValidationCheck(
@@ -394,6 +401,26 @@ def _review_required_marker_check(
         result=ValidationCheckResult.PASS,
         message="No review-required marker needed for this artifact metadata.",
     )
+
+
+def _llm_inference_review_check(evidence_refs: Sequence[Any]) -> ValidationCheck | None:
+    if not any(_evidence_type(ref) == "LLM_INFERENCE" for ref in evidence_refs):
+        return None
+    return ValidationCheck(
+        rule_id="llm.inference.review_required",
+        severity=ValidationSeverity.WARNING,
+        result=ValidationCheckResult.REVIEW_REQUIRED,
+        message=(
+            "LLM inference can enrich draft semantics but cannot confirm new dependency, "
+            "table, function, or procedure facts without deterministic evidence."
+        ),
+    )
+
+
+def _evidence_type(ref: Any) -> str:
+    if isinstance(ref, Mapping):
+        return str(ref.get("type", ""))
+    return str(getattr(ref, "type", ""))
 
 
 def _has_review_marker(content: str, assumptions: Sequence[str]) -> bool:

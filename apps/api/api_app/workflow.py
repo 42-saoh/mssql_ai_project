@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from ai_agent_analysis import analyze_stored_procedure
 from ai_agent_domain import ArtifactType, JobStatus, RequestedOutputType, WorkflowStepType
 from ai_agent_generation import (
     GenerationContext,
@@ -12,6 +13,12 @@ from ai_agent_generation import (
     render_java_mybatis_sp_wrapper,
 )
 from ai_agent_generation.models import GENERATOR_VERSION
+from ai_agent_runtime import (
+    ModelGateway,
+    ModelGatewayError,
+    build_model_gateway_from_env,
+    build_semantic_analysis_run,
+)
 from ai_agent_validation import (
     ValidationCheck,
     ValidationCheckResult,
@@ -26,6 +33,7 @@ from ai_agent_validation import (
 
 from api_app.metadata_gateway import McpMetadataGateway, MetadataCollectionResult, MetadataGateway
 from api_app.repositories import (
+    AgentRunRecord,
     ApprovalRecordData,
     ArtifactRecord,
     JobRecord,
@@ -62,9 +70,11 @@ class WorkflowService:
         self,
         repository: WorkflowRepository,
         metadata_gateway: MetadataGateway | None = None,
+        model_gateway: ModelGateway | None = None,
     ) -> None:
         self.repository = repository
         self.metadata_gateway = metadata_gateway or McpMetadataGateway()
+        self.model_gateway = model_gateway or build_model_gateway_from_env()
 
     def submit_sp_analysis(
         self,
@@ -100,7 +110,7 @@ class WorkflowService:
             db_profile_id=request.db_profile_id,
             target=request.target.to_response(),
             outputs=tuple(output.value for output in request.outputs),
-            options=dict(request.options),
+            options=request.options.to_response(),
             request_hash=request_hash,
             correlation_id=tracking.correlation_id,
             idempotency_key=tracking.idempotency_key,
@@ -137,12 +147,17 @@ class WorkflowService:
             status=JobStatus.ANALYZING,
             current_step=WorkflowStepType.ANALYZE,
         )
+        agent_run = self._run_llm_semantic_analysis(
+            job_id,
+            request_record=request,
+            metadata=metadata,
+        )
         self.repository.transition_job(
             job_id,
             status=JobStatus.GENERATING,
             current_step=WorkflowStepType.GENERATE,
         )
-        artifacts = self._generate_artifacts(job_id, request, metadata)
+        artifacts = self._generate_artifacts(job_id, request, metadata, agent_run)
 
         self.repository.transition_job(
             job_id,
@@ -275,7 +290,7 @@ class WorkflowService:
         self.repository.save_metadata_collection(
             job_id=job_id,
             status=metadata.status,
-            payload=metadata.as_dict(),
+            payload=sanitized_metadata_payload(metadata.as_dict()),
         )
         return metadata
 
@@ -284,8 +299,9 @@ class WorkflowService:
         job_id: str,
         request: WorkRequestRecord,
         metadata: MetadataCollectionResult,
+        agent_run: AgentRunRecord | None = None,
     ) -> list[ArtifactRecord]:
-        context = generation_context_from_request(request, metadata)
+        context = generation_context_from_request(request, metadata, agent_run)
         artifacts: list[ArtifactRecord] = []
         for output in request.outputs:
             if output == RequestedOutputType.SP_ANALYSIS_DOCUMENT.value:
@@ -322,10 +338,53 @@ class WorkflowService:
                         artifact_type,
                         request,
                         metadata,
+                        agent_run,
                     )
                     for artifact_type in artifact_types_for_requested_output(output)
                 )
         return artifacts
+
+    def _run_llm_semantic_analysis(
+        self,
+        job_id: str,
+        *,
+        request_record: WorkRequestRecord,
+        metadata: MetadataCollectionResult,
+    ) -> AgentRunRecord | None:
+        if not bool(request_record.options.get("useLlmAnalysis", False)):
+            return None
+        target = request_record.target
+        object_ref = f"{target['schema']}.{target['name']}"
+        definition_text = procedure_definition_text(metadata)
+        definition_for_model = (
+            definition_text
+            if bool(request_record.options.get("allowSpDefinitionToModel", False))
+            else None
+        )
+        try:
+            run_payload = build_semantic_analysis_run(
+                target_ref=object_ref,
+                metadata=metadata.as_dict(),
+                static_analysis=static_analysis_payload(
+                    definition_text,
+                    source_name=object_ref,
+                    snapshot_id=metadata.snapshot_id,
+                ),
+                procedure_definition=definition_for_model,
+                model_gateway=self.model_gateway,
+                profile_id=str(request_record.options.get("llmProfileId") or ""),
+            )
+        except ModelGatewayError as exc:
+            raise RuntimeError(f"{exc.code}: {exc}") from exc
+        return self.repository.save_agent_run(
+            job_id=job_id,
+            agent_type=run_payload.agent_type,
+            status=run_payload.status.value,
+            target_ref=run_payload.target_ref,
+            summary=run_payload.summary,
+            structured_output=run_payload.structured_output,
+            model_invocation=run_payload.model_invocation.to_storage_dict(),
+        )
 
     def _store_rendered_artifact(
         self,
@@ -384,6 +443,7 @@ class WorkflowService:
         artifact_type: ArtifactType,
         request: WorkRequestRecord,
         metadata: MetadataCollectionResult,
+        agent_run: AgentRunRecord | None = None,
     ) -> ArtifactRecord:
         target = request.target
         object_ref = f"{target['schema']}.{target['name']}"
@@ -431,7 +491,11 @@ class WorkflowService:
             registry_refs=("registry:api_contract_placeholder@0.1.0",),
             assumptions=(WORKFLOW_METADATA_NOTE,),
             review_required=True,
-            extra={"source": "api_contract_placeholder", "metadata": metadata.as_dict()},
+            extra={
+                "source": "api_contract_placeholder",
+                "metadata": sanitized_metadata_payload(metadata.as_dict()),
+                "llmTrace": llm_trace_summary(agent_run),
+            },
         )
 
     def _require_artifact(self, artifact_id: str) -> ArtifactRecord:
@@ -444,6 +508,7 @@ class WorkflowService:
 def generation_context_from_request(
     request: WorkRequestRecord,
     metadata: MetadataCollectionResult | None = None,
+    agent_run: AgentRunRecord | None = None,
 ) -> GenerationContext:
     target = request.target
     schema = str(target["schema"])
@@ -484,10 +549,12 @@ def generation_context_from_request(
                 "resultShape": result_shape,
                 "pkColumns": [],
                 "authorId": "AI",
+                "llmAnalysis": agent_run.structured_output if agent_run else None,
+                "llmTrace": llm_trace_summary(agent_run),
             },
             "evidence": {
-                "sources": generation_evidence_sources(metadata, sp_name),
-                "assumptions": [WORKFLOW_METADATA_NOTE],
+                "sources": generation_evidence_sources(metadata, sp_name, agent_run),
+                "assumptions": generation_assumptions(agent_run),
             },
         }
     )
@@ -542,6 +609,16 @@ def metadata_summary_lines(metadata: MetadataCollectionResult) -> list[str]:
     return [f"- USER_INPUT: `{metadata.object_ref}`"]
 
 
+def sanitized_metadata_payload(payload: dict[str, object]) -> dict[str, object]:
+    sanitized = dict(payload)
+    definition = sanitized.get("procedureDefinition")
+    if isinstance(definition, dict):
+        sanitized_definition = dict(definition)
+        sanitized_definition.pop("definition", None)
+        sanitized["procedureDefinition"] = sanitized_definition
+    return sanitized
+
+
 def metadata_detail_lines(metadata: MetadataCollectionResult) -> list[str]:
     if not metadata.table_schemas:
         return ["- REVIEW_REQUIRED: table schema metadata was not available."]
@@ -594,32 +671,114 @@ def generation_parameters(metadata: MetadataCollectionResult | None) -> list[dic
 def generation_evidence_sources(
     metadata: MetadataCollectionResult | None,
     sp_name: str,
-) -> list[dict[str, str]]:
+    agent_run: AgentRunRecord | None = None,
+) -> list[dict[str, str | None]]:
     if not metadata:
-        return [
+        sources: list[dict[str, str | None]] = [
             {
                 "type": "storedProcedure",
                 "name": sp_name,
                 "reason": "request target only; metadata collection unavailable",
             }
         ]
-    sources = [
-        {
-            "type": "storedProcedure",
-            "name": sp_name,
-            "reason": metadata.status,
-        }
-    ]
-    sources.extend(
-        {
-            "type": "table",
-            "name": f"{table['schema']}.{table['tableName']}",
-            "reason": "MSSQL MCP table schema metadata",
-        }
-        for table in metadata.table_schemas
-        if table.get("schema") and table.get("tableName")
-    )
+    else:
+        sources = [
+            {
+                "type": "storedProcedure",
+                "name": sp_name,
+                "reason": metadata.status,
+                "locator": "MSSQL MCP procedure metadata",
+                "snapshotId": metadata.snapshot_id,
+            }
+        ]
+        sources.extend(
+            {
+                "type": "table",
+                "name": f"{table['schema']}.{table['tableName']}",
+                "reason": "MSSQL MCP table schema metadata",
+                "locator": "MSSQL MCP table schema metadata",
+                "snapshotId": metadata.snapshot_id,
+            }
+            for table in metadata.table_schemas
+            if table.get("schema") and table.get("tableName")
+        )
+    if agent_run:
+        invocation = agent_run.model_invocation
+        sources.append(
+            {
+                "type": "llmInference",
+                "name": agent_run.agent_run_id,
+                "reason": str(invocation.get("outputHash") or agent_run.summary),
+                "locator": "agent-runtime.modelInvocation.outputHash",
+                "snapshotId": None,
+            }
+        )
     return sources
+
+
+def generation_assumptions(agent_run: AgentRunRecord | None) -> list[str]:
+    assumptions = [WORKFLOW_METADATA_NOTE]
+    if agent_run:
+        assumptions.append(
+            "REVIEW_REQUIRED: LLM semantic analysis is inferred and requires human review."
+        )
+        assumptions.extend(str(item) for item in agent_run.structured_output.get("assumptions", []))
+    return list(dedupe_strings(assumptions))
+
+
+def llm_trace_summary(agent_run: AgentRunRecord | None) -> dict[str, object] | None:
+    if agent_run is None:
+        return None
+    invocation = agent_run.model_invocation
+    return {
+        "agentRunId": agent_run.agent_run_id,
+        "agentType": agent_run.agent_type,
+        "status": agent_run.status,
+        "summary": agent_run.summary,
+        "provider": invocation.get("provider"),
+        "model": invocation.get("model"),
+        "modelProfileId": invocation.get("modelProfileId"),
+        "modelRegistryRef": invocation.get("modelRegistryRef"),
+        "reasoningEffort": invocation.get("reasoningEffort"),
+        "promptVersion": invocation.get("promptVersion"),
+        "outputSchemaVersion": invocation.get("outputSchemaVersion"),
+        "inputHash": invocation.get("inputHash"),
+        "promptHash": invocation.get("promptHash"),
+        "outputHash": invocation.get("outputHash"),
+        "tokenUsage": invocation.get("tokenUsage", {}),
+        "latencyMs": invocation.get("latencyMs"),
+    }
+
+
+def procedure_definition_text(metadata: MetadataCollectionResult) -> str | None:
+    definition_payload = metadata.procedure_definition or {}
+    value = definition_payload.get("definition")
+    if not value:
+        return None
+    return str(value)
+
+
+def static_analysis_payload(
+    definition_text: str | None,
+    *,
+    source_name: str,
+    snapshot_id: str | None,
+) -> dict[str, object] | None:
+    if not definition_text:
+        return None
+    result = analyze_stored_procedure(
+        definition_text,
+        source_name=source_name,
+        snapshot_id=snapshot_id,
+        registry_version_refs=[
+            {"registry_type": "PROMPT", "version": "prompt:sp_analysis@0.1.0"},
+            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.1.0"},
+            {"registry_type": "MODEL", "version": "model:openai_sp_semantic_analysis@0.1.0"},
+        ],
+    )
+    payload = result.model_dump(mode="json")
+    payload.pop("source_name", None)
+    return payload
 
 
 def system_code(db_profile_id: str) -> str:

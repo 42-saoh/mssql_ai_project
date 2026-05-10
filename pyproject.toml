@@ -29,7 +29,13 @@ dev = [
 package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
-where = ["packages/domain/src", "packages/analysis/src", "packages/generation/src", "packages/validation/src"]
+where = [
+  "packages/domain/src",
+  "packages/analysis/src",
+  "packages/generation/src",
+  "packages/validation/src",
+  "packages/agent-runtime/src"
+]
 
 [tool.ruff]
 line-length = 100

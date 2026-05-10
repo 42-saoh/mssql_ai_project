@@ -15,6 +15,7 @@ from api_app.lifecycle import (
     ensure_job_transition,
 )
 from api_app.repositories import (
+    AgentRunRecord,
     ApprovalRecordData,
     ArtifactRecord,
     AuditEventRecord,
@@ -36,6 +37,7 @@ class MemoryWorkflowRepository:
         self.requests: dict[str, WorkRequestRecord] = {}
         self.jobs: dict[str, JobRecord] = {}
         self.metadata_collections: dict[str, MetadataCollectionRecord] = {}
+        self.agent_runs: dict[str, AgentRunRecord] = {}
         self.artifacts: dict[str, ArtifactRecord] = {}
         self.validation_reports: dict[str, ValidationReportRecord] = {}
         self.approvals: dict[str, ApprovalRecordData] = {}
@@ -76,7 +78,7 @@ class MemoryWorkflowRepository:
         db_profile_id: str,
         target: dict[str, Any],
         outputs: tuple[str, ...],
-        options: dict[str, bool],
+        options: dict[str, Any],
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
@@ -211,6 +213,61 @@ class MemoryWorkflowRepository:
             record for record in self.metadata_collections.values() if record.job_id == job_id
         ]
         return records[-1] if records else None
+
+    def save_agent_run(
+        self,
+        *,
+        job_id: str,
+        agent_type: str,
+        status: str,
+        target_ref: str,
+        summary: str,
+        structured_output: dict[str, Any],
+        model_invocation: dict[str, Any],
+    ) -> AgentRunRecord:
+        record = AgentRunRecord(
+            agent_run_id=prefixed_id("agent"),
+            job_id=job_id,
+            agent_type=agent_type,
+            status=status,
+            target_ref=target_ref,
+            summary=summary,
+            structured_output=structured_output,
+            model_invocation=model_invocation,
+        )
+        self.agent_runs[record.agent_run_id] = record
+        job = self.jobs.get(job_id)
+        self.record_audit_event(
+            action="AGENT_RUN_RECORDED",
+            target_type="JOB",
+            target_ref_id=job_id,
+            payload={
+                "agentRunId": record.agent_run_id,
+                "agentType": agent_type,
+                "status": status,
+                "targetRef": target_ref,
+                "modelInvocation": _public_model_invocation(model_invocation),
+            },
+            correlation_id=job.correlation_id if job else None,
+        )
+        return record
+
+    def list_agent_runs(
+        self,
+        job_id: str,
+        *,
+        limit: int | None = None,
+    ) -> list[AgentRunRecord] | None:
+        if job_id not in self.jobs:
+            return None
+        runs = sorted(
+            [record for record in self.agent_runs.values() if record.job_id == job_id],
+            key=lambda record: (record.created_at, record.agent_run_id),
+            reverse=True,
+        )
+        if limit is not None:
+            runs = runs[: max(min(int(limit), 100), 1)]
+        return runs
 
     def add_artifact(
         self,
@@ -426,3 +483,26 @@ class MemoryWorkflowRepository:
         )
         self.audit_events.append(record)
         return record
+
+
+def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if key
+        in {
+            "provider",
+            "model",
+            "modelProfileId",
+            "modelRegistryRef",
+            "reasoningEffort",
+            "promptVersion",
+            "outputSchemaVersion",
+            "inputHash",
+            "promptHash",
+            "outputHash",
+            "status",
+            "tokenUsage",
+            "latencyMs",
+        }
+    }

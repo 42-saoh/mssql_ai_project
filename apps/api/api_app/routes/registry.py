@@ -38,6 +38,26 @@ ACTIVE_REGISTRY_BINDINGS = (
         version="generation-core-0.1.0",
         active=True,
     ),
+    RegistryVersion(
+        registryType="MODEL",
+        version="model:openai_sp_semantic_analysis@0.1.0",
+        active=True,
+    ),
+    RegistryVersion(
+        registryType="MODEL",
+        version="model:openai_fast_test@gpt-5-nano@0.1.0",
+        active=True,
+    ),
+    RegistryVersion(
+        registryType="PROMPT",
+        version="prompt:sp_semantic_analysis@0.1.0",
+        active=True,
+    ),
+    RegistryVersion(
+        registryType="SCHEMA",
+        version="schema:llm_semantic_analysis@0.1.0",
+        active=True,
+    ),
 )
 
 
