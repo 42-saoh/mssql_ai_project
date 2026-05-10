@@ -63,6 +63,7 @@ def test_sample_canonical_payload_marks_review_boundaries() -> None:
 
 
 def test_generated_workflow_summary_matches_eval_fixture(monkeypatch) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     request_fixture = _json_fixture("request.json")
     expected = _json_fixture("artifact_payloads.json")

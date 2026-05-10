@@ -75,8 +75,16 @@ api_contract:
     - GET /api/v1/metadata/search
 live_gate:
   env: P21_LIVE_PORTAL_GATE=1
+  gate_mode: explicit_controlled_live
+  default_live_access_attempted: false
   default_behavior: skip_when_gate_not_enabled
   missing_prerequisites_behavior: blocker_failure
+  success_is_production_ready_claim: false
+  required_prerequisites:
+    - PLF workflow repository is configured through PLATFORM_DB_* env
+    - PPM is configured as dbProfileId=ppm read-only metadata target
+    - MSSQL live metadata is explicitly enabled
+    - Web runtime is configured for HTTP API mode with no mock adapter
   required_env:
     - PLATFORM_DB_HOST
     - PLATFORM_DB_PORT
@@ -94,6 +102,10 @@ live_gate:
     platform_db_unavailable: P21_LIVE_PLF_UNAVAILABLE
     metadata_db_unavailable: P21_LIVE_PPM_UNAVAILABLE
     p21_live_ppm_required: P21_LIVE_PPM_REQUIRED
+  eval_test_coverage:
+    - gate_disabled_returns_skip_without_plf_or_ppm_access
+    - gate_enabled_missing_prerequisites_returns_blocker_failure
+    - gate_enabled_with_live_prerequisites_requires_passed_probe
 deferred_future_hardening:
   - code: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
     status: DEFERRED

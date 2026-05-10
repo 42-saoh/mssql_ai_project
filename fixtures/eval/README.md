@@ -20,4 +20,4 @@ P15 fixture 는 `gate_mode: hard_live` 이지만 기본 eval 실행에서는 liv
 
 P16/P17 fixture 는 PPM manifest 가 `live_metadata` 일 때만 실제 object identity 를 참조한다. `template_only` 모드에서는 object name 을 만들지 않는 정책을 유지한다. 현재 scoped live pilot 판정과 P18/P19 opening posture 는 `CONDITIONAL_GO` 이지만, `production_ready: false` 이며 live IdP/JWKS 와 PLF role lookup evidence 는 production-grade enterprise Auth/RBAC claim 전 future hardening 으로 남는다.
 
-P21 fixture 도 `production_ready: false` 를 유지한다. `P21_LIVE_PORTAL_GATE=1` 은 PLF workflow repository 와 read-only PPM metadata 가 모두 configured 된 경우에만 통과할 수 있고, missing PPM 을 PLF 로 대체하지 않는다.
+P21 fixture 도 `production_ready: false` 를 유지한다. `P21_LIVE_PORTAL_GATE=1` 은 PLF workflow repository 와 read-only PPM metadata 가 모두 configured 된 경우에만 통과할 수 있고, missing PPM 을 PLF 로 대체하지 않는다. 기본 gate disabled 실행은 PLF/PPM 접근 없이 skip 으로 기록하며, gate enabled 상태의 missing PLF/PPM prerequisites 는 skip 이 아니라 blocker failure 다.

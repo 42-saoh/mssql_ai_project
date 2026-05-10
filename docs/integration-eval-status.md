@@ -15,7 +15,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | conditional scoped candidate | P17D records live pilot release as `CONDITIONAL_GO` only for the draft-only scoped candidate. This does not make the platform production-ready and does not authorize publish/export, DDL/DML, row-data access, procedure execution, deployment, or PLF fallback. |
 | P18/P19 productization readiness | conditional open | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain deferred future hardening before any production-grade enterprise Auth/RBAC claim. |
-| P21 live portal | explicit live gate | `P21_LIVE_PORTAL_GATE=1` requires PLF workflow repository and read-only PPM metadata access. Missing env is blocker failure, not skip, and does not imply `production_ready: true`. |
+| P21 live portal | explicit live gate | Default eval skips without PLF/PPM access. `P21_LIVE_PORTAL_GATE=1` requires PLF workflow repository and read-only PPM metadata access. Missing env is blocker failure, not skip, and does not imply `production_ready: true`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -63,7 +63,8 @@ For P16/P17D, `make test PYTEST_ARGS="tests/eval/test_p16_pilot_release_readines
 
 The full default suite remains fixture-first/reproducible. Tests that assert fixture snapshot ids or fixture-backed metadata search results pin `MSSQL_ENABLE_LIVE_METADATA=0`; P15 hard-live tests require `P15_HARD_LIVE_GATE=1` and must never fall back from PPM to PLF.
 
-For P21 no-mock portal live validation:
+For P21 no-mock portal validation, the default eval asserts the disabled gate skips without
+initializing PLF or PPM access. For controlled live validation:
 
 ```bash
 P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"

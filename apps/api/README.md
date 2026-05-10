@@ -133,7 +133,8 @@ production-grade enterprise Auth/RBAC 또는 `production_ready: true` 로 주장
 
 P21 은 Web runtime/default path 를 HTTP API 로 고정하고, PLF platform DB 와 PPM read-only
 metadata 를 controlled live portal 의 필수 조건으로 둔다. 기본 테스트는 fixture-first 로
-유지하지만, 아래 gate 를 켜면 missing PLF/PPM 은 skip 이 아니라 blocker failure 다.
+유지하며 PLF/PPM live access 를 초기화하지 않고 skip 을 기록한다. 아래 gate 를 켜면 missing
+PLF/PPM 은 skip 이 아니라 blocker failure 다.
 
 ```bash
 P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"

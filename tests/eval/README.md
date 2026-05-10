@@ -58,7 +58,9 @@ storage-state files, token-bearing screenshots, traces, recordings, chat-pasted 
 
 P21 gate 는 기본 실행에서 skip 되며 PLF/PPM 에 접근하지 않는다. 명시적으로
 `P21_LIVE_PORTAL_GATE=1` 을 켠 경우에만 PLF workflow repository 와 read-only PPM metadata
-access 를 검증한다. 필수 env 가 없으면 skip 이 아니라 prerequisite blocker failure 로 보고한다.
+access 를 검증한다. 이 eval 은 기본 skip 결과가 PLF/PPM 초기화를 만들지 않는지, gate enabled
+상태에서 필수 env 가 없으면 skip 이 아니라 `P21_LIVE_PORTAL_REQUIRED_ENV_MISSING` blocker 로
+실패하는지, live prerequisites 가 준비된 경우에만 passed probe 를 허용하는지 검증한다.
 
 ```bash
 P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
