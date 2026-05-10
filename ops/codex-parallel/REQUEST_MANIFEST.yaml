@@ -697,4 +697,35 @@ waves:
           - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
           - make test-web-smoke
           - python3 -m compileall apps/api tests
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B]
+  - wave: W10
+    description: auth/RBAC live wiring verification
+    tracks:
+      - id: P20
+        branch: feat/p20-auth-rbac-live-wiring
+        worktree: ../wt/p20-auth-rbac-live-wiring
+        prompt: prompts/20_auth_rbac_live_wiring_verification.md
+        role: platform_worker
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review, docs-sync]
+        depends_on: [P18B]
+        target_paths:
+          - apps/api/
+          - tests/eval/
+          - tests/contract/
+          - fixtures/eval/productization_gap_closure_p18_v1.yaml
+          - docs/admin-guide/
+          - docs/user-guide/
+          - docs/integration-eval-status.md
+          - .env.example
+        readonly_paths:
+          - services/mssql-mcp/
+          - packages/
+          - db/schema/
+          - spec/
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
+          - make test-web-smoke
+          - python3 -m compileall apps/api tests
+          - AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/test_p20_auth_rbac_live_gate.py"
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20]

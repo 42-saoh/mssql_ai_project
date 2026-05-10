@@ -10,6 +10,7 @@ from uuid import UUID, uuid5
 
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
+from api_app.auth import Actor, VerifiedIdentity, canonical_role_set
 from api_app.contracts import approval_decision_mapping, validation_storage_result
 from api_app.lifecycle import (
     artifact_status_after_approval,
@@ -511,6 +512,7 @@ class MssqlPlatformRepository:
         missing_evidence: list[str],
         manual_review_points: list[str],
         correlation_id: str | None = None,
+        actor: str = "api-system",
     ) -> ValidationReportRecord:
         artifact = self.get_artifact(artifact_id)
         if artifact is None:
@@ -530,9 +532,10 @@ class MssqlPlatformRepository:
             """
             INSERT INTO dbo.ARTIFACT_VALIDATION_REPORTS(
                 VLDT_RSLT_ID, ARTF_VER_ID, VLDT_PRFL_NM, VLDT_RSLT_CD,
-                RSLT_JSON, MISSING_EVDC_JSON, MANUAL_RVWR_POINTS_JSON, CRE_DTM
+                RSLT_JSON, MISSING_EVDC_JSON, MANUAL_RVWR_POINTS_JSON, CRE_DTM,
+                CRE_USR_ID
             )
-            VALUES (%s, %s, 'api-workflow', %s, %s, %s, %s, %s)
+            VALUES (%s, %s, 'api-workflow', %s, %s, %s, %s, %s, %s)
             """,
             (
                 storage_uuid(record.validation_report_id),
@@ -549,6 +552,7 @@ class MssqlPlatformRepository:
                 json_text(record.missing_evidence),
                 json_text(record.manual_review_points),
                 record.created_at,
+                self._try_resolve_user_id(actor),
             ),
         )
         artifact.latest_validation_report_id = record.validation_report_id
@@ -566,6 +570,7 @@ class MssqlPlatformRepository:
                 "validationReportId": record.validation_report_id,
             },
             correlation_id=correlation_id or self._correlation_for_artifact(artifact),
+            actor=actor,
         )
         return record
 
@@ -749,6 +754,47 @@ class MssqlPlatformRepository:
     def _correlation_for_artifact(self, artifact: ArtifactRecord) -> str | None:
         job = self.get_job(artifact.job_id)
         return job.correlation_id if job else None
+
+    def resolve_actor_roles(self, identity: VerifiedIdentity) -> Actor | None:
+        candidates = identity.lookup_candidates[:3]
+        if not candidates:
+            return None
+        padded_candidates = candidates + ("",) * (3 - len(candidates))
+        rows = self._query_all(
+            """
+            SELECT
+                CONVERT(NVARCHAR(36), u.USR_ID),
+                u.LGN_ID,
+                u.EML_ADR,
+                u.USR_NM,
+                r.AUTH_GRP_NM
+            FROM dbo.AUTH_USERS u
+            JOIN dbo.AUTH_USER_ROLES ur ON ur.USR_ID = u.USR_ID
+            JOIN dbo.AUTH_ROLES r ON r.AUTH_GRP_ID = ur.AUTH_GRP_ID
+            WHERE u.STAT_CD = 'ACTIVE'
+              AND (
+                  u.LGN_ID IN (%s, %s, %s)
+                  OR u.EML_ADR IN (%s, %s, %s)
+              )
+            """,
+            (*padded_candidates, *padded_candidates),
+        )
+        if not rows:
+            return None
+        user_ids = {str(row[0]) for row in rows}
+        if len(user_ids) != 1:
+            return None
+        first = rows[0]
+        roles = canonical_role_set([str(row[4]) for row in rows])
+        if not roles:
+            return None
+        return Actor(
+            actor_id=identity.subject,
+            login=str(first[1] or ""),
+            email=str(first[2]) if first[2] else None,
+            display_name=str(first[3]) if first[3] else identity.name,
+            roles=roles,
+        )
 
     def _save_artifact(self, record: ArtifactRecord) -> None:
         artifact_id = storage_uuid(record.artifact_id)

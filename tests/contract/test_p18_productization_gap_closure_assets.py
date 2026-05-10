@@ -12,6 +12,10 @@ PROMPTS = ROOT / "ops" / "codex-parallel" / "prompts"
 MANIFEST = ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml"
 P18_FIXTURE = ROOT / "fixtures" / "eval" / "productization_gap_closure_p18_v1.yaml"
 CANONICAL_CANDIDATE = ROOT / "fixtures" / "eval" / "canonical_analysis_candidate.json"
+AUTH_SOURCE_DOC = ROOT / "docs" / "admin-guide" / "auth-rbac-production-source.md"
+AUTH_SOURCE_ADR = ROOT / "docs" / "adr" / "ADR-0006-production-auth-rbac-source.md"
+PLATFORM_DDL = ROOT / "db" / "schema" / "ai_agent_platform_schema_v2_dbo_prefix.sql"
+OPENAPI = ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml"
 P18_PROMPTS = {
     "P18A": "18a_canonical_analysis_model_closure.md",
     "P18B": "18b_web_http_auth_rbac_evidence.md",
@@ -85,8 +89,11 @@ def test_p18_fixture_records_no_go_productization_until_web_and_auth_close() -> 
 
     assert fixture["p18a_canonical_analysis_model"]["current_status"] == "CONTRACT_CLOSED"
     assert fixture["p18a_canonical_analysis_model"]["current_blockers"] == []
+    assert fixture["p18b_web_http_auth_rbac"]["auth_rbac"]["current_status"] == (
+        "SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_PENDING"
+    )
     assert fixture["p18b_web_http_auth_rbac"]["auth_rbac"]["blocker"] == (
-        "AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED"
+        "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"
     )
     assert fixture["p18_final_gate"]["current_productization_decision"] == "NO_GO"
     assert "production_ready_claim_allowed" in fixture["policy_boundaries"]
@@ -132,13 +139,37 @@ def test_p18_docs_and_readiness_assets_reference_gap_closure_without_overclaim()
 
     assert "P18 Productization Gap Closure" in combined
     assert "productization_gap_closure_p18_v1.yaml" in combined
-    assert "AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED" in combined
+    assert "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED" in combined
     assert "CanonicalAnalysisModel" in combined
     assert "CONDITIONAL_GO" in combined
     assert "production-ready: true" not in combined
     assert "SELECT * FROM PPM" not in combined
     assert "COUNT(*)" not in combined
     assert "PFL" not in combined
+
+
+def test_p18b_auth_source_docs_match_role_seed_and_error_semantics() -> None:
+    auth_doc = AUTH_SOURCE_DOC.read_text(encoding="utf-8")
+    adr = AUTH_SOURCE_ADR.read_text(encoding="utf-8")
+    ddl = PLATFORM_DDL.read_text(encoding="utf-8")
+    openapi = OPENAPI.read_text(encoding="utf-8")
+    combined = f"{auth_doc}\n{adr}"
+
+    assert "verified OIDC/JWT" in combined
+    assert "PLF" in combined
+    for table in ("AUTH_USERS", "AUTH_ROLES", "AUTH_USER_ROLES"):
+        assert table in combined
+    for role in ("USER", "REVIEWER", "ADMIN", "AUDITOR"):
+        assert f"AUTH_GRP_NM = '{role}'" in ddl
+        assert role in auth_doc
+
+    assert "401 Unauthorized" in auth_doc
+    assert "403 Forbidden" in auth_doc
+    assert "Forbidden:" in openapi
+    assert "Mock header" in adr
+    assert "hardcoded actor" in adr
+    assert "거부" in adr
+    assert "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED" in combined
 
 
 def _yaml(path: Path) -> dict[str, Any]:

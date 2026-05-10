@@ -225,6 +225,7 @@ class WorkflowRepository(Protocol):
         missing_evidence: list[str],
         manual_review_points: list[str],
         correlation_id: str | None = None,
+        actor: str = "api-system",
     ) -> ValidationReportRecord:
         ...
 

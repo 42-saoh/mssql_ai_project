@@ -1,0 +1,207 @@
+#!/usr/bin/env node
+
+import { createHttpPortalApi } from "../lib/api/http-client.ts";
+
+const positionalArgs = process.argv.slice(2).filter((arg) => arg !== "--");
+const baseUrl = positionalArgs[0] ?? process.env.PORTAL_API_BASE_URL;
+
+if (!baseUrl) {
+  throw new Error("Usage: pnpm --dir apps/web run smoke:http-adapter -- <baseUrl>");
+}
+
+const observedRequests = [];
+
+function normalizePath(input) {
+  const url = new URL(String(input));
+  return `${url.pathname}${url.search}`;
+}
+
+async function instrumentedFetch(input, init = {}) {
+  const method = (init.method ?? "GET").toUpperCase();
+  const path = normalizePath(input);
+  observedRequests.push({ method, path });
+  return fetch(input, init);
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function assertObserved(label, predicate) {
+  assert(
+    observedRequests.some(predicate),
+    `Missing HTTP adapter smoke path: ${label}`,
+  );
+}
+
+function assertNoForbiddenPath() {
+  const forbiddenFragments = ["/publish", "/export", "/deploy", "/execute"];
+  const forbidden = observedRequests.find(({ path }) =>
+    forbiddenFragments.some((fragment) => path.includes(fragment)),
+  );
+  assert(!forbidden, `Forbidden HTTP adapter path observed: ${forbidden?.method} ${forbidden?.path}`);
+}
+
+function assertNoForbiddenPayload(value, label, path = "$") {
+  const forbiddenKeys = new Set([
+    "connectionstring",
+    "definition",
+    "password",
+    "rawdefinitiontext",
+    "rowdata",
+    "row_data",
+    "sample_rows",
+    "secret",
+    "sqltext",
+    "token",
+  ]);
+  const forbiddenStringFragments = [
+    "count(*)",
+    "password:",
+    "procedure_execution",
+    "raw_definition_text",
+    "row_data",
+    "sample_rows",
+    "select *",
+  ];
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoForbiddenPayload(item, label, `${path}[${index}]`));
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      const normalizedKey = key.replaceAll("_", "").toLowerCase();
+      assert(
+        !forbiddenKeys.has(normalizedKey),
+        `${label} contains forbidden payload key at ${path}.${key}`,
+      );
+      assertNoForbiddenPayload(child, label, `${path}.${key}`);
+    }
+    return;
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.toLowerCase();
+    const forbidden = forbiddenStringFragments.find((fragment) =>
+      normalizedValue.includes(fragment),
+    );
+    assert(!forbidden, `${label} contains forbidden payload text at ${path}: ${forbidden}`);
+  }
+}
+
+function assertNoPublishedState(artifacts, artifact) {
+  const publishedSummary = artifacts.find((item) => item.status === "PUBLISHED");
+  assert(!publishedSummary, `HTTP smoke returned published artifact ${publishedSummary?.artifactId}`);
+  assert(artifact.status !== "PUBLISHED", `HTTP smoke preview returned published artifact ${artifact.artifactId}`);
+}
+
+const api = createHttpPortalApi({ baseUrl, fetcher: instrumentedFetch });
+
+const submitted = await api.createSPAnalysisRequest({
+  dbProfileId: "master",
+  target: {
+    type: "PROCEDURE",
+    schema: "dbo",
+    name: "usp_GetOrderSummary",
+  },
+  outputs: ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT", "JAVA_MYBATIS_DRAFT"],
+  options: { includeEvidenceRefs: true },
+});
+
+const job = await api.getJob(submitted.jobId);
+const listed = await api.listJobArtifacts(submitted.jobId);
+const analysisSummary = listed.artifacts.find((artifact) => artifact.type === "SP_ANALYSIS_DOC");
+assert(analysisSummary, "HTTP smoke could not find SP_ANALYSIS_DOC artifact summary");
+
+const artifact = await api.getArtifact(analysisSummary.artifactId);
+const validation = await api.validateArtifact(analysisSummary.artifactId);
+const approval = await api.createApprovalDecision(analysisSummary.artifactId, {
+  decision: "REQUEST_CHANGES",
+  reviewer: "web-http-smoke@example.com",
+  comment: "P18B HTTP adapter smoke records a review decision only.",
+});
+const profiles = await api.listMetadataProfiles();
+const metadataSearch = await api.searchMetadataObjects({
+  dbProfileId: "master",
+  query: "order",
+  objectTypes: ["PROCEDURE", "TABLE"],
+  limit: 5,
+});
+const registry = await api.listRegistryVersions();
+
+assert(submitted.status === "REVIEW_PENDING", `Unexpected submit status: ${submitted.status}`);
+assert(job.currentStep === "VALIDATE", `Unexpected job current step: ${job.currentStep}`);
+assert(listed.artifacts.length > 0, "HTTP smoke returned no artifacts");
+assert(artifact.evidenceRefs.length > 0, "HTTP smoke artifact has no evidence refs");
+assert(validation.status === "PASSED" || validation.status === "REVIEW_REQUIRED", `Unexpected validation status: ${validation.status}`);
+assert(approval.decision === "REQUEST_CHANGES", `Unexpected approval decision: ${approval.decision}`);
+assert(profiles.profiles.every((profile) => profile.readOnly === true), "Metadata profiles must be read-only");
+assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
+assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
+assert(registry.versions.length > 0, "Registry versions response is empty");
+
+assertNoPublishedState(listed.artifacts, artifact);
+assertNoForbiddenPath();
+
+for (const [label, payload] of Object.entries({
+  submitted,
+  job,
+  listed,
+  artifact,
+  validation,
+  approval,
+  profiles,
+  metadataSearch,
+  registry,
+})) {
+  assertNoForbiddenPayload(payload, label);
+}
+
+assertObserved("POST /api/v1/requests/sp-analysis", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/requests/sp-analysis",
+);
+assertObserved("GET /api/v1/jobs/{jobId}", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/jobs\/[^/]+$/.test(path),
+);
+assertObserved("GET /api/v1/jobs/{jobId}/artifacts", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/jobs\/[^/]+\/artifacts$/.test(path),
+);
+assertObserved("GET /api/v1/artifacts/{artifactId}", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/artifacts\/[^/]+$/.test(path),
+);
+assertObserved("POST /api/v1/artifacts/{artifactId}/validation", ({ method, path }) =>
+  method === "POST" && /^\/api\/v1\/artifacts\/[^/]+\/validation$/.test(path),
+);
+assertObserved("POST /api/v1/artifacts/{artifactId}/approval-decisions", ({ method, path }) =>
+  method === "POST" && /^\/api\/v1\/artifacts\/[^/]+\/approval-decisions$/.test(path),
+);
+assertObserved("GET /api/v1/metadata/db-profiles", ({ method, path }) =>
+  method === "GET" && path === "/api/v1/metadata/db-profiles",
+);
+assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
+  method === "GET" && path.startsWith("/api/v1/metadata/search?"),
+);
+assertObserved("GET /api/v1/registry/versions", ({ method, path }) =>
+  method === "GET" && path === "/api/v1/registry/versions",
+);
+
+console.log(
+  JSON.stringify(
+    {
+      status: "pass",
+      adapter: "apps/web/lib/api/http-client.ts",
+      baseUrl,
+      jobStatus: job.status,
+      validationStatus: validation.status,
+      approvalDecision: approval.decision,
+      observedRequests,
+      activeProductizationBlocker: "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED",
+    },
+    null,
+    2,
+  ),
+);

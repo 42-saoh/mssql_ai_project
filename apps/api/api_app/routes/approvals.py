@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from api_app.dependencies import get_workflow_service
+from api_app.auth import Actor
+from api_app.dependencies import get_workflow_service, require_artifact_review_actor
 from api_app.errors import api_http_exception
 from api_app.presenters import present_approval_record
 from api_app.schemas import ApprovalDecisionRequest, ApprovalRecord
@@ -23,12 +24,19 @@ def create_approval_decision(
     req: ApprovalDecisionRequest,
     request: Request,
     service: Annotated[WorkflowService, Depends(get_workflow_service)],
+    actor: Annotated[Actor | None, Depends(require_artifact_review_actor)],
 ) -> ApprovalRecord:
+    if actor is not None and not actor.matches_reviewer(req.reviewer):
+        raise api_http_exception(
+            status_code=403,
+            detail="Approval reviewer must match the verified actor identity.",
+            code="FORBIDDEN",
+        )
     try:
         record = service.record_approval_decision(
             artifact_id=artifactId,
             decision=req.decision,
-            reviewer=req.reviewer,
+            reviewer=actor.reviewer_id if actor else req.reviewer,
             comment=req.comment,
             validation_report_id=req.validation_report_id,
             correlation_id=tracking_context_from_request(request).correlation_id,

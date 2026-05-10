@@ -11,6 +11,11 @@ P18_FIXTURE = ROOT / "fixtures" / "eval" / "productization_gap_closure_p18_v1.ya
 P17_FIXTURE = ROOT / "fixtures" / "eval" / "live_pilot_blocker_closure_p17_v1.yaml"
 CANONICAL_CANDIDATE = ROOT / "fixtures" / "eval" / "canonical_analysis_candidate.json"
 WEB_ROOT = ROOT / "apps" / "web"
+WEB_HTTP_SMOKE = WEB_ROOT / "scripts" / "http-adapter-smoke.mjs"
+WEB_PACKAGE = WEB_ROOT / "package.json"
+WEB_HTTP_RUNNER = ROOT / "tests" / "e2e" / "web_http_adapter_smoke.py"
+AUTH_SOURCE_DOC = ROOT / "docs" / "admin-guide" / "auth-rbac-production-source.md"
+AUTH_SOURCE_ADR = ROOT / "docs" / "adr" / "ADR-0006-production-auth-rbac-source.md"
 
 
 def test_p18_fixture_preserves_p17_conditional_go_but_keeps_productization_no_go() -> None:
@@ -28,10 +33,7 @@ def test_p18_fixture_preserves_p17_conditional_go_but_keeps_productization_no_go
     assert fixture["p18_final_gate"]["current_productization_decision"] == "NO_GO"
 
     blockers = {blocker["code"] for blocker in fixture["active_productization_blockers"]}
-    assert blockers == {
-        "WEB_HTTP_RELEASE_SMOKE_MISSING",
-        "AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED",
-    }
+    assert blockers == {"AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"}
 
 
 def test_p18a_canonical_contract_gap_is_exact_and_evidence_safe() -> None:
@@ -74,9 +76,18 @@ def test_p18b_web_http_and_auth_boundaries_are_explicit() -> None:
     http_client = (WEB_ROOT / "lib" / "api" / "http-client.ts").read_text(encoding="utf-8")
     client = (WEB_ROOT / "lib" / "api" / "client.ts").read_text(encoding="utf-8")
 
-    assert p18b["http_adapter"]["current_status"] == "IMPLEMENTED_NOT_RELEASE_EVIDENCE"
+    assert p18b["http_adapter"]["current_status"] == "RELEASE_SMOKE_RECORDED"
     assert p18b["http_adapter"]["default_mode"] == "mock"
     assert p18b["http_adapter"]["http_mode_env"] == "PORTAL_API_MODE=http"
+    assert p18b["http_adapter"]["smoke_script_path"] == (
+        "apps/web/scripts/http-adapter-smoke.mjs"
+    )
+    assert p18b["http_adapter"]["local_smoke_runner_path"] == (
+        "tests/e2e/web_http_adapter_smoke.py"
+    )
+    assert p18b["http_adapter"]["local_smoke_command"] == (
+        "python3 tests/e2e/web_http_adapter_smoke.py"
+    )
     assert "PORTAL_API_MODE" in client
     assert "PORTAL_API_BASE_URL" in client
 
@@ -94,10 +105,77 @@ def test_p18b_web_http_and_auth_boundaries_are_explicit() -> None:
     for fragment in required_fragments:
         assert fragment in http_client
 
+    smoke_script = WEB_HTTP_SMOKE.read_text(encoding="utf-8")
+    package_json = WEB_PACKAGE.read_text(encoding="utf-8")
+    runner = WEB_HTTP_RUNNER.read_text(encoding="utf-8")
+    assert "createHttpPortalApi" in smoke_script
+    assert "observedRequests" in smoke_script
+    assert "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED" in smoke_script
+    assert "smoke:http-adapter" in package_json
+    assert "uvicorn.Server" in runner
+    assert "MemoryWorkflowRepository" in runner
+
     auth = p18b["auth_rbac"]
-    assert auth["current_status"] == "BLOCKED"
-    assert auth["blocker"] == "AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED"
+    assert auth["current_status"] == (
+        "SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_PENDING"
+    )
+    assert auth["blocker"] == "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED"
+    assert auth["enforcement"]["enabled_by_env"] == "AUTH_RBAC_ENFORCEMENT"
+    assert auth["enforcement"]["unauthorized_negative_tests"] == (
+        "tests/integration/api/test_api_auth_rbac.py"
+    )
+    assert auth["enforcement"]["live_wiring_status"] == "UNVERIFIED"
     assert auth["must_not_fake_with_mock_headers"] is True
+    assert auth["documented_source"]["identity_source"].startswith("verified OIDC/JWT")
+    assert auth["documented_source"]["role_source"] == (
+        "PLF AUTH_USERS, AUTH_ROLES, AUTH_USER_ROLES"
+    )
+    assert auth["documented_source"]["source_doc"] == (
+        "docs/admin-guide/auth-rbac-production-source.md"
+    )
+    assert auth["documented_source"]["adr"] == (
+        "docs/adr/ADR-0006-production-auth-rbac-source.md"
+    )
+    assert auth["documented_source"]["canonical_roles"] == [
+        "USER",
+        "REVIEWER",
+        "ADMIN",
+        "AUDITOR",
+    ]
+
+
+def test_p18b_auth_source_docs_define_identity_roles_and_denials() -> None:
+    auth_doc = AUTH_SOURCE_DOC.read_text(encoding="utf-8")
+    adr = AUTH_SOURCE_ADR.read_text(encoding="utf-8")
+    combined = f"{auth_doc}\n{adr}"
+
+    for phrase in (
+        "verified OIDC/JWT",
+        "AUTH_USERS",
+        "AUTH_ROLES",
+        "AUTH_USER_ROLES",
+        "Role-To-Action Matrix",
+        "401 Unauthorized",
+        "403 Forbidden",
+        "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED",
+    ):
+        assert phrase in combined
+
+    for role in ("USER", "REVIEWER", "ADMIN", "AUDITOR"):
+        assert role in auth_doc
+
+    forbidden_fragments = (
+        "Mock headers",
+        "hardcoded actors",
+        "local password storage",
+        "committed tokens",
+        "fixture secrets",
+    )
+    for fragment in forbidden_fragments:
+        assert fragment in auth_doc
+
+    assert "JWT group claim only" in adr
+    assert "거부" in adr
 
 
 def test_p18_forbidden_boundaries_remain_closed() -> None:

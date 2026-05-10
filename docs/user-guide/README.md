@@ -11,7 +11,8 @@
 ## 현재 사용 가능한 경로
 
 - API happy path 는 fixture-backed metadata 로 request → job → artifact → validation → approval decision recording 까지 검증된다.
-- web portal 은 mock adapter 기반 shell 이며 API/BFF HTTP 연결 smoke 는 P18 productization evidence 대상이다.
+- web portal 은 기본적으로 mock adapter 기반 shell 이며, P18B 에서 local API/BFF HTTP 연결 smoke evidence 를 추가했다.
+- API validation/approval write action 은 `AUTH_RBAC_ENFORCEMENT=1` 일 때 verified OIDC/JWT actor 와 PLF role membership 이 있는 `REVIEWER` 또는 `ADMIN` 만 수행할 수 있다.
 - 기본 metadata profile 은 `master` 이고, sample fixture target 은 `dbo.usp_GetOrderSummary` 이다.
 - P16/P17D 기준 PPM 대표 object identity 는 `live_metadata` manifest 에서 온 것이며, live pilot release 는 scoped draft-only candidate 로만 CONDITIONAL_GO 다.
 
@@ -26,6 +27,7 @@
 
 - 요청 결과 확인에 앞서 저장소 차원의 자동 검증은 도커 테스트 러너를 통해 수행한다.
 - 최소 통합/eval 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 이다.
+- Web HTTP adapter smoke 는 `python3 tests/e2e/web_http_adapter_smoke.py` 로 실행한다.
 - UI smoke 가 필요한 경우 로컬/승인된 dev URL 에 대해서만 Playwright MCP 를 사용한다.
 
 ## P15 live eval 주의
@@ -40,4 +42,4 @@ P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidenc
 - fixture-first/demo handoff 는 GO WITH LIMITATIONS 이며, 결과물은 계속 draft-only 이다.
 - P17A dependency gate 는 selected SP suite majority 기준으로 통과했지만, SP 와 table 사이의 확정 dependency 는 manifest 의 confirmed `related_procedures` evidence 가 있을 때만 해석한다.
 - 승인 화면이나 API decision 기록은 publish, 배포, DDL 적용을 수행하지 않는다.
-- P18 productization readiness 는 full CanonicalAnalysisModel, web HTTP adapter release smoke, production auth/RBAC evidence 가 닫히기 전까지 NO-GO 다.
+- P18/P19 productization readiness 는 CanonicalAnalysisModel, web HTTP adapter smoke evidence, production auth/RBAC source 문서화, fixture-backed enforcement 가 기록된 뒤에도 live IdP/JWKS 와 PLF role lookup 검증 전까지 NO-GO 다.

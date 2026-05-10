@@ -54,6 +54,23 @@
 - Publish/export gate checks continue to fail unless validation is `PASSED` and the human
   decision is `APPROVE`; no publish/export endpoint is exposed in this API slice.
 
+## P18B Web HTTP adapter smoke
+
+Web HTTP adapter release evidence 는 fixture-backed local API route surface 를 대상으로
+아래 명령으로 검증한다.
+
+```bash
+python3 tests/e2e/web_http_adapter_smoke.py
+```
+
+이 runner 는 FastAPI app 을 local HTTP 서버로 기동하고 `apps/web` 의
+`smoke:http-adapter` command 를 실행해 request/job/artifact/validation/approval/metadata/registry
+경로가 `PortalApi` HTTP client 를 통해 호출되는지 확인한다. Production auth/RBAC source 는
+verified OIDC/JWT identity 와 PLF auth table role lookup 이다. P19 는 `AUTH_RBAC_ENFORCEMENT=1`
+일 때 validation/approval route 에 401/403 enforcement 와 unauthorized negative tests 를
+추가했다. Live IdP/JWKS 와 운영 PLF role membership 검증 전까지는
+`AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` blocker 로 유지한다.
+
 ## Platform DB persistence
 
 API repository 는 로컬 Platform MSSQL DB를 기준으로 동작한다. `.env`에서 아래를 설정한 뒤
@@ -70,6 +87,8 @@ request/job/metadata/artifact/validation/approval/audit 기록을 저장하고 �
 
 - `api_app.platform_db.MssqlPlatformRepository` 는 externally managed PLF schema 를 사용하는
   platform persistence adapter 다. DDL 자동 적용, row-data 조회, procedure 실행은 수행하지 않는다.
+- `api_app.auth` 는 `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL` 을 사용해 bearer JWT 를
+  검증하고, PLF role membership 으로 effective authorization 을 결정한다.
 - `api_app.memory_repository.MemoryWorkflowRepository` 는 fixture-first 테스트와 local demo 용
   in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation/approval
   mapping, audit payload shape 를 유지하되 production persistence 로 사용하지 않는다.
@@ -91,7 +110,7 @@ request/job/metadata/artifact/validation/approval/audit 기록을 저장하고 �
 
 ## 남은 Blockers
 
-1. 운영 auth/RBAC enforcement 는 인증 주체와 role source 가 확정된 뒤 활성화한다.
+1. 운영 auth/RBAC source 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 문서화되었다. Enforcement 는 아직 follow-up 이다.
 2. Metadata search 의 live 실행은 `MSSQL_ENABLE_LIVE_METADATA=1` 과 외부 PPM/PLF 접근 설정에
    의존한다. 테스트 기본값은 fixture-backed repository 이지만 route 는 hardcoded mock 응답을
    반환하지 않는다.

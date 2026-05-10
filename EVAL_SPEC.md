@@ -97,15 +97,20 @@
 - secrets handling
 - unsafe command use
 - doc drift
+- production auth/RBAC source and enforcement evidence
 
 필수 체크:
 - 실제 데이터 접근 코드 없음
 - 자동 DDL 실행 경로 없음
 - 민감 환경값 log/fixture 유출 없음
 - 정책 문서와 구현이 모순되지 않음
+- production identity source 가 verified OIDC/JWT 로 문서화되어 있고 role source 가 PLF auth table 로 연결됨
+- validation/approval enforcement 구현 시 unauthorized negative test 가 존재함
+- live IdP/JWKS 와 PLF role membership 검증이 없으면 productization blocker 를 유지함
 
 통과 기준:
 - P0 위반 0
+- auth/RBAC source 문서화가 없거나 mock header/hardcoded actor 로 production 을 가장하면 blocker
 
 ### 6. Reproducibility
 대상:
@@ -171,6 +176,8 @@
 | parser/analysis 변경 | fixture 기반 analysis eval |
 | generator 변경 | artifact format eval + evidence coverage |
 | policy/approval 변경 | workflow state test + reviewer checklist |
+| auth/RBAC source 변경 | ADR/admin guide sync + role matrix contract test |
+| auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |
 
 ## 평가 산출물 형식
 
