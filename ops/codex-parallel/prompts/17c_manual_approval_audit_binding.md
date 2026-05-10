@@ -63,7 +63,7 @@ P17B의 passed validation package와 동일한 artifact/version에 대해 사람
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/unit/api tests/integration/api tests/eval"`
-- `python -m compileall apps/api tests/unit/api tests/integration/api tests/eval`
+- `python3.14 -m compileall apps/api tests/unit/api tests/integration/api tests/eval`
 - 필요 시 `make test PYTEST_ARGS="tests/e2e tests/eval"`
 
 ## Blocker 보고 기준

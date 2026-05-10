@@ -53,3 +53,16 @@ preflight 에만 사용할 수 있다. 사용자가 credentials/MFA 를 처리�
 또는 승인된 secret manager 에 직접 넣는다. localStorage scraping, cookie scraping,
 storage-state files, token-bearing screenshots, traces, recordings, chat-pasted secrets 는
 금지한다.
+
+## P21 no-mock portal live gate
+
+P21 gate 는 기본 실행에서 skip 되며 PLF/PPM 에 접근하지 않는다. 명시적으로
+`P21_LIVE_PORTAL_GATE=1` 을 켠 경우에만 PLF workflow repository 와 read-only PPM metadata
+access 를 검증한다. 필수 env 가 없으면 skip 이 아니라 prerequisite blocker failure 로 보고한다.
+
+```bash
+P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
+```
+
+이 gate 는 no-mock portal 의 controlled live 확인용이며 `production_ready: true` 주장이 아니다.
+PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않는다.

@@ -65,7 +65,7 @@ P17A/P17B/P17C 산출물을 검토하고 hard-live gate를 재실행한 뒤, P16
 - `make test`
 - `make test-web-smoke`
 - `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
-- `python -m compileall apps services packages tests`
+- `python3.14 -m compileall apps services packages tests`
 - live claim 전용: `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"`
 - live claim 전용: `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
 

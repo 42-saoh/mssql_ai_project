@@ -18,9 +18,11 @@
 
 - `GET /health`
 - `POST /api/v1/requests/sp-analysis`
+- `GET /api/v1/jobs`
 - `GET /api/v1/jobs/{jobId}`
 - `GET /api/v1/jobs/{jobId}/artifacts`
 - `GET /api/v1/artifacts/{artifactId}`
+- `GET /api/v1/artifacts/{artifactId}/validation/latest`
 - `POST /api/v1/artifacts/{artifactId}/validation`
 - `POST /api/v1/artifacts/{artifactId}/approval-decisions`
 - `GET /api/v1/metadata/db-profiles`
@@ -126,6 +128,36 @@ token 은 로컬 `.env` 또는 승인된 secret manager 에 직접 주입한다.
 이 gate 가 성공하기 전까지 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` 는 deferred
 future hardening item 으로 유지된다. Controlled conditional open 은 가능하지만
 production-grade enterprise Auth/RBAC 또는 `production_ready: true` 로 주장하지 않는다.
+
+## P21 no-mock portal live gate
+
+P21 은 Web runtime/default path 를 HTTP API 로 고정하고, PLF platform DB 와 PPM read-only
+metadata 를 controlled live portal 의 필수 조건으로 둔다. 기본 테스트는 fixture-first 로
+유지하지만, 아래 gate 를 켜면 missing PLF/PPM 은 skip 이 아니라 blocker failure 다.
+
+```bash
+P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
+```
+
+필수 환경변수:
+
+- `P21_LIVE_PORTAL_GATE=1`
+- `PLATFORM_DB_HOST`, `PLATFORM_DB_PORT`, `PLATFORM_DB_USER`,
+  `PLATFORM_DB_PASSWORD`, `PLATFORM_DB_NAME`
+- `MSSQL_ENABLE_LIVE_METADATA=1`
+- `MSSQL_METADATA_HOST`, `MSSQL_METADATA_PORT`, `MSSQL_METADATA_USER`,
+  `MSSQL_METADATA_PASSWORD`, `MSSQL_METADATA_PROFILE_FILE`
+
+helper:
+
+```bash
+python3.14 apps/api/scripts/p21_live_portal_probe.py
+```
+
+이 gate 는 PPM metadata search, PLF workflow submit, explicit validation, approval decision
+recording 을 검증한다. Workflow/validation/approval/audit write 는 PLF core platform flow 로만
+허용된다. Row data, procedure execution, business DB DDL/DML, publish/export/deployment,
+PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 
 ## Platform DB persistence
 

@@ -19,7 +19,8 @@
 - 캐시 volume 과 네트워크는 compose project 단위로 분리되므로, 여러 branch/worktree 가 같은 서비스명을 써도 충돌을 줄일 수 있다.
 
 ## 재현성 규칙:
-- Python 의존성은 `requirements/lock/py311-dev.txt` 제약 파일을 통해 설치한다.
+- Python 의존성은 `requirements/lock/py314-dev.txt` 제약 파일을 통해 설치한다.
+- `python-test` 이미지는 `python:3.14-slim` 을 기준으로 한다.
 - `make test` 와 `make setup` 은 `scripts/install_python_locked.sh` 를 호출해 같은 Python 잠금 기준을 사용한다.
 - Web 의존성은 커밋된 `pnpm-lock.yaml` 을 기준으로 반드시 `--frozen-lockfile` 로 설치한다.
 - `web-test` 는 compose volume `/pnpm/store` 를 pnpm store 로 사용해 worktree 안의 `.pnpm-store` 생성을 피한다.
@@ -70,6 +71,8 @@ P15 hard-live gate 는 명시 실행할 때만 live PPM 을 호출한다. 기본
 
 PPM 이 없거나 접근 권한이 없으면 PLF 로 대체하지 않는다. 이 실패는 `LIVE_PPM_EVAL_REQUIRED`, `LIVE_METADATA_UNAVAILABLE`, `PPM_DB_NOT_FOUND`, `PPM_DB_ACCESS_DENIED`, `METADATA_READ_ONLY_PERMISSION_INSUFFICIENT` 같은 blocker 로 취급한다.
 
+P21 no-mock portal gate 는 `P21_LIVE_PORTAL_GATE=1` 을 명시할 때만 PLF workflow repository 와 read-only PPM metadata access 를 함께 검증한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 은 web-test 환경으로 pass-through 되며, missing PLF/PPM 은 skip 이 아니라 prerequisite blocker 로 보고한다.
+
 worktree 포트 전략은 계속 `make dev-ports` 를 기준으로 한다. P15 eval 자체는 API/MCP/Web dev server port 를 점유하지 않지만, 병렬 worker 가 수동 smoke 를 병행할 때는 hard-coded 8000/8100/3000 대신 worktree 별 계산값을 사용한다.
 
 ## 예시
@@ -80,5 +83,6 @@ make test-build
 make test
 make test PYTEST_ARGS="tests/e2e tests/eval"
 P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
 make test-web-smoke
 ```

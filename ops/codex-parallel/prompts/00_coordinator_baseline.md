@@ -1,5 +1,5 @@
 PROJECT.md, AGENTS.md, ARCHITECTURE.md, TOOLS.md, POLICY.md, EVAL_SPEC.md, TASK_TEMPLATE.md 를 먼저 읽고 기준으로 작업해.
-추가로 현재 기준 자산인 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.example`, `Makefile`, `docker/test/docker-compose.yml`, `requirements/lock/py311-dev.txt`, `pnpm-lock.yaml` 을 확인해.
+추가로 현재 기준 자산인 `spec/openapi/ai_agent_platform_openapi_v1.yaml`, `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`, `spec/mcp/mssql_metadata_tool_catalog.yaml`, `spec/validation/validation_rules.yaml`, `spec/policy/**`, `.env.example`, `Makefile`, `docker/test/docker-compose.yml`, `requirements/lock/py314-dev.txt`, `pnpm-lock.yaml` 을 확인해.
 
 너는 이 저장소의 **코디네이터 겸 베이스라인 고정 담당**이다.
 이번 작업은 병렬 개발에 들어가기 전에 공유 계약과 공통 골격이 현재 파일 기준으로 흔들리지 않는지 점검하고, 필요한 최소 보완만 수행하는 단계다.
@@ -76,7 +76,7 @@ Constraints:
 - DB lifecycle 관리 금지
 - 무검증 자동 반영 금지
 - 비밀값을 `.env.example`, 문서, fixture, 테스트에 넣지 않는다.
-- 이미 있는 `pnpm-lock.yaml` 과 `requirements/lock/py311-dev.txt` 를 재현성 기준으로 취급한다.
+- 이미 있는 `pnpm-lock.yaml` 과 `requirements/lock/py314-dev.txt` 를 재현성 기준으로 취급한다.
 - OpenAPI, DDL, domain, validation rule 간 명칭 불일치가 보이면 임의 확장보다 blocker 또는 작은 계약 정리로 처리한다.
 
 Expected Deliverables:
@@ -88,7 +88,7 @@ Expected Deliverables:
 Verification:
 - `make docker-project-name`
 - `make dev-ports`
-- `python -m compileall apps services packages tests`
+- `python3.14 -m compileall apps services packages tests`
 - `make test`
 - `make test-web-smoke`
 - 실행이 불가능하면 정확한 실패 원인, 필요한 환경, 비어 있는 영역을 보고

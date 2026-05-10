@@ -205,6 +205,9 @@ class WorkflowRepository(Protocol):
     def get_job(self, job_id: str) -> JobRecord | None:
         ...
 
+    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+        ...
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         ...
 

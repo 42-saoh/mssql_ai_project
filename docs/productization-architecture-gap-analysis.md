@@ -11,6 +11,9 @@ production auth/RBAC source of truth. P19 adds fixture-backed auth/RBAC enforcem
 while live IdP/JWKS and PLF role lookup verification is deferred future hardening.
 The current opening posture is `CONDITIONAL_GO` for controlled use, with
 `production_ready: false` still explicit.
+P21 moves the Web portal from runtime mock/demo flow to HTTP-only functional pages and
+sets Python 3.14 as the active host/Docker baseline, but PLF and read-only PPM
+prerequisites remain required before the no-mock portal gate can pass.
 
 ## Status Taxonomy
 
@@ -36,10 +39,11 @@ The current opening posture is `CONDITIONAL_GO` for controlled use, with
 | CanonicalAnalysisModel | `fixture-first` | Domain package now defines a minimal versioned canonical contract with snapshot id, registry refs, evidence refs, dependencies, patterns, result sets, business rules, and modernization points. | Productization still needs downstream web/auth release evidence; field-level uncertainty is allowed only as explicit `REVIEW_REQUIRED`. |
 | Generation factory | `fixture-first` | SP analysis doc, dependency report, and Java/MyBatis SP wrapper drafts render deterministically with review markers. | P12 must expand template registry, manifest, golden samples, policy-based naming, and draft review checklists. |
 | Validation engine | `fixture-first` | Validation rules load from spec and enforce evidence/review markers; publish gate helper requires passed validation plus approval. | P13 must productize rule taxonomy, reviewer checklist, audit linkage, and storage mappings without changing shared specs directly. |
-| Web portal | `stub` | Next.js shell uses mock adapter and provides request/job/artifact preview surfaces. | P14 must add product demo flows, metadata search, API adapter smoke, blocker display, and PPM sample handling. |
+| Web portal | `conditional-live` | P21 runtime/default path uses HTTP API only and renders blockers when API/PLF/PPM prerequisites are missing. | Full product readiness still requires PLF/PPM live gate evidence, broader UI smoke, and no production-ready overclaim. |
 | Eval/ops/readiness | `fixture-first` | P06 fixture eval covers one happy path and forbidden operations. | P15/P16 must define product metrics, observability/security checks, PPM scenarios, and go/no-go handoff package. |
 | P17 scoped pilot release | `conditional-live` | P17D records `CONDITIONAL_GO` for the draft-only scoped candidate. | This does not close productization; P18 must resolve canonical contract and web/auth evidence. |
 | P18/P19 productization closure | `conditional-live` | `fixtures/eval/productization_gap_closure_p18_v1.yaml` records P18A canonical closure, web HTTP adapter smoke, auth/RBAC source documentation, fixture-backed enforcement, and deferred live wiring hardening. | Controlled conditional open is allowed, but `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` remains required before claiming production-grade enterprise Auth/RBAC. |
+| P21 no-mock functional portal | `conditional-live` | `fixtures/eval/live_portal_no_mock_p21_v1.yaml` records Python 3.14, HTTP-only Web runtime, required pages, PLF/PPM prerequisites, and no fallback policy. | `P21_LIVE_PORTAL_GATE=1` must pass in an approved environment before calling the portal live-functional; `production_ready: false` remains. |
 
 ## Contract Drift Matrix
 
@@ -85,3 +89,4 @@ In both modes, the following remain forbidden: row-data reads, procedure executi
 | P16 | Pilot release readiness and handoff package. | Go/no-go includes PPM access, dependency evidence, validation results, approval/audit, and policy compliance. |
 | P17 | Live pilot blocker closure. | Scoped draft-only candidate can become `CONDITIONAL_GO`; platform production-ready remains forbidden. |
 | P18/P19 | Canonical contract, web HTTP smoke, and auth/RBAC productization closure. | Conditional open is allowed with live IdP/JWKS and PLF role lookup deferred; production-grade enterprise Auth/RBAC claims require that evidence to pass first. |
+| P21 | No-mock functional portal and Python 3.14 baseline. | Web must use HTTP API, PLF and PPM must be configured for live gate, and missing prerequisites are blockers rather than mock fallback. |

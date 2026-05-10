@@ -476,6 +476,29 @@ class MssqlPlatformRepository:
         )
         return job_from_row(row) if row else None
 
+    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+        normalized_limit = normalize_list_limit(limit)
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({normalized_limit})
+                CONVERT(NVARCHAR(36), j.JOB_ID),
+                COALESCE(j.WRKR_REF_ID, CONVERT(NVARCHAR(36), j.JOB_ID)),
+                COALESCE(r.TRC_ID, CONVERT(NVARCHAR(36), j.REQ_ID)),
+                j.CUR_STAT_CD,
+                j.CUR_STEP_TP_CD,
+                j.ERR_CD,
+                j.ERR_CNTNT,
+                j.CRE_DTM,
+                j.UPD_DTM,
+                j.RGST_BINDING_JSON
+            FROM dbo.CORE_JOBS j
+            JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
+            ORDER BY j.CRE_DTM DESC, j.JOB_ID DESC
+            """,
+            (),
+        )
+        return [job_from_row(row) for row in rows]
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         row = self._query_one(
             (
@@ -1179,6 +1202,12 @@ def storage_validation_to_api(value: str) -> str:
 
 def storage_approval_to_api(value: str) -> str:
     return "APPROVE" if value == "APPROVED" else "REJECT"
+
+
+def normalize_list_limit(limit: int | None, *, default: int = 20) -> int:
+    if limit is None:
+        return default
+    return min(max(int(limit), 1), 100)
 
 
 def as_datetime(value: Any) -> datetime:

@@ -5,9 +5,17 @@ from api_app.errors import api_http_exception
 from api_app.presenters import present_job
 from api_app.repositories import WorkflowRepository
 from api_app.schemas import Job
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+
+
+@router.get("")
+def list_jobs(
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> dict[str, list[Job]]:
+    return {"jobs": [present_job(job) for job in repository.list_jobs(limit=limit)]}
 
 
 @router.get("/{jobId}", response_model=Job)

@@ -51,6 +51,10 @@ class Job(ApiModel):
     current_step: WorkflowStepType | None = Field(default=None, alias="currentStep")
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
+    progress: float | None = None
+    blockers: list[dict[str, str]] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    failure_reason: str | None = Field(default=None, alias="failureReason")
 
 
 class EvidenceRef(ApiModel):
@@ -62,6 +66,7 @@ class EvidenceRef(ApiModel):
 
 class ArtifactSummary(ApiModel):
     artifact_id: str = Field(alias="artifactId")
+    job_id: str | None = Field(default=None, alias="jobId")
     type: ArtifactType
     status: ArtifactStatus
     title: str | None = None
@@ -85,6 +90,7 @@ class ValidationCheck(ApiModel):
 
 
 class ValidationReport(ApiModel):
+    validation_report_id: str | None = Field(default=None, alias="validationReportId")
     artifact_id: str = Field(alias="artifactId")
     status: Literal["PASSED", "FAILED", "REVIEW_REQUIRED"]
     checks: list[ValidationCheck]

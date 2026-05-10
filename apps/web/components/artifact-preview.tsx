@@ -18,9 +18,11 @@ const reviewChecklist = [
 export function ArtifactPreview({
   artifact,
   validation,
+  validateAction,
 }: Readonly<{
   artifact: Artifact;
-  validation: ValidationReport;
+  validation?: ValidationReport | null;
+  validateAction?: (formData: FormData) => Promise<void>;
 }>) {
   return (
     <div className="stack">
@@ -95,35 +97,49 @@ export function ArtifactPreview({
             <h2>Evidence and policy checks</h2>
           </div>
           <StatusPill
-            value={validation.status}
-            label={validationStatusLabels[validation.status]}
+            value={validation?.status ?? "REVIEW_REQUIRED"}
+            label={validation ? validationStatusLabels[validation.status] : "Not recorded"}
           />
         </div>
 
-        <div className="validation-list">
-          {validation.checks.map((check) => (
-            <article className="validation-row" key={check.ruleId}>
-              <div>
-                <h3>{check.ruleId}</h3>
-                <p>{check.message ?? "No message provided."}</p>
-              </div>
-              <div className="status-cluster">
-                <StatusPill value={check.severity} label={check.severity} />
-                <StatusPill value={check.result} label={check.result.replace("_", " ")} />
-              </div>
-            </article>
-          ))}
-        </div>
+        {validation ? (
+          <div className="validation-list">
+            {validation.checks.map((check) => (
+              <article className="validation-row" key={check.ruleId}>
+                <div>
+                  <h3>{check.ruleId}</h3>
+                  <p>{check.message ?? "No message provided."}</p>
+                </div>
+                <div className="status-cluster">
+                  <StatusPill value={check.severity} label={check.severity} />
+                  <StatusPill value={check.result} label={check.result.replace("_", " ")} />
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="callout callout--warning">
+            <strong>No latest validation report</strong>
+            <p>Run validation explicitly to create a PLF validation report for this artifact.</p>
+          </div>
+        )}
 
-        {(validation.missingEvidence?.length ?? 0) > 0 ? (
+        {(validation?.missingEvidence?.length ?? 0) > 0 ? (
           <div className="callout callout--warning">
             <strong>Missing evidence</strong>
             <ul>
-              {validation.missingEvidence?.map((item) => (
+              {validation?.missingEvidence?.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
           </div>
+        ) : null}
+
+        {validateAction ? (
+          <form action={validateAction} className="form-actions">
+            <input name="artifactId" type="hidden" value={artifact.artifactId} />
+            <button type="submit">Run validation</button>
+          </form>
         ) : null}
       </section>
 
@@ -160,11 +176,11 @@ export function ArtifactPreview({
             ))}
           </ul>
 
-          {(validation.manualReviewPoints?.length ?? 0) > 0 ? (
+          {(validation?.manualReviewPoints?.length ?? 0) > 0 ? (
             <div className="callout">
               <strong>Manual review points</strong>
               <ul>
-                {validation.manualReviewPoints?.map((item) => (
+                {validation?.manualReviewPoints?.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
@@ -196,9 +212,9 @@ export function ArtifactPreview({
       </section>
 
       <div className="page-actions">
-        <Link href="/jobs/job_demo_review_pending">Back to review job</Link>
+        {artifact.jobId ? <Link href={`/jobs/${artifact.jobId}`}>Back to review job</Link> : null}
         <Link className="secondary-action" href={`/review/decision?artifactId=${artifact.artifactId}`}>
-          Preview review decision
+          Record review decision
         </Link>
       </div>
     </div>

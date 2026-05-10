@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from api_app.metadata_gateway import McpMetadataGateway
+import pytest
+from api_app.metadata_gateway import McpMetadataGateway, P21LivePortalPrerequisiteError
 
 
 def test_mcp_metadata_gateway_collects_fixture_metadata_through_registry() -> None:
@@ -36,3 +37,17 @@ def test_mcp_metadata_gateway_returns_review_required_fallback_for_missing_fixtu
             "locator": "request.target",
         },
     )
+
+
+def test_p21_live_gate_blocks_fixture_metadata_gateway_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "1")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+
+    with pytest.raises(P21LivePortalPrerequisiteError) as exc_info:
+        McpMetadataGateway().collect_procedure_metadata(
+            db_profile_id="ppm",
+            schema="dbo",
+            procedure_name="usp_GetOrderSummary",
+        )
+
+    assert exc_info.value.code == "P21_LIVE_PPM_REQUIRED"

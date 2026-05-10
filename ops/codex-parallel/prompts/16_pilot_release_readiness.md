@@ -63,7 +63,7 @@ PPM 대표 SP/Table 대상 시범 적용 준비 상태를 점검하고, 산출�
 - `make test`
 - `make test-web-smoke`
 - `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
-- `python -m compileall apps services packages tests`
+- `python3.14 -m compileall apps services packages tests`
 
 ## Blocker 보고 기준
 

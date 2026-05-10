@@ -113,12 +113,14 @@ const submitted = await api.createSPAnalysisRequest({
 });
 
 const job = await api.getJob(submitted.jobId);
+const jobs = await api.listJobs(5);
 const listed = await api.listJobArtifacts(submitted.jobId);
 const analysisSummary = listed.artifacts.find((artifact) => artifact.type === "SP_ANALYSIS_DOC");
 assert(analysisSummary, "HTTP smoke could not find SP_ANALYSIS_DOC artifact summary");
 
 const artifact = await api.getArtifact(analysisSummary.artifactId);
 const validation = await api.validateArtifact(analysisSummary.artifactId);
+const latestValidation = await api.getLatestValidation(analysisSummary.artifactId);
 const approval = await api.createApprovalDecision(analysisSummary.artifactId, {
   decision: "REQUEST_CHANGES",
   reviewer: "web-http-smoke@example.com",
@@ -135,9 +137,11 @@ const registry = await api.listRegistryVersions();
 
 assert(submitted.status === "REVIEW_PENDING", `Unexpected submit status: ${submitted.status}`);
 assert(job.currentStep === "VALIDATE", `Unexpected job current step: ${job.currentStep}`);
+assert(jobs.jobs.some((item) => item.jobId === job.jobId), "Recent jobs did not include submitted job");
 assert(listed.artifacts.length > 0, "HTTP smoke returned no artifacts");
 assert(artifact.evidenceRefs.length > 0, "HTTP smoke artifact has no evidence refs");
 assert(validation.status === "PASSED" || validation.status === "REVIEW_REQUIRED", `Unexpected validation status: ${validation.status}`);
+assert(latestValidation.validationReportId === validation.validationReportId, "Latest validation did not match explicit validation");
 assert(approval.decision === "REQUEST_CHANGES", `Unexpected approval decision: ${approval.decision}`);
 assert(profiles.profiles.every((profile) => profile.readOnly === true), "Metadata profiles must be read-only");
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
@@ -150,9 +154,11 @@ assertNoForbiddenPath();
 for (const [label, payload] of Object.entries({
   submitted,
   job,
+  jobs,
   listed,
   artifact,
   validation,
+  latestValidation,
   approval,
   profiles,
   metadataSearch,
@@ -167,6 +173,9 @@ assertObserved("POST /api/v1/requests/sp-analysis", ({ method, path }) =>
 assertObserved("GET /api/v1/jobs/{jobId}", ({ method, path }) =>
   method === "GET" && /^\/api\/v1\/jobs\/[^/]+$/.test(path),
 );
+assertObserved("GET /api/v1/jobs", ({ method, path }) =>
+  method === "GET" && path.startsWith("/api/v1/jobs?"),
+);
 assertObserved("GET /api/v1/jobs/{jobId}/artifacts", ({ method, path }) =>
   method === "GET" && /^\/api\/v1\/jobs\/[^/]+\/artifacts$/.test(path),
 );
@@ -175,6 +184,9 @@ assertObserved("GET /api/v1/artifacts/{artifactId}", ({ method, path }) =>
 );
 assertObserved("POST /api/v1/artifacts/{artifactId}/validation", ({ method, path }) =>
   method === "POST" && /^\/api\/v1\/artifacts\/[^/]+\/validation$/.test(path),
+);
+assertObserved("GET /api/v1/artifacts/{artifactId}/validation/latest", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/artifacts\/[^/]+\/validation\/latest$/.test(path),
 );
 assertObserved("POST /api/v1/artifacts/{artifactId}/approval-decisions", ({ method, path }) =>
   method === "POST" && /^\/api\/v1\/artifacts\/[^/]+\/approval-decisions$/.test(path),

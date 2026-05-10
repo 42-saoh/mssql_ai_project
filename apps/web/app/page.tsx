@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { DependencyBlocker } from "@/components/dependency-blocker";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
+import type { PortalApi } from "@/lib/api/portal-api";
 import type {
   ArtifactSummary,
   Job,
@@ -14,7 +16,7 @@ import {
   jobStatusLabels,
 } from "@/lib/presentation";
 
-const demoJobId = "job_demo_review_pending";
+export const dynamic = "force-dynamic";
 
 function fulfilledValue<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
@@ -27,10 +29,22 @@ function rejectedMessage(result: PromiseSettledResult<unknown>): string | null {
 }
 
 export default async function HomePage() {
-  const api = getPortalApi();
-  const [jobResult, artifactResult, registryResult, metadataResult] = await Promise.allSettled([
-    api.getJob(demoJobId),
-    api.listJobArtifacts(demoJobId),
+  let api: PortalApi;
+  try {
+    api = getPortalApi();
+  } catch (error) {
+    return (
+      <div className="stack">
+        <DependencyBlocker
+          title="Portal API is not configured"
+          message={error instanceof Error ? error.message : "PORTAL_API_BASE_URL is required."}
+        />
+      </div>
+    );
+  }
+
+  const [jobsResult, registryResult, metadataResult] = await Promise.allSettled([
+    api.listJobs(5),
     api.listRegistryVersions(),
     api.searchMetadataObjects({
       dbProfileId: "ppm",
@@ -39,45 +53,48 @@ export default async function HomePage() {
       limit: 6,
     }),
   ]);
-  const job = fulfilledValue<Job>(jobResult);
-  const artifacts = fulfilledValue<{ jobId: string; artifacts: ArtifactSummary[] }>(
-    artifactResult,
-  )?.artifacts ?? [];
+  const jobs = fulfilledValue<{ jobs: Job[] }>(jobsResult)?.jobs ?? [];
+  const job = jobs[0] ?? null;
+  const artifactResult = job ? await Promise.allSettled([api.listJobArtifacts(job.jobId)]) : null;
+  const artifacts =
+    artifactResult && artifactResult[0].status === "fulfilled"
+      ? artifactResult[0].value.artifacts
+      : [];
   const registryVersions =
     fulfilledValue<{ versions: RegistryVersion[] }>(registryResult)?.versions ?? [];
   const metadataSearch = fulfilledValue<MetadataSearchResponse>(metadataResult);
   const apiWarnings = [
-    rejectedMessage(jobResult),
-    rejectedMessage(artifactResult),
+    rejectedMessage(jobsResult),
     rejectedMessage(registryResult),
     rejectedMessage(metadataResult),
+    artifactResult ? rejectedMessage(artifactResult[0]) : null,
   ].filter((message): message is string => Boolean(message));
+  const firstArtifact = artifacts[0];
 
   return (
     <div className="stack">
       <section className="panel portal-summary">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Central portal shell</p>
+            <p className="eyebrow">Controlled live portal</p>
             <h1>Analyze, validate, review</h1>
           </div>
-          <span className="quiet-label">{job ? "Mock data boundary" : "HTTP API boundary"}</span>
+          <span className="quiet-label">HTTP API boundary</span>
         </div>
         <p className="lede">
-          Product-demo App Router shell for MSSQL stored procedure request intake, read-only
-          metadata search, draft artifacts, validation evidence, blockers, and approval-gated
-          review state.
+          Portal pages call the configured API/BFF for request intake, read-only metadata search,
+          draft artifacts, validation evidence, blockers, and persisted review decisions.
         </p>
         <div className="form-actions">
           <Link className="primary-action" href="/requests/new">
-            Create PPM sample request
+            Create PPM request
           </Link>
           <Link className="secondary-action" href="/metadata/search">
             Search metadata
           </Link>
           {job ? (
             <Link className="secondary-action" href={`/jobs/${job.jobId}`}>
-              Inspect review job
+              Inspect latest job
             </Link>
           ) : null}
         </div>
@@ -87,8 +104,8 @@ export default async function HomePage() {
         <div className="panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Job status</p>
-              <h2>{job?.jobId ?? "No demo job"}</h2>
+              <p className="eyebrow">Recent job</p>
+              <h2>{job?.jobId ?? "No jobs returned"}</h2>
             </div>
             {job ? <StatusPill value={job.status} label={jobStatusLabels[job.status]} /> : null}
           </div>
@@ -109,7 +126,7 @@ export default async function HomePage() {
           ) : (
             <>
               <p className="lede">
-                The connected API is live, but it does not seed the mock demo job.
+                The API is reachable only when PLF workflow prerequisites are configured.
               </p>
               <Link href="/requests/new">Create request</Link>
             </>
@@ -120,7 +137,7 @@ export default async function HomePage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Registry bindings</p>
-              <h2>Active mock versions</h2>
+              <h2>Active versions</h2>
             </div>
           </div>
           <div className="registry-list">
@@ -188,20 +205,24 @@ export default async function HomePage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Review decision</p>
-              <h2>Preview record</h2>
+              <h2>Persist decision</h2>
             </div>
             <span className="quiet-label">No publish</span>
           </div>
           <p className="lede">
-            Reviewers can shape an approval decision payload while validation, audit, publish, and
-            deployment boundaries stay explicit.
+            Reviewers record approval decisions through the API. Publish, export, deployment,
+            procedure execution, and DDL/DML controls remain unavailable.
           </p>
           <div className="form-actions">
-            <Link className="secondary-action" href="/review/decision">
-              Preview decision
-            </Link>
-            <Link className="secondary-action" href="/jobs/job_demo_failed_blocker">
-              View blocker job
+            <Link
+              className="secondary-action"
+              href={
+                firstArtifact
+                  ? `/review/decision?artifactId=${firstArtifact.artifactId}`
+                  : "/review/decision"
+              }
+            >
+              Record decision
             </Link>
           </div>
         </div>
@@ -215,7 +236,7 @@ export default async function HomePage() {
           </div>
         </div>
         <div className="artifact-list">
-          {artifacts.map((artifact) => (
+          {artifacts.map((artifact: ArtifactSummary) => (
             <article className="artifact-row" key={artifact.artifactId}>
               <div>
                 <h3>{artifact.title ?? artifactTypeLabels[artifact.type]}</h3>

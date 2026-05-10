@@ -96,6 +96,33 @@ paths:
                 $ref: "#/components/schemas/SubmitRequestResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /api/v1/jobs:
+    get:
+      tags: [jobs]
+      summary: List recent workflow jobs.
+      operationId: listJobs
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Recent workflow jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Job"
   /api/v1/jobs/{jobId}:
     get:
       tags: [jobs]
@@ -162,6 +189,22 @@ paths:
       responses:
         "200":
           description: Validation report for the artifact.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationReport"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/artifacts/{artifactId}/validation/latest:
+    get:
+      tags: [artifacts]
+      summary: Read the latest validation report without creating a validation write.
+      operationId: getLatestValidationReport
+      parameters:
+        - $ref: "#/components/parameters/ArtifactId"
+      responses:
+        "200":
+          description: Latest validation report for the artifact.
           content:
             application/json:
               schema:
@@ -326,14 +369,14 @@ components:
       required: true
       schema:
         type: string
-      example: job_demo_001
+      example: job_123
     ArtifactId:
       name: artifactId
       in: path
       required: true
       schema:
         type: string
-      example: art_demo_001
+      example: art_123
   responses:
     BadRequest:
       description: Invalid request payload or unsupported workflow option.
@@ -441,6 +484,20 @@ components:
         updatedAt:
           type: string
           format: date-time
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchBlocker"
+        caveats:
+          type: array
+          items:
+            type: string
+        failureReason:
+          type: string
     JobStatus:
       type: string
       enum:
@@ -469,6 +526,8 @@ components:
       required: [artifactId, type, status]
       properties:
         artifactId:
+          type: string
+        jobId:
           type: string
         type:
           $ref: "#/components/schemas/ArtifactType"
@@ -561,6 +620,8 @@ components:
       type: object
       required: [artifactId, status, checks]
       properties:
+        validationReportId:
+          type: string
         artifactId:
           type: string
         status:
@@ -673,6 +734,7 @@ components:
             - PPM_DB_ACCESS_DENIED
             - LIVE_METADATA_UNAVAILABLE
             - DEPENDENCY_METADATA_INCOMPLETE
+            - P21_LIVE_PPM_REQUIRED
         message:
           type: string
     MetadataSearchResult:

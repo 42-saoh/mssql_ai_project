@@ -76,7 +76,7 @@ Expected Deliverables:
 
 Verification:
 - `make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/unit/test_mssql_mcp_live_config.py"`
-- 필요 시 `python -m compileall services/mssql-mcp tests`
+- 필요 시 `python3.14 -m compileall services/mssql-mcp tests`
 - `make run-mcp` smoke 는 환경이 준비된 경우에만 수행하고, live DB 없이는 강제하지 않음
 
 Report Format:

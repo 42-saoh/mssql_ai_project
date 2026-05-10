@@ -72,7 +72,7 @@ MSSQL Metadata MCP를 production target에 맞게 확장 설계·구현한다. p
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/unit/test_mssql_mcp_live_config.py tests/contract/test_local_mssql_connection_assets.py"`
-- `python -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp`
+- `python3.14 -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp`
 - live enabled 환경이 있으면 secret 없이 `MSSQL_ENABLE_LIVE_METADATA=1` smoke 결과를 보고
 
 ## Blocker 보고 기준

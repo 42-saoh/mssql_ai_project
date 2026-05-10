@@ -65,7 +65,7 @@ PI 3기 표준에 맞춘 Java/MyBatis 초안 생성 factory를 template registry
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/unit/generation tests/contract/test_generation_goldens_and_repro_assets.py"`
-- `python -m compileall packages/generation tests/unit/generation`
+- `python3.14 -m compileall packages/generation tests/unit/generation`
 - 필요 시 `make test PYTEST_ARGS="tests/unit/validation"`
 
 ## Blocker 보고 기준

@@ -6,10 +6,21 @@ from typing import Any
 from mssql_mcp_app.errors import MetadataToolError
 from mssql_mcp_app.profiles import load_db_profiles
 from mssql_mcp_app.registry import build_tool_registry
-from mssql_mcp_app.repositories import FixtureMetadataRepository
+from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
 from mssql_mcp_app.settings import load_live_metadata_settings
 
-from api_app.metadata_service import repo_root
+from api_app.metadata_service import (
+    METADATA_BLOCKER_MESSAGES,
+    P21_LIVE_PPM_REQUIRED,
+    p21_live_portal_enabled,
+    repo_root,
+)
+
+
+class P21LivePortalPrerequisiteError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__(METADATA_BLOCKER_MESSAGES[P21_LIVE_PPM_REQUIRED])
+        self.code = P21_LIVE_PPM_REQUIRED
 
 
 @dataclass(frozen=True)
@@ -82,8 +93,17 @@ class McpMetadataGateway(MetadataGateway):
     ) -> MetadataCollectionResult:
         object_ref = f"{schema}.{procedure_name}"
         settings = load_live_metadata_settings()
+        if p21_live_portal_enabled() and (
+            not settings.live_metadata_enabled or db_profile_id != "ppm"
+        ):
+            raise P21LivePortalPrerequisiteError()
         profiles = load_db_profiles(settings, repo_root=repo_root())
-        registry = build_tool_registry(repository=self.fixture_repository, profiles=profiles)
+        repository = (
+            LiveMetadataRepository(settings=settings, profiles=profiles)
+            if settings.live_metadata_enabled
+            else self.fixture_repository
+        )
+        registry = build_tool_registry(repository=repository, profiles=profiles)
         evidence_refs: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
 

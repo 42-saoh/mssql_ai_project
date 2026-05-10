@@ -81,6 +81,10 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert job.headers["X-Correlation-ID"].startswith("corr_")
     assert job.json()["currentStep"] == "VALIDATE"
 
+    recent_jobs = client.get("/api/v1/jobs", params={"limit": 10})
+    assert recent_jobs.status_code == 200
+    assert submitted["jobId"] in {item["jobId"] for item in recent_jobs.json()["jobs"]}
+
     listed = client.get(f"/api/v1/jobs/{submitted['jobId']}/artifacts")
     assert listed.status_code == 200
     artifacts = listed.json()["artifacts"]
@@ -103,6 +107,16 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert validation.headers["X-Correlation-ID"] == "corr-route-flow"
     assert validation.json()["artifactId"] == artifact_id
     assert validation.json()["status"] in {"PASSED", "REVIEW_REQUIRED"}
+    assert validation.json()["validationReportId"].startswith("val_")
+
+    latest_validation = client.get(
+        f"/api/v1/artifacts/{artifact_id}/validation/latest",
+        headers=headers,
+    )
+    assert latest_validation.status_code == 200
+    assert latest_validation.headers["X-Correlation-ID"] == "corr-route-flow"
+    assert latest_validation.json()["artifactId"] == artifact_id
+    assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
 
     approval = client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
@@ -429,6 +443,7 @@ def test_metadata_search_validation_and_dependency_error_shapes(client: TestClie
 def test_unknown_resources_return_not_found(client: TestClient) -> None:
     job = client.get("/api/v1/jobs/job_missing")
     artifact = client.get("/api/v1/artifacts/art_missing")
+    latest_validation = client.get("/api/v1/artifacts/art_missing/validation/latest")
     validation = client.post("/api/v1/artifacts/art_missing/validation")
 
     assert job.status_code == 404
@@ -437,6 +452,9 @@ def test_unknown_resources_return_not_found(client: TestClient) -> None:
     assert artifact.status_code == 404
     assert set(artifact.json()) == {"detail", "code"}
     assert artifact.json()["code"] == "RESOURCE_NOT_FOUND"
+    assert latest_validation.status_code == 404
+    assert set(latest_validation.json()) == {"detail", "code"}
+    assert latest_validation.json()["code"] == "RESOURCE_NOT_FOUND"
     assert validation.status_code == 404
     assert set(validation.json()) == {"detail", "code"}
     assert validation.json()["code"] == "RESOURCE_NOT_FOUND"

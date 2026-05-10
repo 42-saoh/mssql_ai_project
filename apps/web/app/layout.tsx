@@ -22,8 +22,6 @@ export default function RootLayout({
           <nav aria-label="Primary navigation">
             <Link href="/requests/new">New request</Link>
             <Link href="/metadata/search">Metadata search</Link>
-            <Link href="/jobs/job_demo_review_pending">Job status</Link>
-            <Link href="/artifacts/art_demo_sp_analysis">Artifact preview</Link>
             <Link href="/review/decision">Review decision</Link>
           </nav>
         </header>

@@ -52,12 +52,12 @@ cp .env.example .env        # 로컬 전용. 비밀값을 채운 뒤 커밋하�
 make docker-project-name
 make dev-ports
 make test-build
-python -m compileall apps services packages tests
+python3.14 -m compileall apps services packages tests
 ```
 
 - 호스트에 `python` alias 가 없으면 `python3 -m compileall apps services packages tests` 로 같은 compile-only 검증을 수행한다.
 - `pnpm-lock.yaml` 은 현재 기준 저장소에 존재한다. coordinator 는 잠금 파일을 임의 재생성하지 말고 필요 시 명시적인 dependency 변경 작업에서만 갱신한다.
-- Python 의존성은 `requirements/lock/py311-dev.txt` 와 `scripts/install_python_locked.sh` 기준으로 맞춘다.
+- Python 의존성은 `requirements/lock/py314-dev.txt` 와 `scripts/install_python_locked.sh` 기준으로 맞춘다.
 - `.env.example` 은 비밀값 없는 샘플이다. 실제 credential 은 `.env`, `.env.local`, OS keychain 등 저장소 밖/비커밋 경로에 둔다.
 - 로컬 Docker MSSQL 을 붙일 때는 `.env` 를 만들고 `PLATFORM_DB_*`, `MSSQL_METADATA_*` 를 채운다.
 - metadata profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 공유 기준으로 사용한다.

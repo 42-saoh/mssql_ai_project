@@ -49,8 +49,9 @@ def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     assert "/publish" not in source
     assert "/deploy" not in source
     assert "/execute" not in source
-    assert "createApprovalDecision" not in review_page
-    assert 'method="post"' not in review_page
+    assert "createApprovalDecision" in review_page
+    assert "recordDecision" in review_page
+    assert "approval_preview_" not in review_page
     assert "row data" in source
     assert "ddl/dml" in source
     assert "dependency_metadata_incomplete" in source

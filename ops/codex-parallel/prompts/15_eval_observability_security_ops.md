@@ -27,7 +27,7 @@ eval fixtures, representative pilot scenarios, quality metrics, latency/performa
 - `Makefile`
 - `docker/test/**`
 - `scripts/**`
-- `requirements/lock/py311-dev.txt`
+- `requirements/lock/py314-dev.txt`
 - `pnpm-lock.yaml`
 - `fixtures/eval/**`
 - `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml`
@@ -67,7 +67,7 @@ eval fixtures, representative pilot scenarios, quality metrics, latency/performa
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/e2e tests/eval"`
-- `python -m compileall tests`
+- `python3.14 -m compileall tests`
 - `bash -n scripts/*.sh`
 - 필요 시 `python -m pytest tests/contract`
 

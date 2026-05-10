@@ -55,7 +55,7 @@
 - `make`
 
 ### Python 계열
-- `python`
+- `python3.14`
 - `uv` 또는 `pip`
 - `pytest`
 - `ruff`
@@ -100,6 +100,7 @@
 - 기본 metadata profile id 는 `master`, platform profile id 는 `plf`, pilot analysis target profile id 는 `ppm` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
 - 기본 metadata profile id 는 `master` 이며, profile registry 는 `config/mssql/local_docker_profiles.yaml` 을 기준으로 한다.
 - 현재 local registry 의 `master` profile 은 metadata source 의 `master` database 를, `plf` profile 은 platform DB `PLF` 를, `ppm` profile 은 pilot analysis target DB `PPM` 을 가리킨다. PPM 이 없거나 접근 불가하면 PLF로 임의 대체하지 않는다.
+- P21 no-mock portal 은 `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 을 요구한다. `P21_LIVE_PORTAL_GATE=1` 은 PLF workflow repository 와 read-only PPM metadata access 가 모두 준비된 경우에만 사용한다.
 
 ## 로그와 추적
 
@@ -136,7 +137,7 @@
 ## Docker 기반 테스트 실행
 
 - `docker/test/docker-compose.yml` 이 기본 테스트 러너 정의를 가진다.
-- `make test` 는 파이썬 테스트를 컨테이너 안에서 실행한다.
+- `make test` 는 Python 3.14 컨테이너 안에서 파이썬 테스트를 실행한다.
 - `make test-web-smoke` 는 현재 web 자동 테스트 공백을 보완하는 컨테이너 기반 build smoke 다.
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 은 fixture-first request → job → artifact → validation → approval recording happy path 와 eval fixture 정합성을 검증한다.
 - `scripts/install_web_workspace.sh` 는 docker/test 에서 `/pnpm/store` volume 을 pnpm store 로 사용해 worktree 안에 `.pnpm-store` 를 만들지 않는다.

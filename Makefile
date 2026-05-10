@@ -1,6 +1,6 @@
-PYTHON ?= python
-UVICORN ?= uvicorn
-RUFF ?= ruff
+PYTHON ?= python3.14
+UVICORN ?= $(PYTHON) -m uvicorn
+RUFF ?= $(PYTHON) -m ruff
 PNPM ?= pnpm
 DOCKER_COMPOSE ?= docker compose
 REPO_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -16,7 +16,7 @@ APP_PORT ?= $(shell WORKTREE_PATH="$(WORKTREE_PATH)" WORKTREE_PORT_SLOT="$(WORKT
 MCP_PORT ?= $(shell WORKTREE_PATH="$(WORKTREE_PATH)" WORKTREE_PORT_SLOT="$(WORKTREE_PORT_SLOT)" sh "$(PORT_RESOLVER)" MCP_PORT 2>/dev/null || echo 8100)
 WEB_PORT ?= $(shell WORKTREE_PATH="$(WORKTREE_PATH)" WORKTREE_PORT_SLOT="$(WORKTREE_PORT_SLOT)" sh "$(PORT_RESOLVER)" WEB_PORT 2>/dev/null || echo 3000)
 LOCAL_PYTHONPATH ?= $(REPO_ROOT)/apps/api:$(REPO_ROOT)/services/mssql-mcp:$(REPO_ROOT)/packages/domain/src:$(REPO_ROOT)/packages/analysis/src:$(REPO_ROOT)/packages/generation/src:$(REPO_ROOT)/packages/validation/src
-PYTHON_LOCK_FILE ?= requirements/lock/py311-dev.txt
+PYTHON_LOCK_FILE ?= requirements/lock/py314-dev.txt
 PYTHON_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_python_locked.sh
 WEB_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_web_workspace.sh
 ALLOW_UNLOCKED_PNPM_INSTALL ?= 0

@@ -104,6 +104,7 @@ export interface Job {
 
 export interface ArtifactSummary {
   artifactId: string;
+  jobId?: string;
   type: ArtifactType;
   status: ArtifactStatus;
   title?: string;
@@ -137,6 +138,7 @@ export interface ValidationCheck {
 }
 
 export interface ValidationReport {
+  validationReportId?: string;
   artifactId: string;
   status: ValidationStatus;
   checks: ValidationCheck[];

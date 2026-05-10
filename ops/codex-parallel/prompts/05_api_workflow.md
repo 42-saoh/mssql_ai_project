@@ -72,7 +72,7 @@ Expected Deliverables:
 Verification:
 - `make test PYTEST_ARGS="tests/integration/api tests/unit/api"`
 - 필요한 최소 unit tests
-- `python -m compileall apps/api tests/integration/api tests/unit/api`
+- `python3.14 -m compileall apps/api tests/integration/api tests/unit/api`
 - app import / route smoke
 
 Report Format:

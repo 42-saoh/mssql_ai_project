@@ -76,3 +76,28 @@ def validate_artifact(
             code="RESOURCE_NOT_FOUND",
         ) from exc
     return present_validation_report(report)
+
+
+@router.get(
+    "/api/v1/artifacts/{artifactId}/validation/latest",
+    response_model=ValidationReport,
+)
+def get_latest_validation(
+    artifactId: str,
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> ValidationReport:
+    artifact = repository.get_artifact(artifactId)
+    if artifact is None:
+        raise api_http_exception(
+            status_code=404,
+            detail=f"Unknown artifact: {artifactId}",
+            code="RESOURCE_NOT_FOUND",
+        )
+    report = repository.latest_validation_for(artifactId)
+    if report is None:
+        raise api_http_exception(
+            status_code=404,
+            detail=f"No validation report recorded for artifact: {artifactId}",
+            code="RESOURCE_NOT_FOUND",
+        )
+    return present_validation_report(report)

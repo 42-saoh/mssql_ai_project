@@ -535,6 +535,10 @@ export function createMockPortalApi(): PortalApi {
       };
     },
 
+    async listJobs(): Promise<{ jobs: Job[] }> {
+      return { jobs: Object.keys(jobScenarios).map((jobId) => toJob(jobId)) };
+    },
+
     async getJob(jobId: string): Promise<Job> {
       return toJob(jobId);
     },
@@ -552,6 +556,10 @@ export function createMockPortalApi(): PortalApi {
 
     async getArtifact(artifactId: string): Promise<Artifact> {
       return artifacts[artifactId] ?? artifacts.art_demo_sp_analysis;
+    },
+
+    async getLatestValidation(artifactId: string): Promise<ValidationReport> {
+      return validationReports[artifactId] ?? validationReports.art_demo_sp_analysis;
     },
 
     async validateArtifact(artifactId: string): Promise<ValidationReport> {

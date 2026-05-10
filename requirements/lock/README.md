@@ -3,7 +3,7 @@
 이 디렉터리는 병렬 Codex worker 가 같은 Python 기준선으로 설치/테스트하도록 하는 잠금 자산을 둔다.
 
 현재 기준:
-- `py311-dev.txt` — Python 3.11 계열 로컬 개발/도커 테스트 공용 제약 파일
+- `py314-dev.txt` — Python 3.14 계열 로컬 개발/도커 테스트 공용 제약 파일
 
 운영 원칙:
 - `make setup` 와 `make test` 는 `scripts/install_python_locked.sh` 를 통해 이 파일을 사용한다.

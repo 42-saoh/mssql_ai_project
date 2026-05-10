@@ -259,6 +259,16 @@ class MemoryWorkflowRepository:
     def get_job(self, job_id: str) -> JobRecord | None:
         return self.jobs.get(job_id)
 
+    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+        jobs = sorted(
+            self.jobs.values(),
+            key=lambda job: (job.created_at, job.job_id),
+            reverse=True,
+        )
+        if limit is not None:
+            jobs = jobs[: max(min(int(limit), 100), 1)]
+        return [replace(job) for job in jobs]
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         return self.artifacts.get(artifact_id)
 

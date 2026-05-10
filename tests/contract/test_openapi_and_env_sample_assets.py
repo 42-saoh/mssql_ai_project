@@ -41,7 +41,9 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert data["info"]["title"] == "MSSQL Analysis Agent Platform API"
     assert "/health" in data["paths"]
     assert "/api/v1/requests/sp-analysis" in data["paths"]
+    assert "/api/v1/jobs" in data["paths"]
     assert "/api/v1/jobs/{jobId}" in data["paths"]
+    assert "/api/v1/artifacts/{artifactId}/validation/latest" in data["paths"]
     assert "SPAnalysisRequest" in data["components"]["schemas"]
     assert "Artifact" in data["components"]["schemas"]
     assert "ValidationReport" in data["components"]["schemas"]
@@ -183,6 +185,9 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "MSSQL_METADATA_USER=readonly_metadata_user\n" in text
     assert "MSSQL_METADATA_USER=sa" not in text
     assert "MSSQL_METADATA_DEFAULT_PROFILE_ID=master" in text
+    assert "P21_LIVE_PORTAL_GATE=0" in text
+    assert "PORTAL_API_MODE=http" in text
+    assert "PORTAL_API_BASE_URL=\n" in text
     assert "TPsaoh" not in text
 
 

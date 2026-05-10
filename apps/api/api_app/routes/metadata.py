@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from mssql_mcp_app.errors import MetadataToolError
-
 from api_app.errors import api_http_exception
 from api_app.metadata_service import (
     DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
@@ -14,6 +12,7 @@ from api_app.metadata_service import (
 )
 from api_app.schemas import MetadataSearchResponse
 from fastapi import APIRouter, Query
+from mssql_mcp_app.errors import MetadataToolError
 
 router = APIRouter(prefix="/api/v1/metadata", tags=["metadata"])
 

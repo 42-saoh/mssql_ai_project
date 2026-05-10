@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
-
-from mssql_mcp_app.errors import MetadataToolError, UNKNOWN_TOOL
+from mssql_mcp_app.errors import UNKNOWN_TOOL, MetadataToolError
 from mssql_mcp_app.profiles import load_db_profiles
 from mssql_mcp_app.registry import build_tool_registry
 from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
@@ -24,6 +24,7 @@ from api_app.schemas import (
 METADATA_SEARCH_MCP_TOOL_MISSING = "METADATA_SEARCH_MCP_TOOL_MISSING"
 PPM_MANIFEST_TEMPLATE_ONLY = "PPM_MANIFEST_TEMPLATE_ONLY"
 DEPENDENCY_METADATA_INCOMPLETE = "DEPENDENCY_METADATA_INCOMPLETE"
+P21_LIVE_PPM_REQUIRED = "P21_LIVE_PPM_REQUIRED"
 
 DEFAULT_METADATA_SEARCH_OBJECT_TYPES = ("PROCEDURE", "TABLE", "VIEW", "FUNCTION")
 METADATA_SEARCH_TOOL_NAME = "search_metadata_objects"
@@ -36,6 +37,10 @@ METADATA_BLOCKER_MESSAGES = {
     ),
     DEPENDENCY_METADATA_INCOMPLETE: (
         "Dependency metadata is incomplete and requires review before relying on links."
+    ),
+    P21_LIVE_PPM_REQUIRED: (
+        "P21 live portal gate requires live read-only PPM metadata access; fixture "
+        "metadata and PLF fallback are not allowed."
     ),
 }
 
@@ -104,6 +109,15 @@ def search_metadata_objects(
     normalized_types = normalize_metadata_search_object_types(object_types)
     normalized_limit = normalize_metadata_search_limit(limit)
 
+    settings = load_live_metadata_settings()
+    if p21_live_portal_enabled():
+        if not settings.live_metadata_enabled or db_profile_id != "ppm":
+            raise MetadataSearchDependencyError(
+                code=P21_LIVE_PPM_REQUIRED,
+                detail=METADATA_BLOCKER_MESSAGES[P21_LIVE_PPM_REQUIRED],
+                status_code=503,
+            )
+
     if db_profile_id == "ppm" and ppm_manifest_selection_mode() != "live_metadata":
         blocker = metadata_search_blocker(PPM_MANIFEST_TEMPLATE_ONLY)
         return MetadataSearchResponse(
@@ -119,7 +133,6 @@ def search_metadata_objects(
             blockers=[blocker],
         )
 
-    settings = load_live_metadata_settings()
     profiles = load_db_profiles(settings, repo_root=repo_root())
     registry = build_tool_registry(
         repository=metadata_search_repository(settings, profiles),
@@ -205,6 +218,10 @@ def metadata_search_repository(settings: Any, profiles: list[Any]) -> Any:
     if settings.live_metadata_enabled:
         return LiveMetadataRepository(settings=settings, profiles=profiles)
     return FixtureMetadataRepository()
+
+
+def p21_live_portal_enabled() -> bool:
+    return os.getenv("P21_LIVE_PORTAL_GATE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _profiles_from_yaml() -> tuple[str, list[MetadataProfile]]:

@@ -2,7 +2,7 @@
 
 ## Summary
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. The suite documents what is implemented now and separates stubs, fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
 
 ## Current Boundaries
 
@@ -11,10 +11,11 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | API workflow | implemented | FastAPI routes submit the request, create a job, generate draft artifacts, validate, and record approval decisions. |
 | Metadata collection | fixture-first | Default path uses `fixtures/mcp/metadata_snapshot.json` through the MSSQL MCP registry boundary. |
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
-| Web portal | HTTP smoke recorded | Next.js shell uses mock data by default. P18B adds local `PORTAL_API_MODE=http` adapter smoke against fixture-backed API routes. |
+| Web portal | no-mock HTTP runtime | P21 default runtime requires `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL`; missing API/PLF/PPM prerequisites render blockers instead of demo ids. |
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | conditional scoped candidate | P17D records live pilot release as `CONDITIONAL_GO` only for the draft-only scoped candidate. This does not make the platform production-ready and does not authorize publish/export, DDL/DML, row-data access, procedure execution, deployment, or PLF fallback. |
 | P18/P19 productization readiness | conditional open | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain deferred future hardening before any production-grade enterprise Auth/RBAC claim. |
+| P21 live portal | explicit live gate | `P21_LIVE_PORTAL_GATE=1` requires PLF workflow repository and read-only PPM metadata access. Missing env is blocker failure, not skip, and does not imply `production_ready: true`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -30,6 +31,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml`: P17B draft-only live pilot artifact validation package with passed release-critical checks.
 - `fixtures/eval/manual_approval_audit_p17_v1.yaml`: P17C human approval and audit binding for the P17B artifact set/version and validation report.
 - `fixtures/eval/productization_gap_closure_p18_v1.yaml`: P18/P19 productization fixture recording P18A canonical closure, P18B HTTP adapter smoke evidence, production auth/RBAC source documentation, fixture-backed enforcement, and the deferred live wiring hardening item.
+- `fixtures/eval/live_portal_no_mock_p21_v1.yaml`: P21 no-mock portal and Python 3.14 contract fixture recording required pages, HTTP-only Web boundary, PLF/PPM prerequisites, live gate blocker behavior, and `production_ready: false`.
 
 ## Verification Scope
 
@@ -47,6 +49,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - P16/P17D readiness fixtures and docs preserve P17A/P17B/P17C/P17D evidence, P18A canonical contract checks stay fixture-first, and the live release remains limited to scoped `CONDITIONAL_GO`
 - P18B HTTP adapter smoke can be run with `python3 tests/e2e/web_http_adapter_smoke.py`; the dockerized python test suite may skip this smoke when node/pnpm are unavailable.
 - P19 auth/RBAC enforcement is covered by `tests/integration/api/test_api_auth_rbac.py`, including 401, 403, reviewer success, and reviewer spoofing cases.
+- P21 prompt/fixture/no-mock/Python 3.14 contracts are covered by `tests/contract/test_p21_no_mock_prompt_assets.py`; default `tests/eval/test_p21_live_portal_no_mock_gate.py` skips unless the live gate is explicitly enabled.
 
 For P15 hard-live validation, run the same suite with `P15_HARD_LIVE_GATE=1` and live PPM read-only metadata access configured:
 
@@ -60,6 +63,14 @@ For P16/P17D, `make test PYTEST_ARGS="tests/eval/test_p16_pilot_release_readines
 
 The full default suite remains fixture-first/reproducible. Tests that assert fixture snapshot ids or fixture-backed metadata search results pin `MSSQL_ENABLE_LIVE_METADATA=0`; P15 hard-live tests require `P15_HARD_LIVE_GATE=1` and must never fall back from PPM to PLF.
 
+For P21 no-mock portal live validation:
+
+```bash
+P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
+```
+
+This requires PLF `PLATFORM_DB_*` and PPM read-only metadata env. If either is missing, the gate fails with a prerequisite blocker and must not use fixture metadata or PLF fallback for PPM.
+
 ## P15 Ops Gate
 
 - Quality metrics: evidence coverage, review-required ratio, validation pass rate, generation reproducibility, and draft artifact completeness.
@@ -70,7 +81,7 @@ The full default suite remains fixture-first/reproducible. Tests that assert fix
 
 ## Drift Memo
 
-- OpenAPI: no contract change in this slice. Requested output groups remain separate from persisted artifact types.
+- OpenAPI: P21 adds recent jobs and latest validation read routes. Requested output groups remain separate from persisted artifact types.
 - Domain: P18A adds the minimal versioned `CanonicalAnalysisModel` contract in `packages/domain` and keeps missing snapshot/registry/evidence bindings as explicit analysis blockers.
 - MCP catalog: no tool surface change. Tools remain read-only and structured-argument only.
 - Validation rules: no rule change. Existing evidence/review-required rules drive e2e/eval expectations.
@@ -87,3 +98,4 @@ The full default suite remains fixture-first/reproducible. Tests that assert fix
 6. Mature DDL draft renderer while keeping schema apply/manual review outside automation.
 7. Keep future live pilot reruns evidence-based: if P17B validation, P17C approval/audit binding, or hard-live PPM verification cannot be reproduced, return the scoped candidate to `NO_GO`.
 8. Keep `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` as deferred future hardening until live auth/RBAC wiring closes without mock headers, hardcoded actors, fixture tokens, or committed secrets.
+9. Keep P21 no-mock portal evidence conditional on PLF/PPM prerequisites; do not claim full production readiness from a local controlled live gate.

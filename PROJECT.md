@@ -143,7 +143,7 @@ repo/
 - Machine-readable policy assets: `spec/policy/`
 - Environment sample: `.env.example`
 - Dockerized test runner: `docker/test/docker-compose.yml`
-- Reproducibility locks: `requirements/lock/py311-dev.txt`, `pnpm-lock.yaml`
+- Reproducibility locks: `requirements/lock/py314-dev.txt`, `pnpm-lock.yaml`
 
 이 파일들은 현재 병렬 개발의 공유 기준선이다. Wave 0 이후 worker 는 `packages/domain`, `spec/openapi`, `db/schema`, `spec/policy`, `docker/test`, 루트 문서를 읽기 전용 기준으로 사용하고, 변경이 필요하면 코디네이터에게 blocker 로 올린다.
 

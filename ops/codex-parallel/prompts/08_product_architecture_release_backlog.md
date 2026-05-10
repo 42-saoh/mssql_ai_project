@@ -59,7 +59,7 @@ P00~P07 starter/MVP 상태를 productization target으로 전환하기 위한 ar
 ## 검증 명령
 
 - `python -m pytest tests/contract/test_codex_productization_prompt_pack_assets.py tests/contract/test_ppm_pilot_object_selection_assets.py`
-- `python -m compileall tests`
+- `python3.14 -m compileall tests`
 - `python - <<'PY'` 로 `ops/codex-parallel/REQUEST_MANIFEST.yaml` YAML parse 확인
 
 ## Blocker 보고 기준
