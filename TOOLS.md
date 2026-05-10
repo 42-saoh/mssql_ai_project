@@ -108,7 +108,7 @@
 ### OpenAI / LLM runtime
 
 - 기본 semantic analysis model: `OPENAI_MODEL_ANALYSIS=gpt-5.5`
-- fast/test model: `OPENAI_MODEL_FAST_TEST=gpt-5-nano`
+- fast/test model: `gpt-5-nano` 고정 (`openai_fast_test` profile 은 env override 로 모델을 바꾸지 않음)
 - 기본 adapter: `FakeModelGateway`
 - remote adapter: `OpenAIModelGateway`
 - 구현 package: `packages/agent-runtime/src/ai_agent_runtime`
@@ -156,6 +156,8 @@
 - `make test-web-smoke` 는 현재 web 자동 테스트 공백을 보완하는 컨테이너 기반 build smoke 다.
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 은 fixture-first request → job → artifact → validation → approval recording happy path 와 eval fixture 정합성을 검증한다.
 - `LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p22_openai_live_agent_gate.py"` 는 선택적 OpenAI live gate 다. 기본 테스트는 fake gateway 로 수행한다.
+- `make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/unit/agent_runtime tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 는 P23C fixture-first LLM quality scoring runner 를 검증한다. 기본 실행은 `FakeModelGateway`, `openai_fast_test`, `gpt-5-nano` 로 고정되며 네트워크를 사용하지 않는다.
+- `LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"` 는 선택적 P23 OpenAI quality confidence gate 다. 실패는 production readiness blocker 로 해석하지 않으며 `production_ready: false` 를 유지한다.
 - `scripts/install_web_workspace.sh` 는 docker/test 에서 `/pnpm/store` volume 을 pnpm store 로 사용해 worktree 안에 `.pnpm-store` 를 만들지 않는다.
 - 새 테스트 스위트를 추가할 때는 가능하면 도커 실행 경로를 함께 제공한다.
 - 외부 DB 연결이 필요한 경우 환경변수로 주입하되, 테스트 명령이 DB lifecycle 을 대신 관리하지는 않는다.

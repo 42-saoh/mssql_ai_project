@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from ai_agent_runtime import FakeModelGateway, build_semantic_analysis_run
+from ai_agent_runtime import (
+    FakeModelGateway,
+    build_semantic_analysis_run,
+    evaluate_p23_semantic_quality,
+)
 from ai_agent_runtime.models import LlmSemanticAnalysisOutput
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -162,6 +166,72 @@ def test_p23b_default_runtime_path_uses_fake_gateway_and_sanitized_storage(
         assert "raw_openai_response_text" not in serialized
 
 
+def test_p23c_fixture_first_quality_runner_scores_all_scenarios(monkeypatch: Any) -> None:
+    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "not-used-for-p23c")
+    fixture = _fixture()
+    gateway = _fixture_gateway(fixture)
+
+    for scenario in _scenarios(fixture):
+        run = _build_run(scenario, gateway)
+        report = evaluate_p23_semantic_quality(
+            scenario=scenario,
+            run=run,
+            thresholds=fixture["quality_thresholds"],
+        )
+        scores = report["scores"]
+        thresholds = report["thresholds"]
+
+        assert report["status"] == "PASSED", _metric_message(scenario, "status", report["status"])
+        assert scores["semanticRecall"] >= thresholds["semanticRecallMin"], _metric_message(
+            scenario, "semanticRecall", scores["semanticRecall"]
+        )
+        assert scores["evidenceDiscipline"] >= thresholds["evidenceDisciplineMin"], (
+            _metric_message(scenario, "evidenceDiscipline", scores["evidenceDiscipline"])
+        )
+        assert scores["unreviewedOverclaims"] <= thresholds["unreviewedOverclaimsMax"], (
+            _metric_message(scenario, "unreviewedOverclaims", scores["unreviewedOverclaims"])
+        )
+        assert scores["storageSafetyFindings"] <= thresholds["storageSafetyFindingsMax"], (
+            _metric_message(scenario, "storageSafetyFindings", scores["storageSafetyFindings"])
+        )
+        assert report["productionReady"] is False
+        assert report["evidenceRefs"] == [
+            {
+                "type": "LLM_INFERENCE",
+                "objectRef": run.model_invocation.output_hash,
+                "locator": "agent-runtime.modelInvocation.outputHash",
+            }
+        ]
+        assert all(result["status"] == "REVIEW_REQUIRED" for result in report["validatorResults"])
+
+
+def test_p23c_quality_report_is_reproducible_and_sanitized(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    fixture = _fixture()
+    gateway = _fixture_gateway(fixture)
+
+    for scenario in _scenarios(fixture):
+        first = evaluate_p23_semantic_quality(
+            scenario=scenario,
+            run=_build_run(scenario, gateway),
+            thresholds=fixture["quality_thresholds"],
+        )
+        second = evaluate_p23_semantic_quality(
+            scenario=scenario,
+            run=_build_run(scenario, gateway),
+            thresholds=fixture["quality_thresholds"],
+        )
+        serialized = json.dumps(first, ensure_ascii=False, sort_keys=True)
+
+        assert first == second, _metric_message(scenario, "reportHash", first["reportHash"])
+        assert len(first["reportHash"]) == 64
+        assert scenario["transient_model_input"]["procedure_definition"] not in serialized
+        assert "CREATE OR ALTER PROCEDURE" not in serialized
+        assert "raw_prompt" not in serialized
+        assert "raw_sp_definition" not in serialized
+        assert "raw_openai_response_text" not in serialized
+
+
 def _fixture() -> dict[str, Any]:
     return yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
 
@@ -175,3 +245,30 @@ def _scenario(fixture_id: str) -> dict[str, Any]:
         scenario["fixture_id"]: scenario for scenario in _scenarios(_fixture())
     }
     return scenarios[fixture_id]
+
+
+def _fixture_gateway(fixture: dict[str, Any]) -> FakeModelGateway:
+    return FakeModelGateway(
+        output_by_target_ref={
+            scenario["target_ref"]: scenario["golden_expected_semantic_output"]
+            for scenario in _scenarios(fixture)
+        }
+    )
+
+
+def _build_run(scenario: dict[str, Any], gateway: FakeModelGateway) -> Any:
+    return build_semantic_analysis_run(
+        target_ref=scenario["target_ref"],
+        metadata={
+            "dbContext": scenario["db_context"],
+            "deterministicFacts": scenario["deterministic_facts"],
+        },
+        static_analysis=scenario["transient_model_input"]["static_analysis"],
+        procedure_definition=scenario["transient_model_input"]["procedure_definition"],
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+
+def _metric_message(scenario: dict[str, Any], metric: str, value: object) -> str:
+    return f"{scenario['fixture_id']} {metric} {value}"
