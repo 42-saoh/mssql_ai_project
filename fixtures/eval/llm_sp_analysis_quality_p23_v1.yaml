@@ -1,0 +1,122 @@
+fixture_suite_id: llm_sp_analysis_quality_p23_v1
+contract_ref: p23_llm_sp_analysis_quality@0.1.0
+phase: P23
+status: planned
+production_ready: false
+purpose: >
+  Contract seed for the P23 simple/medium/complex LLM-assisted stored procedure
+  semantic analysis evaluation suite. Concrete SP fixtures and golden expected
+  outputs are authored by separated P23 implementation tracks.
+model_profiles:
+  semantic_analysis:
+    profile_id: openai_sp_semantic_analysis
+    default_model: gpt-5.5
+  fast_test:
+    profile_id: openai_fast_test
+    default_model: gpt-5-nano
+prompt_contract:
+  prompt_ref: prompt:sp_semantic_analysis@0.1.0
+  schema_ref: schema:llm_semantic_analysis@0.1.0
+  allowed_output_fields:
+    - business_rules
+    - modernization_points
+    - risk_flags
+    - review_markers
+    - assumptions
+  required_evidence_type: LLM_INFERENCE
+  unsupported_fact_status: REVIEW_REQUIRED
+safety_expectations:
+  forbidden_storage_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - row_data
+    - secrets
+  forbidden_runtime_actions:
+    - row_data_query
+    - procedure_execution
+    - automatic_ddl
+    - automatic_dml
+    - auto_apply_artifact
+trace_expectations:
+  model_invocation_summary_fields:
+    - provider
+    - model
+    - model_profile_id
+    - reasoning_effort
+    - request_hash
+    - prompt_hash
+    - response_hash
+    - input_token_count
+    - output_token_count
+    - total_token_count
+    - latency_ms
+    - status
+  agent_run_summary_fields:
+    - agent_run_id
+    - job_id
+    - runtime_version
+    - prompt_ref
+    - schema_ref
+    - model_profile_id
+    - validation_status
+    - status
+scenarios:
+  - fixture_id: p23_simple_read_only_lookup
+    complexity: simple
+    source_kind: synthetic_contract_fixture
+    sp_definition_policy: transient_model_input_only
+    fixture_authoring_status: pending_p23b
+    required_expected_outputs:
+      business_rules_min: 1
+      modernization_points_min: 1
+      risk_flags_min: 0
+      review_markers_min: 0
+      assumptions_min: 0
+    required_checks:
+      - schema_valid_structured_output
+      - deterministic_facts_not_contradicted
+      - no_raw_trace_storage
+  - fixture_id: p23_medium_branching_transaction
+    complexity: medium
+    source_kind: synthetic_contract_fixture
+    sp_definition_policy: transient_model_input_only
+    fixture_authoring_status: pending_p23b
+    required_expected_outputs:
+      business_rules_min: 2
+      modernization_points_min: 1
+      risk_flags_min: 1
+      review_markers_min: 1
+      assumptions_min: 1
+    required_checks:
+      - transaction_or_error_handling_reviewed
+      - schema_valid_structured_output
+      - no_raw_trace_storage
+  - fixture_id: p23_complex_dynamic_sql_cross_db
+    complexity: complex
+    source_kind: synthetic_contract_fixture
+    sp_definition_policy: transient_model_input_only
+    fixture_authoring_status: pending_p23b
+    required_expected_outputs:
+      business_rules_min: 2
+      modernization_points_min: 2
+      risk_flags_min: 2
+      review_markers_min: 2
+      assumptions_min: 1
+    required_checks:
+      - dynamic_sql_uncertainty_marked
+      - cross_database_reference_reviewed
+      - unsupported_dependency_claims_review_required
+      - no_raw_trace_storage
+quality_thresholds:
+  semantic_recall_min: 0.75
+  evidence_discipline_min: 0.9
+  unreviewed_overclaims_max: 0
+  storage_safety_findings_max: 0
+verification_commands:
+  contract_default:
+    - make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py"
+  later_fake_eval:
+    - make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py"
+  optional_live_gate:
+    - LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"

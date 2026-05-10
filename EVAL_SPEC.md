@@ -185,6 +185,27 @@
 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p22_openai_live_agent_gate.py"
 ```
 
+### 10. P23 LLM SP Analysis Quality Eval Contract
+대상:
+- `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`
+- `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`
+- `ops/codex-parallel/prompts/23*.md`
+- P23A~P23D split execution manifest
+
+필수 체크:
+- P23 은 P22 runtime 이후의 평가 확장으로 분리하고, P23A 는 계약/프롬프트 자산만 만든다
+- simple/medium/complex stored procedure scenario matrix 를 선언한다
+- fast/test profile 은 `gpt-5-nano` 로 고정한다
+- LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 로 제한한다
+- `LLM_INFERENCE` evidence 와 unsupported dependency/table/function claim 의 `REVIEW_REQUIRED` 처리 기준을 둔다
+- raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 fixture trace/API/Web 산출물에 저장하지 않는다
+- optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 통과
+- P23A -> P23B -> P23C -> P23D 병합 순서가 manifest 에 명시됨
+- P23 완료 전까지 `production_ready: false` 유지
+
 ## 초기 fixture 세트
 
 `fixtures/` 아래에 최소 아래 대표 사례를 둔다.
@@ -222,6 +243,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 | auth/RBAC source 변경 | ADR/admin guide sync + role matrix contract test |
 | auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |
 | OpenAI/LLM runtime 변경 | fake gateway unit + no-raw-trace contract + optional live gate 문서화 |
+| LLM analysis quality eval 변경 | P23 contract prompt asset test + fixture-first fake eval + optional live gate 문서화 |
 
 ## 평가 산출물 형식
 
