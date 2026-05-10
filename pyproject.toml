@@ -9,7 +9,7 @@ description = "Starter monorepo for MSSQL analysis, documentation, and conversio
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi>=0.116.0",
+  "fastapi>=0.136.1",
   "uvicorn>=0.35.0",
   "pydantic>=2.13.1",
   "pyyaml>=6.0.2",

@@ -114,6 +114,9 @@ def test_p21_python314_assets_are_active_baseline() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     dockerfile = (ROOT / "docker" / "test" / "Dockerfile.python").read_text(encoding="utf-8")
+    python_lock = (ROOT / "requirements" / "lock" / "py314-dev.txt").read_text(
+        encoding="utf-8"
+    )
     lock_readme = (ROOT / "requirements" / "lock" / "README.md").read_text(encoding="utf-8")
 
     assert "PYTHON ?= python3.14" in makefile
@@ -121,8 +124,10 @@ def test_p21_python314_assets_are_active_baseline() -> None:
     assert "$(PYTHON) -m uvicorn" in makefile
     assert "$(PYTHON) -m ruff" in makefile
     assert 'requires-python = ">=3.14"' in pyproject
+    assert '"fastapi>=0.136.1"' in pyproject
     assert 'target-version = "py314"' in pyproject
     assert "python:3.14-slim" in dockerfile
+    assert "fastapi==0.136.1" in python_lock
     assert "py314-dev.txt" in lock_readme
     assert (ROOT / "requirements" / "lock" / "py314-dev.txt").exists()
     assert sorted(
