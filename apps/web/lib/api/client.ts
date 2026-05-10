@@ -1,5 +1,5 @@
-import { createHttpPortalApi } from "./http-client";
-import type { PortalApi } from "./portal-api";
+import { createHttpPortalApi } from "./http-client.ts";
+import type { PortalApi } from "./portal-api.ts";
 
 export function getPortalApi(): PortalApi {
   const apiMode = process.env.PORTAL_API_MODE?.trim();

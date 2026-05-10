@@ -11,7 +11,7 @@ import type {
   SPAnalysisRequest,
   SubmitRequestResponse,
   ValidationReport,
-} from "./types";
+} from "./types.ts";
 
 export interface PortalApi {
   createSPAnalysisRequest(request: SPAnalysisRequest): Promise<SubmitRequestResponse>;

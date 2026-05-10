@@ -1,6 +1,6 @@
-import type { PortalApi } from "./portal-api";
-import { readPortalApiError } from "./errors";
-import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types";
+import { readPortalApiError } from "./errors.ts";
+import type { PortalApi } from "./portal-api.ts";
+import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types.ts";
 
 interface HttpPortalApiOptions {
   baseUrl: string;
