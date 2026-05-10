@@ -2,9 +2,13 @@
 
 ## Summary
 
-P16 correctly keeps the live pilot release at `NO_GO`. The hard-live metadata connection is useful evidence, but it is not enough to claim release readiness. P17 is the follow-up blocker-closure wave. It must close release-critical evidence gaps without weakening the metadata-only, draft-only, approval-gated boundary.
+P17D has updated the scoped live pilot release candidate to `CONDITIONAL_GO`. This is a
+conditional reviewer-facing decision, not a production-ready platform claim. The decision is
+based on P17A dependency evidence, P17B passed artifact validation, P17C human approval/audit
+binding, and P17D hard-live verification, while preserving the metadata-only, draft-only,
+approval-gated boundary.
 
-Current live pilot decision remains `NO_GO` until all P17 exit criteria pass.
+Current live pilot decision is `CONDITIONAL_GO` for the scoped draft-only candidate.
 
 ## Current Blocker Status
 
@@ -13,24 +17,21 @@ There are no remaining P17C manual approval blockers. The human approval evidenc
 `approvalDecision: APPROVE`, timestamp `2026-05-10T13:15:00+09:00`, and correlation id
 `corr-p17c-human-approval-20260510`.
 
-Current live pilot decision still remains `NO_GO` until P17D runs the hard-live gates and
-updates the final release decision.
+There are no remaining P17D hard-live blockers. P17D reran both hard-live gates and recorded
+passed command-level evidence in `fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml` and
+`fixtures/eval/pilot_release_readiness_p16_v1.yaml`.
 
 | Closed blocker | Evidence | Owner |
 |---|---|---|
 | `MANUAL_APPROVAL_EVIDENCE_MISSING` | Human `APPROVE` decision is bound to the P17B artifact set/version and passed validation report. | P17C |
 
-Closed evidence gate:
+Closed evidence gates:
 
 | Closed item | Evidence | Owner |
 |---|---|---|
 | `DEPENDENCY_METADATA_INCOMPLETE` | P17A selected stored procedure suite majority dependency metadata gate passed; `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` remains as complex sentinel residual review. | P17A |
-
-A third practical gap must also be closed before the final decision can change:
-
-| Gap | Required evidence | Closure owner |
-|---|---|---|
-| Live pilot artifact validation | Draft-only live pilot artifacts for the selected PPM objects must have `PASSED` validation and no release-critical `REVIEW_REQUIRED` result. | P17B |
+| Live pilot artifact validation | Draft-only live pilot artifacts for the selected PPM objects have `PASSED` validation and no release-critical `REVIEW_REQUIRED` result. | P17B |
+| P17D hard-live verification | Both required hard-live commands passed against `ppm`/`PPM` with no PLF fallback. | P17D |
 
 ## P17 Execution Order
 
@@ -55,6 +56,7 @@ A third practical gap must also be closed before the final decision can change:
    - Re-run the hard-live gates.
    - Change the release decision only if P17A, P17B, P17C, and hard-live verification all pass.
    - Otherwise preserve `NO_GO` and report the remaining blocker codes.
+   - Current P17D status is complete: the scoped candidate is `CONDITIONAL_GO`.
 
 ## GO Transition Rule
 
@@ -78,7 +80,8 @@ P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e
 P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
 ```
 
-If PPM access, metadata permissions, or live configuration fail, keep `NO_GO`. Do not switch the analysis profile to PLF.
+If PPM access, metadata permissions, or live configuration fail in a future rerun, return to
+`NO_GO`. Do not switch the analysis profile to PLF.
 
 ## Forbidden Evidence And Actions
 
@@ -94,7 +97,7 @@ If PPM access, metadata permissions, or live configuration fail, keep `NO_GO`. D
 
 P17 can produce one of two final outcomes:
 
-- `NO_GO`: at least one release-critical blocker remains active, or P17D hard-live verification / final release decision is still pending.
+- `NO_GO`: at least one release-critical blocker remains active, or P17D hard-live verification cannot be reproduced.
 - `CONDITIONAL_GO`: all evidence gates pass, but generated Java/MyBatis artifacts remain draft-only and still require human ownership for any downstream deployment.
 
 P17 must not label the whole platform as `production-ready`. It can only state that the scoped live pilot release candidate has enough evidence for conditional reviewer approval.

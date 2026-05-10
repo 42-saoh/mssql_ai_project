@@ -13,7 +13,7 @@ P16_REPORT = ROOT / "docs" / "pilot-release-readiness.md"
 P16_HANDOFF = ROOT / "ops" / "codex-parallel" / "P16_PILOT_RELEASE_HANDOFF.md"
 
 
-def test_p16_fixture_matches_live_manifest_and_no_go_decision() -> None:
+def test_p16_fixture_matches_live_manifest_and_conditional_go_decision() -> None:
     fixture = _yaml(P16_FIXTURE)
     manifest = _yaml(PILOT_MANIFEST)
 
@@ -27,7 +27,9 @@ def test_p16_fixture_matches_live_manifest_and_no_go_decision() -> None:
     assert fixture["profile_policy"]["analysis_db_profile_id"] == "ppm"
     assert fixture["profile_policy"]["plf_fallback_allowed"] is False
 
-    assert fixture["release_recommendation"]["live_pilot_release"]["decision"] == "NO_GO"
+    assert fixture["release_recommendation"]["live_pilot_release"]["decision"] == (
+        "CONDITIONAL_GO"
+    )
     assert (
         fixture["release_recommendation"]["fixture_first_demo_handoff"]["decision"]
         == "GO_WITH_LIMITATIONS"
@@ -36,7 +38,7 @@ def test_p16_fixture_matches_live_manifest_and_no_go_decision() -> None:
     assert "DEPENDENCY_METADATA_INCOMPLETE" not in {
         blocker["code"] for blocker in manifest["active_blockers"]
     }
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in _blocker_codes(fixture)
+    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" not in _blocker_codes(fixture)
 
 
 def test_p16_representative_objects_are_manifest_backed_when_live() -> None:
@@ -98,17 +100,27 @@ def test_p16_quality_release_checklist_and_forbidden_boundaries() -> None:
         "docs_status_taxonomy",
     } <= set(checklist)
     assert checklist["dependency_evidence"]["status"] == "PASS"
-    assert checklist["manual_approval"]["status"] == "BLOCKER"
+    assert checklist["validation_result"]["status"] == "PASS"
+    assert checklist["manual_approval"]["status"] == "PASS"
+    assert checklist["audit_trace"]["status"] == "PASS"
+    assert checklist["hard_live_verification"]["status"] == "PASS"
     assert checklist["policy_forbidden_actions"]["status"] == "PASS"
 
     quality = fixture["quality_report"]
     assert quality["evidence_coverage"]["selected_object_identity_coverage"] == 1.0
     assert quality["evidence_coverage"]["confirmed_procedure_dependency_suite_coverage"] > 0.5
-    assert quality["validation"]["passed_validation_for_live_release"] is False
-    assert quality["approval_audit"]["manual_approval_status"] == "MISSING_FOR_LIVE_RELEASE"
+    assert quality["validation"]["passed_validation_for_live_release"] is True
+    assert quality["validation"]["live_release_validation_status"] == "PASSED"
+    assert quality["approval_audit"]["manual_approval_status"] == "HUMAN_APPROVED_BOUND"
+    assert quality["approval_audit"]["audit_status"] == "BOUND"
     assert (
         quality["approval_audit"]["publish_status"]
-        == "no_publish_endpoint_or_approved_live_release"
+        == "no_publish_export_draft_only_conditional_go"
+    )
+    assert fixture["p17d_hard_live_verification"]["status"] == "PASSED"
+    assert all(
+        item["status"] == "PASSED"
+        for item in fixture["p17d_hard_live_verification"]["commands"]
     )
 
     assert {
@@ -124,19 +136,21 @@ def test_p16_quality_release_checklist_and_forbidden_boundaries() -> None:
     assert fixture["profile_policy"]["ddl_dml_allowed"] is False
 
 
-def test_p16_docs_align_with_no_go_and_do_not_overclaim() -> None:
+def test_p16_docs_align_with_conditional_go_and_do_not_overclaim() -> None:
     fixture = _yaml(P16_FIXTURE)
     report = P16_REPORT.read_text(encoding="utf-8")
     handoff = P16_HANDOFF.read_text(encoding="utf-8")
     combined = f"{report}\n{handoff}"
 
-    assert "Live pilot release: NO-GO" in report
+    assert "Live pilot release: CONDITIONAL_GO" in report
     assert "Fixture-first/demo handoff: GO WITH LIMITATIONS" in report
     assert "DEPENDENCY_METADATA_INCOMPLETE" in combined
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in combined
+    assert "scoped live pilot candidate" in combined
     assert "No surface is production-ready" in report
     assert fixture["handoff_package"]["primary_report"] in combined
     assert fixture["handoff_package"]["eval_fixture"] in combined
+    assert "draft-only" in combined
+    assert "no PLF fallback" in combined or "PLF fallback" in combined
 
     forbidden_fragments = (
         "PFL",
@@ -146,6 +160,7 @@ def test_p16_docs_align_with_no_go_and_do_not_overclaim() -> None:
         "row_sample",
         "automatic DDL execution is supported",
         "production-ready: true",
+        "unconditional GO",
     )
     for fragment in forbidden_fragments:
         assert fragment not in combined

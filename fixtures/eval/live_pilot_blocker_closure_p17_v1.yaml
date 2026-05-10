@@ -3,7 +3,7 @@ source_p16_fixture: fixtures/eval/pilot_release_readiness_p16_v1.yaml
 source_pilot_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
 source_p15_gate: fixtures/eval/eval_observability_security_ops_p15_v1.yaml
 current_state:
-  live_pilot_release_decision: NO_GO
+  live_pilot_release_decision: CONDITIONAL_GO
   fixture_first_demo_handoff: GO_WITH_LIMITATIONS
   source_db: PPM
   platform_db_context: PLF
@@ -15,7 +15,10 @@ current_state:
   p17c_manual_approval_audit_fixture: fixtures/eval/manual_approval_audit_p17_v1.yaml
   p17c_manual_approval_status: HUMAN_APPROVED
   p17c_blocker_closed: true
-  p17d_release_decision_pending: true
+  p17d_release_decision_pending: false
+  p17d_release_decision_completed: true
+  p17d_final_decision: CONDITIONAL_GO
+  p17d_decision_reason: P17A dependency, P17B validation, P17C human approval/audit binding, and P17D hard-live gates passed for the scoped draft-only candidate.
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -120,6 +123,27 @@ conditional_go_requires:
     commands:
       - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
       - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+p17d_hard_live_verification:
+  status: PASSED
+  verified_at: '2026-05-10T13:43:10+09:00'
+  commands:
+    - command: P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+      status: PASSED
+      evidence: Hard-live e2e/eval gate passed against ppm/PPM metadata with no PLF fallback.
+    - command: P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+      status: PASSED
+      evidence: Hard-live e2e/eval/contract gate passed against ppm/PPM metadata with no PLF fallback.
+  evidence_refs:
+    - fixtures/eval/eval_observability_security_ops_p15_v1.yaml
+    - fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
+    - fixtures/eval/manual_approval_audit_p17_v1.yaml
+    - fixtures/eval/pilot_release_readiness_p16_v1.yaml#p17d_hard_live_verification
+  forbidden_evidence_excluded:
+    - raw_logs
+    - secrets
+    - row_data
+    - procedure_execution
+    - raw_definition_text
 forbidden_evidence:
   - row_data
   - sample_rows
@@ -133,10 +157,19 @@ final_decision_policy:
   allowed_decisions:
     - NO_GO
     - CONDITIONAL_GO
-  current_decision: NO_GO
+  current_decision: CONDITIONAL_GO
+  conditional_go_scope: scoped_live_pilot_candidate_only
+  conditional_go_boundaries:
+    - generated_artifacts_are_draft_only
+    - metadata_only_ppm_profile
+    - no_plf_fallback
+    - no_publish_or_export
+    - no_row_data
+    - no_procedure_execution
+    - no_auto_ddl_or_dml
   no_go_must_remain_when:
     - live artifact validation is not PASSED
-    - P17D hard-live gate has not run or cannot be reproduced
+    - P17D hard-live gate cannot be reproduced
   overclaim_forbidden:
     - "production-ready: true"
     - unconditional GO

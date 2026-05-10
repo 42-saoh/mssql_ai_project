@@ -227,11 +227,69 @@ def test_p17_blocker_fixture_references_p17c_human_approval_binding() -> None:
         "HUMAN_APPROVED"
     )
     assert fixture["current_state"]["p17c_blocker_closed"] is True
-    assert fixture["current_state"]["p17d_release_decision_pending"] is True
+    assert fixture["current_state"]["p17d_release_decision_pending"] is False
+    assert fixture["current_state"]["p17d_release_decision_completed"] is True
+    assert fixture["current_state"]["p17d_final_decision"] == "CONDITIONAL_GO"
     assert fixture["current_state"]["active_blockers_to_close"] == []
     assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in fixture["current_state"][
         "blockers_closed"
     ]
+
+
+def test_p17d_conditional_go_requires_all_bound_evidence_and_hard_live_gates() -> None:
+    fixture = _yaml(P17_BLOCKER_FIXTURE)
+    p17b = _yaml(P17B_FIXTURE)
+    p17c = _yaml(P17C_FIXTURE)
+
+    assert fixture["current_state"]["live_pilot_release_decision"] == "CONDITIONAL_GO"
+    assert fixture["final_decision_policy"]["current_decision"] == "CONDITIONAL_GO"
+    assert fixture["final_decision_policy"]["conditional_go_scope"] == (
+        "scoped_live_pilot_candidate_only"
+    )
+
+    requirements = fixture["conditional_go_requires"]
+    assert requirements["dependency_metadata"]["blocker_closed"] in fixture["current_state"][
+        "blockers_closed"
+    ]
+    assert p17b["validation_status"] == requirements["validation"]["required_status"]
+    assert requirements["validation"]["release_critical_review_required_allowed"] is False
+    assert p17c["approvalDecision"] == requirements["approval"]["required_decision"]
+    assert p17c["human_approval_recorded"] is True
+    assert p17c["approval_record"]["not_synthesized"] is True
+    assert p17c["validation_package_binding"]["validation_ref"][
+        "validation_report_id"
+    ] == p17b["artifact_set"]["validation_report_id"]
+
+    verification = fixture["p17d_hard_live_verification"]
+    assert verification["status"] == "PASSED"
+    assert len(verification["commands"]) == 2
+    assert all(command["status"] == "PASSED" for command in verification["commands"])
+    assert any(
+        'PYTEST_ARGS="tests/e2e tests/eval"' in command["command"]
+        for command in verification["commands"]
+    )
+    assert any(
+        'PYTEST_ARGS="tests/e2e tests/eval tests/contract"' in command["command"]
+        for command in verification["commands"]
+    )
+    assert {
+        "raw_logs",
+        "secrets",
+        "row_data",
+        "procedure_execution",
+        "raw_definition_text",
+    } <= set(verification["forbidden_evidence_excluded"])
+
+    boundaries = set(fixture["final_decision_policy"]["conditional_go_boundaries"])
+    assert {
+        "generated_artifacts_are_draft_only",
+        "metadata_only_ppm_profile",
+        "no_plf_fallback",
+        "no_publish_or_export",
+        "no_row_data",
+        "no_procedure_execution",
+        "no_auto_ddl_or_dml",
+    } <= boundaries
 
 
 def _yaml(path: Path) -> dict[str, Any]:
