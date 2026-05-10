@@ -12,6 +12,25 @@ FIXTURE = ROOT / "fixtures" / "eval" / "live_portal_no_mock_p21_v1.yaml"
 WEB_ROOT = ROOT / "apps" / "web"
 
 
+def _active_python_baseline_docs() -> list[Path]:
+    explicit_files = [
+        ROOT / "PROJECT.md",
+        ROOT / "TOOLS.md",
+        ROOT / "EVAL_SPEC.md",
+        ROOT / "docker" / "test" / "README.md",
+        ROOT / "requirements" / "lock" / "README.md",
+        ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml",
+    ]
+    recursive_roots = [
+        ROOT / "docs",
+        ROOT / "ops" / "codex-parallel",
+    ]
+    files = {path for path in explicit_files if path.exists()}
+    for base in recursive_roots:
+        files.update(path for path in base.rglob("*") if path.suffix in {".md", ".yaml", ".yml"})
+    return sorted(files)
+
+
 def test_p21_prompts_capture_required_contract_sections() -> None:
     prompt_names = (
         "21a_python314_environment_baseline.md",
@@ -106,6 +125,41 @@ def test_p21_python314_assets_are_active_baseline() -> None:
     assert "python:3.14-slim" in dockerfile
     assert "py314-dev.txt" in lock_readme
     assert (ROOT / "requirements" / "lock" / "py314-dev.txt").exists()
+    assert sorted(
+        path.name for path in (ROOT / "requirements" / "lock").glob("py*-dev.txt")
+    ) == ["py314-dev.txt"]
+
+
+def test_p21_active_docs_do_not_reference_legacy_python_baselines() -> None:
+    forbidden_snippets = (
+        "py311-dev.txt",
+        "py312-dev.txt",
+        "py313-dev.txt",
+        "Python 3.11",
+        "Python 3.12",
+        "Python 3.13",
+        "python3.11",
+        "python3.12",
+        "python3.13",
+        "PYTHON=python3",
+        "python3 -m compileall",
+        "python3 tests/",
+        "python3 apps/",
+        "python -m pytest",
+        "python -m compileall",
+        "python - <<",
+        "python3 - <<",
+        "python -c",
+        "python3 -c",
+    )
+    offenders: list[str] = []
+    for path in _active_python_baseline_docs():
+        text = path.read_text(encoding="utf-8")
+        for snippet in forbidden_snippets:
+            if snippet in text:
+                offenders.append(f"{path.relative_to(ROOT)} contains {snippet!r}")
+
+    assert offenders == []
 
 
 def test_p21_web_no_mock_runtime_contract() -> None:

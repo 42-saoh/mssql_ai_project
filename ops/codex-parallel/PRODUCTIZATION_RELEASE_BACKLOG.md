@@ -33,7 +33,7 @@ Verification:
 
 - `make test PYTEST_ARGS="tests/integration/api tests/unit/api"`
 - `python3.14 -m compileall apps/api tests/integration/api tests/unit/api`
-- Optional: `python -m pytest tests/contract/test_openapi_and_env_sample_assets.py`
+- Optional: `make test PYTEST_ARGS="tests/contract/test_openapi_and_env_sample_assets.py"`
 
 Blockers:
 
@@ -212,7 +212,7 @@ Verification:
 - `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"`
 - `python3.14 -m compileall tests`
 - `bash -n scripts/*.sh`
-- Optional: `python -m pytest tests/contract`
+- Optional: `make test PYTEST_ARGS="tests/contract"`
 
 Blockers:
 
@@ -271,7 +271,7 @@ Acceptance criteria:
 Verification:
 
 - `make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"`
-- `python3 -m compileall packages/analysis packages/domain tests`
+- `python3.14 -m compileall packages/analysis packages/domain tests`
 
 Blockers:
 
@@ -299,7 +299,7 @@ Verification:
 
 - `make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"`
 - `make test-web-smoke`
-- `python3 -m compileall apps/api tests`
+- `python3.14 -m compileall apps/api tests`
 
 Blockers:
 

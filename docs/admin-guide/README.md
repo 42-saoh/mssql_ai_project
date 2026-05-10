@@ -23,7 +23,7 @@
 3. schema 변경이 필요하면 `db/schema/` 에 versioned SQL 만 추가하고 실제 DB 적용은 외부 운영자가 수동 수행한다.
 4. 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 과 필요한 경우 `make test`, `make test-web-smoke` 로 수행한다.
 5. approval decision 은 현재 기록 기능이며 publish 나 배포를 자동 수행하지 않는다.
-6. Web HTTP adapter route smoke 는 `python3 tests/e2e/web_http_adapter_smoke.py` 로 실행한다. 이 검증은 fixture-backed local API route evidence 이며 production auth/RBAC evidence 가 아니다.
+6. Web HTTP adapter route smoke 는 `python3.14 tests/e2e/web_http_adapter_smoke.py` 로 실행한다. 이 검증은 fixture-backed local API route evidence 이며 production auth/RBAC evidence 가 아니다.
 7. Auth/RBAC route enforcement 검증은 `make test PYTEST_ARGS="tests/integration/api/test_api_auth_rbac.py"` 로 실행한다. 이 검증은 runtime-generated JWT 와 fixture PLF role repository 를 사용하며 운영 IdP/JWKS 검증을 대체하지 않는다.
 
 ## P15 hard-live eval 운영

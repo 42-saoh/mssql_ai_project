@@ -60,7 +60,7 @@
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"`
-- `python3 -m compileall packages/analysis packages/domain tests`
+- `python3.14 -m compileall packages/analysis packages/domain tests`
 - 필요 시 `make test PYTEST_ARGS="tests/eval/test_p18_productization_gap_closure.py"`
 
 ## Blocker 보고 기준

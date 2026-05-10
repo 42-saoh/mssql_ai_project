@@ -398,12 +398,12 @@ P17D 이후에도 전체 플랫폼은 production-ready 가 아니다. P18은 P17
 
 ```bash
 make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
-python3 -m compileall packages/analysis packages/domain tests
+python3.14 -m compileall packages/analysis packages/domain tests
 make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
 make test-web-smoke
 make test
 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
-python3 -m compileall apps services packages tests
+python3.14 -m compileall apps services packages tests
 ```
 
 P18도 row data, procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는 publish/export 를 허용하지 않는다. production auth/RBAC 를 mock header 로 가장해야만 통과할 수 있다면 productization decision 은 `NO_GO` 로 유지한다. Live wiring 미검증만 남은 경우에는 controlled `CONDITIONAL_GO` 와 deferred future hardening 으로 분리한다.

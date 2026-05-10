@@ -292,7 +292,7 @@ waves:
           - services/mssql-mcp/mssql_mcp_app/profiles.py
           - services/mssql-mcp/mssql_mcp_app/tool_models.py
         verify:
-          - python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py
+          - make test PYTEST_ARGS="tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py"
           - python3.14 -m compileall services/mssql-mcp tests
       - id: P08
         branch: feat/p08-product-architecture-backlog
@@ -317,7 +317,7 @@ waves:
           - db/schema/
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
-          - python -m pytest tests/contract/test_codex_productization_prompt_pack_assets.py tests/contract/test_ppm_pilot_object_selection_assets.py
+          - make test PYTEST_ARGS="tests/contract/test_codex_productization_prompt_pack_assets.py tests/contract/test_ppm_pilot_object_selection_assets.py"
   - wave: W5
     description: productization implementation tracks by bounded domain
     tracks:
@@ -663,7 +663,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
-          - python3 -m compileall packages/analysis packages/domain tests
+          - python3.14 -m compileall packages/analysis packages/domain tests
       - id: P18B
         branch: feat/p18b-web-http-auth-rbac-evidence
         worktree: ../wt/p18b-web-http-auth-rbac-evidence
@@ -696,7 +696,7 @@ waves:
         verify:
           - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
           - make test-web-smoke
-          - python3 -m compileall apps/api tests
+          - python3.14 -m compileall apps/api tests
   - wave: W10
     description: auth/RBAC live wiring verification
     tracks:
@@ -726,7 +726,7 @@ waves:
         verify:
           - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
           - make test-web-smoke
-          - python3 -m compileall apps/api tests
+          - python3.14 -m compileall apps/api tests
           - AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/test_p20_auth_rbac_live_gate.py"
   - wave: W11
     description: P21 no-mock functional portal and Python 3.14 baseline

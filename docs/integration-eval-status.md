@@ -47,7 +47,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - P15 hard-live fixture contract, metrics, redaction, permission-check schema, and blocker policy are valid
 - P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing
 - P16/P17D readiness fixtures and docs preserve P17A/P17B/P17C/P17D evidence, P18A canonical contract checks stay fixture-first, and the live release remains limited to scoped `CONDITIONAL_GO`
-- P18B HTTP adapter smoke can be run with `python3 tests/e2e/web_http_adapter_smoke.py`; the dockerized python test suite may skip this smoke when node/pnpm are unavailable.
+- P18B HTTP adapter smoke can be run with `python3.14 tests/e2e/web_http_adapter_smoke.py`; the dockerized python test suite may skip this smoke when node/pnpm are unavailable.
 - P19 auth/RBAC enforcement is covered by `tests/integration/api/test_api_auth_rbac.py`, including 401, 403, reviewer success, and reviewer spoofing cases.
 - P21 prompt/fixture/no-mock/Python 3.14 contracts are covered by `tests/contract/test_p21_no_mock_prompt_assets.py`; default `tests/eval/test_p21_live_portal_no_mock_gate.py` skips unless the live gate is explicitly enabled.
 

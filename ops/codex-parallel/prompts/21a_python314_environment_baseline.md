@@ -52,7 +52,7 @@ P21 전체 작업의 실행 기반을 Python 3.14 로 고정한다. Host 명령,
 
 - Docker test image 를 `python:3.14-slim` 로 변경한다.
 - `requirements/lock/py314-dev.txt` 를 현재 재현성 lock 으로 추가/전환한다.
-- Makefile 기본 `PYTHON` 은 `python3.14` 이며 `python -m uvicorn`, `python -m ruff` 실행 스타일을 사용한다.
+- Makefile 기본 `PYTHON` 은 `python3.14` 이며 `$(PYTHON) -m uvicorn`, `$(PYTHON) -m ruff` 실행 스타일을 사용한다.
 - `requires-python = ">=3.14"` 와 Ruff `target-version = "py314"` 를 적용한다.
 - 현재 문서, manifest, lockfile 안내에서 이전 Python lock file 을 active baseline 으로 부르지 않는다.
 

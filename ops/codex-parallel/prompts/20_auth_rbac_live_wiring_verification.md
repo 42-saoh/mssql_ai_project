@@ -86,7 +86,7 @@ P19의 fixture-backed auth/RBAC enforcement 이후 남은 `AUTH_RBAC_LIVE_IDP_PL
 
 - `make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"`
 - `make test-web-smoke`
-- `python3 -m compileall apps/api tests`
+- `python3.14 -m compileall apps/api tests`
 - Live gate:
   - `AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/test_p20_auth_rbac_live_gate.py"`
 

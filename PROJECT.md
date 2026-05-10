@@ -178,4 +178,4 @@ repo/
 - 기본 검증은 `docker/test/` 아래 테스트 러너를 통해 수행한다.
 - 외부 DB 가 필요한 테스트는 환경변수로 연결하되, 저장소가 DB lifecycle 을 관리하지는 않는다.
 - Web 계열은 전용 자동화가 자리잡기 전까지 컨테이너 기반 build smoke 와 Playwright MCP smoke 를 병행할 수 있다.
-- 호스트에 `python` 명령이 없으면 `PYTHON=python3` 또는 `python3 -m compileall ...` 로 동일 검증을 수행한다.
+- 호스트 compile-only 검증은 `python3.14 -m compileall ...` 를 기준으로 수행한다.

@@ -28,7 +28,7 @@
 
 - 요청 결과 확인에 앞서 저장소 차원의 자동 검증은 도커 테스트 러너를 통해 수행한다.
 - 최소 통합/eval 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 이다.
-- Web HTTP adapter smoke 는 `python3 tests/e2e/web_http_adapter_smoke.py` 로 실행한다.
+- Web HTTP adapter smoke 는 `python3.14 tests/e2e/web_http_adapter_smoke.py` 로 실행한다.
 - UI smoke 가 필요한 경우 로컬/승인된 dev URL 에 대해서만 Playwright MCP 를 사용한다.
 
 ## P15 live eval 주의

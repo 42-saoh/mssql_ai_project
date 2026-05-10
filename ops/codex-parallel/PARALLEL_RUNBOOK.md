@@ -55,7 +55,7 @@ make test-build
 python3.14 -m compileall apps services packages tests
 ```
 
-- 호스트에 `python` alias 가 없으면 `python3 -m compileall apps services packages tests` 로 같은 compile-only 검증을 수행한다.
+- 호스트 compile-only 검증은 `python3.14 -m compileall apps services packages tests` 를 기준으로 수행한다.
 - `pnpm-lock.yaml` 은 현재 기준 저장소에 존재한다. coordinator 는 잠금 파일을 임의 재생성하지 말고 필요 시 명시적인 dependency 변경 작업에서만 갱신한다.
 - Python 의존성은 `requirements/lock/py314-dev.txt` 와 `scripts/install_python_locked.sh` 기준으로 맞춘다.
 - `.env.example` 은 비밀값 없는 샘플이다. 실제 credential 은 `.env`, `.env.local`, OS keychain 등 저장소 밖/비커밋 경로에 둔다.
@@ -251,12 +251,12 @@ productization decision 은 evidence 제출 후 controlled `CONDITIONAL_GO` 로 
 
 ```bash
 make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
-python3 -m compileall packages/analysis packages/domain tests
+python3.14 -m compileall packages/analysis packages/domain tests
 make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
 make test-web-smoke
 make test
 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
-python3 -m compileall apps services packages tests
+python3.14 -m compileall apps services packages tests
 ```
 
 금지 사항은 계속 동일하다. row data, procedure execution, raw definition text 저장, 자동

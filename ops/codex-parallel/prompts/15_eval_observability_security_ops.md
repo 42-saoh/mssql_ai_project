@@ -69,7 +69,7 @@ eval fixtures, representative pilot scenarios, quality metrics, latency/performa
 - `make test PYTEST_ARGS="tests/e2e tests/eval"`
 - `python3.14 -m compileall tests`
 - `bash -n scripts/*.sh`
-- 필요 시 `python -m pytest tests/contract`
+- 필요 시 `make test PYTEST_ARGS="tests/contract"`
 
 ## Blocker 보고 기준
 

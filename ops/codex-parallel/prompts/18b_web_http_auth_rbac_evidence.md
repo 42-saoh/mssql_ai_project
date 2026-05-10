@@ -66,7 +66,7 @@
 
 - `make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"`
 - `make test-web-smoke`
-- `python3 -m compileall apps/api tests`
+- `python3.14 -m compileall apps/api tests`
 - 승인된 로컬 dev server 를 사용한 web-to-API smoke 가 있으면 해당 명령을 추가로 실행한다.
 
 ## Blocker 보고 기준

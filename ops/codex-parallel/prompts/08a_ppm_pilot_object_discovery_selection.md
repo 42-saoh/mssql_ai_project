@@ -132,9 +132,9 @@ P08A에서 아래 작업은 하지 않는다. 필요하면 P10 또는 coordinato
 
 ## 검증 명령
 
-- `python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py`
+- `make test PYTEST_ARGS="tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py"`
 - `python3.14 -m compileall services/mssql-mcp tests`
-- `python - <<'PY'` 로 `selected_objects.yaml` / `candidate_inventory_template.yaml` YAML parse 확인
+- `python3.14 - <<'PY'` 로 `selected_objects.yaml` / `candidate_inventory_template.yaml` YAML parse 확인
 - live metadata를 실제 시도한 경우에는 실행 명령, profile id, 실패/성공 원인을 secret 없이 기록한다.
 
 ## Blocker 보고 기준

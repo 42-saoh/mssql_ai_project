@@ -121,7 +121,7 @@ Required verification before accepting this package:
 - `make test`
 - `make test-web-smoke`
 - `make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
-- `python3 -m compileall apps services packages tests`
+- `python3.14 -m compileall apps services packages tests`
 
 Additional verification before any live PPM readiness claim:
 
