@@ -17,8 +17,9 @@
 - `lib/api/portal-api.ts` 는 화면이 기대하는 API client 인터페이스다.
 - `lib/api/http-client.ts` 는 runtime/default API adapter 다.
 - `lib/api/client.ts` 는 `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 을 요구한다.
-- `lib/api/mock-adapter.ts` 는 historical/dev fixture asset 으로 남아 있을 수 있지만 default
-  runtime path 에 import 되지 않는다.
+- runtime/default path 에 mock adapter 또는 demo id fallback 은 없다.
+- `lib/api/errors.ts` 는 API `{code, detail}` error body 를 보존해 PLF/PPM/config blocker 를
+  화면에 표시한다.
 - `lib/pilot-manifest.ts` 는 PPM manifest 가 `live_metadata` 인 경우에만 sample object
   identities 를 읽고, `template_only` 일 때는 실제 이름을 노출하지 않는다.
 

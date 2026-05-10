@@ -1,4 +1,5 @@
 import type { PortalApi } from "./portal-api";
+import { readPortalApiError } from "./errors";
 import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types";
 
 interface HttpPortalApiOptions {
@@ -27,7 +28,8 @@ async function readJson<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`Portal API request failed: ${response.status} ${response.statusText}`);
+    const error = await readPortalApiError(response, path);
+    throw error;
   }
 
   return (await response.json()) as T;

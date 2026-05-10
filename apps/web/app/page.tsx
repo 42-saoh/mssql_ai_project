@@ -2,6 +2,7 @@ import Link from "next/link";
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 import type {
   ArtifactSummary,
@@ -23,8 +24,8 @@ function fulfilledValue<T>(result: PromiseSettledResult<T>): T | null {
 }
 
 function rejectedMessage(result: PromiseSettledResult<unknown>): string | null {
-  return result.status === "rejected" && result.reason instanceof Error
-    ? result.reason.message
+  return result.status === "rejected"
+    ? formatPortalApiError(result.reason, "Portal API dependency is unavailable.")
     : null;
 }
 
@@ -37,7 +38,7 @@ export default async function HomePage() {
       <div className="stack">
         <DependencyBlocker
           title="Portal API is not configured"
-          message={error instanceof Error ? error.message : "PORTAL_API_BASE_URL is required."}
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
         />
       </div>
     );

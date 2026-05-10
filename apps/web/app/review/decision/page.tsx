@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 import type { ApprovalDecision, Artifact, ValidationReport } from "@/lib/api/types";
 import { artifactStatusLabels, validationStatusLabels } from "@/lib/presentation";
@@ -59,7 +60,7 @@ export default async function ReviewDecisionPage({
         <div className="stack">
           <DependencyBlocker
             title="Portal API is not configured"
-            message={error instanceof Error ? error.message : "PORTAL_API_BASE_URL is required."}
+            message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
           />
         </div>
       );
@@ -74,12 +75,11 @@ export default async function ReviewDecisionPage({
         <div className="stack">
           <DependencyBlocker
             title="Artifact dependency is unavailable"
-            message={
-              artifactResult.reason instanceof Error
-                ? artifactResult.reason.message
-                : "PLF artifact repository is required."
-            }
-            code="P21_REVIEW_ARTIFACT_BLOCKED"
+            message={formatPortalApiError(
+              artifactResult.reason,
+              "PLF artifact repository is required.",
+            )}
+            code={portalApiErrorCode(artifactResult.reason, "P21_REVIEW_ARTIFACT_BLOCKED")}
           />
         </div>
       );

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { ArtifactPreview } from "@/components/artifact-preview";
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export default async function ArtifactPage({
       <div className="stack">
         <DependencyBlocker
           title="Portal API is not configured"
-          message={error instanceof Error ? error.message : "PORTAL_API_BASE_URL is required."}
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
         />
       </div>
     );
@@ -45,12 +46,11 @@ export default async function ArtifactPage({
       <div className="stack">
         <DependencyBlocker
           title="Artifact dependency is unavailable"
-          message={
-            artifactResult.reason instanceof Error
-              ? artifactResult.reason.message
-              : "PLF artifact repository is required."
-          }
-          code="P21_ARTIFACT_DEPENDENCY_BLOCKED"
+          message={formatPortalApiError(
+            artifactResult.reason,
+            "PLF artifact repository is required.",
+          )}
+          code={portalApiErrorCode(artifactResult.reason, "P21_ARTIFACT_DEPENDENCY_BLOCKED")}
         />
       </div>
     );

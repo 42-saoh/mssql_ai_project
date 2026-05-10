@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { RequestForm } from "@/components/request-form";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 import type {
   MetadataProfile,
@@ -50,7 +51,7 @@ export default async function NewRequestPage({
       <div className="stack">
         <DependencyBlocker
           title="Portal API is not configured"
-          message={error instanceof Error ? error.message : "PORTAL_API_BASE_URL is required."}
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
         />
       </div>
     );
@@ -64,8 +65,8 @@ export default async function NewRequestPage({
       <div className="stack">
         <DependencyBlocker
           title="Metadata profiles are unavailable"
-          message={error instanceof Error ? error.message : "PLF/PPM prerequisites are missing."}
-          code="P21_PORTAL_METADATA_PROFILES_BLOCKED"
+          message={formatPortalApiError(error, "PLF/PPM prerequisites are missing.")}
+          code={portalApiErrorCode(error, "P21_PORTAL_METADATA_PROFILES_BLOCKED")}
         />
       </div>
     );

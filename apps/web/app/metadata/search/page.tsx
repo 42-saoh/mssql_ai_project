@@ -2,6 +2,7 @@ import Link from "next/link";
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 import type { MetadataSearchObjectType } from "@/lib/api/types";
 
@@ -50,7 +51,7 @@ export default async function MetadataSearchPage({
       <div className="stack">
         <DependencyBlocker
           title="Portal API is not configured"
-          message={error instanceof Error ? error.message : "PORTAL_API_BASE_URL is required."}
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
         />
       </div>
     );
@@ -80,8 +81,8 @@ export default async function MetadataSearchPage({
       <div className="stack">
         <DependencyBlocker
           title="PPM metadata dependency is unavailable"
-          message={reason instanceof Error ? reason.message : "Live PPM metadata is required."}
-          code="P21_METADATA_SEARCH_BLOCKED"
+          message={formatPortalApiError(reason, "Live PPM metadata is required.")}
+          code={portalApiErrorCode(reason, "P21_METADATA_SEARCH_BLOCKED")}
         />
       </div>
     );

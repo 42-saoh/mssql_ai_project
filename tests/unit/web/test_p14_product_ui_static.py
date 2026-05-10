@@ -54,4 +54,37 @@ def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     assert "approval_preview_" not in review_page
     assert "row data" in source
     assert "ddl/dml" in source
-    assert "dependency_metadata_incomplete" in source
+    assert "blocker-row" in source
+
+
+def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
+    client = (WEB_ROOT / "lib" / "api" / "client.ts").read_text(encoding="utf-8")
+    request_page = (WEB_ROOT / "app" / "requests" / "new" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    artifact_page = (
+        WEB_ROOT / "app" / "artifacts" / "[artifactId]" / "page.tsx"
+    ).read_text(encoding="utf-8")
+    review_page = (
+        WEB_ROOT / "app" / "review" / "decision" / "page.tsx"
+    ).read_text(encoding="utf-8")
+    source = _web_source()
+
+    assert not (WEB_ROOT / "lib" / "api" / "mock-adapter.ts").exists()
+    assert 'process.env.PORTAL_API_MODE ?? "http"' not in client
+    assert "PORTAL_API_MODE=http is required for the P21 no-mock portal" in client
+    assert "PORTAL_API_BASE_URL is required for the P21 no-mock portal" in client
+
+    for demo_id in ("job_demo_", "art_demo_", "approval_preview_"):
+        assert demo_id not in source
+
+    assert "api.createSPAnalysisRequest" in request_page
+    assert "redirect(`/jobs/${response.jobId}`)" in request_page
+    assert "api.getLatestValidation(artifactId)" in artifact_page
+    assert artifact_page.count("api.validateArtifact(artifactId)") == 1
+    assert artifact_page.index("async function runValidation") < artifact_page.index(
+        "api.validateArtifact(artifactId)"
+    )
+    assert "api.createApprovalDecision" in review_page
+    assert "formatPortalApiError" in source
+    assert "portalApiErrorCode" in source

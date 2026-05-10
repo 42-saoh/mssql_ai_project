@@ -1,6 +1,7 @@
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { JobStatusView } from "@/components/job-status-view";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 import type { ArtifactSummary, Job } from "@/lib/api/types";
 import { jobStatusSummary } from "@/lib/presentation";
@@ -21,7 +22,7 @@ export default async function JobPage({
       <div className="stack">
         <DependencyBlocker
           title="Portal API is not configured"
-          message={error instanceof Error ? error.message : "PORTAL_API_BASE_URL is required."}
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
         />
       </div>
     );
@@ -38,8 +39,8 @@ export default async function JobPage({
       <div className="stack">
         <DependencyBlocker
           title="Job dependency is unavailable"
-          message={error instanceof Error ? error.message : "PLF workflow repository is required."}
-          code="P21_JOB_DEPENDENCY_BLOCKED"
+          message={formatPortalApiError(error, "PLF workflow repository is required.")}
+          code={portalApiErrorCode(error, "P21_JOB_DEPENDENCY_BLOCKED")}
         />
       </div>
     );

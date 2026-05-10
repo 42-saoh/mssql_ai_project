@@ -170,18 +170,26 @@ def test_p21_active_docs_do_not_reference_legacy_python_baselines() -> None:
 def test_p21_web_no_mock_runtime_contract() -> None:
     client = (WEB_ROOT / "lib" / "api" / "client.ts").read_text(encoding="utf-8")
     http_client = (WEB_ROOT / "lib" / "api" / "http-client.ts").read_text(encoding="utf-8")
+    errors = (WEB_ROOT / "lib" / "api" / "errors.ts").read_text(encoding="utf-8")
     functional_source = "\n".join(
         path.read_text(encoding="utf-8")
         for root in (WEB_ROOT / "app", WEB_ROOT / "components", WEB_ROOT / "lib" / "api")
         for path in root.rglob("*")
-        if path.suffix in {".ts", ".tsx"} and path.name != "mock-adapter.ts"
+        if path.suffix in {".ts", ".tsx"}
     )
 
+    assert not (WEB_ROOT / "lib" / "api" / "mock-adapter.ts").exists()
     assert "mock-adapter" not in client
-    assert 'process.env.PORTAL_API_MODE ?? "http"' in client
+    assert 'process.env.PORTAL_API_MODE ?? "http"' not in client
+    assert "process.env.PORTAL_API_MODE?.trim()" in client
+    assert "PORTAL_API_MODE=http is required for the P21 no-mock portal" in client
     assert "PORTAL_API_BASE_URL is required for the P21 no-mock portal" in client
     assert "/api/v1/jobs" in http_client
     assert "/validation/latest" in http_client
+    assert "readPortalApiError" in http_client
+    assert "PortalApiHttpError" in errors
+    assert "readonly code" in errors
+    assert "readonly detail" in errors
     for demo_id in ("job_demo_", "art_demo_", "approval_preview_"):
         assert demo_id not in functional_source
     assert "api.createSPAnalysisRequest" in functional_source

@@ -1060,7 +1060,7 @@ class MssqlPlatformRepository:
             ) from None
         try:
             return pytds.connect(
-                server=self.settings.host,
+                dsn=self.settings.host,
                 port=self.settings.port,
                 database=self.settings.database,
                 user=self.settings.user,

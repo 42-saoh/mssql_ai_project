@@ -11,7 +11,8 @@
 ## 현재 사용 가능한 경로
 
 - API happy path 는 fixture-backed metadata 로 request → job → artifact → validation → approval decision recording 까지 검증된다.
-- web portal 은 기본적으로 mock adapter 기반 shell 이며, P18B 에서 local API/BFF HTTP 연결 smoke evidence 를 추가했다.
+- web portal 은 P21 기준 no-mock HTTP portal 이며, `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 설정되어야 기능 페이지가 동작한다.
+- PLF workflow repository 또는 PPM read-only metadata prerequisite 이 없으면 화면은 demo id fallback 없이 dependency blocker 를 표시한다.
 - API validation/approval write action 은 `AUTH_RBAC_ENFORCEMENT=1` 일 때 verified OIDC/JWT actor 와 PLF role membership 이 있는 `REVIEWER` 또는 `ADMIN` 만 수행할 수 있다.
 - Live IdP/JWKS 와 운영 PLF role lookup 검증은 future hardening 으로 남아 있으므로, 현재 시스템은 controlled conditional use 로 해석한다.
 - 기본 metadata profile 은 `master` 이고, sample fixture target 은 `dbo.usp_GetOrderSummary` 이다.
@@ -29,6 +30,7 @@
 - 요청 결과 확인에 앞서 저장소 차원의 자동 검증은 도커 테스트 러너를 통해 수행한다.
 - 최소 통합/eval 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 이다.
 - Web HTTP adapter smoke 는 `python3.14 tests/e2e/web_http_adapter_smoke.py` 로 실행한다.
+- P21 no-mock portal 검증은 `make test-web-smoke`, `make test PYTEST_ARGS="tests/unit/web tests/contract/test_p21_no_mock_prompt_assets.py"`, `P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"` 를 사용한다.
 - UI smoke 가 필요한 경우 로컬/승인된 dev URL 에 대해서만 Playwright MCP 를 사용한다.
 
 ## P15 live eval 주의
@@ -44,3 +46,4 @@ P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidenc
 - P17A dependency gate 는 selected SP suite majority 기준으로 통과했지만, SP 와 table 사이의 확정 dependency 는 manifest 의 confirmed `related_procedures` evidence 가 있을 때만 해석한다.
 - 승인 화면이나 API decision 기록은 publish, 배포, DDL 적용을 수행하지 않는다.
 - P18/P19 productization readiness 는 CanonicalAnalysisModel, web HTTP adapter smoke evidence, production auth/RBAC source 문서화, fixture-backed enforcement 를 기록해 controlled CONDITIONAL_GO 로 해석한다. 단, live IdP/JWKS 와 PLF role lookup 검증 전까지 production-grade enterprise Auth/RBAC 또는 `production_ready: true` 로 주장하지 않는다.
+- P21C Web readiness 는 HTTP API 연결, PLF/PPM blocker rendering, explicit validation action, persisted approval decision 을 확인하는 controlled live portal 기준이다. 이 기준도 full production-ready 주장은 아니며 `production_ready: false` 를 유지한다.
