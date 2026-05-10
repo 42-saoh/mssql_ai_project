@@ -9,5 +9,6 @@ for rel in [
     ROOT / "packages" / "analysis" / "src",
     ROOT / "packages" / "generation" / "src",
     ROOT / "packages" / "validation" / "src",
+    ROOT / "packages" / "agent-runtime" / "src",
 ]:
     sys.path.insert(0, str(rel))

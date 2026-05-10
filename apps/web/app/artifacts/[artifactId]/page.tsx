@@ -57,10 +57,17 @@ export default async function ArtifactPage({
   }
 
   const validation = validationResult.status === "fulfilled" ? validationResult.value : null;
+  const agentRuns = artifactResult.value.jobId
+    ? await api
+        .listJobAgentRuns(artifactResult.value.jobId)
+        .then((response) => response.agentRuns)
+        .catch(() => [])
+    : [];
   return (
     <ArtifactPreview
       artifact={artifactResult.value}
       validation={validation}
+      agentRuns={agentRuns}
       validateAction={runValidation}
     />
   );

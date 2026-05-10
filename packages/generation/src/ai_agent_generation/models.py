@@ -55,6 +55,7 @@ class EvidenceSource:
             "table": "Table",
             "view": "View",
             "function": "Function",
+            "llmInference": "LLM Inference",
             "policy": "Policy",
         }
         return labels.get(self.type, self.type)
@@ -63,6 +64,8 @@ class EvidenceSource:
     def evidence_type(self) -> str:
         if self.type in {"storedProcedure", "procedure", "table", "view", "function"}:
             return "MSSQL_METADATA"
+        if self.type == "llmInference":
+            return "LLM_INFERENCE"
         if self.type == "policy":
             return "POLICY"
         return "USER_INPUT"

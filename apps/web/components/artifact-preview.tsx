@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
-import type { Artifact, ValidationReport } from "@/lib/api/types";
+import type { AgentRunSummary, Artifact, ValidationReport } from "@/lib/api/types";
 import {
   artifactStatusLabels,
   artifactTypeLabels,
@@ -15,13 +15,17 @@ const reviewChecklist = [
   "No screen in this shell executes SQL, publishes code, or mutates business data.",
 ];
 
+const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
+
 export function ArtifactPreview({
   artifact,
   validation,
+  agentRuns = [],
   validateAction,
 }: Readonly<{
   artifact: Artifact;
   validation?: ValidationReport | null;
+  agentRuns?: AgentRunSummary[];
   validateAction?: (formData: FormData) => Promise<void>;
 }>) {
   return (
@@ -78,8 +82,8 @@ export function ArtifactPreview({
           <div className="callout">
             <strong>Caveats</strong>
             <ul>
-              {artifact.caveats.map((caveat) => (
-                <li key={caveat}>{caveat}</li>
+              {artifact.caveats.map((caveat, index) => (
+                <li key={listItemKey("artifact-caveat", index)}>{caveat}</li>
               ))}
             </ul>
           </div>
@@ -128,8 +132,8 @@ export function ArtifactPreview({
           <div className="callout callout--warning">
             <strong>Missing evidence</strong>
             <ul>
-              {validation?.missingEvidence?.map((item) => (
-                <li key={item}>{item}</li>
+              {validation?.missingEvidence?.map((item, index) => (
+                <li key={listItemKey("missing-evidence", index)}>{item}</li>
               ))}
             </ul>
           </div>
@@ -144,6 +148,36 @@ export function ArtifactPreview({
       </section>
 
       <section className="split-layout">
+        <div className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">LLM trace</p>
+              <h2>Sanitized model run</h2>
+            </div>
+          </div>
+          {agentRuns.length > 0 ? (
+            <div className="evidence-list">
+              {agentRuns.map((run) => (
+                <article className="evidence-row" key={run.agentRunId}>
+                  <strong>{run.modelInvocation.model}</strong>
+                  <span>{run.modelInvocation.promptVersion}</span>
+                  <code>{run.modelInvocation.outputHash}</code>
+                  <small>
+                    {run.status} · input {run.modelInvocation.inputHash} · tokens{" "}
+                    {run.modelInvocation.tokenUsage?.totalTokens ?? 0} · latency{" "}
+                    {run.modelInvocation.latencyMs ?? 0}ms
+                  </small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="callout">
+              <strong>No LLM trace</strong>
+              <p>This artifact was generated without a recorded LLM semantic analysis run.</p>
+            </div>
+          )}
+        </div>
+
         <div className="panel">
           <div className="section-heading">
             <div>
@@ -180,8 +214,8 @@ export function ArtifactPreview({
             <div className="callout">
               <strong>Manual review points</strong>
               <ul>
-                {validation?.manualReviewPoints?.map((item) => (
-                  <li key={item}>{item}</li>
+                {validation?.manualReviewPoints?.map((item, index) => (
+                  <li key={listItemKey("manual-review-point", index)}>{item}</li>
                 ))}
               </ul>
             </div>
@@ -191,8 +225,8 @@ export function ArtifactPreview({
             <div className="callout">
               <strong>Assumptions</strong>
               <ul>
-                {artifact.assumptions?.map((item) => (
-                  <li key={item}>{item}</li>
+                {artifact.assumptions?.map((item, index) => (
+                  <li key={listItemKey("artifact-assumption", index)}>{item}</li>
                 ))}
               </ul>
             </div>
@@ -202,8 +236,8 @@ export function ArtifactPreview({
             <div className="callout callout--warning">
               <strong>TODO / REVIEW_REQUIRED</strong>
               <ul>
-                {artifact.todos?.map((item) => (
-                  <li key={item}>{item}</li>
+                {artifact.todos?.map((item, index) => (
+                  <li key={listItemKey("artifact-todo", index)}>{item}</li>
                 ))}
               </ul>
             </div>

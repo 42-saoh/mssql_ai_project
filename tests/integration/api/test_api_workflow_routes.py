@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 from ai_agent_domain import ArtifactType
@@ -18,7 +19,7 @@ class CountingValidationRepository(MemoryWorkflowRepository):
         super().__init__()
         self.validation_write_count = 0
 
-    def save_validation_report(self, **kwargs) -> ValidationReportRecord:  # type: ignore[no-untyped-def]
+    def save_validation_report(self, **kwargs: Any) -> ValidationReportRecord:
         self.validation_write_count += 1
         return super().save_validation_report(**kwargs)
 
@@ -27,6 +28,7 @@ class CountingValidationRepository(MemoryWorkflowRepository):
 def client_and_repository(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[tuple[TestClient, MemoryWorkflowRepository]]:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
@@ -57,6 +59,22 @@ def _sp_analysis_payload(outputs: list[str] | None = None) -> dict:
         "outputs": outputs or ["SP_ANALYSIS_DOCUMENT"],
         "options": {"includeEvidenceRefs": True},
     }
+
+
+def _sp_analysis_llm_payload(outputs: list[str] | None = None) -> dict:
+    payload = _sp_analysis_payload(outputs or ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"])
+    payload["target"] = {
+        "type": "PROCEDURE",
+        "schema": "dbo",
+        "name": "usp_GetOrderSummary",
+    }
+    payload["options"] = {
+        "includeEvidenceRefs": True,
+        "useLlmAnalysis": True,
+        "llmProfileId": "openai_fast_test",
+        "allowSpDefinitionToModel": True,
+    }
+    return payload
 
 
 def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None:
@@ -175,6 +193,7 @@ def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
 def test_latest_validation_route_does_not_create_validation_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     repository = CountingValidationRepository()
     service = WorkflowService(repository)
@@ -280,6 +299,24 @@ def test_approve_without_passed_validation_returns_workflow_conflict(
     preview = client.get(f"/api/v1/artifacts/{artifact_id}", headers=headers)
     assert preview.status_code == 200
     assert preview.json()["status"] != "PUBLISHED"
+
+
+def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> None:
+    submit = client.post("/api/v1/requests/sp-analysis", json=_sp_analysis_llm_payload())
+
+    assert submit.status_code == 202
+    job_id = submit.json()["jobId"]
+    response = client.get(f"/api/v1/jobs/{job_id}/agent-runs")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["jobId"] == job_id
+    assert len(payload["agentRuns"]) == 1
+    run = payload["agentRuns"][0]
+    assert run["modelInvocation"]["model"] == "gpt-5-nano"
+    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.1.0"
+    assert "structuredOutput" in run
+    assert "CREATE PROCEDURE" not in str(payload)
 
 
 def test_approval_route_records_enriched_audit_payload_for_passed_validation(

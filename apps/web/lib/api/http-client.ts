@@ -57,6 +57,19 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       return readJson(fetcher, baseUrl, `/api/v1/jobs/${encodeURIComponent(jobId)}`);
     },
 
+    listJobAgentRuns(jobId: string, limit?: number) {
+      const params = new URLSearchParams();
+      if (limit !== undefined) {
+        params.set("limit", String(limit));
+      }
+      const suffix = params.size > 0 ? `?${params.toString()}` : "";
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/jobs/${encodeURIComponent(jobId)}/agent-runs${suffix}`,
+      );
+    },
+
     listJobArtifacts(jobId: string) {
       return readJson(fetcher, baseUrl, `/api/v1/jobs/${encodeURIComponent(jobId)}/artifacts`);
     },

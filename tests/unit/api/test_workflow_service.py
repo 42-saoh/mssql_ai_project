@@ -5,9 +5,15 @@ from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowSte
 from api_app.lifecycle import WorkflowStateError
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
-from api_app.workflow import WorkflowService
+from api_app.workflow import WORKFLOW_METADATA_NOTE, WorkflowService
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
+
+
+@pytest.fixture(autouse=True)
+def fixture_metadata_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
 
 
 def _request(outputs: list[str] | None = None) -> SPAnalysisRequest:
@@ -26,6 +32,26 @@ def _request(outputs: list[str] | None = None) -> SPAnalysisRequest:
                 "JAVA_MYBATIS_DRAFT",
             ],
             "options": {"includeEvidenceRefs": True},
+        }
+    )
+
+
+def _llm_request(outputs: list[str] | None = None) -> SPAnalysisRequest:
+    return SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_GetOrderSummary",
+            },
+            "outputs": outputs or ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": True,
+                "llmProfileId": "openai_fast_test",
+                "allowSpDefinitionToModel": True,
+            },
         }
     )
 
@@ -106,6 +132,42 @@ def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> 
     assert len(artifact_created) == len(repository.artifacts)
     assert all(event.payload["stage"] == "ARTIFACT" for event in artifact_created)
     assert all(event.payload["targetRef"]["type"] == "ARTIFACT" for event in artifact_created)
+
+
+def test_generated_artifact_assumptions_are_deduped() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    service.submit_sp_analysis(_request())
+
+    assert repository.artifacts
+    for artifact in repository.artifacts.values():
+        assert len(artifact.assumptions) == len(set(artifact.assumptions))
+        assert artifact.assumptions.count(WORKFLOW_METADATA_NOTE) == 1
+
+
+def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    _request_record, job = service.submit_sp_analysis(_llm_request())
+
+    agent_runs = repository.list_agent_runs(job.job_id)
+    assert agent_runs is not None
+    assert len(agent_runs) == 1
+    run = agent_runs[0]
+    assert run.agent_type == "LLM_SEMANTIC_ANALYST"
+    assert run.model_invocation["model"] == "gpt-5-nano"
+    assert "businessRules" in run.structured_output
+    assert "CREATE PROCEDURE" not in str(run.model_invocation)
+    assert "CREATE PROCEDURE" not in str(run.structured_output)
+    assert "CREATE PROCEDURE" not in str(repository.metadata_collections)
+    assert any(
+        ref["type"] == "LLM_INFERENCE"
+        for artifact in repository.artifacts.values()
+        for ref in artifact.evidence_refs
+    )
+    assert any(event.action == "AGENT_RUN_RECORDED" for event in repository.audit_events)
 
 
 def test_submit_replays_same_idempotency_key_for_same_payload() -> None:

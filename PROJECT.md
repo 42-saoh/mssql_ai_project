@@ -77,6 +77,7 @@ repo/
 ├─ services/
 │  └─ mssql-mcp/           # MSSQL Metadata MCP 서버
 ├─ packages/
+│  ├─ agent-runtime/       # OpenAI model gateway / prompt / structured LLM analysis
 │  ├─ domain/              # Canonical models / contracts
 │  ├─ analysis/            # SP parser / dependency logic
 │  ├─ generation/          # Doc / code generators
@@ -117,7 +118,7 @@ repo/
 - Preview / approval workflow
 
 ### P3. 운영 고도화
-- Prompt / template / profile registry
+- Prompt / model / template / profile registry
 - Eval fixture 확장
 - 지식 자산화
 - 운영 대시보드 / 모니터링
@@ -137,7 +138,9 @@ repo/
 
 - OpenAPI 초안: `spec/openapi/ai_agent_platform_openapi_v1.yaml`
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
+- Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
+- OpenAI LLM runtime package: `packages/agent-runtime/src/ai_agent_runtime`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - Validation rules: `spec/validation/validation_rules.yaml`
 - Machine-readable policy assets: `spec/policy/`

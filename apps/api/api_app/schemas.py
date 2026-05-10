@@ -30,11 +30,28 @@ class TargetObject(ApiModel):
         return f"{self.schema_name}.{self.name}"
 
 
+class SPAnalysisOptions(ApiModel):
+    include_evidence_refs: bool = Field(default=True, alias="includeEvidenceRefs")
+    include_modernization_hints: bool = Field(
+        default=True,
+        alias="includeModernizationHints",
+    )
+    use_llm_analysis: bool = Field(default=False, alias="useLlmAnalysis")
+    llm_profile_id: Literal[
+        "openai_sp_semantic_analysis",
+        "openai_fast_test",
+    ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
+    allow_sp_definition_to_model: bool = Field(
+        default=False,
+        alias="allowSpDefinitionToModel",
+    )
+
+
 class SPAnalysisRequest(ApiModel):
     db_profile_id: str = Field(alias="dbProfileId")
     target: TargetObject
     outputs: list[RequestedOutputType] = Field(min_length=1)
-    options: dict[str, bool] = Field(default_factory=dict)
+    options: SPAnalysisOptions = Field(default_factory=SPAnalysisOptions)
 
 
 class SubmitRequestResponse(ApiModel):
@@ -58,7 +75,14 @@ class Job(ApiModel):
 
 
 class EvidenceRef(ApiModel):
-    type: Literal["MSSQL_METADATA", "STATIC_ANALYSIS", "POLICY", "TEMPLATE", "USER_INPUT"]
+    type: Literal[
+        "MSSQL_METADATA",
+        "STATIC_ANALYSIS",
+        "LLM_INFERENCE",
+        "POLICY",
+        "TEMPLATE",
+        "USER_INPUT",
+    ]
     object_ref: str = Field(alias="objectRef")
     locator: str
     snapshot_id: str | None = Field(default=None, alias="snapshotId")
@@ -99,6 +123,34 @@ class ValidationReport(ApiModel):
         default_factory=list,
         alias="manualReviewPoints",
     )
+
+
+class ModelInvocationSummary(ApiModel):
+    provider: str
+    model: str
+    model_profile_id: str = Field(alias="modelProfileId")
+    model_registry_ref: str | None = Field(default=None, alias="modelRegistryRef")
+    reasoning_effort: str | None = Field(default=None, alias="reasoningEffort")
+    prompt_version: str = Field(alias="promptVersion")
+    output_schema_version: str = Field(alias="outputSchemaVersion")
+    input_hash: str = Field(alias="inputHash")
+    prompt_hash: str = Field(alias="promptHash")
+    output_hash: str = Field(alias="outputHash")
+    status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
+    token_usage: dict[str, int] = Field(default_factory=dict, alias="tokenUsage")
+    latency_ms: int | None = Field(default=None, alias="latencyMs")
+
+
+class AgentRunSummary(ApiModel):
+    agent_run_id: str = Field(alias="agentRunId")
+    job_id: str = Field(alias="jobId")
+    agent_type: str = Field(alias="agentType")
+    status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
+    target_ref: str = Field(alias="targetRef")
+    summary: str
+    structured_output: dict[str, Any] = Field(alias="structuredOutput")
+    model_invocation: ModelInvocationSummary = Field(alias="modelInvocation")
+    created_at: datetime | None = Field(default=None, alias="createdAt")
 
 
 class ApprovalDecisionRequest(ApiModel):
@@ -170,8 +222,14 @@ class MetadataSearchResponse(ApiModel):
 
 
 class RegistryVersion(ApiModel):
-    registry_type: Literal["PROMPT", "TEMPLATE", "POLICY", "DB_PROFILE", "GENERATOR"] = Field(
-        alias="registryType"
-    )
+    registry_type: Literal[
+        "PROMPT",
+        "TEMPLATE",
+        "POLICY",
+        "DB_PROFILE",
+        "GENERATOR",
+        "MODEL",
+        "SCHEMA",
+    ] = Field(alias="registryType")
     version: str
     active: bool = True

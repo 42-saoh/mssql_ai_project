@@ -36,6 +36,20 @@ rules:
       - MODEL_DRAFT
     description: Inferred or ambiguous sections should be marked REVIEW_REQUIRED.
 
+  - id: llm.inference.review_required
+    severity: warning
+    appliesTo:
+      - SP_ANALYSIS_DOC
+      - DEPENDENCY_REPORT
+      - MAPPER_XML
+      - MAPPER_INTERFACE
+      - SERVICE_DRAFT
+      - DTO_DRAFT
+      - VO_DRAFT
+      - MODEL_DRAFT
+      - DDL_DRAFT
+    description: LLM inference may enrich draft semantics but cannot confirm new dependency facts without deterministic evidence.
+
   - id: repo.schema.versioned_file_only
     severity: error
     appliesTo:

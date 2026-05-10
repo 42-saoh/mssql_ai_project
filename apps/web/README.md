@@ -33,6 +33,14 @@
   `POST /api/v1/artifacts/{artifactId}/approval-decisions` 를 호출한다.
 - PLF/PPM/API prerequisites 가 없으면 dependency blocker 를 렌더링한다.
 
+## P22 behavior
+
+- `/requests/new` 는 LLM semantic analysis option 을 API `SPAnalysisOptions` 로 전송한다.
+- `/jobs/[jobId]` 는 `GET /api/v1/jobs/{jobId}/agent-runs` 로 sanitized LLM trace summary 를 읽어
+  model, prompt/schema version, input/output hash, token usage, latency, status 를 표시한다.
+- `/artifacts/[artifactId]` 는 artifact 의 job id 가 있을 때 같은 sanitized trace summary 를 표시한다.
+- raw prompt, raw SP definition, raw OpenAI response text 는 Web API client type 과 화면에 없다.
+
 현재 화면은 row data 조회, procedure execution, DDL/DML, publish/export, deployment,
 production Auth/RBAC mock header 가장을 제공하지 않는다. P20 Auth/RBAC live IdP wiring 은
 future hardening 으로 남아 있으며 `production_ready: false` 를 유지한다.

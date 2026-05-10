@@ -10,6 +10,7 @@ class SPAnalysisDocumentRenderer:
     artifact_type = ArtifactType.SP_ANALYSIS_DOC
 
     def render(self, context: GenerationContext) -> RenderedArtifact:
+        llm_analysis = _llm_analysis(context)
         lines = [
             f"# {context.entity_name} SP Analysis Draft",
             "",
@@ -39,6 +40,9 @@ class SPAnalysisDocumentRenderer:
             "## dependency_summary",
             f"- Stored Procedure: `{context.sp_name}`",
             f"- Table: `{context.table_name}`",
+            "",
+            "## llm_semantic_analysis",
+            *_llm_semantic_lines(llm_analysis),
             "",
             "## evidence_summary",
             *[
@@ -71,6 +75,7 @@ class DependencyReportRenderer:
     artifact_type = ArtifactType.DEPENDENCY_REPORT
 
     def render(self, context: GenerationContext) -> RenderedArtifact:
+        llm_analysis = _llm_analysis(context)
         lines = [
             f"# {context.entity_name} Dependency Report Draft",
             "",
@@ -94,6 +99,9 @@ class DependencyReportRenderer:
                     for source in context.evidence_sources
                 ],
                 "",
+                "## llm_risk_flags",
+                *_llm_risk_lines(llm_analysis),
+                "",
                 "## assumptions_and_todo",
                 "- TODO: nested procedure/function/view dependencies 확인",
                 "- TODO: read/write dependency direction 확정",
@@ -113,3 +121,33 @@ class DependencyReportRenderer:
             assumptions=context.evidence_assumptions,
             review_required=True,
         )
+
+
+def _llm_analysis(context: GenerationContext) -> dict:
+    payload = context.value("llmAnalysis", {}) or {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _llm_semantic_lines(payload: dict) -> list[str]:
+    if not payload:
+        return ["- status: NOT_REQUESTED"]
+    lines = ["- status: REVIEW_REQUIRED"]
+    for rule in payload.get("businessRules", []) or []:
+        lines.append(f"- Business rule ({rule.get('category')}): {rule.get('summary')}")
+    for point in payload.get("modernizationPoints", []) or []:
+        lines.append(f"- Modernization ({point.get('code')}): {point.get('summary')}")
+    for marker in payload.get("reviewMarkers", []) or []:
+        lines.append(f"- Review marker ({marker.get('code')}): {marker.get('message')}")
+    return lines
+
+
+def _llm_risk_lines(payload: dict) -> list[str]:
+    if not payload:
+        return ["- status: NOT_REQUESTED"]
+    risk_flags = payload.get("riskFlags", []) or []
+    if not risk_flags:
+        return ["- status: NO_RISK_FLAGS_RETURNED"]
+    return [
+        f"- {item.get('severity')} `{item.get('code')}`: {item.get('summary')}"
+        for item in risk_flags
+    ]

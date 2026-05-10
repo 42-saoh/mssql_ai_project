@@ -1,0 +1,146 @@
+contract_id: p23_llm_sp_analysis_quality@0.1.0
+phase: P23
+title: LLM-assisted SP analysis quality evaluation
+status: contract_ready
+production_ready: false
+depends_on:
+  - P22 OpenAI LLM Agent Runtime
+  - prompt:sp_semantic_analysis@0.1.0
+  - schema:llm_semantic_analysis@0.1.0
+  - model:openai_sp_semantic_analysis@0.1.0
+  - model:openai_fast_test@gpt-5-nano@0.1.0
+objective:
+  Build a repeatable simple/medium/complex evaluation suite for LLM-assisted
+  stored procedure semantic analysis without expanding runtime behavior in the
+  contract slice.
+runtime_profiles:
+  semantic_analysis:
+    default_model: gpt-5.5
+    profile_id: openai_sp_semantic_analysis
+    remote_gate_required: true
+  fast_test:
+    default_model: gpt-5-nano
+    profile_id: openai_fast_test
+    remote_gate_required: false
+environment_gates:
+  remote_llm:
+    required_env:
+      - LLM_ENABLE_REMOTE=1
+      - LLM_ALLOW_SP_TEXT=1
+      - OPENAI_API_KEY
+    optional_env:
+      - OPENAI_MODEL_ANALYSIS
+      - LLM_LIVE_GATE=1
+  default_tests:
+    use_fake_gateway: true
+    allow_network: false
+scope:
+  allowed_llm_enrichment_fields:
+    - business_rules
+    - modernization_points
+    - risk_flags
+    - review_markers
+    - assumptions
+  required_evidence_type: LLM_INFERENCE
+  deterministic_facts_source:
+    - MSSQL metadata MCP output
+    - deterministic static analysis output
+  validator_obligation:
+    new_dependency_fact_claims: REVIEW_REQUIRED
+    new_table_fact_claims: REVIEW_REQUIRED
+    new_function_fact_claims: REVIEW_REQUIRED
+    low_evidence_business_rule_claims: REVIEW_REQUIRED
+forbidden_behavior:
+  row_data_queries: true
+  procedure_execution: true
+  automatic_ddl_or_dml: true
+  auto_apply_artifacts: true
+  raw_prompt_storage: true
+  raw_sp_definition_storage: true
+  raw_openai_response_text_storage: true
+  secret_logging: true
+trace_policy:
+  allowed_model_invocation_fields:
+    - provider
+    - model
+    - model_profile_id
+    - reasoning_effort
+    - prompt_ref
+    - prompt_version
+    - schema_ref
+    - schema_version
+    - request_hash
+    - prompt_hash
+    - response_hash
+    - input_token_count
+    - output_token_count
+    - total_token_count
+    - latency_ms
+    - status
+  allowed_agent_run_fields:
+    - agent_run_id
+    - job_id
+    - runtime_version
+    - prompt_ref
+    - schema_ref
+    - model_profile_id
+    - structured_output_json
+    - validation_status
+    - status
+quality_dimensions:
+  semantic_recall:
+    description: Expected business rules, risks, and assumptions are present.
+    minimum_score: 0.75
+  evidence_discipline:
+    description: Claims are tied to existing deterministic facts or review markers.
+    minimum_score: 0.9
+  overclaim_control:
+    description: Unsupported dependency, table, or function claims are flagged.
+    maximum_unreviewed_overclaims: 0
+  storage_safety:
+    description: No raw prompt, SP definition, provider response text, row data, or secrets are stored.
+    required_findings: 0
+scenario_matrix:
+  - scenario_id: simple_read_only_lookup
+    complexity: simple
+    minimum_cases: 1
+    expected_focus:
+      - input validation
+      - single result-shaping rule
+      - low modernization risk
+  - scenario_id: medium_branching_transaction
+    complexity: medium
+    minimum_cases: 1
+    expected_focus:
+      - branching business rules
+      - transaction and error handling
+      - review markers for side effects
+  - scenario_id: complex_dynamic_sql_cross_db
+    complexity: complex
+    minimum_cases: 1
+    expected_focus:
+      - dynamic SQL uncertainty
+      - cross-database references
+      - unsupported dependency claims marked REVIEW_REQUIRED
+      - modernization risk prioritization
+deliverables:
+  contract_assets:
+    - spec/eval/p23_llm_sp_analysis_quality_contract.yaml
+    - fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml
+  prompt_assets:
+    - ops/codex-parallel/prompts/23a_llm_sp_eval_contract_assets.md
+    - ops/codex-parallel/prompts/23b_llm_sp_eval_fixture_suite.md
+    - ops/codex-parallel/prompts/23c_llm_sp_eval_runner.md
+    - ops/codex-parallel/prompts/23d_llm_sp_eval_docs_readiness.md
+  later_implementation_targets:
+    - tests/eval/
+    - packages/agent-runtime/
+    - apps/api/
+    - apps/web/
+acceptance:
+  contract_only_slice:
+    - P23 work is decomposed into independent prompts.
+    - The quality contract names required scenarios, gates, fields, and safety rules.
+    - No live OpenAI call is required for default contract validation.
+    - Fast/test model remains gpt-5-nano.
+    - Production readiness remains false until PPM live gated eval passes.

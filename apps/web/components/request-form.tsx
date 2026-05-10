@@ -152,6 +152,23 @@ export function RequestForm({
             <input type="checkbox" name="includeModernizationHints" defaultChecked />
             Include modernization hints
           </label>
+          <label>
+            <input type="checkbox" name="useLlmAnalysis" />
+            Run LLM semantic analysis
+          </label>
+          <label>
+            <input type="checkbox" name="allowSpDefinitionToModel" />
+            Allow SP definition in model input
+          </label>
+        </div>
+        <div className="form-grid form-grid--compact">
+          <label>
+            <span>LLM profile</span>
+            <select name="llmProfileId" defaultValue="openai_fast_test">
+              <option value="openai_fast_test">fast/test - gpt-5-nano</option>
+              <option value="openai_sp_semantic_analysis">semantic analysis - gpt-5.5</option>
+            </select>
+          </label>
         </div>
       </fieldset>
 

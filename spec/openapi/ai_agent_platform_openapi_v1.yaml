@@ -139,6 +139,41 @@ paths:
                 $ref: "#/components/schemas/Job"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/jobs/{jobId}/agent-runs:
+    get:
+      tags: [jobs]
+      summary: List sanitized agent runtime traces for a job.
+      operationId: listJobAgentRuns
+      description: |
+        Returns model and agent trace summaries only. Raw prompt text, SP definition text,
+        and raw model response text are not exposed by this endpoint.
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Sanitized agent run traces for the job.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId, agentRuns]
+                properties:
+                  jobId:
+                    type: string
+                  agentRuns:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentRunSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/jobs/{jobId}/artifacts:
     get:
       tags: [artifacts]
@@ -448,9 +483,28 @@ components:
           items:
             $ref: "#/components/schemas/RequestedOutputType"
         options:
-          type: object
-          additionalProperties:
-            type: boolean
+          $ref: "#/components/schemas/SPAnalysisOptions"
+    SPAnalysisOptions:
+      type: object
+      properties:
+        includeEvidenceRefs:
+          type: boolean
+          default: true
+        includeModernizationHints:
+          type: boolean
+          default: true
+        useLlmAnalysis:
+          type: boolean
+          default: false
+        llmProfileId:
+          type: string
+          default: openai_sp_semantic_analysis
+          enum:
+            - openai_sp_semantic_analysis
+            - openai_fast_test
+        allowSpDefinitionToModel:
+          type: boolean
+          default: false
     SubmitRequestResponse:
       type: object
       required: [requestId, jobId, status]
@@ -608,7 +662,7 @@ components:
       properties:
         type:
           type: string
-          enum: [MSSQL_METADATA, STATIC_ANALYSIS, POLICY, TEMPLATE, USER_INPUT]
+          enum: [MSSQL_METADATA, STATIC_ANALYSIS, LLM_INFERENCE, POLICY, TEMPLATE, USER_INPUT]
         objectRef:
           type: string
           examples: [plf.dbo.usp_OrderRequest_Select]
@@ -653,6 +707,81 @@ components:
           enum: [PASS, FAIL, REVIEW_REQUIRED]
         message:
           type: string
+    ModelInvocationSummary:
+      type: object
+      required:
+        - provider
+        - model
+        - modelProfileId
+        - promptVersion
+        - outputSchemaVersion
+        - inputHash
+        - promptHash
+        - outputHash
+        - status
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        modelProfileId:
+          type: string
+        modelRegistryRef:
+          type: string
+        reasoningEffort:
+          type: string
+        promptVersion:
+          type: string
+        outputSchemaVersion:
+          type: string
+        inputHash:
+          type: string
+        promptHash:
+          type: string
+        outputHash:
+          type: string
+        status:
+          type: string
+          enum: [SUCCEEDED, FAILED, SKIPPED]
+        tokenUsage:
+          type: object
+          additionalProperties:
+            type: integer
+        latencyMs:
+          type: integer
+    AgentRunSummary:
+      type: object
+      required:
+        - agentRunId
+        - jobId
+        - agentType
+        - status
+        - targetRef
+        - summary
+        - structuredOutput
+        - modelInvocation
+      properties:
+        agentRunId:
+          type: string
+        jobId:
+          type: string
+        agentType:
+          type: string
+        status:
+          type: string
+          enum: [SUCCEEDED, FAILED, SKIPPED]
+        targetRef:
+          type: string
+        summary:
+          type: string
+        structuredOutput:
+          type: object
+          additionalProperties: true
+        modelInvocation:
+          $ref: "#/components/schemas/ModelInvocationSummary"
+        createdAt:
+          type: string
+          format: date-time
     ApprovalDecisionRequest:
       type: object
       required: [decision, reviewer, comment]
@@ -825,7 +954,7 @@ components:
       properties:
         registryType:
           type: string
-          enum: [PROMPT, TEMPLATE, POLICY, DB_PROFILE, GENERATOR]
+          enum: [PROMPT, TEMPLATE, POLICY, DB_PROFILE, GENERATOR, MODEL, SCHEMA]
         version:
           type: string
         active:

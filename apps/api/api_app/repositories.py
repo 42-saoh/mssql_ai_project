@@ -24,7 +24,7 @@ class WorkRequestRecord:
     db_profile_id: str
     target: dict[str, Any]
     outputs: tuple[str, ...]
-    options: dict[str, bool]
+    options: dict[str, Any]
     request_hash: str
     correlation_id: str
     idempotency_key: str | None = None
@@ -53,6 +53,19 @@ class MetadataCollectionRecord:
     job_id: str
     status: str
     payload: dict[str, Any]
+    created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class AgentRunRecord:
+    agent_run_id: str
+    job_id: str
+    agent_type: str
+    status: str
+    target_ref: str
+    summary: str
+    structured_output: dict[str, Any]
+    model_invocation: dict[str, Any]
     created_at: datetime = field(default_factory=utc_now)
 
 
@@ -141,7 +154,7 @@ class WorkflowRepository(Protocol):
         db_profile_id: str,
         target: dict[str, Any],
         outputs: tuple[str, ...],
-        options: dict[str, bool],
+        options: dict[str, Any],
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
@@ -185,6 +198,27 @@ class WorkflowRepository(Protocol):
         ...
 
     def latest_metadata_for_job(self, job_id: str) -> MetadataCollectionRecord | None:
+        ...
+
+    def save_agent_run(
+        self,
+        *,
+        job_id: str,
+        agent_type: str,
+        status: str,
+        target_ref: str,
+        summary: str,
+        structured_output: dict[str, Any],
+        model_invocation: dict[str, Any],
+    ) -> AgentRunRecord:
+        ...
+
+    def list_agent_runs(
+        self,
+        job_id: str,
+        *,
+        limit: int | None = None,
+    ) -> list[AgentRunRecord] | None:
         ...
 
     def add_artifact(
@@ -290,6 +324,7 @@ AUDIT_STAGE_BY_ACTION: dict[str, str] = {
     "JOB_TRANSITIONED": "JOB",
     "JOB_FAILED": "JOB",
     "METADATA_COLLECTED": "METADATA",
+    "AGENT_RUN_RECORDED": "AGENT_RUNTIME",
     "ARTIFACT_CREATED": "ARTIFACT",
     "ARTIFACT_VALIDATED": "VALIDATION",
     "APPROVAL_DECISION_RECORDED": "APPROVAL",

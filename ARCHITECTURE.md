@@ -80,6 +80,9 @@ flowchart LR
 - tool call orchestration
 - evidence binding
 - LLM 사용이 필요한 부분의 제한적 생성
+- OpenAI Responses API 는 `ModelGateway` adapter 뒤에서만 호출
+- raw SP definition 은 명시 옵션이 켜진 실행 중 입력으로만 사용하고 플랫폼 DB,
+  artifact, audit log, API 응답에는 저장하지 않음
 
 ### Analysis Engine
 - SP parser
@@ -188,6 +191,12 @@ packages/domain
 packages/analysis
   - parsing / dependency / search logic
 
+packages/agent-runtime
+  - OpenAI / fake model gateway
+  - prompt renderer
+  - strict structured output parser
+  - model invocation hash / token / latency summary
+
 packages/generation
   - doc/code generators
   - renderers
@@ -210,6 +219,8 @@ packages/templates
 - `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다.
 - `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다.
 - `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
+- `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. 기본 semantic analysis profile 은 `gpt-5.5`, fast/test profile 은 `gpt-5-nano` 이며 기본 테스트는 remote API 를 호출하지 않는다.
+- Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후에만 LLM semantic analysis 를 실행한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
 - P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되었지만, live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
 - P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.
@@ -219,6 +230,9 @@ packages/templates
 - `apps/api` 는 MSSQL 에 직접 붙지 않는다.
 - `services/mssql-mcp` 는 메타데이터 읽기 전용이다.
 - 생성기는 raw MSSQL metadata 가 아니라 canonical model 기준으로 동작한다.
+- LLM provider 에 전달된 prompt, raw SP definition, raw provider response text 는 저장하지 않는다.
+- agent run trace 는 model/profile/prompt/schema version, input/prompt/output hash,
+  token usage, latency, status, schema-valid structured output 만 노출한다.
 - validation 결과 없이 artifact 를 publish 하지 않는다.
 - registry version 이 고정되지 않은 생성 결과는 승인 대상이 아니다.
 - production auth/RBAC 는 mock header, hardcoded actor, fixture token 으로 대체하지 않는다.
@@ -227,6 +241,7 @@ packages/templates
 
 - OpenAPI 초안: `spec/openapi/ai_agent_platform_openapi_v1.yaml`
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
+- Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - Validation rules: `spec/validation/validation_rules.yaml`

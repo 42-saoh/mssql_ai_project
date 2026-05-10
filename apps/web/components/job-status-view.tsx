@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
-import type { ArtifactSummary, Job } from "@/lib/api/types";
+import type { AgentRunSummary, ArtifactSummary, Job } from "@/lib/api/types";
 import {
   artifactStatusLabels,
   artifactTypeLabels,
@@ -42,10 +42,12 @@ export function JobStatusView({
   job,
   scenarioSummary,
   artifacts,
+  agentRuns,
 }: Readonly<{
   job: Job;
   scenarioSummary: string;
   artifacts: ArtifactSummary[];
+  agentRuns: AgentRunSummary[];
 }>) {
   return (
     <div className="stack">
@@ -123,6 +125,50 @@ export function JobStatusView({
             </li>
           ))}
         </ol>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Agent runtime</p>
+            <h2>LLM trace summary</h2>
+          </div>
+          <span className="quiet-label">Sanitized</span>
+        </div>
+
+        {agentRuns.length > 0 ? (
+          <div className="validation-list">
+            {agentRuns.map((run) => (
+              <article className="validation-row" key={run.agentRunId}>
+                <div>
+                  <h3>{run.agentType}</h3>
+                  <p>
+                    {run.modelInvocation.model} · {run.modelInvocation.promptVersion} ·{" "}
+                    {run.summary}
+                  </p>
+                  <small>
+                    input {run.modelInvocation.inputHash} · output{" "}
+                    {run.modelInvocation.outputHash} · tokens{" "}
+                    {run.modelInvocation.tokenUsage?.totalTokens ?? 0} · latency{" "}
+                    {run.modelInvocation.latencyMs ?? 0}ms
+                  </small>
+                </div>
+                <div className="status-cluster">
+                  <StatusPill value={run.status} label={run.status} />
+                  <StatusPill
+                    value={run.modelInvocation.reasoningEffort ?? "none"}
+                    label={run.modelInvocation.reasoningEffort ?? "none"}
+                  />
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="callout">
+            <strong>No LLM run recorded</strong>
+            <p>Submit a request with LLM semantic analysis enabled to record a sanitized trace.</p>
+          </div>
+        )}
       </section>
 
       <section className="panel">
