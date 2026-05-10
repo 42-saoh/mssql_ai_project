@@ -4,7 +4,10 @@
 
 P00-P07 produced a starter/MVP baseline for a metadata-only MSSQL analysis, documentation, and Java/MyBatis draft-generation platform. P08 converts that baseline into productization targets for P09-P16 without changing shared contracts or implementation code.
 
-No current surface is classified as `production-ready`. The current state is useful for bounded fixture-first validation, optional live readiness probing, and worker scoping, but product release readiness depends on the follow-up milestones in `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`.
+No current surface is classified as `production-ready`. P17D has enough evidence for a scoped
+draft-only live pilot `CONDITIONAL_GO`, but product release readiness still depends on P18
+closure of the full `CanonicalAnalysisModel`, web HTTP adapter evidence, and production
+auth/RBAC boundaries.
 
 ## Status Taxonomy
 
@@ -14,6 +17,7 @@ No current surface is classified as `production-ready`. The current state is use
 | `stub` | Placeholder or mock behavior exists with explicit review markers. | Can support local workflow shape; not product evidence. |
 | `fixture-first` | Deterministic tests pass against synthetic or captured fixture metadata. | Acceptable for CI baseline and regression checks. |
 | `optional-live` | Live integration can run only when external DB/profile/secret conditions are provided. | Evidence is conditional and must never fall back from PPM to PLF. |
+| `conditional-live` | Scoped live evidence passed, but only within explicit draft-only and approval-gated boundaries. | Can support a pilot candidate; not a production-ready platform claim. |
 | `production-ready` | Product behavior is contract-backed, validated, approved, documented, monitored, and safe under policy. | Target state only; not claimed by the current baseline. |
 
 ## Current State Matrix
@@ -31,6 +35,8 @@ No current surface is classified as `production-ready`. The current state is use
 | Validation engine | `fixture-first` | Validation rules load from spec and enforce evidence/review markers; publish gate helper requires passed validation plus approval. | P13 must productize rule taxonomy, reviewer checklist, audit linkage, and storage mappings without changing shared specs directly. |
 | Web portal | `stub` | Next.js shell uses mock adapter and provides request/job/artifact preview surfaces. | P14 must add product demo flows, metadata search, API adapter smoke, blocker display, and PPM sample handling. |
 | Eval/ops/readiness | `fixture-first` | P06 fixture eval covers one happy path and forbidden operations. | P15/P16 must define product metrics, observability/security checks, PPM scenarios, and go/no-go handoff package. |
+| P17 scoped pilot release | `conditional-live` | P17D records `CONDITIONAL_GO` for the draft-only scoped candidate. | This does not close productization; P18 must resolve canonical contract and web/auth evidence. |
+| P18 productization closure | `blocked` | `fixtures/eval/productization_gap_closure_p18_v1.yaml` records canonical, HTTP adapter, and auth/RBAC blockers. | Productization remains `NO_GO` until P18A/P18B evidence closes those blockers. |
 
 ## Contract Drift Matrix
 
@@ -56,7 +62,7 @@ The P08A pilot manifest is the only source of PPM object identities for producti
 - Platform DB context: `PLF`
 - Closed dependency evidence gate: `DEPENDENCY_METADATA_INCOMPLETE` is closed by the P17A selected stored procedure suite majority gate.
 
-When `selection_mode` is `live_metadata`, P09-P16 may reference the selected PPM object identities for metadata-only fixtures, demos, and readiness reports. They must preserve the P17A dependency closure caveats and avoid claims that stored procedures are linked to selected tables unless catalog evidence confirms that relationship.
+When `selection_mode` is `live_metadata`, P09-P18 may reference the selected PPM object identities for metadata-only fixtures, demos, and readiness reports. They must preserve the P17A dependency closure caveats and avoid claims that stored procedures are linked to selected tables unless catalog evidence confirms that relationship.
 
 When `selection_mode` is `template_only`, workers must not invent object names. Eval, demo, and release readiness should remain blocker-dependent and use synthetic/fixture-first samples only.
 
@@ -74,3 +80,5 @@ In both modes, the following remain forbidden: row-data reads, procedure executi
 | P14 | Demo object selector and portal sample requests. | UI labels metadata caveats and never exposes row-data/DDL/publish controls. |
 | P15 | Eval, observability, security, and ops metrics. | Metrics separate fixture-first, optional-live, and blocker-dependent evidence. |
 | P16 | Pilot release readiness and handoff package. | Go/no-go includes PPM access, dependency evidence, validation results, approval/audit, and policy compliance. |
+| P17 | Live pilot blocker closure. | Scoped draft-only candidate can become `CONDITIONAL_GO`; platform production-ready remains forbidden. |
+| P18 | Canonical contract and web/auth productization closure. | Full productization stays `NO_GO` until canonical, HTTP adapter, and auth/RBAC evidence pass. |

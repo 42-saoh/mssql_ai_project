@@ -67,3 +67,15 @@ P16이 `NO_GO`인 경우에는 P17A~P17D를 순차 실행한다.
 - `prompts/17d_pilot_release_go_decision.md` — hard-live 재검증 및 `NO_GO`/`CONDITIONAL_GO` 최종 판정
 
 P17 기준 문서는 `docs/live-pilot-blocker-closure-plan.md`, machine-readable fixture는 `fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml` 이다. P17도 PPM을 PLF로 대체하지 않으며, 전체 플랫폼 production-ready 선언은 금지한다.
+
+## P18 Productization Gap Closure Prompt Pack
+
+P17D 이후 scoped live pilot candidate 가 `CONDITIONAL_GO` 여도 production-ready 는 아니다.
+P18은 남은 productization gap 을 닫거나 명확한 blocker 로 고정한다.
+
+- `prompts/18a_canonical_analysis_model_closure.md` — full `CanonicalAnalysisModel` contract closure 또는 정확한 domain blocker 기록
+- `prompts/18b_web_http_auth_rbac_evidence.md` — web HTTP adapter release smoke 와 production auth/RBAC evidence/blocker 정리
+
+P18 기준 fixture는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 이다. P18도 row data,
+procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는
+publish/export, fake production auth/RBAC 를 허용하지 않는다.

@@ -11,10 +11,10 @@
 
 - implemented: API route surface, workflow state 기록, validation report 저장, approval decision 기록, audit event 기록.
 - fixture-first: metadata collection 과 e2e/eval 기본 경로.
-- stub/skeleton: Platform DB adapter, auth/RBAC, publish route, full registry admin.
+- stub/skeleton: Platform DB adapter, production auth/RBAC, publish route, full registry admin.
 - optional live: MSSQL MCP readiness probe. live metadata query execution 은 아직 completed feature 가 아니다.
 - follow-up: published version 승격 UI/API, 운영 권한 모델, live read-only metadata adapter.
-- not production-ready: P16 live pilot release 는 P17A dependency evidence gate 통과 후에도 live release validation 과 approval evidence 누락 때문에 NO-GO 로 유지한다.
+- not production-ready: P17D live pilot release 는 scoped draft-only candidate 로만 CONDITIONAL_GO 이며, P18 canonical contract 와 web/auth evidence 가 닫히기 전까지 전체 플랫폼 production-ready 로 보지 않는다.
 
 ## 기본 운영 절차
 1. `.env.example` 을 기준으로 `.env` 를 만들고 비밀값은 커밋하지 않는다.
@@ -33,13 +33,14 @@
 - correlation id 는 request/job/metadata/artifact/validation/approval/audit 문맥에 전달되어야 한다.
 - 로그와 audit 에 connection string, credential, cookie, raw definition text, row data 를 남기지 않는다.
 
-## P16 pilot readiness 운영
+## P16/P17 pilot readiness 운영
 
 - P16 readiness package 는 `docs/pilot-release-readiness.md`, `ops/codex-parallel/P16_PILOT_RELEASE_HANDOFF.md`, `fixtures/eval/pilot_release_readiness_p16_v1.yaml` 을 기준으로 검토한다.
 - 현재 PPM manifest 는 `live_metadata` 이므로 대표 object identity 를 문서와 fixture 에 참조할 수 있다.
 - P17A 는 selected stored procedure suite majority 기준으로 `DEPENDENCY_METADATA_INCOMPLETE` 를 닫았지만, selected table 은 confirmed `related_procedures` evidence 가 있을 때만 selected procedure dependency 로 주장한다.
-- live pilot release 는 NO-GO 이며, fixture-first/demo handoff 만 제한적으로 GO WITH LIMITATIONS 상태다.
-- live release 로 전환하려면 PPM hard-live 검증, passed validation, human `APPROVE`, audit trace 가 같은 artifact/version 에 묶여야 한다.
+- P17D 이후 live pilot release 는 scoped draft-only candidate 에 한해 CONDITIONAL_GO 이며, fixture-first/demo handoff 는 계속 GO WITH LIMITATIONS 이다.
+- live pilot 조건을 유지하려면 PPM hard-live 검증, passed validation, human `APPROVE`, audit trace 가 같은 artifact/version 에 묶여야 한다.
+- P18 productization readiness 는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 의 CanonicalAnalysisModel, web HTTP adapter, production auth/RBAC blocker 가 닫히기 전까지 NO-GO 다.
 
 ## 스키마 변경 운영
 

@@ -84,3 +84,22 @@ milestones:
       - ppm_manifest_template_only
       - active_blockers_unresolved_for_live_release
       - policy_forbidden_action_required
+  P17:
+    readiness_gate: scoped_live_pilot_conditional_go_requires_closed_blockers
+    verification:
+      - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+      - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+    blocker_if:
+      - live_pilot_artifact_validation_not_passed
+      - manual_approval_audit_binding_missing
+      - hard_live_gate_not_reproducible
+  P18:
+    readiness_gate: productization_gaps_require_canonical_contract_and_http_auth_evidence
+    verification:
+      - make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
+      - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
+      - make test-web-smoke
+    blocker_if:
+      - canonical_analysis_model_review_required
+      - web_http_release_smoke_missing
+      - auth_rbac_production_source_unresolved

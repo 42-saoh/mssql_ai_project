@@ -11,9 +11,9 @@
 ## 현재 사용 가능한 경로
 
 - API happy path 는 fixture-backed metadata 로 request → job → artifact → validation → approval decision recording 까지 검증된다.
-- web portal 은 mock adapter 기반 shell 이며 API/BFF HTTP 연결 smoke 는 follow-up 이다.
+- web portal 은 mock adapter 기반 shell 이며 API/BFF HTTP 연결 smoke 는 P18 productization evidence 대상이다.
 - 기본 metadata profile 은 `master` 이고, sample fixture target 은 `dbo.usp_GetOrderSummary` 이다.
-- P16 기준 PPM 대표 object identity 는 `live_metadata` manifest 에서 온 것이지만, live pilot release 는 아직 NO-GO 다.
+- P16/P17D 기준 PPM 대표 object identity 는 `live_metadata` manifest 에서 온 것이며, live pilot release 는 scoped draft-only candidate 로만 CONDITIONAL_GO 다.
 
 ## 주의
 - 결과는 초안이며 검토가 필요하다.
@@ -34,10 +34,10 @@
 
 P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidence coverage, review-required 비율, validation 상태, draft artifact completeness, latency budget, audit stage, redaction 상태다. raw definition text, row data, credential 은 화면/로그/fixture 에 포함하지 않는다.
 
-## P16 readiness 결과 해석
+## P16/P17/P18 readiness 결과 해석
 
-- `docs/pilot-release-readiness.md` 는 현재 live pilot release 를 NO-GO 로 판정한다.
+- `docs/pilot-release-readiness.md` 는 현재 live pilot release 를 scoped CONDITIONAL_GO 로 판정한다.
 - fixture-first/demo handoff 는 GO WITH LIMITATIONS 이며, 결과물은 계속 draft-only 이다.
 - P17A dependency gate 는 selected SP suite majority 기준으로 통과했지만, SP 와 table 사이의 확정 dependency 는 manifest 의 confirmed `related_procedures` evidence 가 있을 때만 해석한다.
 - 승인 화면이나 API decision 기록은 publish, 배포, DDL 적용을 수행하지 않는다.
-- live pilot release 후보는 passed validation 과 human `APPROVE` 가 audit context 와 함께 남은 뒤 다시 검토해야 한다.
+- P18 productization readiness 는 full CanonicalAnalysisModel, web HTTP adapter release smoke, production auth/RBAC evidence 가 닫히기 전까지 NO-GO 다.

@@ -2,7 +2,7 @@
 
 ## Summary
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. The suite documents what is implemented now and separates stubs, fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, and follow-up slices.
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18 records the remaining production readiness gaps for full `CanonicalAnalysisModel`, web HTTP adapter evidence, and production auth/RBAC. The suite documents what is implemented now and separates stubs, fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, productization blockers, and follow-up slices.
 
 ## Current Boundaries
 
@@ -14,6 +14,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | Web portal | stub/skeleton | Next.js shell uses mock data by default. HTTP API smoke is follow-up. |
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | conditional scoped candidate | P17D records live pilot release as `CONDITIONAL_GO` only for the draft-only scoped candidate. This does not make the platform production-ready and does not authorize publish/export, DDL/DML, row-data access, procedure execution, deployment, or PLF fallback. |
+| P18 productization readiness | blocked | Full `CanonicalAnalysisModel`, HTTP adapter release smoke, and production auth/RBAC evidence are P18 blockers until implemented or explicitly closed. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -28,6 +29,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/pilot_release_readiness_p16_v1.yaml`: P16/P17D pilot release checklist, quality report, selected object evidence summary, P17B validation binding, P17C approval/audit status, P17D hard-live evidence, and go/no-go recommendation.
 - `fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml`: P17B draft-only live pilot artifact validation package with passed release-critical checks.
 - `fixtures/eval/manual_approval_audit_p17_v1.yaml`: P17C human approval and audit binding for the P17B artifact set/version and validation report.
+- `fixtures/eval/productization_gap_closure_p18_v1.yaml`: P18 productization blocker fixture for canonical contract, web HTTP adapter evidence, and auth/RBAC source of truth.
 
 ## Verification Scope
 
@@ -81,3 +83,4 @@ The full default suite remains fixture-first/reproducible. Tests that assert fix
 5. Expand eval fixtures beyond the single happy path to dynamic SQL, temp tables, transaction/TRY-CATCH, DDL drafts, and failure paths.
 6. Mature DDL draft renderer while keeping schema apply/manual review outside automation.
 7. Keep future live pilot reruns evidence-based: if P17B validation, P17C approval/audit binding, or hard-live PPM verification cannot be reproduced, return the scoped candidate to `NO_GO`.
+8. Close P18 blockers by implementing an explicit canonical domain contract and proving web HTTP/auth evidence, or keep productization `NO_GO` with exact blocker codes.

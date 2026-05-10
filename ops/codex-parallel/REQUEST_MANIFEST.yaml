@@ -633,4 +633,68 @@ waves:
           - python -m compileall apps services packages tests
           - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
           - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D]
+  - wave: W9
+    description: post-P17 productization gap closure
+    tracks:
+      - id: P18A
+        branch: feat/p18a-canonical-analysis-model-closure
+        worktree: ../wt/p18a-canonical-analysis-model-closure
+        prompt: prompts/18a_canonical_analysis_model_closure.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review, docs-sync]
+        depends_on: [P17D]
+        target_paths:
+          - packages/domain/
+          - packages/analysis/
+          - fixtures/eval/productization_gap_closure_p18_v1.yaml
+          - fixtures/eval/canonical_analysis_candidate.json
+          - tests/unit/analysis/
+          - tests/eval/
+          - tests/contract/
+          - docs/productization-architecture-gap-analysis.md
+          - docs/integration-eval-status.md
+        readonly_paths:
+          - apps/
+          - services/
+          - spec/
+          - db/schema/
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
+          - python3 -m compileall packages/analysis packages/domain tests
+      - id: P18B
+        branch: feat/p18b-web-http-auth-rbac-evidence
+        worktree: ../wt/p18b-web-http-auth-rbac-evidence
+        prompt: prompts/18b_web_http_auth_rbac_evidence.md
+        role: platform_worker
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review, docs-sync, browser-automation-smoke]
+        depends_on: [P17D]
+        target_paths:
+          - apps/web/
+          - apps/api/
+          - fixtures/eval/productization_gap_closure_p18_v1.yaml
+          - tests/unit/web/
+          - tests/integration/api/
+          - tests/e2e/
+          - tests/eval/
+          - docs/admin-guide/
+          - docs/user-guide/
+          - docs/integration-eval-status.md
+        readonly_paths:
+          - services/mssql-mcp/
+          - packages/domain/
+          - packages/analysis/
+          - packages/generation/
+          - packages/validation/
+          - spec/
+          - db/schema/
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
+          - make test-web-smoke
+          - python3 -m compileall apps/api tests
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B]

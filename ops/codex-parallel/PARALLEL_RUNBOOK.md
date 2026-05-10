@@ -227,3 +227,36 @@ P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e
 ```
 
 금지 사항은 P16과 같다. row data, procedure execution, raw definition text 저장, 자동 DDL/DML, PLF fallback, 승인 없는 publish/export는 허용하지 않는다.
+
+## 15. P18 Productization Gap Closure 운영
+
+P17D가 scoped live pilot candidate 를 `CONDITIONAL_GO` 로 만들었더라도 전체 플랫폼은
+production-ready 가 아니다. 아래 두 worktree 로 P18을 병렬 실행한다.
+
+```bash
+git worktree add ../wt/p18a-canonical-analysis-model-closure -b feat/p18a-canonical-analysis-model-closure
+git worktree add ../wt/p18b-web-http-auth-rbac-evidence -b feat/p18b-web-http-auth-rbac-evidence
+```
+
+`P18A`는 full `CanonicalAnalysisModel` contract 를 구현하거나, 구현할 수 없는 누락 필드를
+정확한 blocker 로 고정한다. `P18B`는 `PORTAL_API_MODE=http` 경로의 web-to-API smoke 와
+production auth/RBAC source of truth 를 검증한다. auth/RBAC 출처가 없으면 mock header 로
+대체하지 말고 `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED` 로 보고한다.
+
+P18 기준 fixture 는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 이다. P18의
+productization decision 은 두 트랙이 모두 evidence 를 제출하기 전까지 `NO_GO` 로 유지한다.
+
+검증 기준:
+
+```bash
+make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
+python3 -m compileall packages/analysis packages/domain tests
+make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
+make test-web-smoke
+make test
+make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
+python3 -m compileall apps services packages tests
+```
+
+금지 사항은 계속 동일하다. row data, procedure execution, raw definition text 저장, 자동
+DDL/DML, PLF fallback, 승인 없는 publish/export, fake production auth/RBAC 는 허용하지 않는다.
