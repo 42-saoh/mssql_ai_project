@@ -63,7 +63,7 @@ Expected Deliverables:
 
 Verification:
 - `make test PYTEST_ARGS="tests/unit/analysis"`
-- `python -m compileall packages/analysis tests/unit/analysis`
+- `python3.14 -m compileall packages/analysis tests/unit/analysis`
 
 Report Format:
 - Changed Files

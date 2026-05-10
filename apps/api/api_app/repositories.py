@@ -205,6 +205,9 @@ class WorkflowRepository(Protocol):
     def get_job(self, job_id: str) -> JobRecord | None:
         ...
 
+    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+        ...
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         ...
 
@@ -225,6 +228,7 @@ class WorkflowRepository(Protocol):
         missing_evidence: list[str],
         manual_review_points: list[str],
         correlation_id: str | None = None,
+        actor: str = "api-system",
     ) -> ValidationReportRecord:
         ...
 

@@ -8,17 +8,17 @@ platform_db_context: PLF
 current_state:
   p17_scoped_live_pilot_decision: CONDITIONAL_GO
   p17_scope: scoped_live_pilot_candidate_only
-  p18_productization_decision: NO_GO
+  p18_productization_decision: CONDITIONAL_GO
   production_ready: false
   p18_tracks:
     P18A:
       title: CanonicalAnalysisModel Contract Closure
-      status: PLANNED
-      release_blocker: CANONICAL_ANALYSIS_MODEL_REVIEW_REQUIRED
+      status: CLOSED
+      release_blocker: null
     P18B:
       title: Web HTTP Adapter And Auth/RBAC Evidence Closure
-      status: PLANNED
-      release_blocker: AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED
+      status: HTTP_RELEASE_SMOKE_AND_AUTH_ENFORCEMENT_FIXTURE_COVERED_LIVE_WIRING_DEFERRED
+      release_blocker: null
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -30,12 +30,14 @@ policy_boundaries:
   publish_or_export_allowed_without_approval: false
   production_ready_claim_allowed: false
 p18a_canonical_analysis_model:
-  current_candidate_contract: CanonicalAnalysisModel-compatible-local-v0.2
+  current_candidate_contract: CanonicalAnalysisModel
   target_contract: CanonicalAnalysisModel
-  current_status: REVIEW_REQUIRED
-  current_blockers:
-    - DOMAIN_CONTRACT_MISSING
+  current_status: CONTRACT_CLOSED
+  analysis_status: REVIEW_REQUIRED
+  current_blockers: []
   observed_candidate_fields:
+    - snapshot_id
+    - registry_version_refs
     - procedure.identifier
     - procedure.parameters
     - dependencies.table_references
@@ -50,23 +52,18 @@ p18a_canonical_analysis_model:
     - result_sets
     - call_graph
     - business_rules
+    - modernization_points
+    - evidence_refs
     - evidence_assessment
     - overall_confidence
     - todos
     - review_markers
-  exact_contract_blockers:
-    - code: DOMAIN_CANONICAL_SCHEMA_MISSING
-      target_path: packages/domain/src/ai_agent_domain/models.py
-      required_resolution: Add an explicit versioned CanonicalAnalysisModel domain contract or keep productization NO_GO.
-    - code: SNAPSHOT_ID_BINDING_MISSING
-      target_path: packages/analysis/src/ai_agent_analysis/models.py
-      required_resolution: Persist canonical snapshot id binding instead of source_name/source_hash only.
-    - code: REGISTRY_VERSION_REFS_MISSING
-      target_path: packages/analysis/src/ai_agent_analysis/models.py
-      required_resolution: Persist registry version refs required by architecture readiness.
-    - code: MODERNIZATION_POINTS_SCHEMA_MISSING
-      target_path: packages/domain/src/ai_agent_domain/models.py
-      required_resolution: Define modernization point shape or mark it REVIEW_REQUIRED with explicit evidence.
+  exact_contract_blockers: []
+  closed_contract_blockers:
+    - DOMAIN_CANONICAL_SCHEMA_MISSING
+    - SNAPSHOT_ID_BINDING_MISSING
+    - REGISTRY_VERSION_REFS_MISSING
+    - MODERNIZATION_POINTS_SCHEMA_MISSING
   release_critical_review_required_allowed: false
   uncertainty_policy:
     dynamic_sql_unresolved: REVIEW_REQUIRED
@@ -79,12 +76,17 @@ p18a_canonical_analysis_model:
     - contract/eval tests cover required fields, status mapping, and forbidden evidence
 p18b_web_http_auth_rbac:
   http_adapter:
-    current_status: IMPLEMENTED_NOT_RELEASE_EVIDENCE
+    current_status: RELEASE_SMOKE_RECORDED
     default_mode: mock
     http_mode_env: PORTAL_API_MODE=http
     base_url_env: PORTAL_API_BASE_URL
     adapter_path: apps/web/lib/api/http-client.ts
     interface_path: apps/web/lib/api/portal-api.ts
+    smoke_script_path: apps/web/scripts/http-adapter-smoke.mjs
+    local_smoke_runner_path: tests/e2e/web_http_adapter_smoke.py
+    smoke_command: pnpm --dir apps/web run smoke:http-adapter -- <baseUrl>
+    local_smoke_command: python3 tests/e2e/web_http_adapter_smoke.py
+    release_evidence_scope: local fixture-backed API route smoke only
     required_smoke_paths:
       - POST /api/v1/requests/sp-analysis
       - GET /api/v1/jobs/{jobId}
@@ -96,46 +98,62 @@ p18b_web_http_auth_rbac:
       - GET /api/v1/metadata/search
       - GET /api/v1/registry/versions
     blocker_if:
-      - WEB_HTTP_RELEASE_SMOKE_MISSING
       - HTTP_ADAPTER_DIVERGES_FROM_PORTAL_API_INTERFACE
       - UI_ACTION_IMPLIES_PUBLISH_EXPORT_OR_DEPLOY
   auth_rbac:
-    current_status: BLOCKED
-    blocker: AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED
+    current_status: SOURCE_DOCUMENTED_ENFORCEMENT_IMPLEMENTED_LIVE_WIRING_DEFERRED
+    documented_source:
+      identity_source: verified OIDC/JWT from external IdP or API gateway
+      role_source: PLF AUTH_USERS, AUTH_ROLES, AUTH_USER_ROLES
+      source_doc: docs/admin-guide/auth-rbac-production-source.md
+      adr: docs/adr/ADR-0006-production-auth-rbac-source.md
+      canonical_roles:
+        - USER
+        - REVIEWER
+        - ADMIN
+        - AUDITOR
+    enforcement:
+      enabled_by_env: AUTH_RBAC_ENFORCEMENT
+      jwt_settings:
+        - OIDC_ISSUER
+        - OIDC_AUDIENCE
+        - OIDC_JWKS_URL
+      implemented_routes:
+        - POST /api/v1/artifacts/{artifactId}/validation
+        - POST /api/v1/artifacts/{artifactId}/approval-decisions
+      unauthorized_negative_tests: tests/integration/api/test_api_auth_rbac.py
+      live_wiring_status: DEFERRED_OPTIONAL_FUTURE_HARDENING
+    deferred_item: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
+    non_blocking_for_conditional_open: true
     must_not_fake_with_mock_headers: true
-    required_resolution:
-      - define production actor identity source
-      - define role source and role-to-action matrix
-      - enforce role checks in API/BFF routes or keep productization NO_GO
-      - add negative tests for unauthorized validation and approval actions
+    future_hardening_resolution:
+      - verify production OIDC/JWKS settings against an approved IdP
+      - verify PLF AUTH_USERS/AUTH_ROLES/AUTH_USER_ROLES membership in an approved environment
   exit_criteria:
     - mock adapter remains available for demo/dev
     - HTTP adapter smoke proves the same PortalApi flow against local API routes
-    - production auth/RBAC is implemented with tests or remains an explicit blocker
+    - fixture-backed auth/RBAC enforcement remains covered while live wiring is documented as deferred
     - no publish/export, row data, procedure execution, DDL/DML, or PLF fallback path appears
-active_productization_blockers:
-  - code: CANONICAL_ANALYSIS_MODEL_REVIEW_REQUIRED
-    owner_track: P18A
-    severity: BLOCKER
-  - code: DOMAIN_CANONICAL_SCHEMA_MISSING
-    owner_track: P18A
-    severity: BLOCKER
-  - code: WEB_HTTP_RELEASE_SMOKE_MISSING
+active_productization_blockers: []
+deferred_productization_items:
+  - code: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
     owner_track: P18B
-    severity: BLOCKER
-  - code: AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED
-    owner_track: P18B
-    severity: BLOCKER
+    severity: FUTURE_HARDENING
+    status: DEFERRED
+    non_blocking_for_conditional_open: true
+    required_before_claiming: production-grade enterprise Auth/RBAC
 p18_final_gate:
   allowed_decisions:
     - NO_GO
     - CONDITIONAL_GO
-  current_productization_decision: NO_GO
+  current_productization_decision: CONDITIONAL_GO
   no_go_must_remain_when:
-    - CanonicalAnalysisModel contract remains REVIEW_REQUIRED
-    - HTTP adapter release smoke is missing
-    - production auth/RBAC source is unresolved
+    - HTTP adapter release smoke regresses or is missing
     - any forbidden evidence or action is required
+  conditional_go_boundaries:
+    - production_ready remains false
+    - Auth/RBAC live IdP/JWKS and PLF wiring is deferred future hardening
+    - fixture-backed 401/403 enforcement remains covered
   p17_conditional_go_preserved: true
 forbidden_evidence:
   - row_data

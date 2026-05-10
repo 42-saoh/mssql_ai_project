@@ -62,7 +62,7 @@ Stored Procedure 분석을 evidence-first engine으로 발전시킨다. definiti
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/unit/analysis"`
-- `python -m compileall packages/analysis tests/unit/analysis`
+- `python3.14 -m compileall packages/analysis tests/unit/analysis`
 - 필요 시 `make test PYTEST_ARGS="tests/eval"`
 
 ## Blocker 보고 기준

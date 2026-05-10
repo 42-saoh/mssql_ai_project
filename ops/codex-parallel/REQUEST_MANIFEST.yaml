@@ -30,7 +30,7 @@ preflight:
   - make docker-project-name
   - make dev-ports
   - make test-build
-  - python -m compileall apps services packages tests
+  - python3.14 -m compileall apps services packages tests
 dev_port_strategy:
   script: scripts/resolve_dev_ports.sh
   app_base: 8000
@@ -38,7 +38,7 @@ dev_port_strategy:
   web_base: 3000
   rule: pNN-* worktree uses base+NN, otherwise path-hash slot is used unless WORKTREE_PORT_SLOT is set
 reproducibility:
-  python_lock: requirements/lock/py311-dev.txt
+  python_lock: requirements/lock/py314-dev.txt
   metadata_profile_registry: config/mssql/local_docker_profiles.yaml
   web_lock: pnpm-lock.yaml
   python_install_script: scripts/install_python_locked.sh
@@ -112,7 +112,7 @@ waves:
         verify:
           - make docker-project-name
           - make dev-ports
-          - python -m compileall apps services packages tests
+          - python3.14 -m compileall apps services packages tests
           - make test
           - make test-web-smoke
   - wave: W1
@@ -292,8 +292,8 @@ waves:
           - services/mssql-mcp/mssql_mcp_app/profiles.py
           - services/mssql-mcp/mssql_mcp_app/tool_models.py
         verify:
-          - python -m pytest tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py
-          - python -m compileall services/mssql-mcp tests
+          - make test PYTEST_ARGS="tests/contract/test_ppm_pilot_object_selection_assets.py tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py"
+          - python3.14 -m compileall services/mssql-mcp tests
       - id: P08
         branch: feat/p08-product-architecture-backlog
         worktree: ../wt/p08-product-architecture-backlog
@@ -317,7 +317,7 @@ waves:
           - db/schema/
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
-          - python -m pytest tests/contract/test_codex_productization_prompt_pack_assets.py tests/contract/test_ppm_pilot_object_selection_assets.py
+          - make test PYTEST_ARGS="tests/contract/test_codex_productization_prompt_pack_assets.py tests/contract/test_ppm_pilot_object_selection_assets.py"
   - wave: W5
     description: productization implementation tracks by bounded domain
     tracks:
@@ -341,7 +341,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/integration/api tests/unit/api"
-          - python -m compileall apps/api tests/integration/api tests/unit/api
+          - python3.14 -m compileall apps/api tests/integration/api tests/unit/api
       - id: P10
         branch: feat/p10-mssql-mcp-productization
         worktree: ../wt/p10-mssql-mcp-productization
@@ -368,7 +368,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/unit/test_mssql_mcp_live_config.py tests/contract/test_local_mssql_connection_assets.py"
-          - python -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp
+          - python3.14 -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp
       - id: P11
         branch: feat/p11-sp-analysis-evidence
         worktree: ../wt/p11-sp-analysis-evidence
@@ -389,7 +389,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/unit/analysis"
-          - python -m compileall packages/analysis tests/unit/analysis
+          - python3.14 -m compileall packages/analysis tests/unit/analysis
       - id: P12
         branch: feat/p12-java-mybatis-generation-factory
         worktree: ../wt/p12-java-mybatis-generation-factory
@@ -411,7 +411,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/unit/generation tests/contract/test_generation_goldens_and_repro_assets.py"
-          - python -m compileall packages/generation tests/unit/generation
+          - python3.14 -m compileall packages/generation tests/unit/generation
   - wave: W6
     description: validation, web, evaluation, observability, security, ops productization
     tracks:
@@ -439,7 +439,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/unit/validation tests/unit/api tests/integration/api"
-          - python -m compileall packages/validation apps/api tests/unit/validation tests/unit/api tests/integration/api
+          - python3.14 -m compileall packages/validation apps/api tests/unit/validation tests/unit/api tests/integration/api
       - id: P14
         branch: feat/p14-web-product-ui
         worktree: ../wt/p14-web-product-ui
@@ -483,7 +483,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/e2e tests/eval"
-          - python -m compileall tests
+          - python3.14 -m compileall tests
   - wave: W7
     description: pilot release readiness and handoff
     tracks:
@@ -512,7 +512,7 @@ waves:
           - make test
           - make test-web-smoke
           - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
-          - python -m compileall apps services packages tests
+          - python3.14 -m compileall apps services packages tests
   - wave: W8
     description: live pilot blocker closure after P16 NO-GO
     tracks:
@@ -543,7 +543,7 @@ waves:
           - config/mssql/local_docker_profiles.yaml
         verify:
           - make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/contract/test_ppm_pilot_object_selection_assets.py"
-          - python -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp
+          - python3.14 -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp
           - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
       - id: P17B
         branch: feat/p17b-live-artifact-validation
@@ -573,7 +573,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/unit/analysis tests/unit/generation tests/unit/validation tests/eval"
-          - python -m compileall packages/analysis packages/generation packages/validation tests
+          - python3.14 -m compileall packages/analysis packages/generation packages/validation tests
       - id: P17C
         branch: feat/p17c-approval-audit-binding
         worktree: ../wt/p17c-approval-audit-binding
@@ -601,7 +601,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/unit/api tests/integration/api tests/eval"
-          - python -m compileall apps/api tests/unit/api tests/integration/api tests/eval
+          - python3.14 -m compileall apps/api tests/unit/api tests/integration/api tests/eval
       - id: P17D
         branch: feat/p17d-pilot-release-go-decision
         worktree: ../wt/p17d-pilot-release-go-decision
@@ -630,7 +630,7 @@ waves:
           - make test
           - make test-web-smoke
           - make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
-          - python -m compileall apps services packages tests
+          - python3.14 -m compileall apps services packages tests
           - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
           - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
   - wave: W9
@@ -663,7 +663,7 @@ waves:
           - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
         verify:
           - make test PYTEST_ARGS="tests/unit/analysis tests/eval tests/contract"
-          - python3 -m compileall packages/analysis packages/domain tests
+          - python3.14 -m compileall packages/analysis packages/domain tests
       - id: P18B
         branch: feat/p18b-web-http-auth-rbac-evidence
         worktree: ../wt/p18b-web-http-auth-rbac-evidence
@@ -696,5 +696,150 @@ waves:
         verify:
           - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
           - make test-web-smoke
-          - python3 -m compileall apps/api tests
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B]
+          - python3.14 -m compileall apps/api tests
+  - wave: W10
+    description: auth/RBAC live wiring verification
+    tracks:
+      - id: P20
+        branch: feat/p20-auth-rbac-live-wiring
+        worktree: ../wt/p20-auth-rbac-live-wiring
+        prompt: prompts/20_auth_rbac_live_wiring_verification.md
+        role: platform_worker
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review, docs-sync]
+        depends_on: [P18B]
+        target_paths:
+          - apps/api/
+          - tests/eval/
+          - tests/contract/
+          - fixtures/eval/productization_gap_closure_p18_v1.yaml
+          - docs/admin-guide/
+          - docs/user-guide/
+          - docs/integration-eval-status.md
+          - .env.example
+        readonly_paths:
+          - services/mssql-mcp/
+          - packages/
+          - db/schema/
+          - spec/
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
+          - make test-web-smoke
+          - python3.14 -m compileall apps/api tests
+          - AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/test_p20_auth_rbac_live_gate.py"
+  - wave: W11
+    description: P21 no-mock functional portal and Python 3.14 baseline
+    tracks:
+      - id: P21A
+        branch: feat/p21a-python314-baseline
+        worktree: ../wt/p21a-python314-baseline
+        prompt: prompts/21a_python314_environment_baseline.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review, docs-sync]
+        depends_on: [P20]
+        target_paths:
+          - Makefile
+          - pyproject.toml
+          - docker/test/
+          - requirements/lock/
+          - .env.example
+          - PROJECT.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+          - docs/
+          - ops/codex-parallel/
+          - tests/contract/
+        readonly_paths:
+          - apps/
+          - services/
+          - packages/
+          - db/schema/
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - python3.14 -m compileall apps services packages tests
+          - make test PYTEST_ARGS="tests/contract/test_p21_no_mock_prompt_assets.py tests/contract/test_generation_goldens_and_repro_assets.py"
+          - make test
+      - id: P21B
+        branch: feat/p21b-live-api-mcp-backend
+        worktree: ../wt/p21b-live-api-mcp-backend
+        prompt: prompts/21b_live_api_mcp_backend_closure.md
+        role: platform_worker
+        skills: [contract-to-code, mcp-tooling-design, quality-gate-review]
+        depends_on: [P21A]
+        target_paths:
+          - apps/api/
+          - spec/openapi/ai_agent_platform_openapi_v1.yaml
+          - tests/integration/api/
+          - tests/unit/api/
+          - tests/eval/
+          - tests/contract/
+          - fixtures/eval/live_portal_no_mock_p21_v1.yaml
+          - docs/
+          - .env.example
+        readonly_paths:
+          - services/mssql-mcp/
+          - packages/
+          - db/schema/
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - python3.14 -m compileall apps/api services/mssql-mcp packages tests
+          - make test PYTEST_ARGS="tests/integration/api tests/unit/api tests/contract/test_openapi_and_env_sample_assets.py"
+          - P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
+      - id: P21C
+        branch: feat/p21c-web-no-mock-portal
+        worktree: ../wt/p21c-web-no-mock-portal
+        prompt: prompts/21c_web_no_mock_functional_portal.md
+        role: platform_worker
+        skills: [contract-to-code, browser-automation-smoke, quality-gate-review]
+        depends_on: [P21B]
+        target_paths:
+          - apps/web/
+          - tests/unit/web/
+          - tests/e2e/
+          - tests/contract/
+          - docs/user-guide/
+          - docs/integration-eval-status.md
+        readonly_paths:
+          - apps/api/
+          - services/mssql-mcp/
+          - packages/
+          - spec/
+          - db/schema/
+          - .env.example
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - make test-web-smoke
+          - make test PYTEST_ARGS="tests/unit/web tests/contract/test_p21_no_mock_prompt_assets.py"
+      - id: P21D
+        branch: feat/p21d-eval-docs-readiness
+        worktree: ../wt/p21d-eval-docs-readiness
+        prompt: prompts/21d_eval_docs_readiness.md
+        role: docs_curator
+        skills: [eval-fixture-authoring, quality-gate-review, docs-sync]
+        depends_on: [P21C]
+        target_paths:
+          - fixtures/eval/live_portal_no_mock_p21_v1.yaml
+          - tests/eval/
+          - tests/contract/
+          - docs/
+          - apps/api/README.md
+          - apps/web/README.md
+          - fixtures/eval/README.md
+          - tests/eval/README.md
+          - ops/codex-parallel/
+          - .env.example
+        readonly_paths:
+          - services/mssql-mcp/
+          - packages/
+          - db/schema/
+          - config/mssql/local_docker_profiles.yaml
+          - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+        verify:
+          - python3.14 -m compileall apps services packages tests
+          - make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py tests/contract/test_p21_no_mock_prompt_assets.py tests/eval"
+          - make test-web-smoke
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D]

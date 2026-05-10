@@ -41,7 +41,7 @@ def probe_profile_connection(
 
     try:
         connection = pytds.connect(
-            server=settings.metadata_host,
+            dsn=settings.metadata_host,
             port=settings.metadata_port,
             database=profile.database,
             user=settings.metadata_user,

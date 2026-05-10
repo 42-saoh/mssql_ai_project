@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from ai_agent_domain import CanonicalAnalysisModel
+
 from ai_agent_analysis.models import (
     CanonicalConversionBlocker,
     EvidenceStatus,
@@ -10,29 +12,111 @@ from ai_agent_analysis.models import (
 )
 
 
-def canonical_conversion_blockers() -> list[CanonicalConversionBlocker]:
-    return [
-        CanonicalConversionBlocker(
-            code="DOMAIN_CONTRACT_MISSING",
-            message=(
-                "P11 requests CanonicalAnalysisModel expansion, but this worker boundary "
-                "marks packages/domain as read-only."
-            ),
-            target_path="packages/domain/src/ai_agent_domain/models.py",
+def canonical_conversion_blockers(
+    result: StoredProcedureAnalysisResult | None = None,
+    *,
+    snapshot_id: str | None = None,
+    registry_version_refs: list[Any] | None = None,
+    evidence_refs_present: bool | None = None,
+) -> list[CanonicalConversionBlocker]:
+    if result is not None:
+        snapshot_id = result.snapshot_id
+        registry_version_refs = result.registry_version_refs
+        evidence_refs_present = bool(_canonical_evidence_refs(result))
+
+    blockers: list[CanonicalConversionBlocker] = []
+    if not snapshot_id:
+        blockers.append(
+            CanonicalConversionBlocker(
+                code="SNAPSHOT_ID_BINDING_MISSING",
+                message="CanonicalAnalysisModel requires an explicit metadata snapshot id.",
+                target_path="packages/analysis/src/ai_agent_analysis/models.py",
+            )
         )
-    ]
+    if not registry_version_refs:
+        blockers.append(
+            CanonicalConversionBlocker(
+                code="REGISTRY_VERSION_REFS_MISSING",
+                message="CanonicalAnalysisModel requires bound registry version refs.",
+                target_path="packages/analysis/src/ai_agent_analysis/models.py",
+            )
+        )
+    if evidence_refs_present is False:
+        blockers.append(
+            CanonicalConversionBlocker(
+                code="CANONICAL_EVIDENCE_REFS_MISSING",
+                message="CanonicalAnalysisModel requires evidence refs for observed fields.",
+                target_path="packages/analysis/src/ai_agent_analysis/canonical.py",
+            )
+        )
+    return blockers
+
+
+def to_canonical_analysis_model(result: StoredProcedureAnalysisResult) -> CanonicalAnalysisModel:
+    blockers = canonical_conversion_blockers(result)
+    if blockers:
+        codes = ", ".join(blocker.code for blocker in blockers)
+        raise ValueError(f"Cannot build CanonicalAnalysisModel: {codes}")
+    return CanonicalAnalysisModel.model_validate(_canonical_model_payload(result))
 
 
 def to_canonical_candidate(result: StoredProcedureAnalysisResult) -> dict:
-    return {
+    blockers = canonical_conversion_blockers(result)
+    payload = {
         "target_contract": "CanonicalAnalysisModel",
-        "status": EvidenceStatus.REVIEW_REQUIRED.value,
+        "status": "CONTRACT_CLOSED" if not blockers else EvidenceStatus.REVIEW_REQUIRED.value,
+        "analysis_status": result.evidence_assessment.status.value,
         "evidenceRefs": _openapi_static_analysis_refs(result),
-        "blockers": [
-            blocker.model_dump(mode="json") for blocker in canonical_conversion_blockers()
-        ],
+        "blockers": [blocker.model_dump(mode="json") for blocker in blockers],
         "analysis_local": result.model_dump(mode="json"),
     }
+    if not blockers:
+        payload["canonical_model"] = to_canonical_analysis_model(result).model_dump(mode="json")
+    return payload
+
+
+def _canonical_model_payload(result: StoredProcedureAnalysisResult) -> dict[str, Any]:
+    return {
+        "analysis_version": result.analysis_version,
+        "contract_target": result.contract_target,
+        "snapshot_id": result.snapshot_id,
+        "registry_version_refs": [
+            registry_ref.model_dump(mode="json")
+            for registry_ref in result.registry_version_refs
+        ],
+        "procedure": result.procedure.model_dump(mode="json"),
+        "dependencies": result.dependencies.model_dump(mode="json"),
+        "patterns": result.patterns.model_dump(mode="json"),
+        "result_sets": [result_set.model_dump(mode="json") for result_set in result.result_sets],
+        "call_graph": [edge.model_dump(mode="json") for edge in result.call_graph],
+        "business_rules": [rule.model_dump(mode="json") for rule in result.business_rules],
+        "modernization_points": [
+            point.model_dump(mode="json") for point in result.modernization_points
+        ],
+        "evidence_refs": _canonical_evidence_refs(result),
+        "review_markers": [marker.model_dump(mode="json") for marker in result.review_markers],
+        "todos": [todo.model_dump(mode="json") for todo in result.todos],
+        "evidence_assessment": result.evidence_assessment.model_dump(mode="json"),
+        "overall_confidence": result.overall_confidence.model_dump(mode="json"),
+    }
+
+
+def _canonical_evidence_refs(result: StoredProcedureAnalysisResult) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    seen: set[tuple[str, int | None, str, str]] = set()
+    for evidence in _iter_evidence_dicts(result.model_dump(mode="json")):
+        ref = {
+            "source": str(evidence["source"]),
+            "line": evidence.get("line"),
+            "snippet": str(evidence["snippet"]),
+            "status": str(evidence["status"]),
+        }
+        key = (ref["source"], ref["line"], ref["snippet"], ref["status"])
+        if key in seen:
+            continue
+        seen.add(key)
+        refs.append(ref)
+    return refs
 
 
 def _openapi_static_analysis_refs(result: StoredProcedureAnalysisResult) -> list[dict[str, str]]:

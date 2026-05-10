@@ -1,6 +1,12 @@
+import { DependencyBlocker } from "@/components/dependency-blocker";
 import { JobStatusView } from "@/components/job-status-view";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
+import type { PortalApi } from "@/lib/api/portal-api";
+import type { ArtifactSummary, Job } from "@/lib/api/types";
 import { jobStatusSummary } from "@/lib/presentation";
+
+export const dynamic = "force-dynamic";
 
 export default async function JobPage({
   params,
@@ -8,11 +14,37 @@ export default async function JobPage({
   params: Promise<{ jobId: string }>;
 }>) {
   const { jobId } = await params;
-  const api = getPortalApi();
-  const [job, artifactResponse] = await Promise.all([
-    api.getJob(jobId),
-    api.listJobArtifacts(jobId),
-  ]);
+  let api: PortalApi;
+  try {
+    api = getPortalApi();
+  } catch (error) {
+    return (
+      <div className="stack">
+        <DependencyBlocker
+          title="Portal API is not configured"
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
+        />
+      </div>
+    );
+  }
+  let job: Job;
+  let artifactResponse: { jobId: string; artifacts: ArtifactSummary[] };
+  try {
+    [job, artifactResponse] = await Promise.all([
+      api.getJob(jobId),
+      api.listJobArtifacts(jobId),
+    ]);
+  } catch (error) {
+    return (
+      <div className="stack">
+        <DependencyBlocker
+          title="Job dependency is unavailable"
+          message={formatPortalApiError(error, "PLF workflow repository is required.")}
+          code={portalApiErrorCode(error, "P21_JOB_DEPENDENCY_BLOCKED")}
+        />
+      </div>
+    );
+  }
 
   return (
     <JobStatusView

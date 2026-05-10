@@ -5,6 +5,7 @@ from typing import Any
 
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
+from api_app.auth import Actor, VerifiedIdentity, canonical_role_set
 from api_app.contracts import approval_decision_mapping, validation_storage_result
 from api_app.lifecycle import (
     artifact_status_after_approval,
@@ -39,6 +40,35 @@ class MemoryWorkflowRepository:
         self.validation_reports: dict[str, ValidationReportRecord] = {}
         self.approvals: dict[str, ApprovalRecordData] = {}
         self.audit_events: list[AuditEventRecord] = []
+        self.auth_actors: dict[str, Actor] = {}
+
+    def add_auth_actor(
+        self,
+        *,
+        subject: str,
+        login: str,
+        email: str | None = None,
+        roles: tuple[str, ...] = ("USER",),
+        display_name: str | None = None,
+    ) -> Actor:
+        actor = Actor(
+            actor_id=subject,
+            login=login,
+            email=email,
+            roles=canonical_role_set(roles),
+            display_name=display_name,
+        )
+        for candidate in (subject, login, email):
+            if candidate:
+                self.auth_actors[candidate.strip().lower()] = actor
+        return actor
+
+    def resolve_actor_roles(self, identity: VerifiedIdentity) -> Actor | None:
+        for candidate in identity.lookup_candidates:
+            actor = self.auth_actors.get(candidate.strip().lower())
+            if actor is not None:
+                return actor
+        return None
 
     def create_request(
         self,
@@ -229,6 +259,16 @@ class MemoryWorkflowRepository:
     def get_job(self, job_id: str) -> JobRecord | None:
         return self.jobs.get(job_id)
 
+    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+        jobs = sorted(
+            self.jobs.values(),
+            key=lambda job: (job.created_at, job.job_id),
+            reverse=True,
+        )
+        if limit is not None:
+            jobs = jobs[: max(min(int(limit), 100), 1)]
+        return [replace(job) for job in jobs]
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         return self.artifacts.get(artifact_id)
 
@@ -254,6 +294,7 @@ class MemoryWorkflowRepository:
         missing_evidence: list[str],
         manual_review_points: list[str],
         correlation_id: str | None = None,
+        actor: str = "api-system",
     ) -> ValidationReportRecord:
         artifact = self.artifacts[artifact_id]
         next_status = artifact_status_after_validation(status, artifact.status)
@@ -282,6 +323,7 @@ class MemoryWorkflowRepository:
                 "validationReportId": record.validation_report_id,
             },
             correlation_id=correlation_id or self.jobs[artifact.job_id].correlation_id,
+            actor=actor,
         )
         return record
 

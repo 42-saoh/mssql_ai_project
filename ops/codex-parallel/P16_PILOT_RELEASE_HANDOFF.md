@@ -37,7 +37,7 @@ Run the default reproducibility gate from the repository root:
 make test
 make test-web-smoke
 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
-python3 -m compileall apps services packages tests
+python3.14 -m compileall apps services packages tests
 ```
 
 Run the explicit hard-live gate before making any live PPM readiness claim:

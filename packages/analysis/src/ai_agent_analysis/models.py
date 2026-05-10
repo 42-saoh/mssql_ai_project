@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 ANALYSIS_VERSION = "analysis-local-v0.2"
-CANONICAL_TARGET = "CanonicalAnalysisModel-compatible-local-v0.2"
+CANONICAL_TARGET = "CanonicalAnalysisModel"
 
 
 class EvidenceStatus(StrEnum):
@@ -75,6 +75,12 @@ class EvidenceAssessment(BaseModel):
     review_required_ref_count: int = 0
     todo_count: int = 0
     notes: list[str] = Field(default_factory=list)
+
+
+class RegistryVersionRef(BaseModel):
+    registry_type: str
+    version: str
+    active: bool = True
 
 
 class ProcedureIdentifier(BaseModel):
@@ -186,6 +192,14 @@ class BusinessRuleSummary(BaseModel):
     inferred_from: list[str] = Field(default_factory=list)
 
 
+class ModernizationPoint(BaseModel):
+    code: str
+    summary: str
+    status: EvidenceStatus = EvidenceStatus.REVIEW_REQUIRED
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    inferred_from: list[str] = Field(default_factory=list)
+
+
 class MetadataEnrichmentCandidate(BaseModel):
     table_full_name: str
     candidate_schema: str | None = None
@@ -208,12 +222,15 @@ class StoredProcedureAnalysisResult(BaseModel):
     contract_target: str = CANONICAL_TARGET
     source_name: str
     source_hash_sha256: str
+    snapshot_id: str | None = None
+    registry_version_refs: list[RegistryVersionRef] = Field(default_factory=list)
     procedure: ProcedureSignature
     dependencies: DependencySummary
     patterns: PatternSummary
     result_sets: list[ResultSetHint] = Field(default_factory=list)
     call_graph: list[CallGraphEdge] = Field(default_factory=list)
     business_rules: list[BusinessRuleSummary] = Field(default_factory=list)
+    modernization_points: list[ModernizationPoint] = Field(default_factory=list)
     todos: list[TodoItem] = Field(default_factory=list)
     evidence_assessment: EvidenceAssessment = Field(default_factory=EvidenceAssessment)
     overall_confidence: ConfidenceScore = Field(

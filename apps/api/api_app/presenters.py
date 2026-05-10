@@ -18,6 +18,11 @@ from api_app.schemas import (
 
 
 def present_job(job: JobRecord) -> Job:
+    blockers = []
+    caveats = []
+    if job.error_code:
+        blockers.append({"code": job.error_code, "message": job.error_message or job.error_code})
+        caveats.append(job.error_code)
     return Job(
         jobId=job.job_id,
         requestId=job.request_id,
@@ -25,12 +30,16 @@ def present_job(job: JobRecord) -> Job:
         currentStep=job.current_step,
         createdAt=job.created_at,
         updatedAt=job.updated_at,
+        blockers=blockers,
+        caveats=caveats,
+        failureReason=job.error_message,
     )
 
 
 def present_artifact_summary(artifact: ArtifactRecord) -> ArtifactSummary:
     return ArtifactSummary(
         artifactId=artifact.artifact_id,
+        jobId=artifact.job_id,
         type=artifact.type,
         status=artifact.status,
         title=artifact.title,
@@ -52,6 +61,7 @@ def present_artifact(artifact: ArtifactRecord) -> Artifact:
 
 def present_validation_report(report: ValidationReportRecord) -> ValidationReport:
     return ValidationReport(
+        validationReportId=report.validation_report_id,
         artifactId=report.artifact_id,
         status=report.status,
         checks=[ValidationCheck(**check) for check in report.checks],

@@ -41,6 +41,7 @@
 - shared DB write
 - production credential 사용
 - 외부 SaaS 로 민감 데이터 전송
+- production auth/RBAC 를 mock header, hardcoded actor, fixture token 으로 가장하는 행위
 
 ## 생성 결과 정책
 
@@ -75,6 +76,10 @@
 - 로그에는 SQL connection string, tokens, passwords, cookies 를 남기지 않는다.
 - 테스트 fixture 는 비식별/합성 데이터만 사용한다.
 - 외부 문서 조회는 공식 문서를 우선한다.
+- Production actor identity 는 verified OIDC/JWT 같은 검증된 upstream identity boundary 에서만 온다.
+- Production role source 는 PLF platform DB 의 `AUTH_USERS`, `AUTH_ROLES`, `AUTH_USER_ROLES` membership 으로 문서화하고 검증한다.
+- Production auth/RBAC enforcement 는 `AUTH_RBAC_ENFORCEMENT=1` 과 승인된 `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL` 설정 없이는 production-ready 로 주장할 수 없다.
+- Verified identity 가 없으면 401, verified identity 는 있으나 role-to-action matrix 를 만족하지 못하면 403 으로 분리한다.
 
 ## 검증 정책
 

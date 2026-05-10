@@ -60,8 +60,8 @@ API/BFF를 실제 제품 workflow 기준으로 정리한다. request, job, artif
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/integration/api tests/unit/api"`
-- `python -m compileall apps/api tests/integration/api tests/unit/api`
-- 필요 시 `python -m pytest tests/contract/test_openapi_and_env_sample_assets.py`
+- `python3.14 -m compileall apps/api tests/integration/api tests/unit/api`
+- 필요 시 `make test PYTEST_ARGS="tests/contract/test_openapi_and_env_sample_assets.py"`
 
 ## Blocker 보고 기준
 

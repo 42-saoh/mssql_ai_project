@@ -1,7 +1,12 @@
 import Link from "next/link";
+import { DependencyBlocker } from "@/components/dependency-blocker";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
+import type { PortalApi } from "@/lib/api/portal-api";
 import type { MetadataSearchObjectType } from "@/lib/api/types";
+
+export const dynamic = "force-dynamic";
 
 const objectTypeOptions: MetadataSearchObjectType[] = [
   "PROCEDURE",
@@ -38,18 +43,53 @@ export default async function MetadataSearchPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const params = await searchParams;
-  const api = getPortalApi();
-  const profileResponse = await api.listMetadataProfiles();
+  let api: PortalApi;
+  try {
+    api = getPortalApi();
+  } catch (error) {
+    return (
+      <div className="stack">
+        <DependencyBlocker
+          title="Portal API is not configured"
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
+        />
+      </div>
+    );
+  }
   const dbProfileId = firstParam(params.dbProfileId) ?? "ppm";
   const query = firstParam(params.query)?.trim() || "P";
   const objectTypes = selectedObjectTypes(params);
   const limit = Number(firstParam(params.limit) ?? "10");
-  const response = await api.searchMetadataObjects({
-    dbProfileId,
-    query,
-    objectTypes,
-    limit,
-  });
+  const [profileResult, searchResult] = await Promise.allSettled([
+    api.listMetadataProfiles(),
+    api.searchMetadataObjects({
+      dbProfileId,
+      query,
+      objectTypes,
+      limit,
+    }),
+  ]);
+
+  if (profileResult.status === "rejected" || searchResult.status === "rejected") {
+    const reason =
+      profileResult.status === "rejected"
+        ? profileResult.reason
+        : searchResult.status === "rejected"
+          ? searchResult.reason
+          : undefined;
+    return (
+      <div className="stack">
+        <DependencyBlocker
+          title="PPM metadata dependency is unavailable"
+          message={formatPortalApiError(reason, "Live PPM metadata is required.")}
+          code={portalApiErrorCode(reason, "P21_METADATA_SEARCH_BLOCKED")}
+        />
+      </div>
+    );
+  }
+
+  const profileResponse = profileResult.value;
+  const response = searchResult.value;
 
   return (
     <div className="stack">

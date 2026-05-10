@@ -9,6 +9,7 @@ import yaml
 from ai_agent_analysis import (
     analyze_stored_procedure,
     load_schema_search_fixture,
+    to_canonical_analysis_model,
     to_canonical_candidate,
 )
 
@@ -27,6 +28,13 @@ SQL_FIXTURES = {
     "sp_with_dynamic_sql": ROOT / "fixtures" / "mssql" / "sp_with_dynamic_sql.sql",
     "sp_with_temp_table": ROOT / "fixtures" / "mssql" / "sp_with_temp_table.sql",
 }
+
+CANONICAL_SNAPSHOT_ID = "mcp-fixture-snapshot-0001"
+CANONICAL_REGISTRY_REFS = [
+    {"registry_type": "PROMPT", "version": "prompt:sp_analysis@0.1.0", "active": True},
+    {"registry_type": "TEMPLATE", "version": "template:sp_analysis_doc@0.1.0", "active": True},
+    {"registry_type": "POLICY", "version": "policy:analysis_static_rules@0.1.0", "active": True},
+]
 
 
 @pytest.mark.parametrize("fixture_name", sorted(SQL_FIXTURES))
@@ -57,11 +65,19 @@ def test_analysis_core_matches_expected_fixture(fixture_name: str) -> None:
     assert _call_graph(result) == expected["callGraph"]
     assert _result_sets(result) == expected["resultSets"]
     assert _patterns(result) == expected["patterns"]
-    assert [todo.code for todo in result.todos] == expected["todoCodes"]
+    assert [todo.code for todo in result.todos] == _expected_todo_codes(
+        expected["todoCodes"]
+    )
     assert result.overall_confidence.status.value == expected["confidence"]["status"]
-    assert result.overall_confidence.score == expected["confidence"]["score"]
+    assert result.overall_confidence.score == _expected_confidence_score(
+        expected["confidence"]["score"],
+        expected["todoCodes"],
+    )
     assert result.evidence_assessment.review_required is True
-    assert result.canonical_conversion_blockers[0].code == "DOMAIN_CONTRACT_MISSING"
+    assert [blocker.code for blocker in result.canonical_conversion_blockers] == [
+        "SNAPSHOT_ID_BINDING_MISSING",
+        "REGISTRY_VERSION_REFS_MISSING",
+    ]
 
     if "tempTables" in expected:
         assert _temp_tables(result) == expected["tempTables"]
@@ -88,7 +104,8 @@ def test_dynamic_sql_dependencies_are_not_inferred_from_string_literals() -> Non
     assert result.result_sets == []
     assert [todo.code for todo in result.todos] == [
         "DYNAMIC_SQL_DEPENDENCY_REVIEW",
-        "DOMAIN_CONTRACT_MISSING",
+        "SNAPSHOT_ID_BINDING_MISSING",
+        "REGISTRY_VERSION_REFS_MISSING",
     ]
 
 
@@ -256,7 +273,8 @@ def test_exec_parenthesized_variable_is_review_required_dynamic_sql() -> None:
     assert result.result_sets == []
     assert [todo.code for todo in result.todos] == [
         "DYNAMIC_SQL_DEPENDENCY_REVIEW",
-        "DOMAIN_CONTRACT_MISSING",
+        "SNAPSHOT_ID_BINDING_MISSING",
+        "REGISTRY_VERSION_REFS_MISSING",
     ]
 
 
@@ -281,7 +299,7 @@ def test_schema_search_fixture_enriches_known_order_table() -> None:
     ]
 
 
-def test_canonical_candidate_reports_domain_contract_blocker() -> None:
+def test_canonical_candidate_reports_binding_blockers_by_default() -> None:
     sql_path = SQL_FIXTURES["sp_simple_crud"]
     result = analyze_stored_procedure(
         sql_path.read_text(encoding="utf-8"),
@@ -292,7 +310,11 @@ def test_canonical_candidate_reports_domain_contract_blocker() -> None:
 
     assert candidate["target_contract"] == "CanonicalAnalysisModel"
     assert candidate["status"] == "REVIEW_REQUIRED"
-    assert candidate["blockers"][0]["code"] == "DOMAIN_CONTRACT_MISSING"
+    assert [blocker["code"] for blocker in candidate["blockers"]] == [
+        "SNAPSHOT_ID_BINDING_MISSING",
+        "REGISTRY_VERSION_REFS_MISSING",
+    ]
+    assert "canonical_model" not in candidate
     assert candidate["evidenceRefs"]
     assert {ref["type"] for ref in candidate["evidenceRefs"]} == {"STATIC_ANALYSIS"}
     assert {ref["objectRef"] for ref in candidate["evidenceRefs"]} == {
@@ -302,6 +324,31 @@ def test_canonical_candidate_reports_domain_contract_blocker() -> None:
     assert identifier["full_name"] == "dbo.usp_OrderSelect"
     assert "overall_confidence" in candidate["analysis_local"]
     assert "todos" in candidate["analysis_local"]
+
+
+def test_canonical_candidate_builds_domain_model_when_bindings_exist() -> None:
+    sql_path = SQL_FIXTURES["sp_simple_crud"]
+    result = analyze_stored_procedure(
+        sql_path.read_text(encoding="utf-8"),
+        source_name=str(sql_path),
+        snapshot_id=CANONICAL_SNAPSHOT_ID,
+        registry_version_refs=CANONICAL_REGISTRY_REFS,
+    )
+
+    canonical_model = to_canonical_analysis_model(result)
+    candidate = to_canonical_candidate(result)
+
+    assert result.canonical_conversion_blockers == []
+    assert canonical_model.schema_version == "CanonicalAnalysisModel.v1"
+    assert canonical_model.snapshot_id == CANONICAL_SNAPSHOT_ID
+    assert [ref.version for ref in canonical_model.registry_version_refs] == [
+        ref["version"] for ref in CANONICAL_REGISTRY_REFS
+    ]
+    assert canonical_model.procedure.identifier.full_name == "dbo.usp_OrderSelect"
+    assert canonical_model.evidence_refs
+    assert candidate["status"] == "CONTRACT_CLOSED"
+    assert candidate["blockers"] == []
+    assert candidate["canonical_model"]["snapshot_id"] == CANONICAL_SNAPSHOT_ID
 
 
 def test_ppm_selected_sp_evidence_fixture_is_metadata_only() -> None:
@@ -476,3 +523,22 @@ def _secret_like_values(payload, path: str = "$") -> list[str]:
         for index, item in enumerate(payload):
             offenders.extend(_secret_like_values(item, f"{path}[{index}]"))
     return offenders
+
+
+def _expected_todo_codes(codes: list[str]) -> list[str]:
+    expanded: list[str] = []
+    for code in codes:
+        if code == "DOMAIN_CONTRACT_MISSING":
+            expanded.extend(
+                [
+                    "SNAPSHOT_ID_BINDING_MISSING",
+                    "REGISTRY_VERSION_REFS_MISSING",
+                ]
+            )
+        else:
+            expanded.append(code)
+    return expanded
+
+
+def _expected_confidence_score(score: float, todo_codes: list[str]) -> float:
+    return round(score - 0.03, 2) if "DOMAIN_CONTRACT_MISSING" in todo_codes else score

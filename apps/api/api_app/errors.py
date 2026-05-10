@@ -14,9 +14,11 @@ def error_payload(detail: str, code: str) -> dict[str, str]:
 def code_for_status(status_code: int) -> str:
     mapping = {
         status.HTTP_400_BAD_REQUEST: "BAD_REQUEST",
+        status.HTTP_401_UNAUTHORIZED: "UNAUTHORIZED",
+        status.HTTP_403_FORBIDDEN: "FORBIDDEN",
         status.HTTP_404_NOT_FOUND: "RESOURCE_NOT_FOUND",
         status.HTTP_409_CONFLICT: "IDEMPOTENCY_CONFLICT",
-        status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
+        status.HTTP_422_UNPROCESSABLE_CONTENT: "VALIDATION_ERROR",
         status.HTTP_503_SERVICE_UNAVAILABLE: "DEPENDENCY_BLOCKED",
     }
     return mapping.get(status_code, "API_ERROR")

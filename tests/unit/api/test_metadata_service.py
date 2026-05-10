@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from api_app.metadata_service import list_safe_metadata_profiles, list_safe_metadata_tools
+import pytest
+from api_app.metadata_service import (
+    MetadataSearchDependencyError,
+    list_safe_metadata_profiles,
+    list_safe_metadata_tools,
+    search_metadata_objects,
+)
 
 
 def test_metadata_profiles_return_public_fields_only(monkeypatch) -> None:
@@ -25,3 +31,13 @@ def test_metadata_tools_return_read_only_catalog_summary() -> None:
     assert all(tool["readOnly"] is True for tool in tools)
     assert "get_table_schema" in {tool["name"] for tool in tools}
     assert not any("input" in tool for tool in tools)
+
+
+def test_p21_live_gate_requires_live_ppm_metadata(monkeypatch) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "1")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+
+    with pytest.raises(MetadataSearchDependencyError) as exc_info:
+        search_metadata_objects(db_profile_id="ppm", query="order")
+
+    assert exc_info.value.code == "P21_LIVE_PPM_REQUIRED"

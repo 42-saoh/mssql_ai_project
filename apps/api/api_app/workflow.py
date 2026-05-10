@@ -103,7 +103,7 @@ class WorkflowService:
         except Exception as exc:  # pragma: no cover - defensive failure state
             job = self.repository.fail_job(
                 job.job_id,
-                code=exc.__class__.__name__,
+                code=str(getattr(exc, "code", exc.__class__.__name__)),
                 message=str(exc),
             )
         request_record.status = job.status
@@ -154,6 +154,7 @@ class WorkflowService:
         artifact_id: str,
         *,
         correlation_id: str | None = None,
+        actor: str | None = None,
     ) -> ValidationReportRecord:
         artifact = self._require_artifact(artifact_id)
         report = validate_artifact(artifact.validation_payload(), artifact_id=artifact_id)
@@ -164,6 +165,7 @@ class WorkflowService:
             missing_evidence=list(report.missing_evidence),
             manual_review_points=list(report.manual_review_points),
             correlation_id=correlation_id,
+            actor=actor or "api-system",
         )
 
     def record_approval_decision(

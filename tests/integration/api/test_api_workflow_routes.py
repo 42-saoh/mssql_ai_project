@@ -6,10 +6,21 @@ import pytest
 from ai_agent_domain import ArtifactType
 from api_app.dependencies import get_repository, get_workflow_service, reset_application_state
 from api_app.main import app
+from api_app.repositories import ValidationReportRecord
 from api_app.workflow import WorkflowService
 from fastapi.testclient import TestClient
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
+
+
+class CountingValidationRepository(MemoryWorkflowRepository):
+    def __init__(self) -> None:
+        super().__init__()
+        self.validation_write_count = 0
+
+    def save_validation_report(self, **kwargs) -> ValidationReportRecord:  # type: ignore[no-untyped-def]
+        self.validation_write_count += 1
+        return super().save_validation_report(**kwargs)
 
 
 @pytest.fixture
@@ -81,6 +92,10 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert job.headers["X-Correlation-ID"].startswith("corr_")
     assert job.json()["currentStep"] == "VALIDATE"
 
+    recent_jobs = client.get("/api/v1/jobs", params={"limit": 10})
+    assert recent_jobs.status_code == 200
+    assert submitted["jobId"] in {item["jobId"] for item in recent_jobs.json()["jobs"]}
+
     listed = client.get(f"/api/v1/jobs/{submitted['jobId']}/artifacts")
     assert listed.status_code == 200
     artifacts = listed.json()["artifacts"]
@@ -103,6 +118,16 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert validation.headers["X-Correlation-ID"] == "corr-route-flow"
     assert validation.json()["artifactId"] == artifact_id
     assert validation.json()["status"] in {"PASSED", "REVIEW_REQUIRED"}
+    assert validation.json()["validationReportId"].startswith("val_")
+
+    latest_validation = client.get(
+        f"/api/v1/artifacts/{artifact_id}/validation/latest",
+        headers=headers,
+    )
+    assert latest_validation.status_code == 200
+    assert latest_validation.headers["X-Correlation-ID"] == "corr-route-flow"
+    assert latest_validation.json()["artifactId"] == artifact_id
+    assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
 
     approval = client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
@@ -119,6 +144,58 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert approval.json()["decision"] == "REQUEST_CHANGES"
     assert "validationReportId" not in approval.json()
     assert "reviewerChecklist" not in approval.json()
+
+
+def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+) -> None:
+    client, repository = client_and_repository
+    created_job_ids: list[str] = []
+    for index in range(3):
+        request = repository.create_request(
+            db_profile_id="master",
+            target={"type": "PROCEDURE", "schema": "dbo", "name": f"usp_demo_{index}"},
+            outputs=("SP_ANALYSIS_DOCUMENT",),
+            options={"includeEvidenceRefs": True},
+            request_hash=f"hash-jobs-{index}",
+            correlation_id=f"corr-jobs-{index}",
+            idempotency_key=None,
+        )
+        job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+        created_job_ids.append(job.job_id)
+
+    response = client.get("/api/v1/jobs", params={"limit": 2})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) == {"jobs"}
+    assert [item["jobId"] for item in payload["jobs"]] == list(reversed(created_job_ids[-2:]))
+
+
+def test_latest_validation_route_does_not_create_validation_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    repository = CountingValidationRepository()
+    service = WorkflowService(repository)
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        client = TestClient(app)
+        submit = client.post("/api/v1/requests/sp-analysis", json=_sp_analysis_payload())
+        assert submit.status_code == 202
+        artifact_id = client.get(
+            f"/api/v1/jobs/{submit.json()['jobId']}/artifacts"
+        ).json()["artifacts"][0]["artifactId"]
+        before = repository.validation_write_count
+
+        response = client.get(f"/api/v1/artifacts/{artifact_id}/validation/latest")
+
+        assert response.status_code == 200
+        assert repository.validation_write_count == before
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
 
 
 def test_sp_analysis_submit_idempotency_replays_or_conflicts(client: TestClient) -> None:
@@ -429,6 +506,7 @@ def test_metadata_search_validation_and_dependency_error_shapes(client: TestClie
 def test_unknown_resources_return_not_found(client: TestClient) -> None:
     job = client.get("/api/v1/jobs/job_missing")
     artifact = client.get("/api/v1/artifacts/art_missing")
+    latest_validation = client.get("/api/v1/artifacts/art_missing/validation/latest")
     validation = client.post("/api/v1/artifacts/art_missing/validation")
 
     assert job.status_code == 404
@@ -437,6 +515,9 @@ def test_unknown_resources_return_not_found(client: TestClient) -> None:
     assert artifact.status_code == 404
     assert set(artifact.json()) == {"detail", "code"}
     assert artifact.json()["code"] == "RESOURCE_NOT_FOUND"
+    assert latest_validation.status_code == 404
+    assert set(latest_validation.json()) == {"detail", "code"}
+    assert latest_validation.json()["code"] == "RESOURCE_NOT_FOUND"
     assert validation.status_code == 404
     assert set(validation.json()) == {"detail", "code"}
     assert validation.json()["code"] == "RESOURCE_NOT_FOUND"

@@ -2628,7 +2628,7 @@ class LiveMetadataRepository:
             ) from exc
         try:
             return pytds.connect(
-                server=self.settings.metadata_host,
+                dsn=self.settings.metadata_host,
                 port=self.settings.metadata_port,
                 database=database,
                 user=self.settings.metadata_user,

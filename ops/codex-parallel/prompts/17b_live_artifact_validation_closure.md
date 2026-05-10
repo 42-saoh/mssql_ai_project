@@ -67,7 +67,7 @@ P17A에서 dependency evidence가 확인된 PPM pilot object set을 기준으로
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/unit/analysis tests/unit/generation tests/unit/validation tests/eval"`
-- `python -m compileall packages/analysis packages/generation packages/validation tests`
+- `python3.14 -m compileall packages/analysis packages/generation packages/validation tests`
 - 필요 시 `make test PYTEST_ARGS="tests/contract/test_generation_goldens_and_repro_assets.py"`
 
 ## Blocker 보고 기준

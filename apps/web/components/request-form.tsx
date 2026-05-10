@@ -12,17 +12,19 @@ export function RequestForm({
   profiles,
   pilotManifest,
   selectedSample,
+  action,
 }: Readonly<{
   defaultProfileId: string;
   profiles: MetadataProfile[];
   pilotManifest: PilotManifestSummary;
   selectedSample?: PilotMetadataObjectSample;
+  action: (formData: FormData) => Promise<void>;
 }>) {
   const effectiveProfileId = selectedSample ? "ppm" : defaultProfileId;
   const sampleName = selectedSample ? `${selectedSample.schema}.${selectedSample.name}` : "";
 
   return (
-    <form className="request-form" action="/jobs/job_demo_draft" method="get">
+    <form className="request-form" action={action}>
       <section className="sample-strip" aria-label="PPM pilot sample requests">
         <div>
           <p className="eyebrow">PPM pilot samples</p>
@@ -154,9 +156,9 @@ export function RequestForm({
       </fieldset>
 
       <div className="form-actions">
-        <button type="submit">Open mock draft job</button>
-        <Link className="secondary-action" href="/jobs/job_demo_review_pending">
-          View review queue example
+        <button type="submit">Submit request</button>
+        <Link className="secondary-action" href="/metadata/search">
+          Search metadata
         </Link>
       </div>
     </form>

@@ -11,13 +11,15 @@ import type {
   SPAnalysisRequest,
   SubmitRequestResponse,
   ValidationReport,
-} from "./types";
+} from "./types.ts";
 
 export interface PortalApi {
   createSPAnalysisRequest(request: SPAnalysisRequest): Promise<SubmitRequestResponse>;
+  listJobs(limit?: number): Promise<{ jobs: Job[] }>;
   getJob(jobId: string): Promise<Job>;
   listJobArtifacts(jobId: string): Promise<{ jobId: string; artifacts: ArtifactSummary[] }>;
   getArtifact(artifactId: string): Promise<Artifact>;
+  getLatestValidation(artifactId: string): Promise<ValidationReport>;
   validateArtifact(artifactId: string): Promise<ValidationReport>;
   createApprovalDecision(
     artifactId: string,

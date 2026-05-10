@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
 import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
+from api_app.live_gate import (
+    P21_LIVE_PLF_UNAVAILABLE,
+    P21_LIVE_PORTAL_REQUIRED_ENV_MISSING,
+)
 from api_app.platform_db import (
     MssqlPlatformRepository,
     PlatformDbSettings,
@@ -34,6 +41,46 @@ def test_platform_db_repository_requires_configured_connection(
         build_platform_repository()
 
 
+def test_p21_platform_db_missing_env_uses_live_prerequisite_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "1")
+    for name in (
+        "PLATFORM_DB_HOST",
+        "PLATFORM_DB_USER",
+        "PLATFORM_DB_PASSWORD",
+        "PLATFORM_DB_NAME",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(PlatformPersistenceError) as exc_info:
+        build_platform_repository()
+
+    assert exc_info.value.code == P21_LIVE_PORTAL_REQUIRED_ENV_MISSING
+    assert "password=" not in str(exc_info.value).lower()
+
+
+def test_p21_platform_db_schema_or_seed_gap_uses_plf_blocker() -> None:
+    settings = PlatformDbSettings(
+        host="127.0.0.1",
+        port=1433,
+        user="sa",
+        password="do-not-echo",
+        database="PLF",
+        requester_login="missing-user",
+    )
+    repository = MssqlPlatformRepository(settings)
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "1")
+        monkeypatch.setattr(repository, "_try_resolve_user_id", lambda _login: None)
+        with pytest.raises(PlatformPersistenceError) as exc_info:
+            repository._resolve_user_id("missing-user")
+
+    assert exc_info.value.code == P21_LIVE_PLF_UNAVAILABLE
+    assert "do-not-echo" not in str(exc_info.value)
+
+
 def test_platform_db_repository_builds_from_env_without_connecting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -48,6 +95,32 @@ def test_platform_db_repository_builds_from_env_without_connecting(
 
     assert settings.configured is True
     assert isinstance(repository, MssqlPlatformRepository)
+
+
+def test_platform_db_connect_uses_pytds_dsn_keyword(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = PlatformDbSettings(
+        host="127.0.0.1",
+        port=1433,
+        user="sa",
+        password="do-not-echo",
+        database="PLF",
+        requester_login="codex-api-local",
+    )
+    repository = MssqlPlatformRepository(settings)
+    captured: dict[str, object] = {}
+    fake_connection = object()
+
+    def fake_connect(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "pytds", SimpleNamespace(connect=fake_connect))
+
+    assert repository._connect() is fake_connection
+    assert captured["dsn"] == "127.0.0.1"
+    assert captured["port"] == 1433
+    assert "server" not in captured
+    assert captured["database"] == "PLF"
 
 
 def test_platform_db_safe_summary_never_contains_password() -> None:

@@ -1,0 +1,137 @@
+version: live_portal_no_mock_p21_v1
+source_p18_fixture: fixtures/eval/productization_gap_closure_p18_v1.yaml
+source_p17_fixture: fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
+source_pilot_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+phase: P21
+title: No-Mock Functional Portal And Python 3.14 Contract
+current_state:
+  p17_scoped_live_pilot_decision: CONDITIONAL_GO
+  p18_productization_decision: CONDITIONAL_GO
+  p20_auth_rbac_live_wiring: DEFERRED_OPTIONAL_FUTURE_HARDENING
+  p21_live_portal_gate_status: NOT_RUN
+  controlled_open_posture: CONDITIONAL_GO_WHEN_PLF_AND_PPM_ARE_CONFIGURED
+  production_ready: false
+python_baseline:
+  host_python: python3.14
+  runtime_version: "3.14"
+  docker_image: python:3.14-slim
+  lock_file: requirements/lock/py314-dev.txt
+  pyproject_requires_python: ">=3.14"
+  ruff_target_version: py314
+database_boundaries:
+  platform_db:
+    acronym: PLF
+    required: true
+    env_prefix: PLATFORM_DB_
+    purpose: platform workflow, artifact, validation, approval, audit, and Auth/RBAC role source
+  metadata_target_db:
+    acronym: PPM
+    required: true
+    profile_id: ppm
+    purpose: read-only MSSQL metadata source for portal analysis workflows
+  plf_fallback_for_ppm_allowed: false
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  business_db_ddl_dml_allowed: false
+  publish_export_deployment_allowed: false
+web_contract:
+  api_transport: HTTP_ONLY
+  required_env:
+    - PORTAL_API_MODE=http
+    - PORTAL_API_BASE_URL
+  runtime_mock_adapter_allowed: false
+  forbidden_demo_id_patterns:
+    - job_demo_
+    - art_demo_
+    - approval_preview_
+  required_functional_pages:
+    - /
+    - /requests/new
+    - /metadata/search
+    - /jobs/[jobId]
+    - /artifacts/[artifactId]
+    - /review/decision
+  page_requirements:
+    /requests/new:
+      submits_to_api: POST /api/v1/requests/sp-analysis
+      redirects_to_real_job_id: true
+    /artifacts/[artifactId]:
+      latest_validation_read: GET /api/v1/artifacts/{artifactId}/validation/latest
+      page_load_validation_write_allowed: false
+      explicit_run_validation_action: POST /api/v1/artifacts/{artifactId}/validation
+    /review/decision:
+      persisted_decision_action: POST /api/v1/artifacts/{artifactId}/approval-decisions
+      preview_only_allowed: false
+api_contract:
+  required_routes:
+    - GET /api/v1/jobs
+    - GET /api/v1/jobs/{jobId}
+    - GET /api/v1/jobs/{jobId}/artifacts
+    - GET /api/v1/artifacts/{artifactId}
+    - GET /api/v1/artifacts/{artifactId}/validation/latest
+    - POST /api/v1/artifacts/{artifactId}/validation
+    - POST /api/v1/artifacts/{artifactId}/approval-decisions
+    - GET /api/v1/metadata/db-profiles
+    - GET /api/v1/metadata/search
+live_gate:
+  env: P21_LIVE_PORTAL_GATE=1
+  gate_mode: explicit_controlled_live
+  default_live_access_attempted: false
+  default_behavior: skip_when_gate_not_enabled
+  missing_prerequisites_behavior: blocker_failure
+  success_is_production_ready_claim: false
+  required_prerequisites:
+    - PLF workflow repository is configured through PLATFORM_DB_* env
+    - PPM is configured as dbProfileId=ppm read-only metadata target
+    - MSSQL live metadata is explicitly enabled
+    - Web runtime is configured for HTTP API mode with no mock adapter
+  required_env:
+    - PLATFORM_DB_HOST
+    - PLATFORM_DB_PORT
+    - PLATFORM_DB_USER
+    - PLATFORM_DB_PASSWORD
+    - PLATFORM_DB_NAME
+    - MSSQL_ENABLE_LIVE_METADATA=1
+    - MSSQL_METADATA_HOST
+    - MSSQL_METADATA_PORT
+    - MSSQL_METADATA_USER
+    - MSSQL_METADATA_PASSWORD
+    - MSSQL_METADATA_PROFILE_FILE
+  blocker_codes:
+    missing_env: P21_LIVE_PORTAL_REQUIRED_ENV_MISSING
+    platform_db_unavailable: P21_LIVE_PLF_UNAVAILABLE
+    metadata_db_unavailable: P21_LIVE_PPM_UNAVAILABLE
+    p21_live_ppm_required: P21_LIVE_PPM_REQUIRED
+  eval_test_coverage:
+    - gate_disabled_returns_skip_without_plf_or_ppm_access
+    - gate_enabled_missing_prerequisites_returns_blocker_failure
+    - gate_enabled_with_live_prerequisites_requires_passed_probe
+deferred_future_hardening:
+  - code: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
+    status: DEFERRED
+    non_blocking_for_p21_controlled_open: true
+    required_before_claiming: production-grade enterprise Auth/RBAC
+forbidden_evidence:
+  - row_data
+  - sample_rows
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - token_value
+  - raw_jwt_claims
+  - plf_row_dump
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - unapproved_publish_or_export
+  - fake_auth_rbac_with_mock_headers
+readiness_boundaries:
+  current_decision_vocabulary:
+    - CONDITIONAL_GO
+    - NO_GO
+  no_production_ready_overclaim: true
+  production_ready: false
+  conditional_go_requires:
+    - PLF configured for platform workflow repository
+    - PPM configured as read-only MCP metadata target
+    - Web runtime uses HTTP API only
+    - no runtime mock/demo id dependency in functional pages

@@ -1,5 +1,6 @@
-import type { PortalApi } from "./portal-api";
-import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types";
+import { readPortalApiError } from "./errors.ts";
+import type { PortalApi } from "./portal-api.ts";
+import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types.ts";
 
 interface HttpPortalApiOptions {
   baseUrl: string;
@@ -27,7 +28,8 @@ async function readJson<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`Portal API request failed: ${response.status} ${response.statusText}`);
+    const error = await readPortalApiError(response, path);
+    throw error;
   }
 
   return (await response.json()) as T;
@@ -42,6 +44,15 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       });
     },
 
+    listJobs(limit?: number) {
+      const params = new URLSearchParams();
+      if (limit !== undefined) {
+        params.set("limit", String(limit));
+      }
+      const suffix = params.size > 0 ? `?${params.toString()}` : "";
+      return readJson(fetcher, baseUrl, `/api/v1/jobs${suffix}`);
+    },
+
     getJob(jobId: string) {
       return readJson(fetcher, baseUrl, `/api/v1/jobs/${encodeURIComponent(jobId)}`);
     },
@@ -54,10 +65,23 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       return readJson(fetcher, baseUrl, `/api/v1/artifacts/${encodeURIComponent(artifactId)}`);
     },
 
+    getLatestValidation(artifactId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/artifacts/${encodeURIComponent(artifactId)}/validation/latest`,
+      );
+    },
+
     validateArtifact(artifactId: string) {
-      return readJson(fetcher, baseUrl, `/api/v1/artifacts/${encodeURIComponent(artifactId)}/validation`, {
-        method: "POST",
-      });
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/artifacts/${encodeURIComponent(artifactId)}/validation`,
+        {
+          method: "POST",
+        },
+      );
     },
 
     createApprovalDecision(artifactId: string, request: ApprovalDecisionRequest) {

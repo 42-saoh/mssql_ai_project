@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 from api_app.schemas import SPAnalysisRequest
 from api_app.workflow import WorkflowService
+from ai_agent_domain import CanonicalAnalysisModel
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
@@ -49,15 +50,20 @@ def test_sample_canonical_payload_marks_review_boundaries() -> None:
     analysis = canonical["analysis_local"]
 
     assert canonical["target_contract"] == "CanonicalAnalysisModel"
-    assert canonical["status"] == "REVIEW_REQUIRED"
-    assert canonical["blockers"][0]["code"] == "DOMAIN_CONTRACT_MISSING"
+    assert canonical["status"] == "CONTRACT_CLOSED"
+    assert canonical["analysis_status"] == "REVIEW_REQUIRED"
+    assert canonical["blockers"] == []
+    assert CanonicalAnalysisModel.model_validate(analysis).snapshot_id == (
+        "mcp-fixture-snapshot-0001"
+    )
     assert analysis["procedure"]["identifier"]["full_name"] == "dbo.usp_GetOrderSummary"
     assert analysis["dependencies"]["table_references"][1]["status"] == "REVIEW_REQUIRED"
     assert analysis["review_markers"][0]["code"] == "AMBIGUOUS_ORDER_LINE_DEPENDENCY"
-    assert analysis["canonical_conversion_blockers"][0]["status"] == "REVIEW_REQUIRED"
+    assert analysis["canonical_conversion_blockers"] == []
 
 
 def test_generated_workflow_summary_matches_eval_fixture(monkeypatch) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     request_fixture = _json_fixture("request.json")
     expected = _json_fixture("artifact_payloads.json")

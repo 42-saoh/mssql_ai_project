@@ -72,7 +72,7 @@ Expected Deliverables:
 Verification:
 - `make test PYTEST_ARGS="tests/unit/generation tests/unit/validation"`
 - 필요 시 `make test PYTEST_ARGS="tests/contract/test_generation_goldens_and_repro_assets.py"`
-- `python -m compileall packages/generation packages/validation tests/unit/generation tests/unit/validation`
+- `python3.14 -m compileall packages/generation packages/validation tests/unit/generation tests/unit/validation`
 
 Report Format:
 - Changed Files

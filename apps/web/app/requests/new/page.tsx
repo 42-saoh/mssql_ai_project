@@ -1,9 +1,41 @@
+import { redirect } from "next/navigation";
+import { DependencyBlocker } from "@/components/dependency-blocker";
 import { RequestForm } from "@/components/request-form";
 import { getPortalApi } from "@/lib/api/client";
+import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
+import type { PortalApi } from "@/lib/api/portal-api";
+import type {
+  MetadataProfile,
+  RequestedOutputType,
+  TargetObjectType,
+} from "@/lib/api/types";
 import { getPilotManifestSummary } from "@/lib/pilot-manifest";
+
+export const dynamic = "force-dynamic";
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+async function submitRequest(formData: FormData) {
+  "use server";
+
+  const outputs = formData.getAll("outputs").map(String) as RequestedOutputType[];
+  const api = getPortalApi();
+  const response = await api.createSPAnalysisRequest({
+    dbProfileId: String(formData.get("dbProfileId") ?? "ppm"),
+    target: {
+      type: String(formData.get("targetType") ?? "PROCEDURE") as TargetObjectType,
+      schema: String(formData.get("schema") ?? "dbo"),
+      name: String(formData.get("name") ?? ""),
+    },
+    outputs: outputs.length > 0 ? outputs : ["SP_ANALYSIS_DOCUMENT"],
+    options: {
+      includeEvidenceRefs: formData.get("includeEvidenceRefs") === "on",
+      includeModernizationHints: formData.get("includeModernizationHints") === "on",
+    },
+  });
+  redirect(`/jobs/${response.jobId}`);
 }
 
 export default async function NewRequestPage({
@@ -11,8 +43,34 @@ export default async function NewRequestPage({
 }: Readonly<{
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
-  const api = getPortalApi();
-  const [profileResponse, params] = await Promise.all([api.listMetadataProfiles(), searchParams]);
+  let api: PortalApi;
+  try {
+    api = getPortalApi();
+  } catch (error) {
+    return (
+      <div className="stack">
+        <DependencyBlocker
+          title="Portal API is not configured"
+          message={formatPortalApiError(error, "PORTAL_API_BASE_URL is required.")}
+        />
+      </div>
+    );
+  }
+  let profileResponse: { defaultProfileId: string; profiles: MetadataProfile[] };
+  let params: Record<string, string | string[] | undefined>;
+  try {
+    [profileResponse, params] = await Promise.all([api.listMetadataProfiles(), searchParams]);
+  } catch (error) {
+    return (
+      <div className="stack">
+        <DependencyBlocker
+          title="Metadata profiles are unavailable"
+          message={formatPortalApiError(error, "PLF/PPM prerequisites are missing.")}
+          code={portalApiErrorCode(error, "P21_PORTAL_METADATA_PROFILES_BLOCKED")}
+        />
+      </div>
+    );
+  }
   const pilotManifest = getPilotManifestSummary();
   const requestedSampleId = firstParam(params.sample);
   const selectedSample =
@@ -30,8 +88,8 @@ export default async function NewRequestPage({
           <span className="quiet-label">Draft only</span>
         </div>
         <p className="lede">
-          Compose the OpenAPI-shaped request payload for one stored procedure target. This shell
-          keeps submission in the mock adapter and never calls a live MSSQL database.
+          Compose the OpenAPI-shaped request payload for one stored procedure target. Submission
+          calls the configured API and redirects to the returned workflow job.
         </p>
       </section>
 
@@ -41,6 +99,7 @@ export default async function NewRequestPage({
           profiles={profileResponse.profiles}
           pilotManifest={pilotManifest}
           selectedSample={selectedSample}
+          action={submitRequest}
         />
       </section>
     </div>

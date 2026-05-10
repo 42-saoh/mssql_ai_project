@@ -267,6 +267,7 @@ def test_p15_hard_live_ppm_metadata_gate_enforced() -> None:
 def test_p15_fixture_workflow_latency_reproducibility_and_draft_completeness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     fixture = _yaml_fixture("eval_observability_security_ops_p15_v1.yaml")
     expectations = _json_fixture("artifact_payloads.json")

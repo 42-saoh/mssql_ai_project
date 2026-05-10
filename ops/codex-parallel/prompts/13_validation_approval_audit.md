@@ -66,7 +66,7 @@ validation rule engine, artifact validation result, reviewer checklist, approval
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/unit/validation tests/unit/api tests/integration/api"`
-- `python -m compileall packages/validation apps/api tests/unit/validation tests/unit/api tests/integration/api`
+- `python3.14 -m compileall packages/validation apps/api tests/unit/validation tests/unit/api tests/integration/api`
 - 필요 시 `make test PYTEST_ARGS="tests/e2e tests/eval"`
 
 ## Blocker 보고 기준

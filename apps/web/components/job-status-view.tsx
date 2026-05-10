@@ -9,15 +9,6 @@ import {
   workflowStepLabels,
 } from "@/lib/presentation";
 
-const stageLinks = [
-  { href: "/jobs/job_demo_draft", label: "draft" },
-  { href: "/jobs/job_demo_validating", label: "validating" },
-  { href: "/jobs/job_demo_review_pending", label: "review_pending" },
-  { href: "/jobs/job_demo_approved", label: "approved" },
-  { href: "/jobs/job_demo_rejected", label: "rejected" },
-  { href: "/jobs/job_demo_failed_blocker", label: "failed_blocker" },
-];
-
 const workflowSteps = [
   "COLLECT_METADATA",
   "ANALYZE",
@@ -116,14 +107,6 @@ export function JobStatusView({
             </ul>
           </div>
         ) : null}
-
-        <div className="stage-link-row" aria-label="Mock job status examples">
-          {stageLinks.map((stage) => (
-            <Link key={stage.href} href={stage.href}>
-              {stage.label}
-            </Link>
-          ))}
-        </div>
       </section>
 
       <section className="panel">
@@ -148,7 +131,7 @@ export function JobStatusView({
             <p className="eyebrow">Draft artifacts</p>
             <h2>Preview outputs</h2>
           </div>
-          <span className="quiet-label">Mock adapter</span>
+          <span className="quiet-label">HTTP API</span>
         </div>
 
         <div className="artifact-list">

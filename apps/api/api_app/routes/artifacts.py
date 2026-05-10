@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from api_app.dependencies import get_repository, get_workflow_service
+from api_app.auth import Actor
+from api_app.dependencies import (
+    get_repository,
+    get_workflow_service,
+    require_artifact_review_actor,
+)
 from api_app.errors import api_http_exception
 from api_app.presenters import (
     present_artifact,
@@ -56,11 +61,13 @@ def validate_artifact(
     artifactId: str,
     request: Request,
     service: Annotated[WorkflowService, Depends(get_workflow_service)],
+    actor: Annotated[Actor | None, Depends(require_artifact_review_actor)],
 ) -> ValidationReport:
     try:
         report = service.validate_artifact(
             artifactId,
             correlation_id=tracking_context_from_request(request).correlation_id,
+            actor=actor.reviewer_id if actor else None,
         )
     except KeyError as exc:
         raise api_http_exception(
@@ -68,4 +75,29 @@ def validate_artifact(
             detail=f"Unknown artifact: {artifactId}",
             code="RESOURCE_NOT_FOUND",
         ) from exc
+    return present_validation_report(report)
+
+
+@router.get(
+    "/api/v1/artifacts/{artifactId}/validation/latest",
+    response_model=ValidationReport,
+)
+def get_latest_validation(
+    artifactId: str,
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> ValidationReport:
+    artifact = repository.get_artifact(artifactId)
+    if artifact is None:
+        raise api_http_exception(
+            status_code=404,
+            detail=f"Unknown artifact: {artifactId}",
+            code="RESOURCE_NOT_FOUND",
+        )
+    report = repository.latest_validation_for(artifactId)
+    if report is None:
+        raise api_http_exception(
+            status_code=404,
+            detail=f"No validation report recorded for artifact: {artifactId}",
+            code="RESOURCE_NOT_FOUND",
+        )
     return present_validation_report(report)

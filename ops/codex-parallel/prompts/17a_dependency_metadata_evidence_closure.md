@@ -67,7 +67,7 @@ P16의 `DEPENDENCY_METADATA_INCOMPLETE` blocker를 닫기 위한 metadata-only d
 ## 검증 명령
 
 - `make test PYTEST_ARGS="tests/contract/mcp tests/unit/mcp tests/unit/test_mcp_catalog.py tests/contract/test_ppm_pilot_object_selection_assets.py"`
-- `python -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp`
+- `python3.14 -m compileall services/mssql-mcp tests/contract/mcp tests/unit/mcp`
 - live claim 전용: `P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"`
 
 ## Blocker 보고 기준

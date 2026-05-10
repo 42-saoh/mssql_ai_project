@@ -10,6 +10,7 @@ from uuid import UUID, uuid5
 
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
+from api_app.auth import Actor, VerifiedIdentity, canonical_role_set
 from api_app.contracts import approval_decision_mapping, validation_storage_result
 from api_app.lifecycle import (
     artifact_status_after_approval,
@@ -17,6 +18,11 @@ from api_app.lifecycle import (
     bounded_artifact_records,
     ensure_artifact_can_change,
     ensure_job_transition,
+)
+from api_app.live_gate import (
+    P21_LIVE_PLF_UNAVAILABLE,
+    P21_LIVE_PORTAL_REQUIRED_ENV_MISSING,
+    p21_live_portal_enabled,
 )
 from api_app.repositories import (
     ApprovalRecordData,
@@ -40,6 +46,10 @@ STORAGE_NAMESPACE = UUID("a8e6e20c-0158-5d6f-8a39-a97f7325c6a2")
 
 class PlatformPersistenceError(RuntimeError):
     """Raised when platform DB persistence cannot safely continue."""
+
+    def __init__(self, message: str, *, code: str = "DEPENDENCY_BLOCKED") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -84,11 +94,27 @@ def load_platform_db_settings() -> PlatformDbSettings:
 def build_platform_repository() -> WorkflowRepository:
     settings = load_platform_db_settings()
     if not settings.configured:
-        raise PlatformPersistenceError(
-            "Platform MSSQL repository requires PLATFORM_DB_HOST, PLATFORM_DB_USER, "
-            "PLATFORM_DB_PASSWORD, and PLATFORM_DB_NAME."
-        )
+        raise platform_missing_env_error()
     return MssqlPlatformRepository(settings)
+
+
+def platform_missing_env_error() -> PlatformPersistenceError:
+    return PlatformPersistenceError(
+        "Platform MSSQL repository requires PLATFORM_DB_HOST, PLATFORM_DB_USER, "
+        "PLATFORM_DB_PASSWORD, and PLATFORM_DB_NAME.",
+        code=(
+            P21_LIVE_PORTAL_REQUIRED_ENV_MISSING
+            if p21_live_portal_enabled()
+            else "DEPENDENCY_BLOCKED"
+        ),
+    )
+
+
+def platform_unavailable_error(message: str) -> PlatformPersistenceError:
+    return PlatformPersistenceError(
+        message,
+        code=P21_LIVE_PLF_UNAVAILABLE if p21_live_portal_enabled() else "DEPENDENCY_BLOCKED",
+    )
 
 
 class MssqlPlatformRepository:
@@ -475,6 +501,29 @@ class MssqlPlatformRepository:
         )
         return job_from_row(row) if row else None
 
+    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+        normalized_limit = normalize_list_limit(limit)
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({normalized_limit})
+                CONVERT(NVARCHAR(36), j.JOB_ID),
+                COALESCE(j.WRKR_REF_ID, CONVERT(NVARCHAR(36), j.JOB_ID)),
+                COALESCE(r.TRC_ID, CONVERT(NVARCHAR(36), j.REQ_ID)),
+                j.CUR_STAT_CD,
+                j.CUR_STEP_TP_CD,
+                j.ERR_CD,
+                j.ERR_CNTNT,
+                j.CRE_DTM,
+                j.UPD_DTM,
+                j.RGST_BINDING_JSON
+            FROM dbo.CORE_JOBS j
+            JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
+            ORDER BY j.CRE_DTM DESC, j.JOB_ID DESC
+            """,
+            (),
+        )
+        return [job_from_row(row) for row in rows]
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         row = self._query_one(
             (
@@ -511,6 +560,7 @@ class MssqlPlatformRepository:
         missing_evidence: list[str],
         manual_review_points: list[str],
         correlation_id: str | None = None,
+        actor: str = "api-system",
     ) -> ValidationReportRecord:
         artifact = self.get_artifact(artifact_id)
         if artifact is None:
@@ -530,9 +580,10 @@ class MssqlPlatformRepository:
             """
             INSERT INTO dbo.ARTIFACT_VALIDATION_REPORTS(
                 VLDT_RSLT_ID, ARTF_VER_ID, VLDT_PRFL_NM, VLDT_RSLT_CD,
-                RSLT_JSON, MISSING_EVDC_JSON, MANUAL_RVWR_POINTS_JSON, CRE_DTM
+                RSLT_JSON, MISSING_EVDC_JSON, MANUAL_RVWR_POINTS_JSON, CRE_DTM,
+                CRE_USR_ID
             )
-            VALUES (%s, %s, 'api-workflow', %s, %s, %s, %s, %s)
+            VALUES (%s, %s, 'api-workflow', %s, %s, %s, %s, %s, %s)
             """,
             (
                 storage_uuid(record.validation_report_id),
@@ -549,6 +600,7 @@ class MssqlPlatformRepository:
                 json_text(record.missing_evidence),
                 json_text(record.manual_review_points),
                 record.created_at,
+                self._try_resolve_user_id(actor),
             ),
         )
         artifact.latest_validation_report_id = record.validation_report_id
@@ -566,6 +618,7 @@ class MssqlPlatformRepository:
                 "validationReportId": record.validation_report_id,
             },
             correlation_id=correlation_id or self._correlation_for_artifact(artifact),
+            actor=actor,
         )
         return record
 
@@ -750,6 +803,47 @@ class MssqlPlatformRepository:
         job = self.get_job(artifact.job_id)
         return job.correlation_id if job else None
 
+    def resolve_actor_roles(self, identity: VerifiedIdentity) -> Actor | None:
+        candidates = identity.lookup_candidates[:3]
+        if not candidates:
+            return None
+        padded_candidates = candidates + ("",) * (3 - len(candidates))
+        rows = self._query_all(
+            """
+            SELECT
+                CONVERT(NVARCHAR(36), u.USR_ID),
+                u.LGN_ID,
+                u.EML_ADR,
+                u.USR_NM,
+                r.AUTH_GRP_NM
+            FROM dbo.AUTH_USERS u
+            JOIN dbo.AUTH_USER_ROLES ur ON ur.USR_ID = u.USR_ID
+            JOIN dbo.AUTH_ROLES r ON r.AUTH_GRP_ID = ur.AUTH_GRP_ID
+            WHERE u.STAT_CD = 'ACTIVE'
+              AND (
+                  u.LGN_ID IN (%s, %s, %s)
+                  OR u.EML_ADR IN (%s, %s, %s)
+              )
+            """,
+            (*padded_candidates, *padded_candidates),
+        )
+        if not rows:
+            return None
+        user_ids = {str(row[0]) for row in rows}
+        if len(user_ids) != 1:
+            return None
+        first = rows[0]
+        roles = canonical_role_set([str(row[4]) for row in rows])
+        if not roles:
+            return None
+        return Actor(
+            actor_id=identity.subject,
+            login=str(first[1] or ""),
+            email=str(first[2]) if first[2] else None,
+            display_name=str(first[3]) if first[3] else identity.name,
+            roles=roles,
+        )
+
     def _save_artifact(self, record: ArtifactRecord) -> None:
         artifact_id = storage_uuid(record.artifact_id)
         artifact_version_id = storage_uuid(f"{record.artifact_id}:v1")
@@ -874,7 +968,7 @@ class MssqlPlatformRepository:
     def _resolve_user_id(self, login_or_email: str) -> str:
         user_id = self._try_resolve_user_id(login_or_email)
         if user_id is None:
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB repository requires a matching AUTH_USERS row. "
                 "Seed the local platform DB manually first."
             )
@@ -902,7 +996,7 @@ class MssqlPlatformRepository:
             (profile_id_or_name, profile_id_or_name),
         )
         if db_profile_id is None:
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB repository requires a matching CORE_DB_PROFILES row. "
                 "Seed the local platform DB manually first."
             )
@@ -935,7 +1029,7 @@ class MssqlPlatformRepository:
         except PlatformPersistenceError:
             raise
         except Exception:  # pragma: no cover - requires live SQL Server
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB operation failed. Check schema and seed prerequisites."
             ) from None
         finally:
@@ -949,7 +1043,7 @@ class MssqlPlatformRepository:
         except PlatformPersistenceError:
             raise
         except Exception:  # pragma: no cover - requires live SQL Server
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Platform DB operation failed. Check schema and seed prerequisites."
             ) from None
         finally:
@@ -957,19 +1051,16 @@ class MssqlPlatformRepository:
 
     def _connect(self):
         if not self.settings.configured:
-            raise PlatformPersistenceError(
-                "Platform MSSQL repository requires PLATFORM_DB_HOST, PLATFORM_DB_USER, "
-                "PLATFORM_DB_PASSWORD, and PLATFORM_DB_NAME."
-            )
+            raise platform_missing_env_error()
         try:
             import pytds
         except Exception:  # pragma: no cover - dependency/runtime issue
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "python-tds is required for platform DB persistence."
             ) from None
         try:
             return pytds.connect(
-                server=self.settings.host,
+                dsn=self.settings.host,
                 port=self.settings.port,
                 database=self.settings.database,
                 user=self.settings.user,
@@ -981,7 +1072,7 @@ class MssqlPlatformRepository:
                 use_mars=False,
             )
         except Exception:  # pragma: no cover - requires live SQL Server
-            raise PlatformPersistenceError(
+            raise platform_unavailable_error(
                 "Could not connect to platform DB. Check PLATFORM_DB_* settings and "
                 "external DB readiness."
             ) from None
@@ -1133,6 +1224,12 @@ def storage_validation_to_api(value: str) -> str:
 
 def storage_approval_to_api(value: str) -> str:
     return "APPROVE" if value == "APPROVED" else "REJECT"
+
+
+def normalize_list_limit(limit: int | None, *, default: int = 20) -> int:
+    if limit is None:
+        return default
+    return min(max(int(limit), 1), 100)
 
 
 def as_datetime(value: Any) -> datetime:

@@ -66,7 +66,7 @@ flowchart LR
 
 ### API / BFF
 - 입력 검증
-- 인증/인가 연계
+- 인증/인가 연계: production identity 는 verified OIDC/JWT, role source 는 PLF `AUTH_USERS` / `AUTH_ROLES` / `AUTH_USER_ROLES`, validation/approval write action 은 `REVIEWER`/`ADMIN`
 - job/artifact 응답 조합
 
 ### Workflow Orchestrator
@@ -206,11 +206,13 @@ packages/templates
 
 ## 현재 통합 구현 상태
 
-- `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/validation/approval decision recording happy path 를 제공한다.
-- `apps/web` 는 Next.js shell 이며 기본값은 mock adapter 다. 실제 승인 확정, publish, DDL 실행, row-data 조회 UI 는 제공하지 않는다.
-- `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tool execution, optional live readiness boundary 를 제공한다. live metadata query 구현은 아직 완료 기능이 아니다.
+- `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/latest-validation/validation/approval decision recording happy path 를 제공한다.
+- `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다.
+- `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다.
 - `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
+- P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되었지만, live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
+- P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.
 
 ## 저장소 경계 규칙
 
@@ -219,6 +221,7 @@ packages/templates
 - 생성기는 raw MSSQL metadata 가 아니라 canonical model 기준으로 동작한다.
 - validation 결과 없이 artifact 를 publish 하지 않는다.
 - registry version 이 고정되지 않은 생성 결과는 승인 대상이 아니다.
+- production auth/RBAC 는 mock header, hardcoded actor, fixture token 으로 대체하지 않는다.
 
 ## 현재 기준 파일
 

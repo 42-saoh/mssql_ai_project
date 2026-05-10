@@ -97,15 +97,20 @@
 - secrets handling
 - unsafe command use
 - doc drift
+- production auth/RBAC source and enforcement evidence
 
 필수 체크:
 - 실제 데이터 접근 코드 없음
 - 자동 DDL 실행 경로 없음
 - 민감 환경값 log/fixture 유출 없음
 - 정책 문서와 구현이 모순되지 않음
+- production identity source 가 verified OIDC/JWT 로 문서화되어 있고 role source 가 PLF auth table 로 연결됨
+- validation/approval enforcement 구현 시 unauthorized negative test 가 존재함
+- live IdP/JWKS 와 PLF role membership 검증이 없으면 production-grade enterprise Auth/RBAC claim 을 금지하고 deferred future hardening 으로 유지함
 
 통과 기준:
 - P0 위반 0
+- auth/RBAC source 문서화가 없거나 mock header/hardcoded actor 로 production 을 가장하면 blocker
 
 ### 6. Reproducibility
 대상:
@@ -136,6 +141,25 @@
 통과 기준:
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 통과
 - `PUBLISHED` 상태, 자동 DDL, row-data access 흐름 0건
+
+### 8. P21 No-Mock Portal Gate
+대상:
+- Python 3.14 host/Docker baseline
+- Web HTTP-only runtime path
+- PLF workflow repository
+- PPM read-only metadata access
+
+필수 체크:
+- `requirements/lock/py314-dev.txt`, `python:3.14-slim`, `requires-python >=3.14`, Ruff `py314` target 이 현재 기준임
+- Web functional pages 는 mock adapter 나 demo ids 에 의존하지 않음
+- `/artifacts/[artifactId]` page-load 는 validation write 를 만들지 않고 latest validation GET 만 수행함
+- `/review/decision` 은 preview-only 가 아니라 approval decision API 를 호출함
+- `P21_LIVE_PORTAL_GATE=1` 에서 PLF/PPM env 가 없으면 skip 이 아니라 blocker failure 로 보고함
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/contract/test_p21_no_mock_prompt_assets.py tests/eval/test_p21_live_portal_no_mock_gate.py"` 통과
+- `make test-web-smoke` 통과
+- live gate 성공 전에는 `production_ready: false` 유지
 
 ## 초기 fixture 세트
 
@@ -171,6 +195,8 @@
 | parser/analysis 변경 | fixture 기반 analysis eval |
 | generator 변경 | artifact format eval + evidence coverage |
 | policy/approval 변경 | workflow state test + reviewer checklist |
+| auth/RBAC source 변경 | ADR/admin guide sync + role matrix contract test |
+| auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |
 
 ## 평가 산출물 형식
 
@@ -213,6 +239,7 @@
 ## 테스트 실행 환경
 
 - 기본 검증 경로는 `docker/test/` 아래의 도커 테스트 러너다.
+- Python 실행 기준은 host 와 Docker 모두 3.14 이다.
 - `make test` 와 이를 호출하는 `make check` 는 호스트 직접 실행 대신 컨테이너 기반 실행을 우선한다.
 - 외부 DB 가 필요한 테스트는 환경변수로 연결하되, 저장소는 해당 DB 의 lifecycle 을 관리하지 않는다.
 - 자동 테스트가 아직 없는 영역은 smoke/build 검증과 테스트 공백 보고를 함께 남긴다.

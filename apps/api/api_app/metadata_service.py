@@ -4,13 +4,13 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
-from mssql_mcp_app.errors import MetadataToolError, UNKNOWN_TOOL
+from mssql_mcp_app.errors import UNKNOWN_TOOL, MetadataToolError
 from mssql_mcp_app.profiles import load_db_profiles
 from mssql_mcp_app.registry import build_tool_registry
 from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
 from mssql_mcp_app.settings import load_live_metadata_settings
 
+from api_app.live_gate import P21_LIVE_PPM_REQUIRED, p21_live_portal_enabled
 from api_app.schemas import (
     EvidenceRef,
     MetadataObjectIdentity,
@@ -36,6 +36,10 @@ METADATA_BLOCKER_MESSAGES = {
     ),
     DEPENDENCY_METADATA_INCOMPLETE: (
         "Dependency metadata is incomplete and requires review before relying on links."
+    ),
+    P21_LIVE_PPM_REQUIRED: (
+        "P21 live portal gate requires live read-only PPM metadata access; fixture "
+        "metadata and PLF fallback are not allowed."
     ),
 }
 
@@ -104,7 +108,14 @@ def search_metadata_objects(
     normalized_types = normalize_metadata_search_object_types(object_types)
     normalized_limit = normalize_metadata_search_limit(limit)
 
-    if db_profile_id == "ppm" and ppm_manifest_selection_mode() != "live_metadata":
+    settings = load_live_metadata_settings()
+    profiles = load_profiles_for_metadata_request(settings, db_profile_id=db_profile_id)
+
+    if (
+        db_profile_id == "ppm"
+        and ppm_manifest_selection_mode() != "live_metadata"
+        and not p21_live_portal_enabled()
+    ):
         blocker = metadata_search_blocker(PPM_MANIFEST_TEMPLATE_ONLY)
         return MetadataSearchResponse(
             dbProfileId=db_profile_id,
@@ -119,8 +130,6 @@ def search_metadata_objects(
             blockers=[blocker],
         )
 
-    settings = load_live_metadata_settings()
-    profiles = load_db_profiles(settings, repo_root=repo_root())
     registry = build_tool_registry(
         repository=metadata_search_repository(settings, profiles),
         profiles=profiles,
@@ -205,6 +214,31 @@ def metadata_search_repository(settings: Any, profiles: list[Any]) -> Any:
     if settings.live_metadata_enabled:
         return LiveMetadataRepository(settings=settings, profiles=profiles)
     return FixtureMetadataRepository()
+
+
+def load_profiles_for_metadata_request(settings: Any, *, db_profile_id: str) -> list[Any]:
+    if not p21_live_portal_enabled():
+        return load_db_profiles(settings, repo_root=repo_root())
+    if not settings.live_metadata_enabled or db_profile_id != "ppm":
+        raise p21_live_ppm_required()
+    try:
+        profiles = load_db_profiles(settings, repo_root=repo_root())
+    except Exception as exc:
+        raise p21_live_ppm_required() from exc
+    ppm_profile = next((profile for profile in profiles if profile.id == "ppm"), None)
+    if ppm_profile is None or str(ppm_profile.database).strip().upper() != "PPM":
+        raise p21_live_ppm_required()
+    if ppm_manifest_selection_mode() != "live_metadata":
+        raise p21_live_ppm_required()
+    return profiles
+
+
+def p21_live_ppm_required() -> MetadataSearchDependencyError:
+    return MetadataSearchDependencyError(
+        code=P21_LIVE_PPM_REQUIRED,
+        detail=METADATA_BLOCKER_MESSAGES[P21_LIVE_PPM_REQUIRED],
+        status_code=503,
+    )
 
 
 def _profiles_from_yaml() -> tuple[str, list[MetadataProfile]]:
