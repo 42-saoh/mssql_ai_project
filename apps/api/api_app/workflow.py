@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable
 
@@ -361,6 +362,15 @@ class WorkflowService:
             if bool(request_record.options.get("allowSpDefinitionToModel", False))
             else None
         )
+        if (
+            os.getenv("LLM_ENABLE_REMOTE", "0").strip() == "1"
+            and bool(request_record.options.get("allowSpDefinitionToModel", False))
+            and os.getenv("LLM_ALLOW_SP_TEXT", "0").strip() != "1"
+        ):
+            raise ModelGatewayError(
+                "LLM_ALLOW_SP_TEXT=1 is required before high-quality live analysis.",
+                code="LLM_SP_TEXT_NOT_ALLOWED",
+            )
         try:
             run_payload = build_semantic_analysis_run(
                 target_ref=object_ref,
@@ -374,8 +384,8 @@ class WorkflowService:
                 model_gateway=self.model_gateway,
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
             )
-        except ModelGatewayError as exc:
-            raise RuntimeError(f"{exc.code}: {exc}") from exc
+        except ModelGatewayError:
+            raise
         return self.repository.save_agent_run(
             job_id=job_id,
             agent_type=run_payload.agent_type,
@@ -704,11 +714,12 @@ def generation_evidence_sources(
         )
     if agent_run:
         invocation = agent_run.model_invocation
+        output_hash = str(invocation.get("outputHash") or "")
         sources.append(
             {
                 "type": "llmInference",
-                "name": agent_run.agent_run_id,
-                "reason": str(invocation.get("outputHash") or agent_run.summary),
+                "name": output_hash or agent_run.target_ref,
+                "reason": output_hash or agent_run.summary,
                 "locator": "agent-runtime.modelInvocation.outputHash",
                 "snapshotId": None,
             }
@@ -772,7 +783,7 @@ def static_analysis_payload(
         snapshot_id=snapshot_id,
         registry_version_refs=[
             {"registry_type": "PROMPT", "version": "prompt:sp_analysis@0.1.0"},
-            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.2.0"},
+            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.3.0"},
             {"registry_type": "MODEL", "version": "model:openai_sp_semantic_analysis@0.1.0"},
         ],
     )

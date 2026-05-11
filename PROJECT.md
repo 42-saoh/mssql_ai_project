@@ -2,7 +2,7 @@
 
 ## 한 줄 정의
 
-MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터 기반으로 Java/MyBatis 전환 코드 초안을 생성하며, 검증·승인을 거쳐 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.
+MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.
 
 ## 제품 목표
 
@@ -10,7 +10,7 @@ MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, �
 - Java/MyBatis 코드 초안을 표준 형식으로 생성한다.
 - DB 메타데이터를 기반으로 테이블·컬럼·스키마 탐색과 보강을 지원한다.
 - 프롬프트, 모델, 템플릿, DB 프로필을 중앙에서 관리한다.
-- 생성 결과에 근거, 검증, 승인, 재현 가능성을 부여한다.
+- 생성 결과에 근거, 검증, caveat, 재현 가능성을 부여한다.
 - 전환 과정에서 축적되는 규칙과 지식을 조직 자산으로 남긴다.
 
 ## 범위
@@ -22,7 +22,8 @@ MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, �
 - 스키마 탐색, 메타데이터 보강, DTO/VO/Model 초안 생성
 - Java/MyBatis Mapper XML, Mapper Interface, Service 초안 생성
 - DDL 초안 생성
-- 검토, 승인, 버전 관리, 감사로그
+- 검증, caveat, 버전 관리, 감사로그
+- 추후 재활성화를 위한 deferred approval API/server capability
 
 ### 제외
 
@@ -38,15 +39,17 @@ MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, �
 - SP 분석 문서 / 호출관계 및 의존성 결과
 - 메타데이터 조회 및 구조 보강 결과
 - Java/MyBatis / DTO/VO/Model / DDL 초안
-- 검토 이력 및 승인 로그
+- 검증/caveat 이력 및 deferred 승인 로그
 - 관리자/사용자 가이드
 - 시범 적용 및 검증 보고서
 
 ## 운영 원칙
 
 - **Evidence-first**: 모든 분석과 생성은 메타데이터 또는 명시적 근거를 동반한다.
-- **Deterministic-first**: 파싱, 규칙, 검증은 가능한 한 결정론적으로 구현한다.
-- **Approval-gated**: Draft → Validate → Review → Approve → Publish 순서를 지킨다.
+- **Tool-grounded AI-heavy hybrid**: metadata, dependency, static facts, evidence refs 는 툴/결정론 계층이 책임지고, SP 의미 해석과 migration/Java/MyBatis 전환 판단은 high-quality LLM 보강을 기본 사용한다.
+- **Dependency evidence before inference**: dependency closure/reference resolution 은 raw SQL 이 아니라 MCP metadata evidence digest 로 LLM 과 guide renderer 에 전달하며, 불확실한 대상은 `REVIEW_REQUIRED` 로 유지한다.
+- **Deterministic guardrails**: 파싱, 규칙, 검증, forbidden behavior 차단은 결정론적으로 구현한다.
+- **Validation-gated**: P25 이후 기본 제품 플로우는 Draft → Validate → `VALIDATION_COMPLETE` 에서 멈춘다. Review/approval API 는 deferred capability 로 보존하지만 기본 Web/UI 완료 조건이 아니다.
 - **Read-only metadata access**: DB 접근은 메타데이터 조회 전용이며 쓰기를 금지한다.
 - **Docs-as-code**: 설계, 정책, 평가 규칙은 저장소 안에서 버전 관리한다.
 - **Small reversible changes**: 초기 구현은 작은 기능 슬라이스와 빠른 검증을 우선한다.
@@ -110,15 +113,17 @@ repo/
 - MSSQL Metadata MCP 서버
 - CanonicalAnalysisModel
 - SP 분석 문서 / 의존성 결과 생성
-- ValidationReport / ApprovalRecord 저장
+- ValidationReport 저장과 deferred ApprovalRecord capability 보존
 
 ### P2. Generation MVP
 - Java/MyBatis / DTO/VO/Model / DDL 초안 생성
 - Artifact versioning
-- Preview / approval workflow
+- Preview / validation-complete workflow
+- Deferred approval workflow compatibility
 
 ### P3. 운영 고도화
 - Prompt / model / template / profile registry
+- High-quality semantic analysis profile 운영과 fixture-first eval gate 확장
 - Eval fixture 확장
 - 지식 자산화
 - 운영 대시보드 / 모니터링
@@ -145,6 +150,7 @@ repo/
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - Validation rules: `spec/validation/validation_rules.yaml`
 - P24 SP migration guide quality contract: `spec/eval/p24_sp_migration_guide_quality_contract.yaml`
+- P27 dependency evidence tooling design contract: `spec/eval/p27_dependency_evidence_tooling_contract.yaml`
 - Machine-readable policy assets: `spec/policy/`
 - Environment sample: `.env.example`
 - Dockerized test runner: `docker/test/docker-compose.yml`

@@ -16,6 +16,7 @@ def client_and_repository(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[tuple[TestClient, MemoryWorkflowRepository]]:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     app.dependency_overrides[get_repository] = lambda: repository
@@ -83,7 +84,10 @@ def test_fixture_backed_request_to_validation_complete_happy_path(
     assert preview_payload["reviewRequired"] is True
     assert preview_payload["generatorVersion"]
     assert preview_payload["registryRefs"]
-    assert {ref["type"] for ref in preview_payload["evidenceRefs"]} == {"MSSQL_METADATA"}
+    assert {ref["type"] for ref in preview_payload["evidenceRefs"]} >= {
+        "MSSQL_METADATA",
+        "LLM_INFERENCE",
+    }
     assert {ref["objectRef"] for ref in preview_payload["evidenceRefs"]} >= {
         "dbo.usp_GetOrderSummary",
         "dbo.TB_ORDER",

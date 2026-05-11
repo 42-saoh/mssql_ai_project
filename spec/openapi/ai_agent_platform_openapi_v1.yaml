@@ -496,7 +496,7 @@ components:
           default: true
         useLlmAnalysis:
           type: boolean
-          default: false
+          default: true
         llmProfileId:
           type: string
           default: openai_sp_semantic_analysis
@@ -505,7 +505,7 @@ components:
             - openai_fast_test
         allowSpDefinitionToModel:
           type: boolean
-          default: false
+          default: true
     SubmitRequestResponse:
       type: object
       required: [requestId, jobId, status]

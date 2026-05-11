@@ -166,16 +166,16 @@ PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 
 ## P22 OpenAI LLM agent runtime
 
-`POST /api/v1/requests/sp-analysis` 는 typed `options` 로 LLM semantic analysis 를 켤 수 있다.
+`POST /api/v1/requests/sp-analysis` 는 P26 기준 high-quality hybrid LLM semantic analysis 를 기본값으로 사용한다.
 
-- `useLlmAnalysis`: deterministic metadata/static analysis 이후 LLM semantic enrichment 실행
-- `llmProfileId`: `openai_sp_semantic_analysis` 또는 `openai_fast_test`
-- `allowSpDefinitionToModel`: SP definition 원문을 transient model input 으로 허용할지 여부
+- `useLlmAnalysis`: 기본 `true`; deterministic metadata/static analysis 이후 LLM semantic enrichment 실행
+- `llmProfileId`: 기본 `openai_sp_semantic_analysis`; `openai_fast_test` 는 수동/평가 선택지
+- `allowSpDefinitionToModel`: 기본 `true`; SP definition 원문은 transient model input 으로만 허용
 
 기본 실행은 `FakeModelGateway` 를 사용하므로 외부 OpenAI API 를 호출하지 않는다. Remote 실행은
 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 준비된 경우에만 가능하다.
-semantic analysis 기본 모델은 `gpt-5.5`, fast/test profile 기본 모델은 `gpt-5-nano` 다. Optional live confidence testing 에서는 `OPENAI_MODEL_FAST_TEST` 로 `openai_fast_test` 모델을 바꿀 수 있다.
-내부 runtime 은 요청 target 을 SP task 로 감싼 뒤 staged calls 를 수행한다. 단일 API 요청 shape 는 그대로이며, batch API 는 추가하지 않는다. 여러 SP task 실행 경로에서는 `LLM_SP_CONCURRENCY` 기본값 `2` 로 fan-out 을 제한한다.
+semantic analysis 기본 모델은 `gpt-5.5` 이며 optional live confidence testing 에서는 `OPENAI_MODEL_ANALYSIS` 로 바꿀 수 있다. fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 수동 평가 실행 모델을 바꿀 수 있다.
+내부 runtime 은 요청 target 을 SP task 로 감싼 뒤 deterministic evidence digest, business rule extraction, conversion readiness, migration guide insights, evidence critic, optional repair staged calls 를 수행한다. 단일 API 요청 shape 는 그대로이며, batch API 는 추가하지 않는다. 여러 SP task 실행 경로에서는 `LLM_SP_CONCURRENCY` 기본값 `2` 로 fan-out 을 제한한다.
 
 `GET /api/v1/jobs/{jobId}/agent-runs` 는 sanitized trace summary 만 반환한다. 응답에는
 schema-valid structured output, provider/model/profile, prompt/schema version, input/prompt/output

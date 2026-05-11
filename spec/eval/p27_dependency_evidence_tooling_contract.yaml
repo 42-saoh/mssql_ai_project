@@ -1,0 +1,122 @@
+contract_id: p27_dependency_evidence_tooling_design@0.1.0
+phase: P27
+status: design_contract_ready
+production_ready: false
+source_of_truth:
+  - spec/mcp/mssql_metadata_tool_catalog.yaml
+  - services/mssql-mcp/README.md
+scope:
+  summary: >
+    Design-only dependency evidence tooling contract for strengthening the
+    deterministic metadata layer that supports AI-heavy SP analysis.
+  included:
+    - Extend the get_procedure_dependencies contract with optional resolution evidence fields.
+    - Declare get_dependency_closure as a planned read-only inactive MCP tool.
+    - Declare resolve_dependency_reference as a planned read-only inactive MCP tool.
+    - Keep all dependency evidence as structured metadata with snapshot and evidence refs.
+  excluded:
+    - MCP handler implementation
+    - API or Web wiring
+    - persisted artifact type changes
+    - fixture suite expansion beyond contract checks
+    - live metadata gate requirements
+invariants:
+  read_only: true
+  structured_input_only: true
+  snapshot_required: true
+  collected_at_required: true
+  evidence_refs_required: true
+  ppm_to_plf_fallback_allowed: false
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  business_db_ddl_dml_allowed: false
+  raw_sp_definition_storage_allowed: false
+  raw_prompt_storage_allowed: false
+  raw_provider_response_storage_allowed: false
+dependency_resolution_contract:
+  existing_tool: get_procedure_dependencies
+  added_fields:
+    - resolutionConfidence
+    - resolutionEvidenceKind
+    - unresolvedReason
+    - resolutionChain
+  deterministic_promotion:
+    allowed_when:
+      - resolutionStatus is CONFIRMED
+      - resolutionConfidence is HIGH
+      - evidenceRefs point to catalog metadata, not raw SQL or row data
+    blocked_when:
+      - target is ambiguous
+      - target depends on dynamic SQL text
+      - cross-server target is not catalog-confirmed
+      - synonym target is not uniquely resolved through catalog metadata
+      - candidate list has multiple plausible targets
+planned_tools:
+  get_dependency_closure:
+    active: false
+    readOnly: true
+    input:
+      required: [dbProfileId, schema, objectName, objectType]
+      defaults:
+        maxDepth: 2
+        includeReviewRequired: true
+      limits:
+        maxDepth_hard_max: 3
+    output:
+      required: [rootObject, nodes, edges, unresolved, summary]
+      edge_required: [dependencyType, resolutionStatus, resolutionStrategy, evidenceRefs]
+  resolve_dependency_reference:
+    active: false
+    readOnly: true
+    input:
+      required: [dbProfileId, sourceObject, referencedName]
+      optional:
+        - referencedDatabase
+        - referencedServer
+        - referencedSchema
+    output:
+      required:
+        - candidates
+        - selectedResolution
+        - resolutionStatus
+        - resolutionStrategy
+        - evidenceRefs
+        - caveats
+fixture_contract_cases:
+  same_database_confirmed_dependency:
+    expected_status: CONFIRMED
+    deterministic_fact_allowed: true
+  same_server_cross_database_confirmed_dependency:
+    expected_status: CONFIRMED
+    deterministic_fact_allowed: true
+    caveat: PPM must not fall back to PLF if the target database is unavailable.
+  synonym_target_unconfirmed:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  dynamic_sql_marker:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  ambiguous_name_candidates:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+    expected_behavior: Return candidates without selecting a deterministic resolution.
+llm_input_boundary:
+  p24_and_semantic_runtime_input: dependency evidence digest only
+  raw_sql_definition_to_llm_for_dependency_digest: false
+  confirmed_dependency_usage: deterministic fact
+  ambiguous_or_dynamic_usage: LLM_INFERENCE with REVIEW_REQUIRED caveat
+quality_gate:
+  pass:
+    - Catalog declares planned tools as read-only, inactive, structured-input only.
+    - Standard response envelope still requires snapshotId, collectedAt, and evidenceRefs.
+    - get_procedure_dependencies declares the P27 resolution evidence fields.
+    - Docs state P27 is design-only and production_ready remains false.
+  fail:
+    - Planned tools are active or invokable by default.
+    - Any tool accepts free-form SQL or row-data style input.
+    - Any contract allows procedure execution, DDL/DML, raw definition storage, or PPM-to-PLF fallback.
+    - Ambiguous, synonym, dynamic, or cross-server evidence is promoted as deterministic without catalog confirmation.
+verification:
+  default:
+    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+    - git diff --check

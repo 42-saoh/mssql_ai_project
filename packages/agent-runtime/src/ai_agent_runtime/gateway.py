@@ -142,9 +142,31 @@ def _default_fake_semantic_output() -> dict[str, Any]:
         "reviewMarkers": [
             {
                 "code": "LLM_INFERENCE_REVIEW_REQUIRED",
-                "message": "Human reviewer must confirm inferred business semantics.",
+                "message": "LLM-inferred semantics remain validation caveats.",
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": ["prompt.inputHash"],
+            }
+        ],
+        "conversionGuidance": [
+            {
+                "code": "DRAFT_JAVA_MYBATIS_READINESS",
+                "summary": (
+                    "Use the deterministic metadata and validation caveats before applying "
+                    "any Java/MyBatis draft."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": ["metadata.procedureDefinitionHash"],
+            }
+        ],
+        "migrationGuideInsights": [
+            {
+                "section": "migration_strategy",
+                "summary": (
+                    "Keep guide claims evidence-linked and mark unsupported conversion "
+                    "claims as REVIEW_REQUIRED."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": ["metadata.procedureDefinitionHash"],
             }
         ],
         "assumptions": [

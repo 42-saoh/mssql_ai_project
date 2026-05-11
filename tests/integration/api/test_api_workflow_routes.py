@@ -31,6 +31,7 @@ def client_and_repository(
 ) -> Iterator[tuple[TestClient, MemoryWorkflowRepository]]:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     app.dependency_overrides[get_repository] = lambda: repository
@@ -299,7 +300,7 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     assert len(payload["agentRuns"]) == 1
     run = payload["agentRuns"][0]
     assert run["modelInvocation"]["model"] == model_profile_from_env("openai_fast_test").model
-    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.2.0"
+    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.3.0"
     assert run["modelInvocation"]["componentInvocations"]
     assert "structuredOutput" in run
     assert "CREATE PROCEDURE" not in str(payload)

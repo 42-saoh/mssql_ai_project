@@ -36,13 +36,13 @@ class SPAnalysisOptions(ApiModel):
         default=True,
         alias="includeModernizationHints",
     )
-    use_llm_analysis: bool = Field(default=False, alias="useLlmAnalysis")
+    use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
     llm_profile_id: Literal[
         "openai_sp_semantic_analysis",
         "openai_fast_test",
     ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
     allow_sp_definition_to_model: bool = Field(
-        default=False,
+        default=True,
         alias="allowSpDefinitionToModel",
     )
 

@@ -112,6 +112,8 @@ def test_semantic_output_schema_is_strict_for_responses_api() -> None:
         "modernizationPoints",
         "riskFlags",
         "reviewMarkers",
+        "conversionGuidance",
+        "migrationGuideInsights",
         "assumptions",
     ]
     business_rule_schema = schema["properties"]["businessRules"]["items"]
@@ -189,9 +191,17 @@ def test_staged_semantic_run_repairs_invalid_evidence_refs(monkeypatch: Any) -> 
     item = payload.structured_output["businessRules"][0]
     assert set(item["evidenceRefs"]) <= {"fact_demo_parameters", "fact_demo_lookup"}
     assert item["evidenceRefs"]
-    assert payload.model_invocation.to_storage_dict()["componentInvocations"][0][
-        "stage"
-    ] == "semantic_claims"
+    component_stages = [
+        item["stage"]
+        for item in payload.model_invocation.to_storage_dict()["componentInvocations"]
+    ]
+    assert component_stages[:5] == [
+        "deterministic_evidence_digest",
+        "business_rule_extraction",
+        "conversion_readiness",
+        "migration_guide_insights",
+        "evidence_critic",
+    ]
 
 
 def test_complex_staged_run_injects_required_review_markers(monkeypatch: Any) -> None:

@@ -16,8 +16,9 @@ Return only schema-valid JSON. Treat deterministic metadata and static analysis 
 Every claim must use evidenceRefs copied exactly from evidenceRefContract.allowedFactIds.
 Never use prompt hashes, input hashes, output hashes, raw SQL snippets, row data, or provider
 trace ids as claim evidence. Do not invent dependencies, tables, functions, or procedures.
-Mark uncertain conclusions as REVIEW_REQUIRED. Never request row data, procedure execution,
-DDL/DML, deployment, or secrets."""
+Mark uncertain conclusions as REVIEW_REQUIRED. Prioritize migration guide quality and
+Java/MyBatis conversion readiness, but never treat LLM inference as deterministic fact.
+Never request row data, procedure execution, DDL/DML, deployment, or secrets."""
 
 
 def render_semantic_analysis_prompt(
@@ -95,6 +96,34 @@ def _metadata_without_raw_definition(metadata: dict[str, Any]) -> dict[str, Any]
 
 
 def _stage_task(stage: str) -> str:
+    if stage == "deterministic_evidence_digest":
+        return (
+            "Summarize the deterministic evidence that will anchor later claims. "
+            "Return only supported low-level insights and assumptions; do not create "
+            "new dependency facts."
+        )
+    if stage == "business_rule_extraction":
+        return (
+            "Extract business rules, branch semantics, DML side effects, and risk flags "
+            "that are supported by exact allowedFactIds."
+        )
+    if stage == "conversion_readiness":
+        return (
+            "Focus on Java/MyBatis conversion readiness. Populate conversionGuidance "
+            "with draft-only implementation guidance, blockers, and REVIEW_REQUIRED "
+            "caveats tied to exact allowedFactIds."
+        )
+    if stage == "migration_guide_insights":
+        return (
+            "Focus on migration guide quality. Populate migrationGuideInsights with "
+            "section-level insights for overview, dependency inventory, DML matrix, "
+            "call flow, risk metrics, and migration strategy."
+        )
+    if stage == "evidence_critic":
+        return (
+            "Critique the accumulated evidence discipline. Add missing REVIEW_REQUIRED "
+            "markers and avoid unsupported dependency, table, function, or procedure claims."
+        )
     if stage == "semantic_claims":
         return (
             "Infer only supported business rules, modernization points, and risk flags. "

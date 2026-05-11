@@ -142,6 +142,10 @@ def _llm_semantic_lines(payload: dict) -> list[str]:
         lines.append(f"- Business rule ({rule.get('category')}): {rule.get('summary')}")
     for point in payload.get("modernizationPoints", []) or []:
         lines.append(f"- Modernization ({point.get('code')}): {point.get('summary')}")
+    for guidance in payload.get("conversionGuidance", []) or []:
+        lines.append(f"- Conversion guidance ({guidance.get('code')}): {guidance.get('summary')}")
+    for insight in payload.get("migrationGuideInsights", []) or []:
+        lines.append(f"- Guide insight ({insight.get('section')}): {insight.get('summary')}")
     for marker in payload.get("reviewMarkers", []) or []:
         lines.append(f"- Review marker ({marker.get('code')}): {marker.get('message')}")
     return lines

@@ -13,12 +13,22 @@ from ai_agent_runtime.models import (
 P23_SUITE_ID = "p23_llm_sp_analysis_quality"
 LLM_INFERENCE_EVIDENCE_TYPE = "LLM_INFERENCE"
 
-_OUTPUT_FIELDS = ("businessRules", "modernizationPoints", "riskFlags", "reviewMarkers")
+_OUTPUT_FIELDS = (
+    "businessRules",
+    "modernizationPoints",
+    "riskFlags",
+    "reviewMarkers",
+    "conversionGuidance",
+    "migrationGuideInsights",
+)
+_GUIDE_CONVERSION_FIELDS = ("conversionGuidance", "migrationGuideInsights")
 _KEY_FIELDS = {
     "businessRules": "category",
     "modernizationPoints": "code",
     "riskFlags": "code",
     "reviewMarkers": "code",
+    "conversionGuidance": "code",
+    "migrationGuideInsights": "section",
 }
 _FORBIDDEN_STORAGE_KEYS = frozenset(
     {
@@ -44,6 +54,11 @@ def evaluate_p23_semantic_quality(
     fact_ids = frozenset(str(fact["id"]) for fact in scenario["deterministic_facts"])
 
     semantic_recall = _semantic_recall(expected_output, actual_output)
+    guide_conversion_recall = _semantic_recall(
+        expected_output,
+        actual_output,
+        field_names=_GUIDE_CONVERSION_FIELDS,
+    )
     evidence_discipline = _evidence_discipline(actual_output, fact_ids)
     validator_results = _validator_results(
         scenario.get("unsupported_claim_expectations", ()),
@@ -68,6 +83,7 @@ def evaluate_p23_semantic_quality(
         "status": _status(
             scores={
                 "semanticRecall": semantic_recall,
+                "guideConversionRecall": guide_conversion_recall,
                 "evidenceDiscipline": evidence_discipline,
                 "unreviewedOverclaims": unreviewed_overclaims,
                 "storageSafetyFindings": len(storage_findings),
@@ -76,6 +92,7 @@ def evaluate_p23_semantic_quality(
         ),
         "scores": {
             "semanticRecall": semantic_recall,
+            "guideConversionRecall": guide_conversion_recall,
             "evidenceDiscipline": evidence_discipline,
             "unreviewedOverclaims": unreviewed_overclaims,
             "storageSafetyFindings": len(storage_findings),
@@ -127,16 +144,24 @@ def _normalize_output(output: Mapping[str, Any]) -> dict[str, Any]:
 def _normalize_thresholds(thresholds: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "semanticRecallMin": float(thresholds["semantic_recall_min"]),
+        "guideConversionRecallMin": float(
+            thresholds.get("guide_conversion_recall_min", thresholds["semantic_recall_min"])
+        ),
         "evidenceDisciplineMin": float(thresholds["evidence_discipline_min"]),
         "unreviewedOverclaimsMax": int(thresholds["unreviewed_overclaims_max"]),
         "storageSafetyFindingsMax": int(thresholds["storage_safety_findings_max"]),
     }
 
 
-def _semantic_recall(expected_output: Mapping[str, Any], actual_output: Mapping[str, Any]) -> float:
+def _semantic_recall(
+    expected_output: Mapping[str, Any],
+    actual_output: Mapping[str, Any],
+    *,
+    field_names: Sequence[str] = _OUTPUT_FIELDS,
+) -> float:
     expected_items = [
         (field_name, expected_item)
-        for field_name in _OUTPUT_FIELDS
+        for field_name in field_names
         for expected_item in expected_output[field_name]
     ]
     if not expected_items:
@@ -252,6 +277,8 @@ def _evidence_refs(item: Mapping[str, Any]) -> list[str]:
 
 def _status(*, scores: Mapping[str, float | int], thresholds: Mapping[str, Any]) -> str:
     if scores["semanticRecall"] < thresholds["semanticRecallMin"]:
+        return "FAILED"
+    if scores["guideConversionRecall"] < thresholds["guideConversionRecallMin"]:
         return "FAILED"
     if scores["evidenceDiscipline"] < thresholds["evidenceDisciplineMin"]:
         return "FAILED"

@@ -39,7 +39,9 @@
 
 ## P22 behavior
 
-- `/requests/new` 는 LLM semantic analysis option 을 API `SPAnalysisOptions` 로 전송한다.
+- `/requests/new` 는 P26 high-quality hybrid 기본값으로 LLM semantic analysis option 을 API
+  `SPAnalysisOptions` 로 전송한다. 기본 선택은 semantic analysis profile, LLM analysis enabled,
+  transient SP definition input allowed 이며 fast/test profile 은 수동 선택지로만 남긴다.
 - `/jobs/[jobId]` 는 `GET /api/v1/jobs/{jobId}/agent-runs` 로 sanitized LLM trace summary 를 읽어
   model, prompt/schema version, input/output hash, token usage, latency, status 를 표시한다.
 - `/artifacts/[artifactId]` 는 artifact 의 job id 가 있을 때 같은 sanitized trace summary 를 표시한다.

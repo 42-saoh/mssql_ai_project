@@ -29,7 +29,10 @@ def test_metadata_tools_return_read_only_catalog_summary() -> None:
 
     assert tools
     assert all(tool["readOnly"] is True for tool in tools)
-    assert "get_table_schema" in {tool["name"] for tool in tools}
+    names = {tool["name"] for tool in tools}
+    assert "get_table_schema" in names
+    assert "get_dependency_closure" not in names
+    assert "resolve_dependency_reference" not in names
     assert not any("input" in tool for tool in tools)
 
 

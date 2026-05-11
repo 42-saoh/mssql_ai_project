@@ -3,6 +3,11 @@ from fastapi.testclient import TestClient
 from mssql_mcp_app.catalog import TOOL_CATALOG
 from mssql_mcp_app.main import app
 
+PLANNED_P27_TOOLS = {
+    "get_dependency_closure",
+    "resolve_dependency_reference",
+}
+
 
 def test_mcp_health_and_catalog() -> None:
     client = TestClient(app)
@@ -21,13 +26,22 @@ def test_mcp_health_and_catalog() -> None:
     assert "list_functions" in names
     assert "search_metadata_objects" in names
     assert "get_procedure_definition" in names
+    assert "get_dependency_closure" in names
+    assert "resolve_dependency_reference" in names
     assert "find_similar_tables" in names
     for tool in catalog.json()["tools"]:
         assert tool["readOnly"] is True
-        assert tool["active"] is True
+        assert isinstance(tool["active"], bool)
         assert "input" in tool
         assert "password" not in tool
         assert "connectionString" not in tool
+    planned_tools = {
+        tool["name"]: tool
+        for tool in catalog.json()["tools"]
+        if tool["name"] in PLANNED_P27_TOOLS
+    }
+    assert set(planned_tools) == PLANNED_P27_TOOLS
+    assert all(tool["active"] is False for tool in planned_tools.values())
 
 
 def test_mcp_yaml_catalog_matches_service_catalog() -> None:
@@ -114,6 +128,21 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     assert dependency_tool["output"]["properties"]["dependencies"]["items"] == {
         "$ref": "#/response/dependencyItem"
     }
+    assert {
+        "resolutionConfidence",
+        "resolutionEvidenceKind",
+        "unresolvedReason",
+        "resolutionChain",
+    } <= set(dependency_item["properties"])
+    planned_tools = {
+        tool["name"]: tool
+        for tool in payload["tools"]
+        if tool["name"] in PLANNED_P27_TOOLS
+    }
+    assert set(planned_tools) == PLANNED_P27_TOOLS
+    for tool in planned_tools.values():
+        assert tool["active"] is False
+        assert tool["readOnly"] is True
+        assert tool["designStatus"] == "planned_p27_design_only"
     for tool in payload["tools"]:
-        assert tool["active"] is True
         assert tool["readOnly"] is True

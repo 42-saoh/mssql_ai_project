@@ -25,6 +25,8 @@ GOLDEN_OUTPUT_FIELDS = {
     "modernization_points",
     "risk_flags",
     "review_markers",
+    "conversion_guidance",
+    "migration_guide_insights",
     "assumptions",
 }
 OUTPUT_LIST_FIELDS = (
@@ -32,6 +34,8 @@ OUTPUT_LIST_FIELDS = (
     "modernization_points",
     "risk_flags",
     "review_markers",
+    "conversion_guidance",
+    "migration_guide_insights",
 )
 
 
@@ -63,6 +67,10 @@ def test_p23b_golden_outputs_are_schema_valid_and_minimum_complete() -> None:
         assert len(output["modernization_points"]) >= minimums["modernization_points_min"]
         assert len(output["risk_flags"]) >= minimums["risk_flags_min"]
         assert len(output["review_markers"]) >= minimums["review_markers_min"]
+        assert len(output["conversion_guidance"]) >= minimums["conversion_guidance_min"]
+        assert len(output["migration_guide_insights"]) >= minimums[
+            "migration_guide_insights_min"
+        ]
         assert len(output["assumptions"]) >= minimums["assumptions_min"]
 
 
@@ -184,6 +192,13 @@ def test_p23c_fixture_first_quality_runner_scores_all_scenarios(monkeypatch: Any
         assert report["status"] == "PASSED", _metric_message(scenario, "status", report["status"])
         assert scores["semanticRecall"] >= thresholds["semanticRecallMin"], _metric_message(
             scenario, "semanticRecall", scores["semanticRecall"]
+        )
+        assert scores["guideConversionRecall"] >= thresholds["guideConversionRecallMin"], (
+            _metric_message(
+                scenario,
+                "guideConversionRecall",
+                scores["guideConversionRecall"],
+            )
         )
         assert scores["evidenceDiscipline"] >= thresholds["evidenceDisciplineMin"], (
             _metric_message(scenario, "evidenceDiscipline", scores["evidenceDiscipline"])

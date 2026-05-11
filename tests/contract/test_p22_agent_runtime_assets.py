@@ -17,12 +17,12 @@ def test_p22_openapi_declares_llm_options_trace_and_evidence_type() -> None:
 
     assert "/api/v1/jobs/{jobId}/agent-runs" in openapi["paths"]
     options = schemas["SPAnalysisOptions"]["properties"]
-    assert options["useLlmAnalysis"]["default"] is False
+    assert options["useLlmAnalysis"]["default"] is True
     assert options["llmProfileId"]["enum"] == [
         "openai_sp_semantic_analysis",
         "openai_fast_test",
     ]
-    assert options["allowSpDefinitionToModel"]["default"] is False
+    assert options["allowSpDefinitionToModel"]["default"] is True
     assert "LLM_INFERENCE" in schemas["EvidenceRef"]["properties"]["type"]["enum"]
     assert "AgentRunSummary" in schemas
     assert "ModelInvocationSummary" in schemas
@@ -78,5 +78,5 @@ def test_p22_registry_route_exposes_model_prompt_and_schema_bindings(monkeypatch
 
     assert "model:openai_sp_semantic_analysis@0.1.0" in versions
     assert "model:openai_fast_test@gpt-5.4-mini@0.1.0" in versions
-    assert "prompt:sp_semantic_analysis@0.2.0" in versions
-    assert "schema:llm_semantic_analysis@0.2.0" in versions
+    assert "prompt:sp_semantic_analysis@0.3.0" in versions
+    assert "schema:llm_semantic_analysis@0.3.0" in versions

@@ -172,10 +172,10 @@
 
 필수 체크:
 - 기본 테스트는 `FakeModelGateway` 를 사용하고 외부 OpenAI API 를 호출하지 않음
-- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있음
+- semantic analysis profile 기본값은 `gpt-5.5` 이며 `OPENAI_MODEL_ANALYSIS` 로 live confidence 모델을 바꿀 수 있음. fast/test profile 은 수동 평가 선택지로 남고 기본값은 `gpt-5-nano` 다.
 - remote 실행은 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` gate 를 요구
 - raw prompt, raw SP definition, raw OpenAI response text 는 DB/API/artifact/test output 에 저장하지 않음
-- structured output 은 `schema:llm_semantic_analysis@0.2.0` strict JSON schema 를 통과해야 함
+- structured output 은 `schema:llm_semantic_analysis@0.3.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
 통과 기준:
@@ -200,8 +200,8 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - P23A 는 계약/프롬프트 자산을 만들고, P23B 는 synthetic simple/medium/complex fixture 와 fake-gateway 검증을 추가한다
 - P23C 는 P23B fixture 를 `FakeModelGateway` 로 반복 실행하고 quality score 를 계산한다
 - simple/medium/complex stored procedure scenario matrix 와 authored fixture 를 유지한다
-- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
-- LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 로 제한한다
+- P26 live confidence 는 기본적으로 `openai_sp_semantic_analysis` / `OPENAI_MODEL_ANALYSIS` 를 사용한다. fast/test profile 은 수동 평가 선택지로 남고 기본값은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 바꿀 수 있다.
+- LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 로 제한한다
 - runtime 은 SP별 `SemanticAnalysisTask` 로 fan-out 가능하며 `LLM_SP_CONCURRENCY=2` 를 기본 병렬도 한계로 둔다
 - live structured schema 는 deterministic fact id 를 `evidenceRefs` enum 으로 제한하고, runtime 은 invalid/trace evidence refs 를 deterministic fact id 로 repair 한다
 - dynamic SQL, cross-DB, unsupported dependency/table/function/procedure claim 의 필수 `REVIEW_REQUIRED` marker 는 deterministic guard 가 보강한다
@@ -211,7 +211,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
 
 판정 해석:
-- 통과: 기본 fixture-first P23 테스트가 통과하고 `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 을 만족한다.
+- 통과: 기본 fixture-first P23 테스트가 통과하고 `semantic_recall >= 0.75`, `guide_conversion_recall >= 0.8`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 을 만족한다.
 - 보류: fixture-first gate 는 통과했지만 optional live confidence gate 가 skip/fail/unavailable 이거나 로컬 검증 prerequisites 가 준비되지 않았다. 이 경우 P23 confidence signal 만 부족한 상태이며 production readiness 로 해석하지 않는다.
 - 실패/blocker: quality threshold 미달, raw prompt/SP/provider response 저장, `production_ready: true` 주장, PPM-to-PLF fallback, model/profile/prompt/schema drift, 또는 P24 document/code generation 범위를 P23 완료로 표현하는 경우다.
 
@@ -266,6 +266,35 @@ response storage, and `production_ready: false`.
 make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
 ```
 
+### 12. P27 Dependency Evidence Tooling Design Contract
+
+P27 첫 단계는 MCP handler 구현이 아니라 dependency evidence 계약 확정이다.
+목표는 AI-heavy semantic analysis 와 P24 guide renderer 에 raw SQL 이 아닌 구조화된
+dependency evidence digest 를 공급할 수 있도록 deterministic metadata 층을 강화하는 것이다.
+
+대상:
+- `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- `spec/eval/p27_dependency_evidence_tooling_contract.yaml`
+- `tests/unit/test_mcp_catalog.py`
+- `tests/contract/mcp/test_tool_invocation_contract.py`
+
+필수 체크:
+- 기존 `get_procedure_dependencies` 계약은 `resolutionStatus`, `resolutionStrategy`, `sourceScope` 를 유지하고 `resolutionConfidence`, `resolutionEvidenceKind`, `unresolvedReason`, `resolutionChain` 을 optional structured evidence 로 선언한다
+- `get_dependency_closure` 와 `resolve_dependency_reference` 는 read-only, structured-input-only, inactive planned tool 로 catalog 에 존재한다
+- standard MCP response envelope 은 `snapshotId`, `collectedAt`, `evidenceRefs` 를 계속 요구한다
+- confirmed dependency 만 deterministic fact 로 승격 가능하며, ambiguous/dynamic/cross-server/unconfirmed synonym/caller-dependent reference 는 `REVIEW_REQUIRED` 를 유지한다
+- raw SP definition, raw prompt, raw provider response, row data, procedure execution, business DB DDL/DML, free-form SQL input, PPM-to-PLF fallback 은 계속 금지한다
+- P27 은 API/Web wiring, MCP handler 구현, persisted artifact type 변경, live gate 요구를 포함하지 않는다
+
+판정 해석:
+- 통과: planned tool 계약이 inactive/read-only/structured 로 고정되고, dependency item evidence 확장과 no-raw/no-row/no-fallback policy 가 문서와 테스트에서 일치한다.
+- 보류: 계약은 통과했지만 실제 handler/fixture coverage 가 아직 다음 slice 로 남아 있다. 이는 P27 design-only 범위의 정상 상태이며 production readiness 로 해석하지 않는다.
+- 실패/blocker: planned tool 이 기본 invokable 로 켜지거나, 자유 SQL/row data/procedure execution/DDL/DML/raw definition storage/PLF fallback 을 허용하거나, 불확실 dependency 를 deterministic fact 로 승격하는 계약이 들어간 경우다.
+
+```bash
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+```
+
 ## 초기 fixture 세트
 
 `fixtures/` 아래에 최소 아래 대표 사례를 둔다.
@@ -305,6 +334,7 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 | OpenAI/LLM runtime 변경 | fake gateway unit + no-raw-trace contract + optional live gate 문서화 |
 | LLM analysis quality eval 변경 | P23 contract prompt asset test + fixture-first fake eval + optional live gate 문서화 |
 | SP migration guide quality eval 변경 | P24 contract prompt asset test + fixture-first renderer/evaluator section/evidence/DML/call-flow eval |
+| Dependency evidence tooling design 변경 | MCP catalog contract + planned inactive tool/read-only/no-raw policy test |
 
 ## 평가 산출물 형식
 

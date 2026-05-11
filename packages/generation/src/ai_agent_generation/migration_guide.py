@@ -94,7 +94,7 @@ def render_p24_migration_guide_sections(context: GenerationContext) -> list[str]
         elif section_id == "complexity_risk_metrics":
             _append_complexity_risk(lines, guide)
         elif section_id == "migration_strategy":
-            _append_migration_strategy(lines)
+            _append_migration_strategy(lines, context)
         elif section_id == "appendix_mappings":
             _append_appendix_mappings(lines, guide)
         elif section_id == "evidence_assumptions_review":
@@ -362,7 +362,7 @@ def _append_complexity_risk(lines: list[str], guide: Mapping[str, Any]) -> None:
         )
 
 
-def _append_migration_strategy(lines: list[str]) -> None:
+def _append_migration_strategy(lines: list[str], context: GenerationContext) -> None:
     lines.extend(
         [
             "- javaMyBatisReadiness: `draft_notes_only`",
@@ -375,6 +375,41 @@ def _append_migration_strategy(lines: list[str]) -> None:
             ),
         ]
     )
+    _append_llm_migration_strategy_insights(lines, context)
+
+
+def _append_llm_migration_strategy_insights(
+    lines: list[str],
+    context: GenerationContext,
+) -> None:
+    payload = context.value("llmAnalysis", {}) or {}
+    if not isinstance(payload, Mapping):
+        return
+    guidance = _sequence(payload.get("conversionGuidance"))
+    insights = _sequence(payload.get("migrationGuideInsights"))
+    if not guidance and not insights:
+        return
+    lines.append("- llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`")
+    for item in guidance:
+        if not isinstance(item, Mapping):
+            continue
+        lines.append(
+            "- llmConversionGuidance: "
+            f"{item.get('code', 'REVIEW_REQUIRED')} "
+            f"status={item.get('status', 'REVIEW_REQUIRED')} "
+            f"evidenceRefs={_refs_text(_evidence_refs(item))} "
+            f"summary={item.get('summary', '')}"
+        )
+    for item in insights:
+        if not isinstance(item, Mapping):
+            continue
+        lines.append(
+            "- llmMigrationGuideInsight: "
+            f"{item.get('section', 'REVIEW_REQUIRED')} "
+            f"status={item.get('status', 'REVIEW_REQUIRED')} "
+            f"evidenceRefs={_refs_text(_evidence_refs(item))} "
+            f"summary={item.get('summary', '')}"
+        )
 
 
 def _append_appendix_mappings(lines: list[str], guide: Mapping[str, Any]) -> None:

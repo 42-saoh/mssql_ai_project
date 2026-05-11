@@ -1,6 +1,7 @@
 # services/mssql-mcp
 
 MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, fixture-backed execution, env-gated live metadata execution 을 제공한다. 활성 catalog tool 은 fixture 경로와 live repository handler 를 모두 가진다.
+P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 dependency evidence 강화를 위한 planned inactive catalog 계약이며, 아직 handler/API/Web wiring 은 없다.
 
 ## 원칙
 
@@ -78,6 +79,27 @@ Direct definition tools (`get_procedure_definition`, `get_view_definition`,
 `get_function_definition`) may return definition text for downstream analysis and
 also return the same standardized hash/length/pattern/access/caveat fields.
 
+`get_procedure_dependencies` exposes structured dependency resolution evidence
+and is contractually extended for P27 with optional `resolutionConfidence`,
+`resolutionEvidenceKind`, `unresolvedReason`, and `resolutionChain` fields.
+Confirmed dependencies can be treated as deterministic facts only when catalog
+evidence is unique and high confidence. Ambiguous names, dynamic SQL markers,
+unresolved synonym targets, cross-server references without catalog confirmation,
+and caller-dependent references remain `REVIEW_REQUIRED`.
+
+P27 also declares planned inactive tools:
+
+- `get_dependency_closure`: bounded procedure/view/function dependency graph,
+  default `maxDepth=2`, hard max `3`, catalog evidence only.
+- `resolve_dependency_reference`: structured resolver for unresolved,
+  caller-dependent, cross-DB, or synonym references. It returns candidates and
+  selects a target only when catalog evidence is unique.
+
+These planned tools remain read-only, structured-input-only, and inactive until a
+future implementation slice adds handlers and fixtures. They must not accept
+free-form SQL, return row data, execute procedures, perform DDL/DML, expose raw
+definition text, or fall back from PPM to PLF.
+
 `search_metadata_objects` is the query-aware metadata search capability for API
 and UI consumers. It searches procedure/table/view/function identities through
 the same read-only MCP boundary and returns only object identity, source
@@ -98,9 +120,10 @@ can use the standardized timeout/attempt details.
 
 ## 다음 구현 우선순위
 
-1. 실제 MCP transport 연결
-2. fixture set 확장과 optional integration smoke 추가
-3. PPM dependency caveat 감소를 위한 더 강한 metadata evidence 전략 검토
+1. P27 planned dependency evidence tools 를 작은 handler slice 로 구현
+2. 실제 MCP transport 연결
+3. fixture set 확장과 optional integration smoke 추가
+4. PPM dependency caveat 감소를 위한 더 강한 metadata evidence 전략 검증
 
 ## 외부 DB 연결 주의
 

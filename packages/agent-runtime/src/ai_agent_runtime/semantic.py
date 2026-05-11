@@ -27,12 +27,21 @@ TRACE_EVIDENCE_REFS = frozenset(
         "static.analysis",
     }
 )
-OUTPUT_FIELDS = ("businessRules", "modernizationPoints", "riskFlags", "reviewMarkers")
+OUTPUT_FIELDS = (
+    "businessRules",
+    "modernizationPoints",
+    "riskFlags",
+    "reviewMarkers",
+    "conversionGuidance",
+    "migrationGuideInsights",
+)
 KEY_FIELDS = {
     "businessRules": "category",
     "modernizationPoints": "code",
     "riskFlags": "code",
     "reviewMarkers": "code",
+    "conversionGuidance": "code",
+    "migrationGuideInsights": "section",
 }
 
 
@@ -203,7 +212,9 @@ def _summary(output: LlmSemanticAnalysisOutput) -> str:
         f"{len(output.business_rules)} business rules, "
         f"{len(output.modernization_points)} modernization points, "
         f"{len(output.risk_flags)} risk flags, "
-        f"{len(output.review_markers)} review markers"
+        f"{len(output.review_markers)} review markers, "
+        f"{len(output.conversion_guidance)} conversion guidance items, "
+        f"{len(output.migration_guide_insights)} migration guide insights"
     )
 
 
@@ -212,10 +223,13 @@ def _stages_for_task(
     static_analysis: Mapping[str, Any] | None,
     required_review_markers: Sequence[Mapping[str, Any]],
 ) -> tuple[str, ...]:
-    complexity = _complexity(static_analysis, required_review_markers)
-    if complexity == "simple":
-        return ("semantic_claims",)
-    return ("semantic_claims", "review_markers")
+    return (
+        "deterministic_evidence_digest",
+        "business_rule_extraction",
+        "conversion_readiness",
+        "migration_guide_insights",
+        "evidence_critic",
+    )
 
 
 def _complexity(
@@ -372,6 +386,8 @@ def _merge_outputs(outputs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "modernizationPoints": [],
         "riskFlags": [],
         "reviewMarkers": [],
+        "conversionGuidance": [],
+        "migrationGuideInsights": [],
         "assumptions": [],
     }
     for output in outputs:

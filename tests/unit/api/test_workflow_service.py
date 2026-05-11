@@ -15,6 +15,7 @@ from tests.unit.api.fake_repository import MemoryWorkflowRepository
 def fixture_metadata_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
 
 
 def _request(outputs: list[str] | None = None) -> SPAnalysisRequest:
@@ -99,6 +100,24 @@ def _passed_sp_analysis_content() -> str:
     )
 
 
+def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_OrderRequest_Select",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+        }
+    )
+
+    assert request.options.use_llm_analysis is True
+    assert request.options.allow_sp_definition_to_model is True
+    assert request.options.llm_profile_id == "openai_sp_semantic_analysis"
+
+
 def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
@@ -170,6 +189,36 @@ def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
         for ref in artifact.evidence_refs
     )
     assert any(event.action == "AGENT_RUN_RECORDED" for event in repository.audit_events)
+
+
+def test_remote_high_quality_requires_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "1")
+    monkeypatch.setenv("LLM_ALLOW_SP_TEXT", "1")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    request_record, job = service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    assert request_record.status == JobStatus.FAILED
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == "OPENAI_API_KEY_MISSING"
+    assert "OPENAI_API_KEY" in str(job.error_message)
+
+
+def test_remote_high_quality_requires_sp_text_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only-key")
+    monkeypatch.delenv("LLM_ALLOW_SP_TEXT", raising=False)
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    request_record, job = service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    assert request_record.status == JobStatus.FAILED
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == "LLM_SP_TEXT_NOT_ALLOWED"
+    assert "LLM_ALLOW_SP_TEXT=1" in str(job.error_message)
 
 
 def test_submit_replays_same_idempotency_key_for_same_payload() -> None:

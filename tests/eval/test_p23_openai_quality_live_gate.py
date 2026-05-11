@@ -32,7 +32,8 @@ def test_p23_openai_quality_live_gate() -> None:
 
     fixture = _fixture()
     gateway = build_model_gateway_from_env()
-    expected_model = model_profile_from_env("openai_fast_test").model
+    profile_id = "openai_sp_semantic_analysis"
+    expected_model = model_profile_from_env(profile_id).model
     failures: list[str] = []
     scenarios = list(fixture["scenarios"])
     runs = build_semantic_analysis_runs(
@@ -49,7 +50,7 @@ def test_p23_openai_quality_live_gate() -> None:
             for scenario in scenarios
         ],
         model_gateway=gateway,
-        profile_id="openai_fast_test",
+        profile_id=profile_id,
     )
     for scenario, run in zip(scenarios, runs, strict=True):
         report = evaluate_p23_semantic_quality(
@@ -84,6 +85,7 @@ def _sanitized_failure(scenario: dict[str, Any], report: dict[str, Any]) -> str:
     return (
         f"{scenario['fixture_id']} status={report['status']} "
         f"semanticRecall={scores['semanticRecall']} "
+        f"guideConversionRecall={scores['guideConversionRecall']} "
         f"evidenceDiscipline={scores['evidenceDiscipline']} "
         f"unreviewedOverclaims={scores['unreviewedOverclaims']} "
         f"storageSafetyFindings={scores['storageSafetyFindings']}"

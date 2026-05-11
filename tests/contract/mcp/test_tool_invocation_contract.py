@@ -10,6 +10,11 @@ from mssql_mcp_app.main import app
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
+PLANNED_TOOL_NAMES = {
+    "get_dependency_closure",
+    "resolve_dependency_reference",
+}
+
 TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
     "check_database_exists": {
         "dbProfileId": "master",
@@ -125,8 +130,123 @@ def test_catalog_contract_declares_all_active_tool_invocations() -> None:
     )
     assert payload["service"] == "mssqlMetadata"
     assert payload["readOnly"] is True
-    assert {tool["name"] for tool in payload["tools"]} == set(TOOL_INVOCATIONS)
-    assert all(tool["active"] is True and tool["readOnly"] is True for tool in payload["tools"])
+    active_tool_names = {
+        tool["name"] for tool in payload["tools"] if tool["active"] is True
+    }
+    planned_tool_names = {
+        tool["name"] for tool in payload["tools"] if tool["active"] is False
+    }
+    assert active_tool_names == set(TOOL_INVOCATIONS)
+    assert PLANNED_TOOL_NAMES <= planned_tool_names
+    assert all(tool["readOnly"] is True for tool in payload["tools"])
+
+
+def test_p27_dependency_evidence_design_tools_are_contract_only() -> None:
+    payload = yaml.safe_load(
+        (REPO_ROOT / "spec" / "mcp" / "mssql_metadata_tool_catalog.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    tools = {tool["name"]: tool for tool in payload["tools"]}
+    for tool_name in PLANNED_TOOL_NAMES:
+        tool = tools[tool_name]
+        assert tool["active"] is False
+        assert tool["readOnly"] is True
+        assert tool["designStatus"] == "planned_p27_design_only"
+        assert tool["input"]["type"] == "object"
+        assert "query" not in tool["input"]["properties"]
+        assert "sql" not in tool["input"]["properties"]
+        assert "snapshotId" in payload["response"]["success"]["required"]
+        assert "collectedAt" in payload["response"]["success"]["required"]
+        assert "evidenceRefs" in payload["response"]["success"]["required"]
+
+    closure_tool = tools["get_dependency_closure"]
+    assert closure_tool["input"]["properties"]["maxDepth"] == {
+        "type": "integer",
+        "default": 2,
+        "maximum": 3,
+    }
+    assert closure_tool["input"]["properties"]["includeReviewRequired"] == {
+        "type": "boolean",
+        "default": True,
+    }
+    edge_item = closure_tool["output"]["properties"]["edges"]["items"]
+    assert {
+        "dependencyType",
+        "resolutionStatus",
+        "resolutionStrategy",
+        "evidenceRefs",
+    } <= set(edge_item["required"])
+    assert {
+        "resolutionConfidence",
+        "resolutionEvidenceKind",
+        "unresolvedReason",
+        "resolutionChain",
+    } <= set(edge_item["properties"])
+
+    resolver_tool = tools["resolve_dependency_reference"]
+    assert resolver_tool["input"]["required"] == [
+        "dbProfileId",
+        "sourceObject",
+        "referencedName",
+    ]
+    assert resolver_tool["output"]["required"] == [
+        "candidates",
+        "selectedResolution",
+        "resolutionStatus",
+        "resolutionStrategy",
+        "evidenceRefs",
+        "caveats",
+    ]
+    assert {
+        "resolutionConfidence",
+        "resolutionEvidenceKind",
+        "unresolvedReason",
+        "resolutionChain",
+    } <= set(resolver_tool["output"]["properties"])
+
+    dependency_item = payload["response"]["dependencyItem"]
+    assert {
+        "resolutionConfidence",
+        "resolutionEvidenceKind",
+        "unresolvedReason",
+        "resolutionChain",
+    } <= set(dependency_item["properties"])
+
+
+def test_p27_dependency_evidence_eval_contract_matches_mcp_catalog() -> None:
+    contract = yaml.safe_load(
+        (
+            REPO_ROOT
+            / "spec"
+            / "eval"
+            / "p27_dependency_evidence_tooling_contract.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    assert contract["contract_id"] == "p27_dependency_evidence_tooling_design@0.1.0"
+    assert contract["production_ready"] is False
+    assert contract["scope"]["excluded"] == [
+        "MCP handler implementation",
+        "API or Web wiring",
+        "persisted artifact type changes",
+        "fixture suite expansion beyond contract checks",
+        "live metadata gate requirements",
+    ]
+    assert contract["invariants"]["read_only"] is True
+    assert contract["invariants"]["structured_input_only"] is True
+    assert contract["invariants"]["ppm_to_plf_fallback_allowed"] is False
+    assert contract["invariants"]["row_data_allowed"] is False
+    assert contract["invariants"]["procedure_execution_allowed"] is False
+    assert contract["invariants"]["business_db_ddl_dml_allowed"] is False
+    assert contract["planned_tools"]["get_dependency_closure"]["active"] is False
+    assert contract["planned_tools"]["resolve_dependency_reference"]["active"] is False
+    assert set(contract["planned_tools"]) == PLANNED_TOOL_NAMES
+    assert contract["dependency_resolution_contract"]["added_fields"] == [
+        "resolutionConfidence",
+        "resolutionEvidenceKind",
+        "unresolvedReason",
+        "resolutionChain",
+    ]
 
 
 @pytest.mark.parametrize("tool_name, arguments", TOOL_INVOCATIONS.items())

@@ -71,9 +71,9 @@ PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않는다.
 
 ## P23 LLM SP analysis quality eval
 
-P23 eval 은 기본 실행에서 OpenAI 를 호출하지 않는다. `tests/eval/test_p23_llm_sp_analysis_quality.py` 는 `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` 의 simple/medium/complex synthetic scenarios 를 `FakeModelGateway`, `openai_fast_test`, 기본 `gpt-5-nano` 로 반복 실행하고 quality report 의 `status`, `productionReady`, `scores`, `thresholds`, `evidenceRefs`, `validatorResults`, sanitized storage findings 를 검증한다. Optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 `gpt-5.4-mini` 같은 모델을 지정할 수 있다.
+P23/P26 eval 은 기본 실행에서 OpenAI 를 호출하지 않는다. `tests/eval/test_p23_llm_sp_analysis_quality.py` 는 `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` 의 simple/medium/complex synthetic scenarios 를 `FakeModelGateway` 로 반복 실행하고 semantic, guide, conversion quality report 의 `status`, `productionReady`, `scores`, `thresholds`, `evidenceRefs`, `validatorResults`, sanitized storage findings 를 검증한다. Optional live confidence 는 high-quality semantic profile 을 사용하며 `OPENAI_MODEL_ANALYSIS` 로 모델을 지정할 수 있다. `openai_fast_test` / `OPENAI_MODEL_FAST_TEST` 는 수동 fast/test 선택지로만 남는다.
 
-통과 기준은 `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 이다. unsupported dependency/table/function claim 은 `REVIEW_REQUIRED` 로 남아야 하고, `LLM_INFERENCE` evidence 는 deterministic fact 를 대체하지 않는다. raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 test output/report/storage payload 에 저장하지 않는다.
+통과 기준은 `semantic_recall >= 0.75`, `guide_conversion_recall >= 0.8`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 이다. unsupported dependency/table/function claim 은 `REVIEW_REQUIRED` 로 남아야 하고, `LLM_INFERENCE` evidence 는 deterministic fact 를 대체하지 않는다. raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 test output/report/storage payload 에 저장하지 않는다.
 
 ```bash
 make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py tests/eval"
@@ -96,3 +96,13 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 ```
 
 P24 gate 가 통과해도 `production_ready: false` 를 유지한다. Optional live confidence evidence 가 없으면 보류로 해석할 수 있지만 기본 필수 테스트로 승격하지 않으며, P25+ Java/MyBatis source expansion 은 별도 작업으로 둔다.
+
+## P27 dependency evidence tooling design
+
+P27 은 첫 단계에서 handler 구현이 아니라 MCP dependency evidence 계약을 고정한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 inactive/read-only/structured-input planned tools 로만 catalog 에 남는다.
+
+```bash
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+```
+
+이 gate 는 raw SQL input, raw SP definition 저장, raw prompt/provider response 저장, row data, procedure execution, business DB DDL/DML, PPM-to-PLF fallback 을 허용하지 않는다. Ambiguous/dynamic/unresolved synonym/cross-server dependency 는 catalog confirmation 전까지 `REVIEW_REQUIRED` 로 유지한다.

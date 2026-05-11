@@ -17,6 +17,8 @@
 - DB 접근은 메타데이터 조회 전용이다.
 - 앱/생성기/분석 로직은 MSSQL 에 직접 접근하지 않는다.
 - 메타데이터 접근은 `services/mssql-mcp` 경계로 집중한다.
+- Dependency closure/reference resolution 은 structured MCP metadata evidence 만 사용하며 자유 SQL,
+  raw definition 저장, row data, procedure execution, business DB DDL/DML 을 허용하지 않는다.
 - 실제 row data 를 요구하는 기능은 범위 밖으로 간주한다.
 
 ## 승인 정책
@@ -48,6 +50,9 @@
 - OpenAI API 호출은 `LLM_ENABLE_REMOTE=1` 이 설정된 경우에만 허용한다.
 - Stored Procedure definition 원문을 모델 입력으로 보내려면 request option
   `allowSpDefinitionToModel=true` 와 환경변수 `LLM_ALLOW_SP_TEXT=1` 이 모두 필요하다.
+- P26 기본 API/Web 옵션은 high-quality semantic analysis 를 선택하지만, live OpenAI 실행은
+  `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 준비된 경우에만 허용한다.
+  기본 fixture/test 실행은 fake gateway 를 사용해 외부 OpenAI 를 호출하지 않는다.
 - SP definition 원문은 transient request input 으로만 허용하며 플랫폼 DB, artifact,
   audit log, test snapshot, API response 에 저장하지 않는다.
 - raw prompt text, raw OpenAI response text, token/secret, provider credential 은 저장하거나
@@ -72,6 +77,7 @@
 - P25 기본 product flow 는 validation 이후 `VALIDATION_COMPLETE` 에서 멈추며 review UI 를 노출하지 않는다. Approval API/server code 는 deferred capability 로 남기되 기본 workflow 완료 조건이나 production readiness 근거로 사용하지 않는다.
 - SP migration guide quality gate 는 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 초안 품질 평가로만 해석한다. 통과 결과도 production-ready, 자동 전환 완료, 자동 적용 승인으로 표현하지 않는다.
 - Unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
+- Ambiguous dependency, unresolved synonym target, dynamic SQL marker, cross-server target without catalog confirmation, caller-dependent reference 는 deterministic fact 로 승격하지 않고 `REVIEW_REQUIRED` 로 유지한다.
 
 ## 코드 변경 정책
 

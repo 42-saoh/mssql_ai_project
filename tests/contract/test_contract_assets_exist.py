@@ -7,6 +7,7 @@ def test_core_contract_assets_exist() -> None:
     assert (root / "db" / "schema" / "ai_agent_platform_schema_v2_dbo_prefix.sql").exists()
     assert (root / "spec" / "mcp" / "mssql_metadata_tool_catalog.yaml").exists()
     assert (root / "spec" / "validation" / "validation_rules.yaml").exists()
+    assert (root / "spec" / "eval" / "p27_dependency_evidence_tooling_contract.yaml").exists()
     assert (root / "docker" / "test" / "docker-compose.yml").exists()
     assert (root / "docker" / "test" / "Dockerfile.python").exists()
     assert (root / "db" / "schema" / "README.md").exists()

@@ -99,13 +99,13 @@ def test_p18b_web_http_and_auth_boundaries_are_explicit() -> None:
         "/artifacts",
         "/api/v1/artifacts/",
         "/validation",
-        "/approval-decisions",
         "/api/v1/metadata/db-profiles",
         "/api/v1/metadata/search",
         "/api/v1/registry/versions",
     )
     for fragment in required_fragments:
         assert fragment in http_client
+    assert "/approval-decisions" not in http_client
 
     smoke_script = WEB_HTTP_SMOKE.read_text(encoding="utf-8")
     package_json = WEB_PACKAGE.read_text(encoding="utf-8")

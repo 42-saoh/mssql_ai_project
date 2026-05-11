@@ -7,7 +7,7 @@
 
 - MSSQL Stored Procedure 및 관련 오브젝트의 분석·문서화 자동화
 - Java/MyBatis 전환 코드 초안 생성
-- 검증·승인·재현 가능성을 가진 중앙 통합형 운영
+- 검증·caveat·재현 가능성을 가진 중앙 통합형 운영
 
 ## 핵심 설계 원칙
 
@@ -23,8 +23,9 @@
 4. **Canonical 중심 구조**  
    문서, 코드, DDL 초안은 모두 `CanonicalAnalysisModel` 같은 공통 계약을 기준으로 생성한다.
 
-5. **승인 게이트 내장**  
-   Draft → Validate → Review → Approve → Publish 를 벗어난 배포형 흐름을 금지한다.
+5. **검증 게이트 내장**
+   P25 기본 제품 플로우는 Draft → Validate → `VALIDATION_COMPLETE` 에서 멈추며,
+   review/approval 은 deferred capability 로만 남긴다. Publish/deploy/apply 흐름은 여전히 금지한다.
 
 ## 시스템 구성
 
@@ -84,7 +85,7 @@ flowchart LR
 - OpenAI Responses API 는 `ModelGateway` adapter 뒤에서만 호출
 - SP semantic analysis 는 `SemanticAnalysisTask` 단위로 실행하며 여러 SP task 는 `LLM_SP_CONCURRENCY`
   기본값 2 안에서 fan-out 할 수 있다. 단일 SP API shape 는 유지한다.
-- 각 SP task 는 complexity 에 따라 semantic claims, review markers, optional repair stage 로 나뉜다.
+- 각 SP task 는 high-quality 기본값에서 deterministic evidence digest, business rule extraction, conversion readiness, migration guide insights, evidence critic, optional repair stage 로 나뉜다.
 - structured output schema 는 deterministic fact id 를 `evidenceRefs` enum 으로 제한하고, runtime 은
   prompt/input/output hash 같은 trace ref 를 claim evidence 로 저장하지 않도록 repair 한다.
 - raw SP definition 은 명시 옵션이 켜진 실행 중 입력으로만 사용하고 플랫폼 DB,
@@ -121,6 +122,8 @@ flowchart LR
 - 읽기 전용 메타데이터 도구 제공
 - 자유 SQL 실행 금지
 - snapshot/evidence 반환
+- P27 설계 기준으로 dependency closure/reference resolver 는 planned inactive tool
+  계약만 존재하며, handler/API/Web wiring 은 다음 slice 로 분리한다
 
 ## 핵심 데이터 계약
 
@@ -225,12 +228,12 @@ packages/templates
 
 - `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/latest-validation/validation happy path 를 제공한다. P25 기본 workflow 는 validation 이후 `VALIDATION_COMPLETE` 에서 종료하며, approval decision API 는 추후 재활성화 가능한 deferred capability 로 유지한다.
 - `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다. P25 기준 review decision 화면과 CTA 는 기본 UI 에서 제거되었다.
-- `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다.
+- `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다. P27 기준 `get_procedure_dependencies` 계약은 resolution confidence/evidence kind/unresolved reason/chain 을 optional evidence 로 확장하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 inactive design-only tool 로 선언된다.
 - `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
-- `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. 기본 semantic analysis profile 은 `gpt-5.5`, fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. P23 이후 semantic runtime 은 SP별 staged calls, dynamic evidence schema, deterministic evidence-ref repair 를 포함한다. 기본 테스트는 remote API 를 호출하지 않는다.
-- P23 LLM-assisted SP analysis quality eval 은 simple/medium/complex synthetic fixtures 를 `FakeModelGateway`, `openai_fast_test`, 기본 `gpt-5-nano` 로 fixture-first scoring 한다. Optional live OpenAI quality gate 는 confidence signal 이며 production readiness 기준이 아니다. Live 품질 gate 실패는 P24 guide generation failure 가 아니라 P23 semantic-analysis confidence failure 로 해석한다.
+- `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. P26 기준 API/Web 기본값은 high-quality hybrid 분석이며 semantic analysis profile `gpt-5.5`, transient SP definition input, guide/conversion insight schema 를 사용한다. fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. 기본 테스트는 remote API 를 호출하지 않는다.
+- P23/P26 LLM-assisted SP analysis quality eval 은 simple/medium/complex synthetic fixtures 를 `FakeModelGateway` 로 fixture-first scoring 한다. API/Web live 기본 profile 은 `openai_sp_semantic_analysis` / `gpt-5.5` 이고, `openai_fast_test` 는 기본 `gpt-5-nano` 에서 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. Optional live OpenAI quality gate 는 confidence signal 이며 production readiness 기준이 아니다. Live 품질 gate 실패는 P24 guide generation failure 가 아니라 P23/P26 semantic-analysis confidence failure 로 해석한다.
 - P24 SP migration guide quality eval 은 sanitized simple/medium/complex fixtures 를 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` draft artifact type 으로 렌더링하고 `evaluate_p24_migration_guide_quality` 로 점수화한다. 새 persisted artifact type, API/Web/DB schema 변경, live DB access 는 없으며 Java/MyBatis 는 `draft_only_readiness_notes` 경계에 남긴다.
-- Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후에만 LLM semantic analysis 를 실행한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
+- Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후 LLM semantic analysis 를 기본 실행한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
 - P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되어 있으나 P25 기본 product path 는 approval UI 를 노출하지 않는다. Live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
 - P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.
@@ -254,6 +257,7 @@ packages/templates
 - Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- P27 dependency evidence tooling contract: `spec/eval/p27_dependency_evidence_tooling_contract.yaml`
 - Validation rules: `spec/validation/validation_rules.yaml`
 - Policy assets: `spec/policy/`
 

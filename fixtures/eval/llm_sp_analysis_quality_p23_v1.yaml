@@ -12,24 +12,35 @@ model_profiles:
   semantic_analysis:
     profile_id: openai_sp_semantic_analysis
     default_model: gpt-5.5
+    override_env: OPENAI_MODEL_ANALYSIS
   fast_test:
     profile_id: openai_fast_test
     default_model: gpt-5-nano
     override_env: OPENAI_MODEL_FAST_TEST
 prompt_contract:
-  prompt_ref: prompt:sp_semantic_analysis@0.2.0
-  schema_ref: schema:llm_semantic_analysis@0.2.0
+  prompt_ref: prompt:sp_semantic_analysis@0.3.0
+  schema_ref: schema:llm_semantic_analysis@0.3.0
   staged_runtime:
     sp_fan_out: true
     default_sp_concurrency_env: LLM_SP_CONCURRENCY
     default_sp_concurrency: 2
     dynamic_evidence_schema: true
     deterministic_review_marker_injection: true
+    high_quality_default: true
+    stages:
+      - deterministic_evidence_digest
+      - business_rule_extraction
+      - conversion_readiness
+      - migration_guide_insights
+      - evidence_critic
+      - repair
   allowed_output_fields:
     - business_rules
     - modernization_points
     - risk_flags
     - review_markers
+    - conversion_guidance
+    - migration_guide_insights
     - assumptions
   required_evidence_type: LLM_INFERENCE
   unsupported_fact_status: REVIEW_REQUIRED
@@ -161,6 +172,20 @@ scenarios:
           evidence_refs:
             - fact_p23_simple_customer_read
             - fact_p23_simple_result_shape
+      conversion_guidance:
+        - code: READ_ONLY_QUERY_MAPPER_READY
+          summary: Draft Java/MyBatis conversion can use a select mapper with CustomerId and IncludeInactive parameters.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_simple_parameters
+            - fact_p23_simple_result_shape
+      migration_guide_insights:
+        - section: migration_strategy
+          summary: The guide should emphasize preserving the inactive-row visibility branch in the service method contract.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_simple_parameters
+            - fact_p23_simple_customer_read
       risk_flags: []
       review_markers: []
       assumptions: []
@@ -203,6 +228,8 @@ scenarios:
       modernization_points_min: 1
       risk_flags_min: 0
       review_markers_min: 0
+      conversion_guidance_min: 1
+      migration_guide_insights_min: 1
       assumptions_min: 0
     required_checks:
       - schema_valid_structured_output
@@ -330,6 +357,29 @@ scenarios:
             - fact_p23_medium_transaction
             - fact_p23_medium_audit_write
             - fact_p23_medium_error_handling
+      conversion_guidance:
+        - code: TRANSACTIONAL_SERVICE_BOUNDARY_REQUIRED
+          summary: Java/MyBatis draft code must keep account update, review queue insert, and audit write in one reviewed transaction boundary.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_medium_transaction
+            - fact_p23_medium_approve_branch
+            - fact_p23_medium_hold_branch
+            - fact_p23_medium_audit_write
+      migration_guide_insights:
+        - section: dml_impact_matrix
+          summary: The migration guide should split APPROVE update, HOLD queue insert, and audit insert into separate DML rows.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_medium_approve_branch
+            - fact_p23_medium_hold_branch
+            - fact_p23_medium_audit_write
+        - section: call_flow
+          summary: The guide should show the TRY/CATCH rollback path as part of the branch-level call flow.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_medium_transaction
+            - fact_p23_medium_error_handling
       risk_flags:
         - code: TRANSACTIONAL_SIDE_EFFECTS_REQUIRE_REVIEW
           severity: WARNING
@@ -389,6 +439,8 @@ scenarios:
       modernization_points_min: 1
       risk_flags_min: 1
       review_markers_min: 1
+      conversion_guidance_min: 1
+      migration_guide_insights_min: 2
       assumptions_min: 1
     required_checks:
       - transaction_or_error_handling_reviewed
@@ -501,6 +553,32 @@ scenarios:
           status: REVIEW_REQUIRED
           evidence_refs:
             - fact_p23_complex_reporting_audit
+      conversion_guidance:
+        - code: BLOCK_DIRECT_DYNAMIC_SQL_CONVERSION
+          summary: Java/MyBatis drafts must not convert the dynamic cross-database SELECT into a concrete mapper until PPM metadata confirms the target table and shape.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+            - fact_p23_complex_cross_db_dynamic
+            - fact_p23_complex_result_uncertain
+        - code: SEPARATE_OPTIONAL_REPORTING_AUDIT
+          summary: Treat the optional reporting audit insert as a separate reviewed write path from the tenant extract query.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_reporting_audit
+      migration_guide_insights:
+        - section: dependency_inventory
+          summary: The guide must list tenant Orders dependency as REVIEW_REQUIRED instead of confirmed because it comes from dynamic SQL.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+            - fact_p23_complex_cross_db_dynamic
+        - section: migration_strategy
+          summary: The guide should recommend a metadata-reviewed access pattern before any Java/MyBatis mapper draft is applied.
+          status: REVIEW_REQUIRED
+          evidence_refs:
+            - fact_p23_complex_dynamic_sql_unresolved
+            - fact_p23_complex_result_uncertain
       risk_flags:
         - code: DYNAMIC_SQL_RESULT_SHAPE_UNCERTAIN
           severity: ERROR
@@ -588,6 +666,8 @@ scenarios:
       modernization_points_min: 2
       risk_flags_min: 2
       review_markers_min: 2
+      conversion_guidance_min: 2
+      migration_guide_insights_min: 2
       assumptions_min: 1
     required_checks:
       - dynamic_sql_uncertainty_marked
@@ -596,6 +676,7 @@ scenarios:
       - no_raw_trace_storage
 quality_thresholds:
   semantic_recall_min: 0.75
+  guide_conversion_recall_min: 0.8
   evidence_discipline_min: 0.9
   unreviewed_overclaims_max: 0
   storage_safety_findings_max: 0

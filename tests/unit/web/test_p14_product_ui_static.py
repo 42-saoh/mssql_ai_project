@@ -77,6 +77,10 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "api.createSPAnalysisRequest" in request_page
     assert "useLlmAnalysis" in request_page
     assert "allowSpDefinitionToModel" in request_page
+    assert 'name="useLlmAnalysis" defaultChecked' in source
+    assert 'name="allowSpDefinitionToModel" defaultChecked' in source
+    assert 'defaultValue="openai_sp_semantic_analysis"' in source
+    assert "semantic analysis - gpt-5.5" in source
     assert "openai_fast_test" in source
     assert "api.listJobAgentRuns" in source
     assert "redirect(`/jobs/${response.jobId}`)" in request_page

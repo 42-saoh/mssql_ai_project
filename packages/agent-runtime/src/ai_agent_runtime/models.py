@@ -8,8 +8,8 @@ from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PROMPT_VERSION = "prompt:sp_semantic_analysis@0.2.0"
-OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.2.0"
+PROMPT_VERSION = "prompt:sp_semantic_analysis@0.3.0"
+OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.3.0"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
 FAST_TEST_MODEL_PROFILE_ID = "openai_fast_test"
 FAST_TEST_DEFAULT_MODEL = "gpt-5-nano"
@@ -72,6 +72,20 @@ class LlmReviewMarker(StrictModel):
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
 
 
+class LlmConversionGuidance(StrictModel):
+    code: str
+    summary: str
+    status: LlmEvidenceStatus = LlmEvidenceStatus.REVIEW_REQUIRED
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class LlmMigrationGuideInsight(StrictModel):
+    section: str
+    summary: str
+    status: LlmEvidenceStatus = LlmEvidenceStatus.REVIEW_REQUIRED
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
 class LlmSemanticAnalysisOutput(StrictModel):
     business_rules: list[LlmBusinessRule] = Field(default_factory=list, alias="businessRules")
     modernization_points: list[LlmModernizationPoint] = Field(
@@ -80,6 +94,14 @@ class LlmSemanticAnalysisOutput(StrictModel):
     )
     risk_flags: list[LlmRiskFlag] = Field(default_factory=list, alias="riskFlags")
     review_markers: list[LlmReviewMarker] = Field(default_factory=list, alias="reviewMarkers")
+    conversion_guidance: list[LlmConversionGuidance] = Field(
+        default_factory=list,
+        alias="conversionGuidance",
+    )
+    migration_guide_insights: list[LlmMigrationGuideInsight] = Field(
+        default_factory=list,
+        alias="migrationGuideInsights",
+    )
     assumptions: list[str] = Field(default_factory=list)
 
     def to_storage_dict(self) -> dict[str, Any]:
@@ -256,6 +278,34 @@ def semantic_output_schema(
                     "additionalProperties": False,
                 },
             },
+            "conversionGuidance": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "status": evidence_status,
+                        "evidenceRefs": evidence_ref_array,
+                    },
+                    "required": ["code", "summary", "status", "evidenceRefs"],
+                    "additionalProperties": False,
+                },
+            },
+            "migrationGuideInsights": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "section": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "status": evidence_status,
+                        "evidenceRefs": evidence_ref_array,
+                    },
+                    "required": ["section", "summary", "status", "evidenceRefs"],
+                    "additionalProperties": False,
+                },
+            },
             "assumptions": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -266,6 +316,8 @@ def semantic_output_schema(
             "modernizationPoints",
             "riskFlags",
             "reviewMarkers",
+            "conversionGuidance",
+            "migrationGuideInsights",
             "assumptions",
         ],
         "additionalProperties": False,

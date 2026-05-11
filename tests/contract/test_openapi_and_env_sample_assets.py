@@ -24,8 +24,9 @@ def _enum_values(enum_type: type) -> list[str]:
 
 def _ddl_check_values(ddl_text: str, constraint_name: str) -> list[str]:
     match = re.search(
-        rf"CONSTRAINT {constraint_name} CHECK \([^\n]+ IN \(([^)]+)\)\)",
+        rf"CONSTRAINT {constraint_name} CHECK\s*\([^)]*?IN\s*\(([^)]+)\)",
         ddl_text,
+        re.S,
     )
     assert match is not None, constraint_name
     return re.findall(r"'([^']+)'", match.group(1))
@@ -127,6 +128,9 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
     ddl_text = (ROOT / "db" / "schema" / "ai_agent_platform_schema_v2_dbo_prefix.sql").read_text(
         encoding="utf-8"
     )
+    validation_complete_ddl = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v4_validation_complete_status.sql"
+    ).read_text(encoding="utf-8")
 
     assert schemas["JobStatus"]["enum"] == _enum_values(JobStatus)
     assert schemas["WorkflowStepType"]["enum"] == _enum_values(WorkflowStepType)
@@ -135,7 +139,7 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
     assert schemas["RequestedOutputType"]["enum"] == _enum_values(RequestedOutputType)
 
     assert _enum_values(JobStatus) == _ddl_check_values(
-        ddl_text, "CHK_CORE_JOBS_CURRENT_STATUS_CD"
+        validation_complete_ddl, "CHK_CORE_JOBS_CURRENT_STATUS_CD"
     )
     assert _enum_values(ArtifactType) == _ddl_check_values(ddl_text, "CHK_ARTIFACTS_TYPE_CD")
     assert _enum_values(ArtifactStatus) == _ddl_check_values(
