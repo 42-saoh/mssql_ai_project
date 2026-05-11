@@ -171,7 +171,7 @@ PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 
 기본 실행은 `FakeModelGateway` 를 사용하므로 외부 OpenAI API 를 호출하지 않는다. Remote 실행은
 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 준비된 경우에만 가능하다.
-semantic analysis 기본 모델은 `gpt-5.5`, fast/test profile 은 `gpt-5-nano` 다.
+semantic analysis 기본 모델은 `gpt-5.5`, fast/test profile 기본 모델은 `gpt-5-nano` 다. Optional live confidence testing 에서는 `OPENAI_MODEL_FAST_TEST` 로 `openai_fast_test` 모델을 바꿀 수 있다.
 
 `GET /api/v1/jobs/{jobId}/agent-runs` 는 sanitized trace summary 만 반환한다. 응답에는
 schema-valid structured output, provider/model/profile, prompt/schema version, input/prompt/output

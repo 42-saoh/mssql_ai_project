@@ -13,6 +13,6 @@ OpenAI LLM agent runtime slice for P22.
 ## Registry refs
 
 - `model:openai_sp_semantic_analysis@0.1.0`
-- `model:openai_fast_test@gpt-5-nano@0.1.0`
+- `model:openai_fast_test@gpt-5-nano@0.1.0` by default; `OPENAI_MODEL_FAST_TEST` changes the runtime registry ref for optional live confidence tests.
 - `prompt:sp_semantic_analysis@0.1.0`
 - `schema:llm_semantic_analysis@0.1.0`

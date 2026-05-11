@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from ai_agent_domain import ArtifactType
+from ai_agent_runtime.gateway import model_profile_from_env
 from api_app.dependencies import get_repository, get_workflow_service, reset_application_state
 from api_app.main import app
 from api_app.repositories import ValidationReportRecord
@@ -313,7 +314,7 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     assert payload["jobId"] == job_id
     assert len(payload["agentRuns"]) == 1
     run = payload["agentRuns"][0]
-    assert run["modelInvocation"]["model"] == "gpt-5-nano"
+    assert run["modelInvocation"]["model"] == model_profile_from_env("openai_fast_test").model
     assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.1.0"
     assert "structuredOutput" in run
     assert "CREATE PROCEDURE" not in str(payload)

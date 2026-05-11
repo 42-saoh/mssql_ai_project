@@ -68,12 +68,13 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
     assert "sk-" not in env_text
 
 
-def test_p22_registry_route_exposes_model_prompt_and_schema_bindings() -> None:
-    registry = (ROOT / "apps" / "api" / "api_app" / "routes" / "registry.py").read_text(
-        encoding="utf-8"
-    )
+def test_p22_registry_route_exposes_model_prompt_and_schema_bindings(monkeypatch) -> None:
+    from api_app.routes.registry import active_registry_bindings
 
-    assert "model:openai_sp_semantic_analysis@0.1.0" in registry
-    assert "model:openai_fast_test@gpt-5-nano@0.1.0" in registry
-    assert "prompt:sp_semantic_analysis@0.1.0" in registry
-    assert "schema:llm_semantic_analysis@0.1.0" in registry
+    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "gpt-5.4-mini")
+    versions = {binding.version for binding in active_registry_bindings()}
+
+    assert "model:openai_sp_semantic_analysis@0.1.0" in versions
+    assert "model:openai_fast_test@gpt-5.4-mini@0.1.0" in versions
+    assert "prompt:sp_semantic_analysis@0.1.0" in versions
+    assert "schema:llm_semantic_analysis@0.1.0" in versions

@@ -12,8 +12,13 @@ PROMPT_VERSION = "prompt:sp_semantic_analysis@0.1.0"
 OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.1.0"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
 FAST_TEST_MODEL_PROFILE_ID = "openai_fast_test"
+FAST_TEST_DEFAULT_MODEL = "gpt-5-nano"
 SEMANTIC_MODEL_REGISTRY_REF = "model:openai_sp_semantic_analysis@0.1.0"
-FAST_TEST_MODEL_REGISTRY_REF = "model:openai_fast_test@gpt-5-nano@0.1.0"
+FAST_TEST_MODEL_REGISTRY_REF = f"model:openai_fast_test@{FAST_TEST_DEFAULT_MODEL}@0.1.0"
+
+
+def fast_test_model_registry_ref(model: str) -> str:
+    return f"model:openai_fast_test@{model}@0.1.0"
 
 
 class AgentRunStatus(StrEnum):

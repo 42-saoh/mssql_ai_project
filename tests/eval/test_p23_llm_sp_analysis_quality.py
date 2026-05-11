@@ -167,7 +167,7 @@ def test_p23b_default_runtime_path_uses_fake_gateway_and_sanitized_storage(
 
 
 def test_p23c_fixture_first_quality_runner_scores_all_scenarios(monkeypatch: Any) -> None:
-    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "not-used-for-p23c")
+    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "gpt-5.4-mini")
     fixture = _fixture()
     gateway = _fixture_gateway(fixture)
 

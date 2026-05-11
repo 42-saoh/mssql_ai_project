@@ -30,6 +30,7 @@ runtime_profiles:
   fast_test:
     default_model: gpt-5-nano
     profile_id: openai_fast_test
+    override_env: OPENAI_MODEL_FAST_TEST
     remote_gate_required: false
 environment_gates:
   default_tests:
@@ -42,6 +43,8 @@ environment_gates:
       - LLM_ENABLE_REMOTE=1
       - LLM_ALLOW_SP_TEXT=1
       - OPENAI_API_KEY
+    optional_env:
+      - OPENAI_MODEL_FAST_TEST
 scope:
   existing_artifact_types:
     - SP_ANALYSIS_DOC

@@ -15,6 +15,7 @@ model_profiles:
   fast_test:
     profile_id: openai_fast_test
     default_model: gpt-5-nano
+    override_env: OPENAI_MODEL_FAST_TEST
 prompt_contract:
   prompt_ref: prompt:sp_semantic_analysis@0.1.0
   schema_ref: schema:llm_semantic_analysis@0.1.0

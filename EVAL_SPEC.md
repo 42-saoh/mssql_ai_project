@@ -170,7 +170,7 @@
 
 필수 체크:
 - 기본 테스트는 `FakeModelGateway` 를 사용하고 외부 OpenAI API 를 호출하지 않음
-- fast/test profile 은 `gpt-5-nano` 로 고정
+- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있음
 - remote 실행은 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` gate 를 요구
 - raw prompt, raw SP definition, raw OpenAI response text 는 DB/API/artifact/test output 에 저장하지 않음
 - structured output 은 `schema:llm_semantic_analysis@0.1.0` strict JSON schema 를 통과해야 함
@@ -198,7 +198,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - P23A 는 계약/프롬프트 자산을 만들고, P23B 는 synthetic simple/medium/complex fixture 와 fake-gateway 검증을 추가한다
 - P23C 는 P23B fixture 를 `FakeModelGateway` 로 반복 실행하고 quality score 를 계산한다
 - simple/medium/complex stored procedure scenario matrix 와 authored fixture 를 유지한다
-- fast/test profile 은 `gpt-5-nano` 로 고정한다
+- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
 - LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 로 제한한다
 - `LLM_INFERENCE` evidence 와 unsupported dependency/table/function claim 의 `REVIEW_REQUIRED` 처리 기준을 둔다
 - scoring runner 는 semantic recall, evidence discipline, overclaim control, storage safety 를 검증하며 raw prompt/SP/provider response text 를 저장하지 않는다
@@ -235,12 +235,19 @@ response storage, and `production_ready: false`.
 - `tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py`
 
 필수 체크:
-- P24B 는 renderer/runtime/API/Web/DB schema 변경 없이 fixture-first guide quality expectation 만 추가한다
+- P24A 는 contract/prompt/task/manifest 자산을 고정하고, P24B 는 sanitized fixture-first guide quality expectation 을 추가하며, P24C 는 기존 artifact type renderer/evaluator 로 fixture 를 점수화한다
 - simple/medium/complex synthetic scenarios 가 required section taxonomy, dependency inventory, DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, evidence refs 를 포함한다
-- fast/test profile 은 `gpt-5-nano` 로 고정한다
+- P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 를 재사용하고 새 persisted artifact type, API/Web/DB schema 변경, live DB access 를 만들지 않는다
+- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
 - fixture 와 expected report 는 raw prompt, raw SP definition, raw OpenAI response text, row data, secret, 사용자 제공 guide 본문, 실제 운영 SP 원문을 저장하지 않는다
 - unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 모두 `REVIEW_REQUIRED` 로 남긴다
 - PPM 접근 실패 시 PLF fallback 은 금지하고 `production_ready: false` 를 유지한다
+- Java/MyBatis 는 `draft_only_readiness_notes` 로만 다루며 generated source application 은 수행하지 않는다
+
+판정 해석:
+- 통과: fixture-first renderer/evaluator report 가 모든 P24 threshold 를 만족하고 `productionReady: false`, storage safety findings 0, PLF fallback 없음, unsupported claim `REVIEW_REQUIRED` 를 유지한다.
+- 보류: 필수 fixture-first gate 는 통과했지만 optional live confidence evidence 가 skip/fail/unavailable 이거나 로컬 검증 prerequisites 가 준비되지 않았다. 이는 confidence evidence 부족이며 production readiness 로 해석하지 않는다.
+- 실패/blocker: threshold 미달, raw prompt/SP/provider response/row data/secret 저장, PPM-to-PLF fallback, `production_ready: true` 또는 자동 전환 완료 주장, automatic conversion/apply, row data 조회, procedure execution, business DB DDL/DML 요구, 또는 P25+ Java/MyBatis 확장을 P24 완료로 표현하는 경우다.
 
 통과 기준:
 - `required_section_coverage >= 1.0`
@@ -292,7 +299,7 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 | auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |
 | OpenAI/LLM runtime 변경 | fake gateway unit + no-raw-trace contract + optional live gate 문서화 |
 | LLM analysis quality eval 변경 | P23 contract prompt asset test + fixture-first fake eval + optional live gate 문서화 |
-| SP migration guide quality eval 변경 | P24 contract prompt asset test + fixture-first section/evidence/DML/call-flow eval |
+| SP migration guide quality eval 변경 | P24 contract prompt asset test + fixture-first renderer/evaluator section/evidence/DML/call-flow eval |
 
 ## 평가 산출물 형식
 

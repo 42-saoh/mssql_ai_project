@@ -71,7 +71,7 @@ PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않는다.
 
 ## P23 LLM SP analysis quality eval
 
-P23 eval 은 기본 실행에서 OpenAI 를 호출하지 않는다. `tests/eval/test_p23_llm_sp_analysis_quality.py` 는 `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` 의 simple/medium/complex synthetic scenarios 를 `FakeModelGateway`, `openai_fast_test`, `gpt-5-nano` 로 반복 실행하고 quality report 의 `status`, `productionReady`, `scores`, `thresholds`, `evidenceRefs`, `validatorResults`, sanitized storage findings 를 검증한다.
+P23 eval 은 기본 실행에서 OpenAI 를 호출하지 않는다. `tests/eval/test_p23_llm_sp_analysis_quality.py` 는 `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` 의 simple/medium/complex synthetic scenarios 를 `FakeModelGateway`, `openai_fast_test`, 기본 `gpt-5-nano` 로 반복 실행하고 quality report 의 `status`, `productionReady`, `scores`, `thresholds`, `evidenceRefs`, `validatorResults`, sanitized storage findings 를 검증한다. Optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 `gpt-5.4-mini` 같은 모델을 지정할 수 있다.
 
 통과 기준은 `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 이다. unsupported dependency/table/function claim 은 `REVIEW_REQUIRED` 로 남아야 하고, `LLM_INFERENCE` evidence 는 deterministic fact 를 대체하지 않는다. raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 test output/report/storage payload 에 저장하지 않는다.
 
@@ -84,3 +84,15 @@ Optional live quality gate 는 confidence signal 로만 사용한다. gate 가 s
 ```bash
 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"
 ```
+
+## P24 SP migration guide quality eval
+
+P24 eval 은 기본 실행에서 live OpenAI, PPM, PLF, Web/API, DB schema 에 접근하지 않는다. `tests/eval/test_p24_sp_migration_guide_quality.py` 는 `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml` 의 simple/medium/complex sanitized scenarios 를 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 로 렌더링하고 `evaluate_p24_migration_guide_quality` report 를 검증한다.
+
+통과 기준은 `required_section_coverage >= 1.0`, `evidence_linked_claim_coverage >= 0.9`, `dml_matrix_coverage >= 0.9`, `branch_call_flow_coverage >= 0.85`, `unsupported_claim_review_required_ratio >= 1.0`, `storage_safety_findings <= 0` 이다. unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 남아야 하고, raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 test output/report/storage payload 에 저장하지 않는다.
+
+```bash
+make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
+```
+
+P24 gate 가 통과해도 `production_ready: false` 를 유지한다. Optional live confidence evidence 가 없으면 보류로 해석할 수 있지만 기본 필수 테스트로 승격하지 않으며, P25+ Java/MyBatis source expansion 은 별도 작업으로 둔다.

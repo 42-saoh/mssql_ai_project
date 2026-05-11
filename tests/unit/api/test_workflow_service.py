@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
+from ai_agent_runtime.gateway import model_profile_from_env
 from api_app.lifecycle import WorkflowStateError
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
@@ -157,7 +158,7 @@ def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
     assert len(agent_runs) == 1
     run = agent_runs[0]
     assert run.agent_type == "LLM_SEMANTIC_ANALYST"
-    assert run.model_invocation["model"] == "gpt-5-nano"
+    assert run.model_invocation["model"] == model_profile_from_env("openai_fast_test").model
     assert "businessRules" in run.structured_output
     assert "CREATE PROCEDURE" not in str(run.model_invocation)
     assert "CREATE PROCEDURE" not in str(run.structured_output)

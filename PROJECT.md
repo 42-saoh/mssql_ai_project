@@ -143,6 +143,7 @@ repo/
 - OpenAI LLM runtime package: `packages/agent-runtime/src/ai_agent_runtime`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - Validation rules: `spec/validation/validation_rules.yaml`
+- P24 SP migration guide quality contract: `spec/eval/p24_sp_migration_guide_quality_contract.yaml`
 - Machine-readable policy assets: `spec/policy/`
 - Environment sample: `.env.example`
 - Dockerized test runner: `docker/test/docker-compose.yml`

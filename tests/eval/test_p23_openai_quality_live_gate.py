@@ -12,6 +12,7 @@ from ai_agent_runtime import (
     build_semantic_analysis_run,
     evaluate_p23_semantic_quality,
 )
+from ai_agent_runtime.gateway import model_profile_from_env
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "fixtures" / "eval" / "llm_sp_analysis_quality_p23_v1.yaml"
@@ -30,6 +31,7 @@ def test_p23_openai_quality_live_gate() -> None:
 
     fixture = _fixture()
     gateway = build_model_gateway_from_env()
+    expected_model = model_profile_from_env("openai_fast_test").model
     failures: list[str] = []
     for scenario in fixture["scenarios"]:
         run = build_semantic_analysis_run(
@@ -55,7 +57,7 @@ def test_p23_openai_quality_live_gate() -> None:
         assert "raw_sp_definition" not in serialized_report
         assert "raw_openai_response_text" not in serialized_report
         assert run.model_invocation.provider == "openai"
-        assert run.model_invocation.model == "gpt-5-nano"
+        assert run.model_invocation.model == expected_model
         if report["status"] != "PASSED":
             failures.append(_sanitized_failure(scenario, report))
 

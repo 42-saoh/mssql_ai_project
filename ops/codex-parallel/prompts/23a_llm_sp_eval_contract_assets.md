@@ -8,7 +8,7 @@
 - `PLF` 는 platform DB, `PPM` 은 pilot analysis target DB 이며, PPM 접근 실패 시 PLF fallback 은 금지한다.
 - row data, procedure execution, business DB DDL/DML, 자동 반영, secret 저장은 금지한다.
 - raw prompt, raw SP definition, raw OpenAI response text 는 저장하거나 API/Web 에 노출하지 않는다.
-- fast/test profile 은 `gpt-5-nano` 로 고정한다.
+- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다.
 
 ## 목표
 
@@ -64,7 +64,7 @@ P23 LLM-assisted SP analysis quality eval 을 simple/medium/complex suite 로 �
 ## Blocker 보고 기준
 
 - P23 계약이 `production_ready: true` 를 주장함
-- fast/test profile 이 `gpt-5-nano` 가 아님
+- fast/test profile 기본값이 `gpt-5-nano` 가 아니거나 `OPENAI_MODEL_FAST_TEST` override 경계가 문서화되지 않음
 - raw prompt, raw SP definition, raw OpenAI response text 저장을 허용함
 - LLM 이 새 dependency/table/function 사실을 단정했을 때 `REVIEW_REQUIRED` 로 낮추는 계약이 없음
 - P23A 가 runtime/API/Web 구현 변경을 포함함

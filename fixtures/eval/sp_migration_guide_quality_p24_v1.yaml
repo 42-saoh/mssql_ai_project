@@ -15,6 +15,7 @@ model_profiles:
   fast_test:
     profile_id: openai_fast_test
     default_model: gpt-5-nano
+    override_env: OPENAI_MODEL_FAST_TEST
 artifact_scope:
   existing_artifact_types:
     - SP_ANALYSIS_DOC

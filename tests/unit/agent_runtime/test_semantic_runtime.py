@@ -28,7 +28,8 @@ def test_prompt_renderer_hashes_inputs_and_sanitizes_metadata_copy() -> None:
     assert '"definitionHash": "abc"' in prompt.user_prompt
 
 
-def test_fake_gateway_returns_schema_valid_sanitized_invocation() -> None:
+def test_fake_gateway_returns_schema_valid_sanitized_invocation(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
     prompt = render_semantic_analysis_prompt(
         target_ref="dbo.usp_Demo",
         metadata={"procedureDefinition": {"definitionHash": "abc"}},
@@ -45,16 +46,28 @@ def test_fake_gateway_returns_schema_valid_sanitized_invocation() -> None:
     assert "CREATE PROCEDURE" not in str(result.to_storage_dict())
 
 
-def test_fast_test_profile_model_is_fixed_to_gpt_5_nano(monkeypatch: Any) -> None:
-    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "not-a-contract-model")
+def test_fast_test_profile_defaults_to_gpt_5_nano(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
 
     profile = model_profile_from_env("openai_fast_test")
 
     assert profile.model == "gpt-5-nano"
     assert profile.profile_id == "openai_fast_test"
+    assert profile.registry_ref == "model:openai_fast_test@gpt-5-nano@0.1.0"
 
 
-def test_fake_gateway_can_return_fixture_output_by_target_ref() -> None:
+def test_fast_test_profile_honors_model_env_override(monkeypatch: Any) -> None:
+    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "gpt-5.4-mini")
+
+    profile = model_profile_from_env("openai_fast_test")
+
+    assert profile.model == "gpt-5.4-mini"
+    assert profile.profile_id == "openai_fast_test"
+    assert profile.registry_ref == "model:openai_fast_test@gpt-5.4-mini@0.1.0"
+
+
+def test_fake_gateway_can_return_fixture_output_by_target_ref(monkeypatch: Any) -> None:
+    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "gpt-5.4-mini")
     prompt = render_semantic_analysis_prompt(
         target_ref="dbo.usp_Demo",
         metadata={},
@@ -82,7 +95,7 @@ def test_fake_gateway_can_return_fixture_output_by_target_ref() -> None:
     ).invoke_semantic_analysis(prompt=prompt, profile=profile)
 
     assert result.structured_output["businessRules"][0]["category"] == "CUSTOM_FIXTURE_RULE"
-    assert result.model == "gpt-5-nano"
+    assert result.model == "gpt-5.4-mini"
 
 
 def test_semantic_output_schema_is_strict_for_responses_api() -> None:
@@ -106,7 +119,8 @@ def test_semantic_output_schema_is_strict_for_responses_api() -> None:
     ]
 
 
-def test_semantic_run_payload_excludes_raw_prompt_and_sql_from_storage() -> None:
+def test_semantic_run_payload_excludes_raw_prompt_and_sql_from_storage(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
     payload = build_semantic_analysis_run(
         target_ref="dbo.usp_Demo",
         metadata={"procedureDefinition": {"definitionHash": "abc"}},

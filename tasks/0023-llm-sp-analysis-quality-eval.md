@@ -28,7 +28,7 @@ P22 OpenAI LLM Agent Runtime 을 기반으로 stored procedure semantic analysis
 - 선행 결정:
   - P22 runtime 은 OpenAI Responses API 를 adapter 뒤에 둔다.
   - raw SP definition 은 transient model input 으로만 허용하고 저장하지 않는다.
-  - fast/test profile 은 `gpt-5-nano` 로 고정한다.
+  - fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다.
 
 ## In Scope
 
@@ -97,7 +97,7 @@ P22 OpenAI LLM Agent Runtime 을 기반으로 stored procedure semantic analysis
   - simple/medium/complex scenario 선언
   - `LLM_INFERENCE` evidence 선언
   - unsupported fact claim 의 `REVIEW_REQUIRED` 선언
-  - `gpt-5-nano` fast/test profile 선언
+  - `gpt-5-nano` fast/test profile 기본값과 `OPENAI_MODEL_FAST_TEST` override 경계 선언
   - no-raw-trace storage 금지 선언
   - `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0`
 - 수동 점검:

@@ -21,6 +21,7 @@ runtime_profiles:
   fast_test:
     default_model: gpt-5-nano
     profile_id: openai_fast_test
+    override_env: OPENAI_MODEL_FAST_TEST
     remote_gate_required: false
 environment_gates:
   remote_llm:
@@ -30,6 +31,7 @@ environment_gates:
       - OPENAI_API_KEY
     optional_env:
       - OPENAI_MODEL_ANALYSIS
+      - OPENAI_MODEL_FAST_TEST
       - LLM_LIVE_GATE=1
   default_tests:
     use_fake_gateway: true
@@ -148,5 +150,5 @@ acceptance:
     - P23 work is decomposed into independent prompts.
     - The quality contract names required scenarios, gates, fields, and safety rules.
     - No live OpenAI call is required for default contract validation.
-    - Fast/test model remains gpt-5-nano.
+    - Fast/test model defaults to gpt-5-nano and may be overridden by OPENAI_MODEL_FAST_TEST for optional live confidence testing.
     - Production readiness remains false until PPM live gated eval passes.

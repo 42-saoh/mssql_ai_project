@@ -10,7 +10,7 @@ import httpx
 
 from ai_agent_runtime.models import (
     FAST_TEST_MODEL_PROFILE_ID,
-    FAST_TEST_MODEL_REGISTRY_REF,
+    FAST_TEST_DEFAULT_MODEL,
     SEMANTIC_MODEL_PROFILE_ID,
     SEMANTIC_MODEL_REGISTRY_REF,
     AgentRunStatus,
@@ -18,6 +18,7 @@ from ai_agent_runtime.models import (
     ModelInvocationRecord,
     ModelProfile,
     RenderedPrompt,
+    fast_test_model_registry_ref,
     semantic_output_schema,
     stable_json_hash,
 )
@@ -42,10 +43,12 @@ class ModelGateway(Protocol):
 def model_profile_from_env(profile_id: str | None) -> ModelProfile:
     normalized = (profile_id or SEMANTIC_MODEL_PROFILE_ID).strip() or SEMANTIC_MODEL_PROFILE_ID
     if normalized in {FAST_TEST_MODEL_PROFILE_ID, "fast-test", "test"}:
+        model = os.getenv("OPENAI_MODEL_FAST_TEST", FAST_TEST_DEFAULT_MODEL).strip()
+        model = model or FAST_TEST_DEFAULT_MODEL
         return ModelProfile(
             profile_id=FAST_TEST_MODEL_PROFILE_ID,
-            model="gpt-5-nano",
-            registry_ref=FAST_TEST_MODEL_REGISTRY_REF,
+            model=model,
+            registry_ref=fast_test_model_registry_ref(model),
             reasoning_effort=os.getenv("OPENAI_REASONING_EFFORT_FAST_TEST", "low").strip()
             or "low",
         )

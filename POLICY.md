@@ -64,6 +64,8 @@
 - 근거가 명확한 내용과 추론 기반 내용을 구분한다.
 - 불확실한 결과는 `REVIEW_REQUIRED` 또는 동등한 상태를 표시한다.
 - artifact 는 버전, 생성기 버전, snapshot, registry refs 를 추적 가능해야 한다.
+- SP migration guide quality gate 는 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 초안 품질 평가로만 해석한다. 통과 결과도 production-ready, 자동 전환 완료, 자동 적용 승인으로 표현하지 않는다.
+- Unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
 
 ## 코드 변경 정책
 

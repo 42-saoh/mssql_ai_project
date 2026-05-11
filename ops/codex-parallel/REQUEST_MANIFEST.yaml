@@ -955,7 +955,7 @@ waves:
           - make test-web-smoke
           - git diff --check
   - wave: W13
-    description: P24 SP migration guide quality contract and prompt pack
+    description: P24 SP migration guide quality contract, fixtures, renderer eval, and docs readiness
     tracks:
       - id: P24A
         branch: feat/p24a-sp-migration-guide-contract
