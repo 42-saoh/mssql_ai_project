@@ -1,0 +1,1084 @@
+fixture_suite_id: sp_migration_guide_quality_p24_v1
+contract_ref: p24_sp_migration_guide_quality@0.1.0
+phase: P24
+status: authored_p24b
+production_ready: false
+purpose: >
+  P24B synthetic simple/medium/complex fixture suite for stored procedure
+  migration guide quality. The suite stores sanitized facts and guide
+  expectations only; procedure source text and user-provided guide text are
+  outside the persisted fixture boundary.
+model_profiles:
+  guide_generation:
+    profile_id: openai_sp_semantic_analysis
+    default_model: gpt-5.5
+  fast_test:
+    profile_id: openai_fast_test
+    default_model: gpt-5-nano
+artifact_scope:
+  existing_artifact_types:
+    - SP_ANALYSIS_DOC
+    - DEPENDENCY_REPORT
+  new_persisted_artifact_types_allowed: false
+  java_mybatis_output_policy: draft_only_readiness_notes
+input_policy:
+  source_kind: synthetic_contract_fixture
+  guide_source_policy: sanitized_facts_only
+  copy_reference_content_to_repo: false
+  copy_raw_sp_text_to_repo: false
+safety_expectations:
+  forbidden_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - row_data
+    - secrets
+  forbidden_runtime_actions:
+    - row_data_query
+    - procedure_execution
+    - business_db_ddl_or_dml
+    - automatic_artifact_apply
+    - automatic_deployment
+    - ppm_to_plf_fallback
+report_contract:
+  fields:
+    - status
+    - productionReady
+    - scores
+    - thresholds
+    - evidenceRefs
+    - sectionCoverage
+    - reviewRequiredFindings
+    - storageSafetyFindings
+quality_thresholds:
+  required_section_coverage_min: 1.0
+  evidence_linked_claim_coverage_min: 0.9
+  dml_matrix_coverage_min: 0.9
+  branch_call_flow_coverage_min: 0.85
+  unsupported_claim_review_required_ratio_min: 1.0
+  forbidden_storage_findings_max: 0
+scenarios:
+  - fixture_id: p24_simple_read_only_lookup
+    complexity: simple
+    source_kind: synthetic_contract_fixture
+    guide_source_policy: sanitized_facts_only
+    fixture_authoring_status: authored_p24b
+    target_ref: PPM.dbo.usp_P24LookupShipmentStatus
+    db_context:
+      metadata_profile_id: ppm
+      target_db: PPM
+      platform_db: PLF
+      plf_fallback: forbidden
+    artifacts_under_test:
+      - SP_ANALYSIS_DOC
+      - DEPENDENCY_REPORT
+    evidence_refs:
+      - id: ev_p24_simple_proc
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.usp_P24LookupShipmentStatus
+        locator: p24.simple.metadata.procedure
+      - id: ev_p24_simple_shipment_table
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.P24_Shipment
+        locator: p24.simple.metadata.table.shipment
+      - id: ev_p24_simple_status_table
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.P24_ShipmentStatusCode
+        locator: p24.simple.metadata.table.status_code
+      - id: ev_p24_simple_static_flow
+        type: STATIC_ANALYSIS
+        object_ref: PPM.dbo.usp_P24LookupShipmentStatus
+        locator: p24.simple.static.flow
+    sanitized_facts:
+      - id: fact_p24_simple_target
+        fact_type: PROCEDURE_IDENTITY
+        summary: Synthetic PPM procedure for shipment status lookup.
+        evidence_refs:
+          - ev_p24_simple_proc
+      - id: fact_p24_simple_parameters
+        fact_type: PROCEDURE_PARAMETERS
+        summary: Inputs are ShipmentId and IncludeArchived flag.
+        evidence_refs:
+          - ev_p24_simple_proc
+      - id: fact_p24_simple_read
+        fact_type: TABLE_READ
+        summary: Reads shipment and status-code metadata by ShipmentId.
+        evidence_refs:
+          - ev_p24_simple_shipment_table
+          - ev_p24_simple_status_table
+      - id: fact_p24_simple_result_shape
+        fact_type: RESULT_SHAPE
+        summary: Returns shipment identifier, status code, display label, and last status timestamp.
+        evidence_refs:
+          - ev_p24_simple_static_flow
+    section_expectations:
+      - id: sp_overview
+        title: SP overview and basic information
+        evidence_refs:
+          - ev_p24_simple_proc
+        claims:
+          - id: claim_p24_simple_overview
+            status: ACCEPTED
+            summary: The guide identifies the synthetic lookup target and states draft-only scope.
+            evidence_refs:
+              - ev_p24_simple_proc
+      - id: feature_branch_taxonomy
+        title: Main features and branch/flag taxonomy
+        evidence_refs:
+          - ev_p24_simple_static_flow
+        claims:
+          - id: claim_p24_simple_flag
+            status: ACCEPTED
+            summary: IncludeArchived is documented as the only feature flag.
+            evidence_refs:
+              - ev_p24_simple_static_flow
+      - id: dependency_inventory
+        title: Dependency inventory
+        evidence_refs:
+          - ev_p24_simple_shipment_table
+          - ev_p24_simple_status_table
+        claims:
+          - id: claim_p24_simple_dependency_inventory
+            status: ACCEPTED
+            summary: Shipment and shipment status code tables are inventoried with SELECT usage.
+            evidence_refs:
+              - ev_p24_simple_shipment_table
+              - ev_p24_simple_status_table
+      - id: dml_impact_matrix
+        title: DML impact matrix
+        evidence_refs:
+          - ev_p24_simple_static_flow
+        claims:
+          - id: claim_p24_simple_dml_matrix
+            status: ACCEPTED
+            summary: Matrix records read-only SELECT behavior and no write-side effects.
+            evidence_refs:
+              - ev_p24_simple_static_flow
+      - id: call_flow
+        title: Branch-level call flow
+        evidence_refs:
+          - ev_p24_simple_static_flow
+        claims:
+          - id: claim_p24_simple_call_flow
+            status: ACCEPTED
+            summary: Call flow covers validation followed by lookup.
+            evidence_refs:
+              - ev_p24_simple_static_flow
+      - id: critical_phase_analysis
+        title: Critical phase analysis
+        evidence_refs:
+          - ev_p24_simple_static_flow
+        claims:
+          - id: claim_p24_simple_phase
+            status: ACCEPTED
+            summary: The only critical phase is the metadata-backed lookup.
+            evidence_refs:
+              - ev_p24_simple_static_flow
+      - id: complexity_risk_metrics
+        title: Complexity and risk metrics
+        evidence_refs:
+          - ev_p24_simple_static_flow
+        claims:
+          - id: claim_p24_simple_metrics
+            status: ACCEPTED
+            summary: Complexity is low because there is one branch and no DML writes.
+            evidence_refs:
+              - ev_p24_simple_static_flow
+      - id: migration_strategy
+        title: Migration strategy and Java/MyBatis draft readiness
+        evidence_refs:
+          - ev_p24_simple_proc
+        claims:
+          - id: claim_p24_simple_strategy
+            status: REVIEW_REQUIRED
+            summary: Java/MyBatis readiness is a draft note and does not apply generated code.
+            evidence_refs:
+              - ev_p24_simple_proc
+      - id: appendix_mappings
+        title: Parameter and code mapping appendix
+        evidence_refs:
+          - ev_p24_simple_proc
+        claims:
+          - id: claim_p24_simple_appendix
+            status: ACCEPTED
+            summary: Parameters and result labels are mapped from sanitized facts.
+            evidence_refs:
+              - ev_p24_simple_proc
+              - ev_p24_simple_static_flow
+      - id: evidence_assumptions_review
+        title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
+        evidence_refs:
+          - ev_p24_simple_proc
+        claims:
+          - id: claim_p24_simple_review
+            status: REVIEW_REQUIRED
+            summary: Business label wording stays review-required without row data.
+            evidence_refs:
+              - ev_p24_simple_proc
+    dependency_inventory:
+      - object_kind: table
+        object_ref: PPM.dbo.P24_Shipment
+        operations:
+          - SELECT
+        key_columns:
+          - ShipmentId
+        join_or_where_summary: ShipmentId filter with optional archive visibility flag.
+        value_or_state_patterns: StatusCode and LastStatusAt are surfaced as sanitized metadata facts.
+        evidence_refs:
+          - ev_p24_simple_shipment_table
+        status: ACCEPTED
+      - object_kind: table
+        object_ref: PPM.dbo.P24_ShipmentStatusCode
+        operations:
+          - SELECT
+        key_columns:
+          - StatusCode
+        join_or_where_summary: Status code lookup is joined for display label shaping.
+        value_or_state_patterns: Status display label is informational and requires reviewer confirmation.
+        evidence_refs:
+          - ev_p24_simple_status_table
+        status: ACCEPTED
+    expected_dml_operations:
+      - SELECT
+    dml_matrix:
+      - operation: SELECT
+        target_ref: PPM.dbo.P24_Shipment
+        phase: lookup
+        impact: Read shipment status fields only.
+        evidence_refs:
+          - ev_p24_simple_shipment_table
+        status: ACCEPTED
+    call_flow:
+      branches:
+        - id: branch_p24_simple_validate_input
+          phase: validate_input
+          condition_summary: ShipmentId must be present before lookup.
+          evidence_refs:
+            - ev_p24_simple_static_flow
+          actions:
+            - operation: VALIDATE
+              dependency_ref: fact_p24_simple_parameters
+              evidence_refs:
+                - ev_p24_simple_static_flow
+        - id: branch_p24_simple_lookup
+          phase: lookup
+          condition_summary: IncludeArchived changes visibility filtering.
+          evidence_refs:
+            - ev_p24_simple_static_flow
+          actions:
+            - operation: SELECT
+              dependency_ref: PPM.dbo.P24_Shipment
+              evidence_refs:
+                - ev_p24_simple_shipment_table
+    phase_risk_metrics:
+      complexity_score: 1
+      branch_count: 2
+      dml_operation_count: 1
+      risk_flags:
+        - code: LOW_EVIDENCE_LABEL_MEANING
+          status: REVIEW_REQUIRED
+          severity: INFO
+          evidence_refs:
+            - ev_p24_simple_status_table
+    appendix_mappings:
+      parameters:
+        - name: ShipmentId
+          sanitized_type: int
+          evidence_refs:
+            - ev_p24_simple_proc
+        - name: IncludeArchived
+          sanitized_type: bit
+          evidence_refs:
+            - ev_p24_simple_proc
+      result_fields:
+        - name: StatusCode
+          evidence_refs:
+            - ev_p24_simple_static_flow
+        - name: StatusLabel
+          evidence_refs:
+            - ev_p24_simple_status_table
+    unsupported_claim_expectations:
+      - obligation: low_evidence_business_rule_claims
+        claim_type: business_rule
+        claim_code: LOW_EVIDENCE_LABEL_MEANING
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - ev_p24_simple_status_table
+    expected_quality_report:
+      status: PASSED
+      productionReady: false
+      scores:
+        requiredSectionCoverage: 1.0
+        evidenceLinkedClaimCoverage: 1.0
+        dmlMatrixCoverage: 1.0
+        branchCallFlowCoverage: 1.0
+        unsupportedClaimReviewRequiredRatio: 1.0
+        storageSafetyFindings: 0
+      thresholds:
+        requiredSectionCoverageMin: 1.0
+        evidenceLinkedClaimCoverageMin: 0.9
+        dmlMatrixCoverageMin: 0.9
+        branchCallFlowCoverageMin: 0.85
+        unsupportedClaimReviewRequiredRatioMin: 1.0
+        forbiddenStorageFindingsMax: 0
+      evidenceRefs:
+        - ev_p24_simple_proc
+        - ev_p24_simple_static_flow
+      sectionCoverage:
+        sp_overview: true
+        feature_branch_taxonomy: true
+        dependency_inventory: true
+        dml_impact_matrix: true
+        call_flow: true
+        critical_phase_analysis: true
+        complexity_risk_metrics: true
+        migration_strategy: true
+        appendix_mappings: true
+        evidence_assumptions_review: true
+      reviewRequiredFindings:
+        - LOW_EVIDENCE_LABEL_MEANING
+      storageSafetyFindings: []
+  - fixture_id: p24_medium_transactional_branching_dml
+    complexity: medium
+    source_kind: synthetic_contract_fixture
+    guide_source_policy: sanitized_facts_only
+    fixture_authoring_status: authored_p24b
+    target_ref: PPM.dbo.usp_P24ApplyShipmentHoldDecision
+    db_context:
+      metadata_profile_id: ppm
+      target_db: PPM
+      platform_db: PLF
+      plf_fallback: forbidden
+    artifacts_under_test:
+      - SP_ANALYSIS_DOC
+      - DEPENDENCY_REPORT
+    evidence_refs:
+      - id: ev_p24_medium_proc
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.usp_P24ApplyShipmentHoldDecision
+        locator: p24.medium.metadata.procedure
+      - id: ev_p24_medium_shipment_table
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.P24_Shipment
+        locator: p24.medium.metadata.table.shipment
+      - id: ev_p24_medium_hold_table
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.P24_ShipmentHoldQueue
+        locator: p24.medium.metadata.table.hold_queue
+      - id: ev_p24_medium_audit_table
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.P24_ShipmentDecisionAudit
+        locator: p24.medium.metadata.table.audit
+      - id: ev_p24_medium_static_flow
+        type: STATIC_ANALYSIS
+        object_ref: PPM.dbo.usp_P24ApplyShipmentHoldDecision
+        locator: p24.medium.static.transaction_flow
+    sanitized_facts:
+      - id: fact_p24_medium_transaction
+        fact_type: TRANSACTION_CONTROL
+        summary: Explicit transaction boundaries and rollback behavior are present.
+        evidence_refs:
+          - ev_p24_medium_static_flow
+      - id: fact_p24_medium_release_branch
+        fact_type: BRANCH_RULE
+        summary: RELEASE branch updates shipment hold state.
+        evidence_refs:
+          - ev_p24_medium_shipment_table
+          - ev_p24_medium_static_flow
+      - id: fact_p24_medium_hold_branch
+        fact_type: BRANCH_RULE
+        summary: HOLD branch inserts a hold review queue record.
+        evidence_refs:
+          - ev_p24_medium_hold_table
+          - ev_p24_medium_static_flow
+      - id: fact_p24_medium_audit_write
+        fact_type: TABLE_WRITE
+        summary: Decision audit insert occurs after branch action.
+        evidence_refs:
+          - ev_p24_medium_audit_table
+    section_expectations:
+      - id: sp_overview
+        title: SP overview and basic information
+        evidence_refs:
+          - ev_p24_medium_proc
+        claims:
+          - id: claim_p24_medium_overview
+            status: ACCEPTED
+            summary: The guide identifies transactional shipment-hold decision scope.
+            evidence_refs:
+              - ev_p24_medium_proc
+      - id: feature_branch_taxonomy
+        title: Main features and branch/flag taxonomy
+        evidence_refs:
+          - ev_p24_medium_static_flow
+        claims:
+          - id: claim_p24_medium_branches
+            status: ACCEPTED
+            summary: RELEASE and HOLD branches are documented separately.
+            evidence_refs:
+              - ev_p24_medium_static_flow
+      - id: dependency_inventory
+        title: Dependency inventory
+        evidence_refs:
+          - ev_p24_medium_shipment_table
+          - ev_p24_medium_hold_table
+          - ev_p24_medium_audit_table
+        claims:
+          - id: claim_p24_medium_dependency_inventory
+            status: ACCEPTED
+            summary: Tables for shipment state, hold queue, and decision audit are inventoried.
+            evidence_refs:
+              - ev_p24_medium_shipment_table
+              - ev_p24_medium_hold_table
+              - ev_p24_medium_audit_table
+      - id: dml_impact_matrix
+        title: DML impact matrix
+        evidence_refs:
+          - ev_p24_medium_static_flow
+        claims:
+          - id: claim_p24_medium_dml_matrix
+            status: ACCEPTED
+            summary: UPDATE and INSERT side effects are separated by branch and phase.
+            evidence_refs:
+              - ev_p24_medium_static_flow
+      - id: call_flow
+        title: Branch-level call flow
+        evidence_refs:
+          - ev_p24_medium_static_flow
+        claims:
+          - id: claim_p24_medium_call_flow
+            status: ACCEPTED
+            summary: Branch call flow preserves transaction, branch action, audit insert, and rollback review.
+            evidence_refs:
+              - ev_p24_medium_static_flow
+      - id: critical_phase_analysis
+        title: Critical phase analysis
+        evidence_refs:
+          - ev_p24_medium_static_flow
+        claims:
+          - id: claim_p24_medium_phase
+            status: REVIEW_REQUIRED
+            summary: Transaction ordering must be reviewed before any Java/MyBatis draft adoption.
+            evidence_refs:
+              - ev_p24_medium_static_flow
+      - id: complexity_risk_metrics
+        title: Complexity and risk metrics
+        evidence_refs:
+          - ev_p24_medium_static_flow
+        claims:
+          - id: claim_p24_medium_metrics
+            status: ACCEPTED
+            summary: Medium complexity comes from two business branches and multi-table writes.
+            evidence_refs:
+              - ev_p24_medium_static_flow
+      - id: migration_strategy
+        title: Migration strategy and Java/MyBatis draft readiness
+        evidence_refs:
+          - ev_p24_medium_proc
+        claims:
+          - id: claim_p24_medium_strategy
+            status: REVIEW_REQUIRED
+            summary: Migration readiness is limited to draft notes until transaction semantics are reviewed.
+            evidence_refs:
+              - ev_p24_medium_proc
+              - ev_p24_medium_static_flow
+      - id: appendix_mappings
+        title: Parameter and code mapping appendix
+        evidence_refs:
+          - ev_p24_medium_proc
+        claims:
+          - id: claim_p24_medium_appendix
+            status: ACCEPTED
+            summary: Decision code and reviewer parameters are mapped without row data.
+            evidence_refs:
+              - ev_p24_medium_proc
+      - id: evidence_assumptions_review
+        title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
+        evidence_refs:
+          - ev_p24_medium_static_flow
+        claims:
+          - id: claim_p24_medium_review
+            status: REVIEW_REQUIRED
+            summary: Business meaning of decision codes remains review-required.
+            evidence_refs:
+              - ev_p24_medium_static_flow
+    dependency_inventory:
+      - object_kind: table
+        object_ref: PPM.dbo.P24_Shipment
+        operations:
+          - UPDATE
+        key_columns:
+          - ShipmentId
+        join_or_where_summary: Shipment row is targeted by ShipmentId during RELEASE branch.
+        value_or_state_patterns: HoldState and ReleasedAt update semantics require reviewer confirmation.
+        evidence_refs:
+          - ev_p24_medium_shipment_table
+        status: ACCEPTED
+      - object_kind: table
+        object_ref: PPM.dbo.P24_ShipmentHoldQueue
+        operations:
+          - INSERT
+        key_columns:
+          - ShipmentId
+          - QueueId
+        join_or_where_summary: HOLD branch creates a review queue entry for the shipment.
+        value_or_state_patterns: Queue reason is inferred from sanitized branch facts.
+        evidence_refs:
+          - ev_p24_medium_hold_table
+        status: ACCEPTED
+      - object_kind: table
+        object_ref: PPM.dbo.P24_ShipmentDecisionAudit
+        operations:
+          - INSERT
+        key_columns:
+          - AuditId
+          - ShipmentId
+        join_or_where_summary: Audit write follows branch-specific decision action.
+        value_or_state_patterns: Decision code and reviewer attribution are draft-only guide details.
+        evidence_refs:
+          - ev_p24_medium_audit_table
+        status: ACCEPTED
+    expected_dml_operations:
+      - UPDATE
+      - INSERT
+    dml_matrix:
+      - operation: UPDATE
+        target_ref: PPM.dbo.P24_Shipment
+        phase: release_branch
+        impact: Updates shipment hold state for release decision.
+        evidence_refs:
+          - ev_p24_medium_shipment_table
+        status: REVIEW_REQUIRED
+      - operation: INSERT
+        target_ref: PPM.dbo.P24_ShipmentHoldQueue
+        phase: hold_branch
+        impact: Inserts manual hold queue request.
+        evidence_refs:
+          - ev_p24_medium_hold_table
+        status: REVIEW_REQUIRED
+      - operation: INSERT
+        target_ref: PPM.dbo.P24_ShipmentDecisionAudit
+        phase: audit
+        impact: Inserts decision audit record after branch action.
+        evidence_refs:
+          - ev_p24_medium_audit_table
+        status: REVIEW_REQUIRED
+    call_flow:
+      branches:
+        - id: branch_p24_medium_release
+          phase: release_branch
+          condition_summary: DecisionCode RELEASE updates shipment hold state.
+          evidence_refs:
+            - ev_p24_medium_static_flow
+          actions:
+            - operation: UPDATE
+              dependency_ref: PPM.dbo.P24_Shipment
+              evidence_refs:
+                - ev_p24_medium_shipment_table
+        - id: branch_p24_medium_hold
+          phase: hold_branch
+          condition_summary: DecisionCode HOLD creates a review queue item.
+          evidence_refs:
+            - ev_p24_medium_static_flow
+          actions:
+            - operation: INSERT
+              dependency_ref: PPM.dbo.P24_ShipmentHoldQueue
+              evidence_refs:
+                - ev_p24_medium_hold_table
+        - id: branch_p24_medium_audit
+          phase: audit
+          condition_summary: Accepted decision branches write audit details.
+          evidence_refs:
+            - ev_p24_medium_static_flow
+          actions:
+            - operation: INSERT
+              dependency_ref: PPM.dbo.P24_ShipmentDecisionAudit
+              evidence_refs:
+                - ev_p24_medium_audit_table
+    phase_risk_metrics:
+      complexity_score: 3
+      branch_count: 3
+      dml_operation_count: 3
+      risk_flags:
+        - code: TRANSACTIONAL_DML_REVIEW_REQUIRED
+          status: REVIEW_REQUIRED
+          severity: WARNING
+          evidence_refs:
+            - ev_p24_medium_static_flow
+    appendix_mappings:
+      parameters:
+        - name: ShipmentId
+          sanitized_type: int
+          evidence_refs:
+            - ev_p24_medium_proc
+        - name: DecisionCode
+          sanitized_type: nvarchar
+          evidence_refs:
+            - ev_p24_medium_proc
+        - name: ReviewerId
+          sanitized_type: int
+          evidence_refs:
+            - ev_p24_medium_proc
+      result_fields: []
+    unsupported_claim_expectations:
+      - obligation: low_evidence_business_rule_claims
+        claim_type: business_rule
+        claim_code: TRANSACTIONAL_DML_REVIEW_REQUIRED
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - ev_p24_medium_static_flow
+    expected_quality_report:
+      status: PASSED
+      productionReady: false
+      scores:
+        requiredSectionCoverage: 1.0
+        evidenceLinkedClaimCoverage: 1.0
+        dmlMatrixCoverage: 1.0
+        branchCallFlowCoverage: 1.0
+        unsupportedClaimReviewRequiredRatio: 1.0
+        storageSafetyFindings: 0
+      thresholds:
+        requiredSectionCoverageMin: 1.0
+        evidenceLinkedClaimCoverageMin: 0.9
+        dmlMatrixCoverageMin: 0.9
+        branchCallFlowCoverageMin: 0.85
+        unsupportedClaimReviewRequiredRatioMin: 1.0
+        forbiddenStorageFindingsMax: 0
+      evidenceRefs:
+        - ev_p24_medium_proc
+        - ev_p24_medium_static_flow
+      sectionCoverage:
+        sp_overview: true
+        feature_branch_taxonomy: true
+        dependency_inventory: true
+        dml_impact_matrix: true
+        call_flow: true
+        critical_phase_analysis: true
+        complexity_risk_metrics: true
+        migration_strategy: true
+        appendix_mappings: true
+        evidence_assumptions_review: true
+      reviewRequiredFindings:
+        - TRANSACTIONAL_DML_REVIEW_REQUIRED
+      storageSafetyFindings: []
+  - fixture_id: p24_complex_dynamic_cross_db_extract
+    complexity: complex
+    source_kind: synthetic_contract_fixture
+    guide_source_policy: sanitized_facts_only
+    fixture_authoring_status: authored_p24b
+    target_ref: PPM.dbo.usp_P24DynamicTenantExtract
+    db_context:
+      metadata_profile_id: ppm
+      target_db: PPM
+      platform_db: PLF
+      plf_fallback: forbidden
+    artifacts_under_test:
+      - SP_ANALYSIS_DOC
+      - DEPENDENCY_REPORT
+    evidence_refs:
+      - id: ev_p24_complex_proc
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.usp_P24DynamicTenantExtract
+        locator: p24.complex.metadata.procedure
+      - id: ev_p24_complex_dynamic_sql
+        type: STATIC_ANALYSIS
+        object_ref: PPM.dbo.usp_P24DynamicTenantExtract
+        locator: p24.complex.static.dynamic_sql
+      - id: ev_p24_complex_cross_db
+        type: STATIC_ANALYSIS
+        object_ref: tenant_database_parameter
+        locator: p24.complex.static.cross_database_reference
+      - id: ev_p24_complex_audit_table
+        type: MSSQL_METADATA
+        object_ref: PPMReporting.dbo.P24_ExtractAudit
+        locator: p24.complex.metadata.table.audit
+      - id: ev_p24_complex_staging_table
+        type: MSSQL_METADATA
+        object_ref: PPM.dbo.P24_ExtractStaging
+        locator: p24.complex.metadata.table.staging
+      - id: ev_p24_complex_exec_call
+        type: STATIC_ANALYSIS
+        object_ref: sys.sp_executesql
+        locator: p24.complex.static.procedure_call
+    sanitized_facts:
+      - id: fact_p24_complex_dynamic_sql
+        fact_type: DYNAMIC_SQL
+        summary: Dynamic statement targets tenant database and schema identifiers from parameters.
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+      - id: fact_p24_complex_cross_db
+        fact_type: CROSS_DATABASE_REFERENCE
+        summary: Tenant database dependency is parameterized and cannot be accepted as a fixed metadata fact.
+        evidence_refs:
+          - ev_p24_complex_cross_db
+      - id: fact_p24_complex_exec_call
+        fact_type: PROCEDURE_CALL
+        summary: Dynamic statement execution uses sys.sp_executesql.
+        evidence_refs:
+          - ev_p24_complex_exec_call
+      - id: fact_p24_complex_staging_cleanup
+        fact_type: TABLE_WRITE
+        summary: Staging cleanup is represented as sanitized DELETE impact.
+        evidence_refs:
+          - ev_p24_complex_staging_table
+      - id: fact_p24_complex_audit_write
+        fact_type: TABLE_WRITE
+        summary: Reporting audit INSERT is represented without row data.
+        evidence_refs:
+          - ev_p24_complex_audit_table
+    section_expectations:
+      - id: sp_overview
+        title: SP overview and basic information
+        evidence_refs:
+          - ev_p24_complex_proc
+        claims:
+          - id: claim_p24_complex_overview
+            status: ACCEPTED
+            summary: The guide identifies dynamic tenant extract as a draft-only migration subject.
+            evidence_refs:
+              - ev_p24_complex_proc
+      - id: feature_branch_taxonomy
+        title: Main features and branch/flag taxonomy
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        claims:
+          - id: claim_p24_complex_taxonomy
+            status: REVIEW_REQUIRED
+            summary: Dynamic SQL, tenant DB parameter, staging cleanup, and audit branch are documented as separate features.
+            evidence_refs:
+              - ev_p24_complex_dynamic_sql
+              - ev_p24_complex_cross_db
+      - id: dependency_inventory
+        title: Dependency inventory
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+          - ev_p24_complex_audit_table
+        claims:
+          - id: claim_p24_complex_dependency_inventory
+            status: REVIEW_REQUIRED
+            summary: Dynamic SQL and cross-database dependencies remain review-required.
+            evidence_refs:
+              - ev_p24_complex_dynamic_sql
+              - ev_p24_complex_cross_db
+      - id: dml_impact_matrix
+        title: DML impact matrix
+        evidence_refs:
+          - ev_p24_complex_staging_table
+          - ev_p24_complex_audit_table
+        claims:
+          - id: claim_p24_complex_dml_matrix
+            status: REVIEW_REQUIRED
+            summary: SELECT, DELETE, and INSERT impacts are represented as review-required draft guidance.
+            evidence_refs:
+              - ev_p24_complex_dynamic_sql
+              - ev_p24_complex_staging_table
+              - ev_p24_complex_audit_table
+      - id: call_flow
+        title: Branch-level call flow
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        claims:
+          - id: claim_p24_complex_call_flow
+            status: REVIEW_REQUIRED
+            summary: Branch flow separates staging cleanup, dynamic extract, execution call, and optional audit.
+            evidence_refs:
+              - ev_p24_complex_dynamic_sql
+              - ev_p24_complex_exec_call
+      - id: critical_phase_analysis
+        title: Critical phase analysis
+        evidence_refs:
+          - ev_p24_complex_cross_db
+        claims:
+          - id: claim_p24_complex_phase
+            status: REVIEW_REQUIRED
+            summary: Dynamic cross-database phase cannot be confirmed without reviewed PPM metadata.
+            evidence_refs:
+              - ev_p24_complex_cross_db
+      - id: complexity_risk_metrics
+        title: Complexity and risk metrics
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        claims:
+          - id: claim_p24_complex_metrics
+            status: REVIEW_REQUIRED
+            summary: Complex risk rating comes from dynamic SQL, cross-database target, and mixed DML.
+            evidence_refs:
+              - ev_p24_complex_dynamic_sql
+              - ev_p24_complex_cross_db
+      - id: migration_strategy
+        title: Migration strategy and Java/MyBatis draft readiness
+        evidence_refs:
+          - ev_p24_complex_proc
+        claims:
+          - id: claim_p24_complex_strategy
+            status: REVIEW_REQUIRED
+            summary: Migration strategy recommends reviewed access pattern notes only, with no source application.
+            evidence_refs:
+              - ev_p24_complex_proc
+              - ev_p24_complex_dynamic_sql
+      - id: appendix_mappings
+        title: Parameter and code mapping appendix
+        evidence_refs:
+          - ev_p24_complex_proc
+        claims:
+          - id: claim_p24_complex_appendix
+            status: REVIEW_REQUIRED
+            summary: Tenant database and schema parameters stay review-required.
+            evidence_refs:
+              - ev_p24_complex_proc
+              - ev_p24_complex_cross_db
+      - id: evidence_assumptions_review
+        title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        claims:
+          - id: claim_p24_complex_review
+            status: REVIEW_REQUIRED
+            summary: Unsupported table, function, dependency, and cross-DB claims remain REVIEW_REQUIRED.
+            evidence_refs:
+              - ev_p24_complex_dynamic_sql
+    dependency_inventory:
+      - object_kind: dynamic_sql
+        object_ref: PPM.dbo.usp_P24DynamicTenantExtract.dynamic_statement
+        operations:
+          - SELECT
+        key_columns:
+          - TenantDb
+          - SchemaName
+        join_or_where_summary: Dynamic statement shape is sanitized and not stored as executable text.
+        value_or_state_patterns: Tenant-scoped extract semantics require reviewer confirmation.
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        status: REVIEW_REQUIRED
+      - object_kind: cross_database_reference
+        object_ref: tenant_database_parameter
+        operations:
+          - SELECT
+        key_columns:
+          - TenantDb
+        join_or_where_summary: Cross-database target is parameterized and not accepted as fixed dependency.
+        value_or_state_patterns: PPM metadata review is required; PLF fallback is forbidden.
+        evidence_refs:
+          - ev_p24_complex_cross_db
+        status: REVIEW_REQUIRED
+      - object_kind: procedure
+        object_ref: sys.sp_executesql
+        operations:
+          - SELECT
+        key_columns:
+          - statement
+        join_or_where_summary: Confirmed procedure call executes sanitized dynamic statement shape.
+        value_or_state_patterns: Additional procedure dependencies are unsupported without evidence.
+        evidence_refs:
+          - ev_p24_complex_exec_call
+        status: REVIEW_REQUIRED
+      - object_kind: function
+        object_ref: unsupported_helper_function_claim
+        operations:
+          - SELECT
+        key_columns:
+          - function_name
+        join_or_where_summary: No deterministic function dependency is confirmed.
+        value_or_state_patterns: Any helper function claim is a review marker only.
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        status: REVIEW_REQUIRED
+      - object_kind: table
+        object_ref: PPM.dbo.P24_ExtractStaging
+        operations:
+          - DELETE
+        key_columns:
+          - ExtractBatchId
+        join_or_where_summary: Staging cleanup is keyed by extract batch identity.
+        value_or_state_patterns: Cleanup impact remains draft-only until reviewed.
+        evidence_refs:
+          - ev_p24_complex_staging_table
+        status: REVIEW_REQUIRED
+      - object_kind: table
+        object_ref: PPMReporting.dbo.P24_ExtractAudit
+        operations:
+          - INSERT
+        key_columns:
+          - ExtractAuditId
+        join_or_where_summary: Audit write records sanitized target context.
+        value_or_state_patterns: Audit detail semantics are draft-only.
+        evidence_refs:
+          - ev_p24_complex_audit_table
+        status: REVIEW_REQUIRED
+    expected_dml_operations:
+      - SELECT
+      - DELETE
+      - INSERT
+    dml_matrix:
+      - operation: DELETE
+        target_ref: PPM.dbo.P24_ExtractStaging
+        phase: staging_cleanup
+        impact: Removes prior staging entries for the synthetic extract batch.
+        evidence_refs:
+          - ev_p24_complex_staging_table
+        status: REVIEW_REQUIRED
+      - operation: SELECT
+        target_ref: tenant_database_parameter.dynamic_orders_shape
+        phase: dynamic_extract
+        impact: Reads tenant-scoped records through dynamic SQL shape.
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+          - ev_p24_complex_cross_db
+        status: REVIEW_REQUIRED
+      - operation: INSERT
+        target_ref: PPMReporting.dbo.P24_ExtractAudit
+        phase: audit
+        impact: Inserts extract audit summary.
+        evidence_refs:
+          - ev_p24_complex_audit_table
+        status: REVIEW_REQUIRED
+    call_flow:
+      branches:
+        - id: branch_p24_complex_staging_cleanup
+          phase: staging_cleanup
+          condition_summary: Cleanup phase precedes extract guidance.
+          evidence_refs:
+            - ev_p24_complex_staging_table
+          actions:
+            - operation: DELETE
+              dependency_ref: PPM.dbo.P24_ExtractStaging
+              evidence_refs:
+                - ev_p24_complex_staging_table
+        - id: branch_p24_complex_dynamic_extract
+          phase: dynamic_extract
+          condition_summary: Tenant and schema parameters shape dynamic read target.
+          evidence_refs:
+            - ev_p24_complex_dynamic_sql
+          actions:
+            - operation: SELECT
+              dependency_ref: tenant_database_parameter.dynamic_orders_shape
+              evidence_refs:
+                - ev_p24_complex_dynamic_sql
+                - ev_p24_complex_cross_db
+        - id: branch_p24_complex_exec_call
+          phase: execute_dynamic_statement
+          condition_summary: Dynamic statement execution is represented as a procedure call dependency.
+          evidence_refs:
+            - ev_p24_complex_exec_call
+          actions:
+            - operation: CALL
+              dependency_ref: sys.sp_executesql
+              evidence_refs:
+                - ev_p24_complex_exec_call
+        - id: branch_p24_complex_audit
+          phase: audit
+          condition_summary: Audit write records extract context after dynamic phase.
+          evidence_refs:
+            - ev_p24_complex_audit_table
+          actions:
+            - operation: INSERT
+              dependency_ref: PPMReporting.dbo.P24_ExtractAudit
+              evidence_refs:
+                - ev_p24_complex_audit_table
+    phase_risk_metrics:
+      complexity_score: 5
+      branch_count: 4
+      dml_operation_count: 3
+      risk_flags:
+        - code: DYNAMIC_SQL_REVIEW_REQUIRED
+          status: REVIEW_REQUIRED
+          severity: ERROR
+          evidence_refs:
+            - ev_p24_complex_dynamic_sql
+        - code: CROSS_DB_REVIEW_REQUIRED
+          status: REVIEW_REQUIRED
+          severity: ERROR
+          evidence_refs:
+            - ev_p24_complex_cross_db
+    appendix_mappings:
+      parameters:
+        - name: TenantDb
+          sanitized_type: sysname
+          evidence_refs:
+            - ev_p24_complex_proc
+        - name: SchemaName
+          sanitized_type: sysname
+          evidence_refs:
+            - ev_p24_complex_proc
+        - name: ExtractBatchId
+          sanitized_type: bigint
+          evidence_refs:
+            - ev_p24_complex_proc
+      result_fields:
+        - name: dynamic_result_shape
+          evidence_refs:
+            - ev_p24_complex_dynamic_sql
+    unsupported_claim_expectations:
+      - obligation: unsupported_dependency_claims
+        claim_type: dependency
+        claim_code: UNSUPPORTED_DEPENDENCY_CLAIM_REVIEW
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - ev_p24_complex_exec_call
+      - obligation: unsupported_table_claims
+        claim_type: table
+        claim_code: UNSUPPORTED_TABLE_CLAIM_REVIEW
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+      - obligation: unsupported_function_claims
+        claim_type: function
+        claim_code: UNSUPPORTED_FUNCTION_CLAIM_REVIEW
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+      - obligation: unsupported_cross_database_claims
+        claim_type: cross_database_reference
+        claim_code: UNSUPPORTED_CROSS_DB_CLAIM_REVIEW
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - ev_p24_complex_cross_db
+      - obligation: low_evidence_business_rule_claims
+        claim_type: business_rule
+        claim_code: DYNAMIC_SQL_REVIEW_REQUIRED
+        expected_status: REVIEW_REQUIRED
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+    expected_quality_report:
+      status: PASSED
+      productionReady: false
+      scores:
+        requiredSectionCoverage: 1.0
+        evidenceLinkedClaimCoverage: 1.0
+        dmlMatrixCoverage: 1.0
+        branchCallFlowCoverage: 1.0
+        unsupportedClaimReviewRequiredRatio: 1.0
+        storageSafetyFindings: 0
+      thresholds:
+        requiredSectionCoverageMin: 1.0
+        evidenceLinkedClaimCoverageMin: 0.9
+        dmlMatrixCoverageMin: 0.9
+        branchCallFlowCoverageMin: 0.85
+        unsupportedClaimReviewRequiredRatioMin: 1.0
+        forbiddenStorageFindingsMax: 0
+      evidenceRefs:
+        - ev_p24_complex_proc
+        - ev_p24_complex_dynamic_sql
+      sectionCoverage:
+        sp_overview: true
+        feature_branch_taxonomy: true
+        dependency_inventory: true
+        dml_impact_matrix: true
+        call_flow: true
+        critical_phase_analysis: true
+        complexity_risk_metrics: true
+        migration_strategy: true
+        appendix_mappings: true
+        evidence_assumptions_review: true
+      reviewRequiredFindings:
+        - UNSUPPORTED_DEPENDENCY_CLAIM_REVIEW
+        - UNSUPPORTED_TABLE_CLAIM_REVIEW
+        - UNSUPPORTED_FUNCTION_CLAIM_REVIEW
+        - UNSUPPORTED_CROSS_DB_CLAIM_REVIEW
+        - DYNAMIC_SQL_REVIEW_REQUIRED
+      storageSafetyFindings: []
+verification_commands:
+  default_fixture_gate:
+    - make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
+  diff_check:
+    - git diff --check

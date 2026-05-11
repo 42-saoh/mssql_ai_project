@@ -10,6 +10,7 @@ PROMPTS = ROOT / "ops" / "codex-parallel" / "prompts"
 MANIFEST = ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml"
 CONTRACT = ROOT / "spec" / "eval" / "p24_sp_migration_guide_quality_contract.yaml"
 TASK = ROOT / "tasks" / "0024-sp-migration-guide-quality.md"
+P24_FIXTURE = ROOT / "fixtures" / "eval" / "sp_migration_guide_quality_p24_v1.yaml"
 
 P24_PROMPTS = {
     "P24A": "24a_sp_migration_guide_contract_assets.md",
@@ -177,13 +178,44 @@ def test_p24_task_brief_records_contract_only_slice() -> None:
     assert "PLF fallback" in text
 
 
+def test_p24b_fixture_asset_records_fixture_only_boundaries() -> None:
+    fixture = _load_yaml(P24_FIXTURE)
+
+    assert fixture["fixture_suite_id"] == "sp_migration_guide_quality_p24_v1"
+    assert fixture["contract_ref"] == "p24_sp_migration_guide_quality@0.1.0"
+    assert fixture["phase"] == "P24"
+    assert fixture["status"] == "authored_p24b"
+    assert fixture["production_ready"] is False
+    assert fixture["model_profiles"]["fast_test"]["default_model"] == "gpt-5-nano"
+    assert fixture["artifact_scope"]["existing_artifact_types"] == [
+        "SP_ANALYSIS_DOC",
+        "DEPENDENCY_REPORT",
+    ]
+    assert fixture["artifact_scope"]["new_persisted_artifact_types_allowed"] is False
+    assert [scenario["complexity"] for scenario in fixture["scenarios"]] == [
+        "simple",
+        "medium",
+        "complex",
+    ]
+    for scenario in fixture["scenarios"]:
+        assert scenario["db_context"]["target_db"] == "PPM"
+        assert scenario["db_context"]["platform_db"] == "PLF"
+        assert scenario["db_context"]["plf_fallback"] == "forbidden"
+
+
 def test_p24_assets_do_not_copy_user_reference_content_or_raw_sql() -> None:
     asset_paths = [
         CONTRACT,
         TASK,
+        P24_FIXTURE,
         *(PROMPTS / prompt for prompt in P24_PROMPTS.values()),
     ]
-    forbidden_markers = ["CREATE OR ALTER PROCEDURE", "CREATE PROCEDURE"]
+    forbidden_markers = [
+        "CREATE OR ALTER PROCEDURE",
+        "CREATE PROCEDURE",
+        "CREATE PROC",
+        "ALTER PROCEDURE",
+    ]
 
     for path in asset_paths:
         text = path.read_text(encoding="utf-8")
