@@ -18,7 +18,7 @@
     }
   },
   "expected": {
-    "jobStatus": "REVIEW_PENDING",
+    "jobStatus": "VALIDATION_COMPLETE",
     "currentStep": "VALIDATE",
     "metadataMode": "fixture-first",
     "defaultMetadataProfileId": "master",

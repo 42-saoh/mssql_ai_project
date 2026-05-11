@@ -2,7 +2,7 @@
   "sampleId": "p06-fixture-workflow-master-order-summary-v1",
   "source": "Expected stable summary for fixture-backed WorkflowService output.",
   "workflow": {
-    "jobStatus": "REVIEW_PENDING",
+    "jobStatus": "VALIDATION_COMPLETE",
     "currentStep": "VALIDATE",
     "latestValidationStatus": "REVIEW_REQUIRED",
     "artifactTypes": [
@@ -17,7 +17,7 @@
   "artifactExpectations": [
     {
       "type": "SP_ANALYSIS_DOC",
-      "status": "REVIEW_PENDING",
+      "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 2,
       "requiredContent": [
@@ -29,7 +29,7 @@
     },
     {
       "type": "DEPENDENCY_REPORT",
-      "status": "REVIEW_PENDING",
+      "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 2,
       "requiredContent": [
@@ -41,28 +41,28 @@
     },
     {
       "type": "DTO_DRAFT",
-      "status": "REVIEW_PENDING",
+      "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
       "requiredAssumptionMarker": "REVIEW_REQUIRED"
     },
     {
       "type": "SERVICE_DRAFT",
-      "status": "REVIEW_PENDING",
+      "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
       "requiredAssumptionMarker": "REVIEW_REQUIRED"
     },
     {
       "type": "MAPPER_INTERFACE",
-      "status": "REVIEW_PENDING",
+      "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
       "requiredAssumptionMarker": "REVIEW_REQUIRED"
     },
     {
       "type": "MAPPER_XML",
-      "status": "REVIEW_PENDING",
+      "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
       "requiredAssumptionMarker": "REVIEW_REQUIRED"

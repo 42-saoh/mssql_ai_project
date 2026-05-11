@@ -39,6 +39,7 @@ export const jobStatusLabels: Record<JobStatus, string> = {
   ANALYZING: "Analyzing",
   GENERATING: "Generating",
   VALIDATING: "Validating",
+  VALIDATION_COMPLETE: "Validation complete",
   REVIEW_PENDING: "Review pending",
   APPROVED: "Approved",
   REJECTED: "Rejected",
@@ -102,20 +103,22 @@ export function jobStatusSummary(status: JobStatus): string {
     case "COLLECTING_METADATA":
     case "ANALYZING":
     case "GENERATING":
-      return "The request is still in a draft generation phase and has not reached human approval.";
+      return "The request is still in a draft generation phase before validation completes.";
     case "VALIDATING":
-      return "Generated drafts are passing through evidence and policy checks before review.";
+      return "Generated drafts are passing through evidence and policy checks.";
+    case "VALIDATION_COMPLETE":
+      return "Validation is complete for the draft artifacts. Review UI is disabled in the default P25 flow.";
     case "REVIEW_PENDING":
-      return "Validation requires a human reviewer before approval can be recorded.";
+      return "Deferred approval state retained for compatibility. The default P25 flow stops at validation complete.";
     case "APPROVED":
-      return "A reviewer accepted this draft artifact version. The portal shell still exposes no publish action.";
+      return "Deferred approval evidence exists for this draft artifact version. The portal shell still exposes no publish action.";
     case "REJECTED":
-      return "A reviewer rejected this draft and requested changes before downstream use.";
+      return "Deferred approval evidence rejected this draft before downstream use.";
     case "PUBLISHED":
       return "Published status is part of the API contract, but publishing is not available in this shell.";
     case "FAILED":
       return "The workflow failed and requires operator inspection.";
     case "CANCELED":
-      return "The workflow was canceled before approval.";
+      return "The workflow was canceled before validation completed.";
   }
 }

@@ -291,7 +291,7 @@ def test_p15_fixture_workflow_latency_reproducibility_and_draft_completeness(
     complete_artifacts = [
         artifact
         for artifact in first["artifacts"]
-        if artifact["status"] == "REVIEW_PENDING"
+        if artifact["status"] == "DRAFT"
         and artifact["latestValidationStatus"] == "REVIEW_REQUIRED"
         and artifact["generatorVersion"]
         and artifact["registryRefs"]

@@ -58,7 +58,7 @@ def test_ppm_api_productization_fixture_has_no_forbidden_evidence() -> None:
         "plf_fallback_for_ppm",
     ]
     for sample in _walk_samples(fixture):
-        assert sample["expected"]["job_status"] == "REVIEW_PENDING"
+        assert sample["expected"]["job_status"] == "VALIDATION_COMPLETE"
         assert "PUBLISHED" in sample["expected"]["artifact_statuses_forbidden"]
 
 

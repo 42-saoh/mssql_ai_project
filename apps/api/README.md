@@ -1,6 +1,6 @@
 # apps/api
 
-중앙 통합형 Agent 플랫폼의 API/BFF, workflow, approval 시작점을 두는 디렉터리다.
+중앙 통합형 Agent 플랫폼의 API/BFF 와 workflow 시작점을 두는 디렉터리다.
 
 ## 현재 포함
 
@@ -42,11 +42,14 @@
   blockers, and workflow/idempotency conflicts.
 - Artifact listing is internally bounded and stable-ordered. A public pagination contract
   remains an OpenAPI coordination item, so no query/body schema was added in P09.
-- P09 still has no publish route; artifacts may be draft, validated, review-pending,
-  approved, or rejected, but this slice blocks publish transitions.
+- P25 default workflow stops at `VALIDATION_COMPLETE` after validation. Artifacts remain
+  draft/validated outputs; review-pending, approved, and rejected states are retained only
+  for deferred approval compatibility. Publish transitions remain blocked.
 
 ## P13 validation / approval / audit notes
 
+- P25 keeps this approval API/server code as a deferred capability, but the default workflow,
+  Web UI, and smoke path do not call it.
 - Approval decisions require the latest artifact validation report. If callers omit
   `validationReportId`, the workflow binds the latest report internally; stale report ids
   are rejected.
@@ -67,10 +70,10 @@ python3 tests/e2e/web_http_adapter_smoke.py
 ```
 
 이 runner 는 FastAPI app 을 local HTTP 서버로 기동하고 `apps/web` 의
-`smoke:http-adapter` command 를 실행해 request/job/artifact/validation/approval/metadata/registry
+`smoke:http-adapter` command 를 실행해 request/job/artifact/validation/metadata/registry
 경로가 `PortalApi` HTTP client 를 통해 호출되는지 확인한다. Production auth/RBAC source 는
 verified OIDC/JWT identity 와 PLF auth table role lookup 이다. P19 는 `AUTH_RBAC_ENFORCEMENT=1`
-일 때 validation/approval route 에 401/403 enforcement 와 unauthorized negative tests 를
+일 때 validation/deferred approval route 에 401/403 enforcement 와 unauthorized negative tests 를
 추가했다. Live IdP/JWKS 와 운영 PLF role membership 검증은
 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태이며,
 controlled conditional open 의 active productization blocker 로 취급하지 않는다.
@@ -106,7 +109,7 @@ AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/
 ```
 
 helper 는 `OidcJwtVerifier` 와 `MssqlPlatformRepository.resolve_actor_roles()` 경계만
-사용한다. API validation/approval route 를 호출하지 않고 workflow write, approval write,
+사용한다. API validation/deferred approval route 를 호출하지 않고 workflow write, approval write,
 validation write, audit write, publish/export, DDL/DML, procedure execution, row data 조회를
 만들지 않는다. 출력은 pass/fail, role category, blocker code, redacted summary 로 제한한다.
 필수 live env 가 없거나 live 검증이 실패하면 deferred prerequisite failure 로 보고하며,
@@ -156,8 +159,8 @@ helper:
 python3.14 apps/api/scripts/p21_live_portal_probe.py
 ```
 
-이 gate 는 PPM metadata search, PLF workflow submit, explicit validation, approval decision
-recording 을 검증한다. Workflow/validation/approval/audit write 는 PLF core platform flow 로만
+이 gate 는 PPM metadata search, PLF workflow submit, explicit validation 을 검증한다.
+Workflow/validation/audit write 는 PLF core platform flow 로만
 허용된다. Row data, procedure execution, business DB DDL/DML, publish/export/deployment,
 PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 
@@ -191,7 +194,7 @@ API repository 는 로컬 Platform MSSQL DB를 기준으로 동작한다. `.env`
 
 이 adapter 는 `db/schema/` DDL을 자동 적용하지 않고, source DB 업무 row 조회도 수행하지 않는다.
 수동으로 schema를 적용하고 `AUTH_USERS`, `CORE_DB_PROFILES` 기준 행을 준비한 로컬 DB에서만
-request/job/metadata/artifact/validation/approval/audit 기록을 저장하고 다시 읽는다.
+request/job/metadata/artifact/validation/deferred approval/audit 기록을 저장하고 다시 읽는다.
 
 ## Repository adapter boundary
 
@@ -200,7 +203,7 @@ request/job/metadata/artifact/validation/approval/audit 기록을 저장하고 �
 - `api_app.auth` 는 `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL` 을 사용해 bearer JWT 를
   검증하고, PLF role membership 으로 effective authorization 을 결정한다.
 - `api_app.memory_repository.MemoryWorkflowRepository` 는 fixture-first 테스트와 local demo 용
-  in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation/approval
+  in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation/deferred approval
   mapping, audit payload shape 를 유지하되 production persistence 로 사용하지 않는다.
 
 ## Metadata search

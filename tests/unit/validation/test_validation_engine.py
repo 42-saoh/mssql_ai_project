@@ -55,7 +55,7 @@ def test_validate_java_mybatis_golden_draft_requires_review_without_failure() ->
         and check.result == ValidationCheckResult.REVIEW_REQUIRED
         for check in report.checks
     )
-    assert "Draft artifact requires human review before approval/publish." in (
+    assert "Draft artifact has validation caveats before downstream use." in (
         report.manual_review_points
     )
 

@@ -8,16 +8,16 @@ artifact pair with a fixture-first evaluator. P24 remains `production_ready: fal
 there is still no new persisted artifact type, public API/schema change, live DB
 access, raw prompt/SP/provider-response storage, or PPM-to-PLF fallback.
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24 now has contract assets, sanitized guide-quality fixtures, and P24C renderer/evaluator scoring over existing draft artifact types. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation path. P25 changes the default workflow terminal state to `VALIDATION_COMPLETE` and disables the review decision UI while retaining the approval API/server code as a deferred capability. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/deferred approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24 now has contract assets, sanitized guide-quality fixtures, and P24C renderer/evaluator scoring over existing draft artifact types. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
 
 ## Current Boundaries
 
 | Area | Status | Notes |
 |---|---|---|
-| API workflow | implemented | FastAPI routes submit the request, create a job, generate draft artifacts, validate, and record approval decisions. |
+| API workflow | implemented | FastAPI routes submit the request, create a job, generate draft artifacts, validate, and stop at `VALIDATION_COMPLETE`. Approval decision routes remain implemented as deferred compatibility but are outside the default P25 flow. |
 | Metadata collection | fixture-first | Default path uses `fixtures/mcp/metadata_snapshot.json` through the MSSQL MCP registry boundary. |
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
-| Web portal | no-mock HTTP runtime | P21 default runtime requires explicit `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL`; missing API/PLF/PPM prerequisites render API `{code, detail}` blockers instead of mock adapter or demo ids. |
+| Web portal | no-mock HTTP runtime | P21 default runtime requires explicit `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL`; missing API/PLF/PPM prerequisites render API `{code, detail}` blockers instead of mock adapter or demo ids. P25 removes the review decision page and approval CTA from the default UI. |
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | conditional scoped candidate | P17D records live pilot release as `CONDITIONAL_GO` only for the draft-only scoped candidate. This does not make the platform production-ready and does not authorize publish/export, DDL/DML, row-data access, procedure execution, deployment, or PLF fallback. |
 | P18/P19 productization readiness | conditional open | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain deferred future hardening before any production-grade enterprise Auth/RBAC claim. |
@@ -49,12 +49,12 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 
 `make test PYTEST_ARGS="tests/e2e tests/eval"` verifies the default fixture-first/eval gate:
 
-- request acceptance returns `REVIEW_PENDING`
+- request acceptance returns `VALIDATION_COMPLETE`
 - job current step is `VALIDATE`
 - persisted artifact types are generated instead of returning `JAVA_MYBATIS_DRAFT` as a storage type
 - evidence and registry refs are present where implemented
-- validation reports keep draft artifacts in review-required state
-- approval decisions are recorded without publishing
+- validation reports keep `REVIEW_REQUIRED` as an evidence caveat without turning default artifacts into review-pending UI work
+- approval decision recording is retained in server compatibility tests only, not default e2e/Web smoke
 - eval fixtures parse and match generated workflow summaries
 - P15 hard-live fixture contract, metrics, redaction, permission-check schema, and blocker policy are valid
 - P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing

@@ -305,7 +305,7 @@
     "todos": [
       {
         "code": "DEPENDENCY_METADATA_REVIEW",
-        "message": "Review ambiguous TB_ORDER_LINE dependency before approval.",
+        "message": "Flag ambiguous TB_ORDER_LINE dependency as a validation caveat.",
         "status": "REVIEW_REQUIRED",
         "evidence": [
           {

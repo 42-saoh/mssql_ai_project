@@ -37,7 +37,7 @@ function assertObserved(label, predicate) {
 }
 
 function assertNoForbiddenPath() {
-  const forbiddenFragments = ["/publish", "/export", "/deploy", "/execute"];
+  const forbiddenFragments = ["/publish", "/export", "/deploy", "/execute", "/approval-decisions"];
   const forbidden = observedRequests.find(({ path }) =>
     forbiddenFragments.some((fragment) => path.includes(fragment)),
   );
@@ -121,11 +121,6 @@ assert(analysisSummary, "HTTP smoke could not find SP_ANALYSIS_DOC artifact summ
 const artifact = await api.getArtifact(analysisSummary.artifactId);
 const validation = await api.validateArtifact(analysisSummary.artifactId);
 const latestValidation = await api.getLatestValidation(analysisSummary.artifactId);
-const approval = await api.createApprovalDecision(analysisSummary.artifactId, {
-  decision: "REQUEST_CHANGES",
-  reviewer: "web-http-smoke@example.com",
-  comment: "P18B HTTP adapter smoke records a review decision only.",
-});
 const profiles = await api.listMetadataProfiles();
 const metadataSearch = await api.searchMetadataObjects({
   dbProfileId: "master",
@@ -135,14 +130,13 @@ const metadataSearch = await api.searchMetadataObjects({
 });
 const registry = await api.listRegistryVersions();
 
-assert(submitted.status === "REVIEW_PENDING", `Unexpected submit status: ${submitted.status}`);
+assert(submitted.status === "VALIDATION_COMPLETE", `Unexpected submit status: ${submitted.status}`);
 assert(job.currentStep === "VALIDATE", `Unexpected job current step: ${job.currentStep}`);
 assert(jobs.jobs.some((item) => item.jobId === job.jobId), "Recent jobs did not include submitted job");
 assert(listed.artifacts.length > 0, "HTTP smoke returned no artifacts");
 assert(artifact.evidenceRefs.length > 0, "HTTP smoke artifact has no evidence refs");
 assert(validation.status === "PASSED" || validation.status === "REVIEW_REQUIRED", `Unexpected validation status: ${validation.status}`);
 assert(latestValidation.validationReportId === validation.validationReportId, "Latest validation did not match explicit validation");
-assert(approval.decision === "REQUEST_CHANGES", `Unexpected approval decision: ${approval.decision}`);
 assert(profiles.profiles.every((profile) => profile.readOnly === true), "Metadata profiles must be read-only");
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
 assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
@@ -159,7 +153,6 @@ for (const [label, payload] of Object.entries({
   artifact,
   validation,
   latestValidation,
-  approval,
   profiles,
   metadataSearch,
   registry,
@@ -188,9 +181,6 @@ assertObserved("POST /api/v1/artifacts/{artifactId}/validation", ({ method, path
 assertObserved("GET /api/v1/artifacts/{artifactId}/validation/latest", ({ method, path }) =>
   method === "GET" && /^\/api\/v1\/artifacts\/[^/]+\/validation\/latest$/.test(path),
 );
-assertObserved("POST /api/v1/artifacts/{artifactId}/approval-decisions", ({ method, path }) =>
-  method === "POST" && /^\/api\/v1\/artifacts\/[^/]+\/approval-decisions$/.test(path),
-);
 assertObserved("GET /api/v1/metadata/db-profiles", ({ method, path }) =>
   method === "GET" && path === "/api/v1/metadata/db-profiles",
 );
@@ -209,7 +199,6 @@ console.log(
       baseUrl,
       jobStatus: job.status,
       validationStatus: validation.status,
-      approvalDecision: approval.decision,
       observedRequests,
       deferredProductizationItem: "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED",
     },

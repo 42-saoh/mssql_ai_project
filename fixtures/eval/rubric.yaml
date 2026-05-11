@@ -4,7 +4,7 @@ fixture: p06-fixture-workflow-master-order-summary-v1
 mode: fixture-first
 thresholds:
   required_files_present: true
-  job_status: REVIEW_PENDING
+  job_status: VALIDATION_COMPLETE
   current_step: VALIDATE
   artifact_type_exact_match: true
   review_required_marker_required: true

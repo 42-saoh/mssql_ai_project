@@ -8,13 +8,6 @@ import {
   validationStatusLabels,
 } from "@/lib/presentation";
 
-const reviewChecklist = [
-  "Evidence references point to metadata, static analysis, policy, or explicit user input.",
-  "Assumptions marked REVIEW_REQUIRED are resolved by a human reviewer.",
-  "Generated code or DDL remains draft-only until validation and approval are recorded.",
-  "No screen in this shell executes SQL, publishes code, or mutates business data.",
-];
-
 const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
 
 export function ArtifactPreview({
@@ -61,8 +54,8 @@ export function ArtifactPreview({
         <div className="callout callout--warning">
           <strong>Draft-only boundary</strong>
           <p>
-            This preview is not published or deployed. Validation and reviewer decisions can be
-            recorded later, but this UI exposes no SQL execution, DDL apply, source write, or
+            This preview is not published or deployed. Validation remains required, while the
+            default P25 UI exposes no review decision, SQL execution, DDL apply, source write, or
             publish action.
           </p>
         </div>
@@ -200,19 +193,14 @@ export function ArtifactPreview({
         <div className="panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Review</p>
-              <h2>Checklist placeholder</h2>
+              <p className="eyebrow">Validation caveats</p>
+              <h2>Evidence notes</h2>
             </div>
           </div>
-          <ul className="checklist">
-            {reviewChecklist.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
 
           {(validation?.manualReviewPoints?.length ?? 0) > 0 ? (
             <div className="callout">
-              <strong>Manual review points</strong>
+              <strong>Validation caveats</strong>
               <ul>
                 {validation?.manualReviewPoints?.map((item, index) => (
                   <li key={listItemKey("manual-review-point", index)}>{item}</li>
@@ -234,7 +222,7 @@ export function ArtifactPreview({
 
           {(artifact.todos?.length ?? 0) > 0 ? (
             <div className="callout callout--warning">
-              <strong>TODO / REVIEW_REQUIRED</strong>
+              <strong>TODO / REVIEW_REQUIRED caveats</strong>
               <ul>
                 {artifact.todos?.map((item, index) => (
                   <li key={listItemKey("artifact-todo", index)}>{item}</li>
@@ -246,10 +234,7 @@ export function ArtifactPreview({
       </section>
 
       <div className="page-actions">
-        {artifact.jobId ? <Link href={`/jobs/${artifact.jobId}`}>Back to review job</Link> : null}
-        <Link className="secondary-action" href={`/review/decision?artifactId=${artifact.artifactId}`}>
-          Record review decision
-        </Link>
+        {artifact.jobId ? <Link href={`/jobs/${artifact.jobId}`}>Back to job</Link> : null}
       </div>
     </div>
   );

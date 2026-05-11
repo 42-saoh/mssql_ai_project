@@ -14,6 +14,7 @@ export type JobStatus =
   | "ANALYZING"
   | "GENERATING"
   | "VALIDATING"
+  | "VALIDATION_COMPLETE"
   | "REVIEW_PENDING"
   | "APPROVED"
   | "REJECTED"

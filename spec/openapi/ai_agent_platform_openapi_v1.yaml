@@ -14,7 +14,8 @@ info:
 
     - metadata access is read-only and routed through the MSSQL Metadata MCP boundary;
     - generated documentation, Java/MyBatis code, DTO/VO/Model, and DDL are draft artifacts;
-    - publish-like actions require validation evidence and human approval;
+    - default P25 workflows stop at validation-complete draft output without user review UI;
+    - deferred publish-like actions still require validation evidence and retained approval capability;
     - live row-data queries, automatic DDL execution, and unreviewed code application are out of scope.
 servers:
   - url: http://localhost:{port}
@@ -33,7 +34,7 @@ tags:
   - name: artifacts
     description: Draft artifact preview and validation endpoints.
   - name: approvals
-    description: Human review and approval endpoints.
+    description: Deferred human review and approval endpoints retained outside the default P25 UI flow.
   - name: registry
     description: Prompt, template, profile, and policy registry endpoints.
   - name: metadata
@@ -65,7 +66,7 @@ paths:
       description: |
         Starts a draft-only analysis workflow for one stored procedure. The resulting job is
         expected to collect metadata through the MCP boundary, build a canonical analysis
-        model, generate requested artifacts, and stop at validation/review gates.
+        model, generate requested artifacts, and stop at the validation-complete draft gate.
       requestBody:
         required: true
         content:
@@ -554,12 +555,14 @@ components:
           type: string
     JobStatus:
       type: string
+      description: VALIDATION_COMPLETE is the default P25 terminal draft status after validation; review and approval statuses remain for deferred compatibility.
       enum:
         - SUBMITTED
         - COLLECTING_METADATA
         - ANALYZING
         - GENERATING
         - VALIDATING
+        - VALIDATION_COMPLETE
         - REVIEW_PENDING
         - APPROVED
         - REJECTED

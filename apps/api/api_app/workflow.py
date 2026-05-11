@@ -168,7 +168,7 @@ class WorkflowService:
         next_status = (
             JobStatus.FAILED
             if any(report.status == "FAILED" for report in reports)
-            else JobStatus.REVIEW_PENDING
+            else JobStatus.VALIDATION_COMPLETE
         )
         return self.repository.transition_job(
             job_id,
@@ -720,7 +720,7 @@ def generation_assumptions(agent_run: AgentRunRecord | None) -> list[str]:
     assumptions = [WORKFLOW_METADATA_NOTE]
     if agent_run:
         assumptions.append(
-            "REVIEW_REQUIRED: LLM semantic analysis is inferred and requires human review."
+            "REVIEW_REQUIRED: LLM semantic analysis is inferred and remains a validation caveat."
         )
         assumptions.extend(str(item) for item in agent_run.structured_output.get("assumptions", []))
     return list(dedupe_strings(assumptions))

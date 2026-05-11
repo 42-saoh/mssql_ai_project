@@ -139,6 +139,7 @@ repo/
 - OpenAPI 초안: `spec/openapi/ai_agent_platform_openapi_v1.yaml`
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
 - Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
+- P25 validation-complete status DDL 초안: `db/schema/ai_agent_platform_schema_v4_validation_complete_status.sql`
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - OpenAI LLM runtime package: `packages/agent-runtime/src/ai_agent_runtime`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
@@ -150,6 +151,11 @@ repo/
 - Reproducibility locks: `requirements/lock/py314-dev.txt`, `pnpm-lock.yaml`
 
 이 파일들은 현재 병렬 개발의 공유 기준선이다. Wave 0 이후 worker 는 `packages/domain`, `spec/openapi`, `db/schema`, `spec/policy`, `docker/test`, 루트 문서를 읽기 전용 기준으로 사용하고, 변경이 필요하면 코디네이터에게 blocker 로 올린다.
+
+P25 기준 기본 product flow 는 request → metadata → analysis → generation → validation →
+`VALIDATION_COMPLETE` 로 종료한다. 사용자 review/approval 화면은 비활성화되며, approval API 와
+저장 코드는 추후 재활성화를 위한 deferred capability 로만 유지한다. `REVIEW_REQUIRED` 는 사용자
+승인 요구가 아니라 분석 불확실성/evidence caveat 로 해석한다.
 
 ## 병합 starter 추가 디렉터리
 

@@ -40,18 +40,16 @@ def test_p14_sample_names_come_from_live_manifest_not_web_source() -> None:
 
 def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     source = _web_source().lower()
-    review_page = (
-        WEB_ROOT / "app" / "review" / "decision" / "page.tsx"
-    ).read_text(encoding="utf-8")
 
     assert "/api/v1/metadata/search" in source
     assert "/api/v1/artifacts/" in source
     assert "/publish" not in source
     assert "/deploy" not in source
     assert "/execute" not in source
-    assert "createApprovalDecision" in review_page
-    assert "recordDecision" in review_page
-    assert "approval_preview_" not in review_page
+    assert "/review/decision" not in source
+    assert "createapprovaldecision" not in source
+    assert "recorddecision" not in source
+    assert "approval_preview_" not in source
     assert "row data" in source
     assert "ddl/dml" in source
     assert "blocker-row" in source
@@ -65,11 +63,9 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     artifact_page = (
         WEB_ROOT / "app" / "artifacts" / "[artifactId]" / "page.tsx"
     ).read_text(encoding="utf-8")
-    review_page = (
-        WEB_ROOT / "app" / "review" / "decision" / "page.tsx"
-    ).read_text(encoding="utf-8")
     source = _web_source()
 
+    assert not (WEB_ROOT / "app" / "review" / "decision" / "page.tsx").exists()
     assert not (WEB_ROOT / "lib" / "api" / "mock-adapter.ts").exists()
     assert 'process.env.PORTAL_API_MODE ?? "http"' not in client
     assert "PORTAL_API_MODE=http is required for the P21 no-mock portal" in client
@@ -89,6 +85,6 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert artifact_page.index("async function runValidation") < artifact_page.index(
         "api.validateArtifact(artifactId)"
     )
-    assert "api.createApprovalDecision" in review_page
+    assert "api.createApprovalDecision" not in source
     assert "formatPortalApiError" in source
     assert "portalApiErrorCode" in source

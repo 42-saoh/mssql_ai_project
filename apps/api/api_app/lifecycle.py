@@ -17,11 +17,12 @@ ALLOWED_JOB_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.COLLECTING_METADATA: {JobStatus.ANALYZING},
     JobStatus.ANALYZING: {JobStatus.GENERATING},
     JobStatus.GENERATING: {JobStatus.VALIDATING},
-    JobStatus.VALIDATING: {JobStatus.REVIEW_PENDING, JobStatus.FAILED},
+    JobStatus.VALIDATING: {JobStatus.VALIDATION_COMPLETE, JobStatus.FAILED},
     JobStatus.REVIEW_PENDING: {JobStatus.CANCELED},
 }
 
 TERMINAL_JOB_STATUSES = {
+    JobStatus.VALIDATION_COMPLETE,
     JobStatus.APPROVED,
     JobStatus.REJECTED,
     JobStatus.PUBLISHED,
@@ -58,7 +59,7 @@ def artifact_status_after_validation(status: str, current: ArtifactStatus) -> Ar
     if status == "PASSED":
         return ArtifactStatus.VALIDATED
     if status == "REVIEW_REQUIRED":
-        return ArtifactStatus.REVIEW_PENDING
+        return current
     return current
 
 

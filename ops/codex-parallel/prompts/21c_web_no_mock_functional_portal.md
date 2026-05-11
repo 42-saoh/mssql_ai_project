@@ -47,11 +47,11 @@
 
 - `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 을 app 사용의 필수 조건으로 둔다.
 - `apps/web/lib/api/mock-adapter.ts` 는 runtime/default path 에 연결하지 않는다.
-- `/`, `/requests/new`, `/metadata/search`, `/jobs/[jobId]`, `/artifacts/[artifactId]`, `/review/decision` 을 HTTP API 기반 기능 페이지로 유지한다.
+- P25 기준 functional Web pages 는 `/`, `/requests/new`, `/metadata/search`, `/jobs/[jobId]`, `/artifacts/[artifactId]` 로 유지하고 `/review/decision` 은 기본 UI 에서 제거한다.
 - `job_demo_*`, `art_demo_*`, `approval_preview_*` 링크와 fallback 을 제거한다.
 - `/requests/new` 는 API submit 후 실제 반환된 job id 로 redirect 한다.
 - `/artifacts/[artifactId]` 는 page-load validation write 를 만들지 않고 latest validation 을 표시하며, run-validation 은 명시적 action 으로 둔다.
-- `/review/decision` 은 preview-only 가 아니라 API approval decision 을 기록한다.
+- Approval decision API 는 서버 compatibility 로 남기되 default Web flow 와 smoke path 에서 호출하지 않는다.
 - PLF/PPM/live metadata prerequisites 가 없으면 dependency/configuration blocker 를 명확히 렌더링한다.
 
 ## 검증 명령
@@ -64,6 +64,7 @@
 
 - Web 이 mock adapter 또는 demo ids 없이는 기능 페이지를 렌더링할 수 없음
 - API base URL 미설정 상태를 blocker 로 표시하지 못함
-- request/validation/approval action 이 실제 API client 를 호출하지 않음
+- request/validation action 이 실제 API client 를 호출하지 않음
+- default Web flow 또는 smoke path 가 approval decision API 를 호출함
 - page-load validation write 가 남아 있음
 - row data/procedure execution/DDL/DML/publish/export/deployment action 이 노출됨

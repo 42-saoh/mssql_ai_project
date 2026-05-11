@@ -80,12 +80,13 @@
 대상:
 - validation reports
 - preview
-- approval records
+- deferred approval records
 - publish gating
 
 필수 체크:
 - validation 없이 publish 불가
-- approval decision trace 저장
+- P25 기본 workflow 는 approval decision 없이 `VALIDATION_COMPLETE` 에서 멈춤
+- deferred approval decision trace 저장 경로는 서버 호환성 테스트로만 유지
 - reject 후 재검증 없이 publish 불가
 
 통과 기준:
@@ -105,7 +106,7 @@
 - 민감 환경값 log/fixture 유출 없음
 - 정책 문서와 구현이 모순되지 않음
 - production identity source 가 verified OIDC/JWT 로 문서화되어 있고 role source 가 PLF auth table 로 연결됨
-- validation/approval enforcement 구현 시 unauthorized negative test 가 존재함
+- validation/deferred approval enforcement 구현 시 unauthorized negative test 가 존재함
 - live IdP/JWKS 와 PLF role membership 검증이 없으면 production-grade enterprise Auth/RBAC claim 을 금지하고 deferred future hardening 으로 유지함
 
 통과 기준:
@@ -130,13 +131,14 @@
 - job status
 - draft artifact preview
 - validation report
-- approval decision recording
+- validation-complete terminal draft status
 
 필수 체크:
 - 기본 경로는 `master` metadata profile 과 fixture-backed MCP snapshot 을 사용
-- job 은 `REVIEW_PENDING`, current step 은 `VALIDATE`
+- job 은 `VALIDATION_COMPLETE`, current step 은 `VALIDATE`
 - persisted artifact type 이 OpenAPI requested output group 과 구분됨
-- 승인 decision 은 기록만 수행하며 publish 상태로 전이하지 않음
+- validation `REVIEW_REQUIRED` 는 user review flow 가 아니라 evidence caveat 로 유지됨
+- approval decision API 는 deferred compatibility 로 남지만 기본 happy path, Web UI, smoke path 에 포함하지 않음
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 통과
@@ -153,7 +155,7 @@
 - `requirements/lock/py314-dev.txt`, `python:3.14-slim`, `requires-python >=3.14`, Ruff `py314` target 이 현재 기준임
 - Web functional pages 는 mock adapter 나 demo ids 에 의존하지 않음
 - `/artifacts/[artifactId]` page-load 는 validation write 를 만들지 않고 latest validation GET 만 수행함
-- `/review/decision` 은 preview-only 가 아니라 approval decision API 를 호출함
+- P25 기준 `/review/decision` 화면과 approval CTA 는 기본 Web UI 에서 제거되며 직접 접근은 404 로 처리됨
 - `P21_LIVE_PORTAL_GATE=1` 에서 PLF/PPM env 가 없으면 skip 이 아니라 blocker failure 로 보고함
 
 통과 기준:

@@ -5,21 +5,21 @@
 2. job 상태 확인
 3. draft artifact 미리보기
 4. validation report 확인
-5. reviewer 승인/반려
-6. approval decision 기록 확인
+5. validation caveat 확인
 
 ## 현재 사용 가능한 경로
 
-- API happy path 는 fixture-backed metadata 로 request → job → artifact → validation → approval decision recording 까지 검증된다.
+- API happy path 는 fixture-backed metadata 로 request → job → artifact → validation → `VALIDATION_COMPLETE` 까지 검증된다.
 - web portal 은 P21 기준 no-mock HTTP portal 이며, `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 설정되어야 기능 페이지가 동작한다.
 - PLF workflow repository 또는 PPM read-only metadata prerequisite 이 없으면 화면은 demo id fallback 없이 dependency blocker 를 표시한다.
-- API validation/approval write action 은 `AUTH_RBAC_ENFORCEMENT=1` 일 때 verified OIDC/JWT actor 와 PLF role membership 이 있는 `REVIEWER` 또는 `ADMIN` 만 수행할 수 있다.
+- API validation/deferred approval write action 은 `AUTH_RBAC_ENFORCEMENT=1` 일 때 verified OIDC/JWT actor 와 PLF role membership 이 있는 `REVIEWER` 또는 `ADMIN` 만 수행할 수 있다.
 - Live IdP/JWKS 와 운영 PLF role lookup 검증은 future hardening 으로 남아 있으므로, 현재 시스템은 controlled conditional use 로 해석한다.
 - 기본 metadata profile 은 `master` 이고, sample fixture target 은 `dbo.usp_GetOrderSummary` 이다.
 - P16/P17D 기준 PPM 대표 object identity 는 `live_metadata` manifest 에서 온 것이며, live pilot release 는 scoped draft-only candidate 로만 CONDITIONAL_GO 다.
 
 ## 주의
 - 결과는 초안이며 검토가 필요하다.
+- P25 기본 Web UI 는 reviewer 승인/반려 화면을 제공하지 않는다. `REVIEW_REQUIRED` 는 승인 요청이 아니라 분석/evidence caveat 이다.
 - 실제 데이터 조회 기능은 제공하지 않는다.
 - DDL/배포는 자동 실행되지 않는다.
 - publish endpoint 는 아직 제공하지 않는다.
@@ -44,6 +44,6 @@ P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidenc
 - `docs/pilot-release-readiness.md` 는 현재 live pilot release 를 scoped CONDITIONAL_GO 로 판정한다.
 - fixture-first/demo handoff 는 GO WITH LIMITATIONS 이며, 결과물은 계속 draft-only 이다.
 - P17A dependency gate 는 selected SP suite majority 기준으로 통과했지만, SP 와 table 사이의 확정 dependency 는 manifest 의 confirmed `related_procedures` evidence 가 있을 때만 해석한다.
-- 승인 화면이나 API decision 기록은 publish, 배포, DDL 적용을 수행하지 않는다.
+- Deferred approval API decision 기록은 publish, 배포, DDL 적용을 수행하지 않으며 기본 Web flow 에 노출되지 않는다.
 - P18/P19 productization readiness 는 CanonicalAnalysisModel, web HTTP adapter smoke evidence, production auth/RBAC source 문서화, fixture-backed enforcement 를 기록해 controlled CONDITIONAL_GO 로 해석한다. 단, live IdP/JWKS 와 PLF role lookup 검증 전까지 production-grade enterprise Auth/RBAC 또는 `production_ready: true` 로 주장하지 않는다.
-- P21C Web readiness 는 HTTP API 연결, PLF/PPM blocker rendering, explicit validation action, persisted approval decision 을 확인하는 controlled live portal 기준이다. 이 기준도 full production-ready 주장은 아니며 `production_ready: false` 를 유지한다.
+- P21C/P25 Web readiness 는 HTTP API 연결, PLF/PPM blocker rendering, explicit validation action, review UI disabled 상태를 확인하는 controlled live portal 기준이다. 이 기준도 full production-ready 주장은 아니며 `production_ready: false` 를 유지한다.

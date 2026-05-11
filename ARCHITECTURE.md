@@ -61,12 +61,13 @@ flowchart LR
 ### Web Portal / Admin Console
 - 사용자 요청 등록
 - 결과 미리보기
-- 승인/반려
+- validation evidence 확인
+- deferred approval compatibility 상태 확인
 - 관리자 설정
 
 ### API / BFF
 - 입력 검증
-- 인증/인가 연계: production identity 는 verified OIDC/JWT, role source 는 PLF `AUTH_USERS` / `AUTH_ROLES` / `AUTH_USER_ROLES`, validation/approval write action 은 `REVIEWER`/`ADMIN`
+- 인증/인가 연계: production identity 는 verified OIDC/JWT, role source 는 PLF `AUTH_USERS` / `AUTH_ROLES` / `AUTH_USER_ROLES`, validation/deferred approval write action 은 `REVIEWER`/`ADMIN`
 - job/artifact 응답 조합
 
 ### Workflow Orchestrator
@@ -222,8 +223,8 @@ packages/templates
 
 ## 현재 통합 구현 상태
 
-- `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/latest-validation/validation/approval decision recording happy path 를 제공한다.
-- `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다.
+- `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/latest-validation/validation happy path 를 제공한다. P25 기본 workflow 는 validation 이후 `VALIDATION_COMPLETE` 에서 종료하며, approval decision API 는 추후 재활성화 가능한 deferred capability 로 유지한다.
+- `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다. P25 기준 review decision 화면과 CTA 는 기본 UI 에서 제거되었다.
 - `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다.
 - `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
 - `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. 기본 semantic analysis profile 은 `gpt-5.5`, fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. P23 이후 semantic runtime 은 SP별 staged calls, dynamic evidence schema, deterministic evidence-ref repair 를 포함한다. 기본 테스트는 remote API 를 호출하지 않는다.
@@ -231,7 +232,7 @@ packages/templates
 - P24 SP migration guide quality eval 은 sanitized simple/medium/complex fixtures 를 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` draft artifact type 으로 렌더링하고 `evaluate_p24_migration_guide_quality` 로 점수화한다. 새 persisted artifact type, API/Web/DB schema 변경, live DB access 는 없으며 Java/MyBatis 는 `draft_only_readiness_notes` 경계에 남긴다.
 - Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후에만 LLM semantic analysis 를 실행한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
-- P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되었지만, live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
+- P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되어 있으나 P25 기본 product path 는 approval UI 를 노출하지 않는다. Live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
 - P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.
 
 ## 저장소 경계 규칙

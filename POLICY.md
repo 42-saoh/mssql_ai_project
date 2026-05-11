@@ -67,8 +67,9 @@
 
 - 모든 생성 결과는 초안이다. 승인 전 확정본이 아니다.
 - 근거가 명확한 내용과 추론 기반 내용을 구분한다.
-- 불확실한 결과는 `REVIEW_REQUIRED` 또는 동등한 상태를 표시한다.
+- 불확실한 결과는 `REVIEW_REQUIRED` 또는 동등한 상태를 표시한다. P25 이후 이 표기는 사용자 승인 플로우 요구가 아니라 분석 불확실성/evidence caveat 의미다.
 - artifact 는 버전, 생성기 버전, snapshot, registry refs 를 추적 가능해야 한다.
+- P25 기본 product flow 는 validation 이후 `VALIDATION_COMPLETE` 에서 멈추며 review UI 를 노출하지 않는다. Approval API/server code 는 deferred capability 로 남기되 기본 workflow 완료 조건이나 production readiness 근거로 사용하지 않는다.
 - SP migration guide quality gate 는 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 초안 품질 평가로만 해석한다. 통과 결과도 production-ready, 자동 전환 완료, 자동 적용 승인으로 표현하지 않는다.
 - Unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
 

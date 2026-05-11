@@ -1,6 +1,6 @@
 import { readPortalApiError } from "./errors.ts";
 import type { PortalApi } from "./portal-api.ts";
-import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types.ts";
+import type { MetadataSearchRequest, SPAnalysisRequest } from "./types.ts";
 
 interface HttpPortalApiOptions {
   baseUrl: string;
@@ -93,18 +93,6 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
         `/api/v1/artifacts/${encodeURIComponent(artifactId)}/validation`,
         {
           method: "POST",
-        },
-      );
-    },
-
-    createApprovalDecision(artifactId: string, request: ApprovalDecisionRequest) {
-      return readJson(
-        fetcher,
-        baseUrl,
-        `/api/v1/artifacts/${encodeURIComponent(artifactId)}/approval-decisions`,
-        {
-          method: "POST",
-          json: request,
         },
       );
     },

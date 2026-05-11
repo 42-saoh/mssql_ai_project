@@ -78,7 +78,7 @@ def _sp_analysis_llm_payload(outputs: list[str] | None = None) -> dict:
     return payload
 
 
-def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None:
+def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> None:
     headers = {"X-Correlation-ID": "corr-route-flow"}
     submit = client.post(
         "/api/v1/requests/sp-analysis",
@@ -104,7 +104,7 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     submitted = submit.json()
     assert submitted["requestId"].startswith("req_")
     assert submitted["jobId"].startswith("job_")
-    assert submitted["status"] == "REVIEW_PENDING"
+    assert submitted["status"] == "VALIDATION_COMPLETE"
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
@@ -147,22 +147,6 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert latest_validation.headers["X-Correlation-ID"] == "corr-route-flow"
     assert latest_validation.json()["artifactId"] == artifact_id
     assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
-
-    approval = client.post(
-        f"/api/v1/artifacts/{artifact_id}/approval-decisions",
-        headers=headers,
-        json={
-            "decision": "REQUEST_CHANGES",
-            "reviewer": "reviewer@example.com",
-            "comment": "API skeleton decision recording only",
-        },
-    )
-    assert approval.status_code == 201
-    assert approval.headers["X-Correlation-ID"] == "corr-route-flow"
-    assert approval.json()["artifactId"] == artifact_id
-    assert approval.json()["decision"] == "REQUEST_CHANGES"
-    assert "validationReportId" not in approval.json()
-    assert "reviewerChecklist" not in approval.json()
 
 
 def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(

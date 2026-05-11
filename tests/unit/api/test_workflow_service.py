@@ -105,14 +105,14 @@ def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> 
 
     request_record, job = service.submit_sp_analysis(_request())
 
-    assert request_record.status == JobStatus.REVIEW_PENDING
-    assert job.status == JobStatus.REVIEW_PENDING
+    assert request_record.status == JobStatus.VALIDATION_COMPLETE
+    assert job.status == JobStatus.VALIDATION_COMPLETE
     assert [status.value for status, _step in job.transitions] == [
         "COLLECTING_METADATA",
         "ANALYZING",
         "GENERATING",
         "VALIDATING",
-        "REVIEW_PENDING",
+        "VALIDATION_COMPLETE",
     ]
 
     artifact_types = {artifact.type for artifact in repository.artifacts.values()}
@@ -271,6 +271,19 @@ def test_repository_rejects_unsupported_job_transition() -> None:
         )
 
 
+def test_validation_complete_is_terminal_job_status() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    _request_record, job = service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    with pytest.raises(WorkflowStateError, match="terminal status VALIDATION_COMPLETE"):
+        repository.transition_job(
+            job.job_id,
+            status=JobStatus.CANCELED,
+            current_step=WorkflowStepType.VALIDATE,
+        )
+
+
 def test_memory_repository_fail_job_persists_error_state_and_request_status() -> None:
     repository = MemoryWorkflowRepository()
     request = repository.create_request(
@@ -372,7 +385,7 @@ def test_approve_requires_latest_passed_validation_report() -> None:
 
     gate_report = service.evaluate_publish_gate(artifact.artifact_id)
 
-    assert repository.artifacts[artifact.artifact_id].status.value == "REVIEW_PENDING"
+    assert repository.artifacts[artifact.artifact_id].status.value == "DRAFT"
     assert gate_report.status == "FAILED"
     assert gate_report.storage_result == "FAIL"
     assert gate_report.checks[0]["ruleId"] == "workflow.approval.before_publish"

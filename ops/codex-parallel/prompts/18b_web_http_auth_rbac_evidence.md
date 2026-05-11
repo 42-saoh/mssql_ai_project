@@ -56,10 +56,10 @@
 
 ## 구현 범위
 
-- HTTP adapter 가 `PortalApi` interface 의 request/job/artifact/validation/approval/metadata/registry 경로를 모두 호출하는지 smoke 로 증명한다.
+- HTTP adapter 가 `PortalApi` interface 의 request/job/artifact/validation/metadata/registry 경로를 호출하는지 smoke 로 증명한다. Approval 경로는 P25 기준 deferred server compatibility 로 남기며 default Web smoke 에 포함하지 않는다.
 - mock adapter 는 demo/dev 기본값으로 유지하되, release evidence 와 혼동하지 않게 문서화한다.
 - production actor identity source, role source, role-to-action matrix 가 없으면 `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED` blocker 를 유지한다.
-- 권한 구현을 추가하는 경우 validation/approval action 의 unauthorized negative test 를 포함한다.
+- 권한 구현을 추가하는 경우 validation action 과 deferred approval action 의 unauthorized negative test 를 포함한다.
 - UI/API 경로가 publish/export, deployment, DDL/DML, row data, procedure execution, PLF fallback 을 암시하거나 수행하지 않게 한다.
 
 ## 검증 명령

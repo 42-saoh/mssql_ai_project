@@ -10,7 +10,6 @@
 - `/metadata/search` - read-only metadata identity/evidence search
 - `/jobs/[jobId]` - 실제 job 상태와 draft artifact 목록
 - `/artifacts/[artifactId]` - artifact preview 와 latest validation 표시
-- `/review/decision` - API approval decision recording form
 
 ## API boundary
 
@@ -29,9 +28,14 @@
 - `/artifacts/[artifactId]` 는 page-load 에 validation write 를 만들지 않는다.
   Latest validation 은 `GET /api/v1/artifacts/{artifactId}/validation/latest` 로 읽고,
   validation write 는 사용자가 `Run validation` 을 누를 때만 실행한다.
-- `/review/decision` 은 preview-only 가 아니라
-  `POST /api/v1/artifacts/{artifactId}/approval-decisions` 를 호출한다.
 - PLF/PPM/API prerequisites 가 없으면 dependency blocker 를 렌더링한다.
+
+## P25 behavior
+
+- `/review/decision` 화면과 approval CTA 는 기본 Web UI 에서 제거되었고 직접 접근은 404 로 처리한다.
+- Validation 결과의 `REVIEW_REQUIRED` 는 사람 승인 요청이 아니라 evidence caveat 로 표시한다.
+- Approval API/server code 는 추후 재활성화를 위한 deferred capability 로 남지만 Web API client 와
+  smoke path 는 호출하지 않는다.
 
 ## P22 behavior
 

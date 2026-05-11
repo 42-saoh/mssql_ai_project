@@ -106,7 +106,6 @@ def test_p21_fixture_declares_no_mock_live_portal_contract() -> None:
         "/metadata/search",
         "/jobs/[jobId]",
         "/artifacts/[artifactId]",
-        "/review/decision",
     ]
 
 
@@ -197,7 +196,7 @@ def test_p21_web_no_mock_runtime_contract() -> None:
         assert demo_id not in functional_source
     assert "api.createSPAnalysisRequest" in functional_source
     assert "api.getLatestValidation" in functional_source
-    assert "api.createApprovalDecision" in functional_source
+    assert "api.createApprovalDecision" not in functional_source
 
 
 def test_p21_env_compose_and_probe_missing_prerequisites(monkeypatch) -> None:
@@ -212,7 +211,6 @@ def test_p21_env_compose_and_probe_missing_prerequisites(monkeypatch) -> None:
         "PORTAL_API_MODE",
         "PORTAL_API_BASE_URL",
         "P21_METADATA_SEARCH_QUERY",
-        "P21_APPROVAL_REVIEWER_LOGIN",
     ):
         assert f"{name}=" in env_text
         assert name in compose_text or name.startswith(("P21_", "PYTHON", "PNPM", "DOCKER_COMPOSE"))

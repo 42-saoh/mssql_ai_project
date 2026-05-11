@@ -70,7 +70,6 @@ export default async function HomePage() {
     rejectedMessage(metadataResult),
     artifactResult ? rejectedMessage(artifactResult[0]) : null,
   ].filter((message): message is string => Boolean(message));
-  const firstArtifact = artifacts[0];
 
   return (
     <div className="stack">
@@ -78,13 +77,13 @@ export default async function HomePage() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Controlled live portal</p>
-            <h1>Analyze, validate, review</h1>
+            <h1>Analyze and validate</h1>
           </div>
           <span className="quiet-label">HTTP API boundary</span>
         </div>
         <p className="lede">
           Portal pages call the configured API/BFF for request intake, read-only metadata search,
-          draft artifacts, validation evidence, blockers, and persisted review decisions.
+          draft artifacts, validation evidence, and blockers.
         </p>
         <div className="form-actions">
           <Link className="primary-action" href="/requests/new">
@@ -200,32 +199,6 @@ export default async function HomePage() {
             <p className="lede">Metadata search is unavailable from the connected API.</p>
           )}
           <Link href="/metadata/search">Open metadata search</Link>
-        </div>
-
-        <div className="panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Review decision</p>
-              <h2>Persist decision</h2>
-            </div>
-            <span className="quiet-label">No publish</span>
-          </div>
-          <p className="lede">
-            Reviewers record approval decisions through the API. Publish, export, deployment,
-            procedure execution, and DDL/DML controls remain unavailable.
-          </p>
-          <div className="form-actions">
-            <Link
-              className="secondary-action"
-              href={
-                firstArtifact
-                  ? `/review/decision?artifactId=${firstArtifact.artifactId}`
-                  : "/review/decision"
-              }
-            >
-              Record decision
-            </Link>
-          </div>
         </div>
       </section>
 

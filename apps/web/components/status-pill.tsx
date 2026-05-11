@@ -7,6 +7,7 @@ const statusToneByValue: Record<string, Tone> = {
   ANALYZING: "info",
   GENERATING: "info",
   VALIDATING: "warning",
+  VALIDATION_COMPLETE: "success",
   VALIDATED: "success",
   REVIEW_PENDING: "warning",
   REVIEW_REQUIRED: "warning",
