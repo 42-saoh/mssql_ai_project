@@ -91,3 +91,4 @@
 - 기본 검증 명령은 Makefile 의 도커 기반 테스트 명령을 우선 사용한다.
 - 파이썬 계열 테스트는 `make test` 와 `PYTEST_ARGS` 조합을 기본 인터페이스로 사용한다.
 - 전용 UI 테스트가 아직 없으면 `make test-web-smoke` 또는 승인된 Playwright MCP smoke 로 최소 검증을 수행하고, 테스트 공백을 명시적으로 보고한다.
+- Windows PowerShell 환경에서는 WinGet shim 을 직접 호출하지 않고 `scripts/win_git_bash.ps1` 로 Git Bash 를 경유해 `make`/`pnpm` 계열 명령을 실행한다.

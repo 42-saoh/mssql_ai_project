@@ -14,11 +14,15 @@ def test_parallel_docker_assets_exist() -> None:
     assert "test-reset" in makefile
 
     compose = (root / "docker" / "test" / "docker-compose.yml").read_text(encoding="utf-8")
+    web_dockerfile = (root / "docker" / "test" / "Dockerfile.web").read_text(encoding="utf-8")
     assert "WORKTREE_PATH" in compose
     assert "type: bind" in compose
     assert "PNPM_STORE_DIR: /pnpm/store" in compose
     assert "NPM_CONFIG_STORE_DIR: /pnpm/store" in compose
+    assert "web-root-node-modules:/workspace/node_modules" in compose
+    assert "web-app-node-modules:/workspace/apps/web/node_modules" in compose
     assert "P15_HARD_LIVE_GATE" in compose
+    assert "corepack prepare pnpm@10.33.0 --activate" in web_dockerfile
 
     web_install = (root / "scripts" / "install_web_workspace.sh").read_text(encoding="utf-8")
     assert "--store-dir" in web_install

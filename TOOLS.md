@@ -55,7 +55,7 @@
 - `make`
 
 ### Python 계열
-- `python3.14`
+- Python 3.14 runtime. macOS/Linux commonly expose it as `python3.14`; Windows may use `.env` `PYTHON=python`.
 - `uv` 또는 `pip`
 - `pytest`
 - `ruff`
@@ -129,6 +129,17 @@
 - 실패한 명령은 원인 분석 없이 반복 실행하지 않는다.
 - 외부 네트워크가 필요한 설치나 문서 조회는 목적을 분명히 하고 최소화한다.
 - 저장소 바깥을 쓰는 명령, 파괴적 git 명령, 공유 DB를 건드리는 명령은 기본 금지다.
+- Windows PowerShell 에서는 WinGet Links shim 의 `make.exe`/`pnpm.exe` 를 직접 실행하지 않는다. `scripts/win_git_bash.ps1` 를 통해 Git Bash 를 열고 WinGet 실제 package 경로를 PATH 앞에 붙인 뒤 표준 명령을 실행한다.
+
+### Windows Git Bash Helper
+
+Windows 에서 Makefile 의 POSIX shell 구문을 안정적으로 실행하려면 아래 helper 를 사용한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
+```
+
+이 helper 는 `C:\Program Files\Git\bin\bash.exe` 를 우선 사용하고, `%LOCALAPPDATA%\Microsoft\WinGet\Packages` 아래의 `ezwinports.make` 와 `pnpm.pnpm` 실제 설치 경로를 Git Bash `PATH` 앞에 추가한다.
 
 ## 권장 초기 기술 스택
 

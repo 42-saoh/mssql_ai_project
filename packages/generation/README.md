@@ -1,5 +1,11 @@
 # packages/generation
 
+P24C status: `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` render fixture-first SP
+migration guide sections from `GenerationContext.request["migrationGuide"]`
+sanitized facts and evidence refs. `evaluate_p24_migration_guide_quality` scores
+the rendered artifact pair and returns only the P24 report fields while keeping
+`productionReady: false`.
+
 SP 분석 문서, Mapper XML, Service, DTO/VO/Model, DDL 초안 생성기를 둘 자리다.
 
 현재 구현 기준:

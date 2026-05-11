@@ -1,9 +1,17 @@
-PYTHON ?= python3.14
+REPO_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
+ENV_FILE ?= $(REPO_ROOT)/.env
+env_file_value = $(strip $(shell if [ -f "$(ENV_FILE)" ]; then sed -n 's/^$(1)=//p' "$(ENV_FILE)" | tail -n 1 | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//"; fi))
+
+PYTHON_FROM_ENV_FILE := $(call env_file_value,PYTHON)
+PNPM_FROM_ENV_FILE := $(call env_file_value,PNPM)
+DOCKER_COMPOSE_FROM_ENV_FILE := $(call env_file_value,DOCKER_COMPOSE)
+ALLOW_UNLOCKED_PNPM_INSTALL_FROM_ENV_FILE := $(call env_file_value,ALLOW_UNLOCKED_PNPM_INSTALL)
+
+PYTHON ?= $(if $(PYTHON_FROM_ENV_FILE),$(PYTHON_FROM_ENV_FILE),python3.14)
 UVICORN ?= $(PYTHON) -m uvicorn
 RUFF ?= $(PYTHON) -m ruff
-PNPM ?= pnpm
-DOCKER_COMPOSE ?= docker compose
-REPO_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
+PNPM ?= $(if $(PNPM_FROM_ENV_FILE),$(PNPM_FROM_ENV_FILE),pnpm)
+DOCKER_COMPOSE ?= $(if $(DOCKER_COMPOSE_FROM_ENV_FILE),$(DOCKER_COMPOSE_FROM_ENV_FILE),docker compose)
 WORKTREE_PATH ?= $(REPO_ROOT)
 TEST_COMPOSE_FILE ?= $(REPO_ROOT)/docker/test/docker-compose.yml
 PYTEST_ARGS ?=
@@ -19,11 +27,10 @@ LOCAL_PYTHONPATH ?= $(REPO_ROOT)/apps/api:$(REPO_ROOT)/services/mssql-mcp:$(REPO
 PYTHON_LOCK_FILE ?= requirements/lock/py314-dev.txt
 PYTHON_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_python_locked.sh
 WEB_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_web_workspace.sh
-ALLOW_UNLOCKED_PNPM_INSTALL ?= 0
+ALLOW_UNLOCKED_PNPM_INSTALL ?= $(if $(ALLOW_UNLOCKED_PNPM_INSTALL_FROM_ENV_FILE),$(ALLOW_UNLOCKED_PNPM_INSTALL_FROM_ENV_FILE),0)
 
 .PHONY: setup fmt lint test check run-api run-mcp run-web eval test-build test-web-smoke docker-project-name test-shell test-web-shell test-down test-reset dev-ports
 
-ENV_FILE ?= $(REPO_ROOT)/.env
 COMPOSE_ENV_FILE ?= $(if $(wildcard $(ENV_FILE)),--env-file "$(ENV_FILE)",)
 LOAD_ENV = set -a; if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; set +a
 

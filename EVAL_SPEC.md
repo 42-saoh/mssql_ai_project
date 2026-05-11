@@ -205,14 +205,53 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 fixture trace/API/Web 산출물에 저장하지 않는다
 - optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
 
+판정 해석:
+- 통과: 기본 fixture-first P23 테스트가 통과하고 `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 을 만족한다.
+- 보류: fixture-first gate 는 통과했지만 optional live confidence gate 가 skip/fail/unavailable 이거나 로컬 검증 prerequisites 가 준비되지 않았다. 이 경우 P23 confidence signal 만 부족한 상태이며 production readiness 로 해석하지 않는다.
+- 실패/blocker: quality threshold 미달, raw prompt/SP/provider response 저장, `production_ready: true` 주장, PPM-to-PLF fallback, model/profile/prompt/schema drift, 또는 P24 document/code generation 범위를 P23 완료로 표현하는 경우다.
+
 통과 기준:
 - `make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/unit/agent_runtime tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 통과
 - P23A -> P23B -> P23C -> P23D 병합 순서가 manifest 에 명시됨
 - optional live quality gate 는 아래 명령으로 별도 수행하며, 실패해도 production blocker 로 과장하지 않음
-- P23 완료 전까지 `production_ready: false` 유지
+- P23D 완료 후에도 별도 production readiness gate 전까지 `production_ready: false` 유지
 
 ```bash
 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"
+```
+
+### 11. P24 SP Migration Guide Quality Eval Contract
+
+P24C implementation status: fixture-first renderer/evaluator coverage is now
+implemented for the existing `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifact
+types. The evaluator scores the rendered artifact pair with no new persisted
+artifact type, no API/schema changes, no live DB access, no raw prompt/SP/provider
+response storage, and `production_ready: false`.
+
+대상:
+- `spec/eval/p24_sp_migration_guide_quality_contract.yaml`
+- `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml`
+- `tests/eval/test_p24_sp_migration_guide_quality.py`
+- `tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py`
+
+필수 체크:
+- P24B 는 renderer/runtime/API/Web/DB schema 변경 없이 fixture-first guide quality expectation 만 추가한다
+- simple/medium/complex synthetic scenarios 가 required section taxonomy, dependency inventory, DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, evidence refs 를 포함한다
+- fast/test profile 은 `gpt-5-nano` 로 고정한다
+- fixture 와 expected report 는 raw prompt, raw SP definition, raw OpenAI response text, row data, secret, 사용자 제공 guide 본문, 실제 운영 SP 원문을 저장하지 않는다
+- unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 모두 `REVIEW_REQUIRED` 로 남긴다
+- PPM 접근 실패 시 PLF fallback 은 금지하고 `production_ready: false` 를 유지한다
+
+통과 기준:
+- `required_section_coverage >= 1.0`
+- `evidence_linked_claim_coverage >= 0.9`
+- `dml_matrix_coverage >= 0.9`
+- `branch_call_flow_coverage >= 0.85`
+- `unsupported_claim_review_required_ratio >= 1.0`
+- `storage_safety_findings <= 0`
+
+```bash
+make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
 ```
 
 ## 초기 fixture 세트
@@ -253,6 +292,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 | auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |
 | OpenAI/LLM runtime 변경 | fake gateway unit + no-raw-trace contract + optional live gate 문서화 |
 | LLM analysis quality eval 변경 | P23 contract prompt asset test + fixture-first fake eval + optional live gate 문서화 |
+| SP migration guide quality eval 변경 | P24 contract prompt asset test + fixture-first section/evidence/DML/call-flow eval |
 
 ## 평가 산출물 형식
 

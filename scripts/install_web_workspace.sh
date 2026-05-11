@@ -6,6 +6,7 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 PNPM_BIN=${PNPM:-pnpm}
 LOCK_FILE="$REPO_ROOT/pnpm-lock.yaml"
 STORE_DIR=${PNPM_STORE_DIR:-${NPM_CONFIG_STORE_DIR:-}}
+export COREPACK_ENABLE_PROJECT_SPEC=${COREPACK_ENABLE_PROJECT_SPEC:-0}
 
 install_with_lockfile() {
   if [ -n "$STORE_DIR" ]; then

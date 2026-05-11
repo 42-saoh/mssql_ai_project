@@ -8,7 +8,7 @@
 
 ## Goal
 
-P22 OpenAI LLM Agent Runtime 을 기반으로 stored procedure semantic analysis 품질을 simple/medium/complex suite 로 반복 평가할 수 있는 계약, fixture, runner, readiness 문서를 분리된 작업 단위로 만든다. P23 첫 슬라이스는 계약과 프롬프트 팩을 만드는 것이며, runtime 확장은 후속 P23B/P23C 트랙으로 분리한다.
+P22 OpenAI LLM Agent Runtime 을 기반으로 stored procedure semantic analysis 품질을 simple/medium/complex suite 로 반복 평가할 수 있는 계약, fixture, runner, readiness 문서를 정렬한다. P23D 기준으로 계약, authored fixture, fixture-first scoring runner, prompt pack, readiness 문서를 동기화하되 production readiness 는 주장하지 않는다.
 
 ## Context
 
@@ -32,16 +32,16 @@ P22 OpenAI LLM Agent Runtime 을 기반으로 stored procedure semantic analysis
 
 ## In Scope
 
-- P23 quality eval contract 작성
-- P23 seed fixture 작성
-- P23A-P23D 병렬 작업 프롬프트 작성
-- Manifest 의 split track, dependency, merge order 선언
-- Contract asset test 추가
+- P23 quality eval contract/readiness 문서 동기화
+- P23 authored fixture 와 fixture-first scoring runner 상태 문서화
+- P23 quality threshold 와 pass/hold/fail 해석 정리
+- P23A-P23D prompt pack 과 manifest 상태 확인
+- Optional live quality gate 를 confidence signal 로 분리
 
 ## Out of Scope
 
-- P23 fixture 본문 전체 작성
-- P23 eval runner 구현
+- runtime/API/Web behavior 변경
+- fixture YAML 또는 eval runner behavior 변경
 - API/Web 기능 확장
 - P24 document and Java/MyBatis draft generation
 - P25 runtime hardening
@@ -69,46 +69,51 @@ P22 OpenAI LLM Agent Runtime 을 기반으로 stored procedure semantic analysis
   - raw prompt
   - raw SP definition
   - raw OpenAI response text
-- 변경 가능 디렉터리:
-  - `spec/eval/`
-  - `fixtures/eval/`
-  - `ops/codex-parallel/`
-  - `tests/contract/`
-  - 관련 docs/task 파일
+- P23D 문서 readiness 변경 가능 경로:
+  - `ARCHITECTURE.md`
+  - `EVAL_SPEC.md`
+  - `docs/**`
+  - `fixtures/eval/README.md`
+  - `tests/eval/README.md`
+  - `tasks/0023-llm-sp-analysis-quality-eval.md`
+  - `ops/codex-parallel/**` 문서/프롬프트만, drift 가 확인된 경우에 한정
 - PPM 접근 실패 시 PLF fallback 금지
 
 ## Deliverables
 
-- P23 eval contract
-- P23 seed fixture
-- P23A-P23D prompt pack
-- Manifest update
-- Contract prompt asset test
-- EVAL/readiness docs sync
+- P23 eval readiness docs sync
+- EVAL_SPEC threshold/failure interpretation
+- Integration eval status update
+- fixtures/eval and tests/eval README update
+- P23 task brief current-state update
 
 ## Verification
 
 - 실행할 테스트:
-  - `make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py"`
+  - `make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py tests/eval"`
+  - `make test-web-smoke`
+  - `git diff --check`
 - 계약 검증:
   - simple/medium/complex scenario 선언
   - `LLM_INFERENCE` evidence 선언
   - unsupported fact claim 의 `REVIEW_REQUIRED` 선언
   - `gpt-5-nano` fast/test profile 선언
   - no-raw-trace storage 금지 선언
+  - `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0`
 - 수동 점검:
   - P23A-P23D 가 분리되어 있고 P24+ 범위를 구현하지 않음
+  - optional live quality gate 를 기본 필수 테스트나 production readiness 기준으로 표현하지 않음
 
 ## Done Definition
 
-- P23 계약과 seed fixture 가 존재한다.
+- P23 계약, authored fixture, scoring runner, readiness 문서가 서로 같은 모델/profile/prompt/schema refs 를 말한다.
 - P23A-P23D 프롬프트가 각자 허용/금지 경로와 검증 명령을 갖는다.
 - Manifest 에 P23A -> P23B -> P23C -> P23D 병합 순서가 있다.
-- Contract test 가 통과한다.
+- Contract/eval docs verification 이 통과하거나 실행 불가 사유가 명시된다.
 - P23 은 `production_ready: false` 로 남는다.
 
 ## Notes / Risks
 
-- 가정: P22 runtime 은 별도 검증 완료 후 P23B/P23C 작업자가 사용할 수 있다.
-- 오픈 이슈: 실제 quality scoring 방식과 fixture 본문은 P23B/P23C 에서 확정한다.
+- 가정: P22 runtime 과 P23C fixture-first scoring runner 는 현재 테스트 자산으로 검증 대상이다.
+- 오픈 이슈: optional live quality gate 는 OpenAI env 가 명시적으로 준비된 경우의 confidence signal 이며 기본 readiness gate 가 아니다.
 - 후속 작업: P24 LLM-assisted document and Java/MyBatis draft generation 은 P23 통과 이후 별도 브리프로 시작한다.

@@ -1,0 +1,171 @@
+contract_id: p24_sp_migration_guide_quality@0.1.0
+phase: P24
+title: SP migration guide quality contract
+status: contract_ready
+production_ready: false
+depends_on:
+  - P23 LLM SP Analysis Quality Eval
+  - P12 Java/MyBatis Generation Factory
+  - prompt:sp_migration_guide_generation@0.1.0
+  - schema:sp_migration_guide_quality_report@0.1.0
+  - template:sp_migration_guide@0.1.0
+objective:
+  Define the quality contract and prompt pack for generating an evidence-backed
+  stored procedure migration guide at or above the user-provided guide structure,
+  without changing runtime behavior in the contract slice.
+reference_policy:
+  user_reference_name: MIGRATION_GUIDE.md
+  usage: structure_and_quality_reference_only
+  copy_reference_content_to_repo: false
+  copy_raw_sp_text_to_repo: false
+  allowed_reference_derivations:
+    - required_section_taxonomy
+    - quality_dimensions
+    - review_checklist_categories
+runtime_profiles:
+  guide_generation:
+    default_model: gpt-5.5
+    profile_id: openai_sp_semantic_analysis
+    remote_gate_required: true
+  fast_test:
+    default_model: gpt-5-nano
+    profile_id: openai_fast_test
+    remote_gate_required: false
+environment_gates:
+  default_tests:
+    fixture_first: true
+    use_fake_gateway: true
+    allow_network: false
+  optional_live_confidence:
+    required_env:
+      - LLM_LIVE_GATE=1
+      - LLM_ENABLE_REMOTE=1
+      - LLM_ALLOW_SP_TEXT=1
+      - OPENAI_API_KEY
+scope:
+  existing_artifact_types:
+    - SP_ANALYSIS_DOC
+    - DEPENDENCY_REPORT
+  new_persisted_artifact_types_allowed: false
+  java_mybatis_output_policy: draft_only_readiness_notes
+  report_fields:
+    - status
+    - productionReady
+    - scores
+    - thresholds
+    - evidenceRefs
+    - sectionCoverage
+    - reviewRequiredFindings
+    - storageSafetyFindings
+  required_sections:
+    - id: sp_overview
+      title: SP overview and basic information
+    - id: feature_branch_taxonomy
+      title: Main features and branch/flag taxonomy
+    - id: dependency_inventory
+      title: Dependency inventory
+    - id: dml_impact_matrix
+      title: DML impact matrix
+    - id: call_flow
+      title: Branch-level call flow
+    - id: critical_phase_analysis
+      title: Critical phase analysis
+    - id: complexity_risk_metrics
+      title: Complexity and risk metrics
+    - id: migration_strategy
+      title: Migration strategy and Java/MyBatis draft readiness
+    - id: appendix_mappings
+      title: Parameter and code mapping appendix
+    - id: evidence_assumptions_review
+      title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
+dependency_inventory_requirements:
+  object_kinds:
+    - table
+    - function
+    - procedure
+    - cross_database_reference
+    - dynamic_sql
+  operation_fields:
+    - SELECT
+    - INSERT
+    - UPDATE
+    - DELETE
+  required_summaries:
+    - key_columns
+    - join_or_where_summary
+    - value_or_state_patterns
+    - evidence_refs
+validator_obligation:
+  unsupported_dependency_claims: REVIEW_REQUIRED
+  unsupported_table_claims: REVIEW_REQUIRED
+  unsupported_function_claims: REVIEW_REQUIRED
+  unsupported_cross_database_claims: REVIEW_REQUIRED
+  low_evidence_business_rule_claims: REVIEW_REQUIRED
+quality_thresholds:
+  required_section_coverage_min: 1.0
+  evidence_linked_claim_coverage_min: 0.9
+  dml_matrix_coverage_min: 0.9
+  branch_call_flow_coverage_min: 0.85
+  unsupported_claim_review_required_ratio_min: 1.0
+  forbidden_storage_findings_max: 0
+status_interpretation:
+  pass:
+    - fixture-first guide quality report passes all thresholds
+    - required section coverage is complete
+    - storage safety findings are zero
+  hold:
+    - fixture-first guide passes but optional live PPM metadata confidence is skipped, failed, or unavailable
+    - local verification prerequisites are unavailable
+  fail_or_blocker:
+    - threshold miss
+    - raw SP definition, raw prompt, raw OpenAI response, row data, or secret stored
+    - PPM-to-PLF fallback
+    - production-ready or automatic conversion completion claim
+    - business DB DDL/DML or procedure execution required
+forbidden_behavior:
+  row_data_queries: true
+  procedure_execution: true
+  business_db_ddl_or_dml: true
+  automatic_artifact_apply: true
+  automatic_deployment: true
+  raw_prompt_storage: true
+  raw_sp_definition_storage: true
+  raw_openai_response_text_storage: true
+  secret_logging: true
+  ppm_to_plf_fallback: true
+storage_policy:
+  forbidden_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - row_data
+    - secrets
+  allowed_trace_fields:
+    - provider
+    - model
+    - model_profile_id
+    - prompt_ref
+    - schema_ref
+    - request_hash
+    - prompt_hash
+    - response_hash
+    - token_usage
+    - latency_ms
+    - status
+deliverables:
+  contract_assets:
+    - spec/eval/p24_sp_migration_guide_quality_contract.yaml
+    - tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py
+  prompt_assets:
+    - ops/codex-parallel/prompts/24a_sp_migration_guide_contract_assets.md
+    - ops/codex-parallel/prompts/24b_sp_migration_guide_fixture_suite.md
+    - ops/codex-parallel/prompts/24c_sp_migration_guide_renderer_eval.md
+    - ops/codex-parallel/prompts/24d_sp_migration_guide_docs_readiness.md
+  task_brief:
+    - tasks/0024-sp-migration-guide-quality.md
+acceptance:
+  contract_only_slice:
+    - P24A adds contract, prompt pack, task brief, manifest wiring, and contract tests only.
+    - No public API, DB schema, runtime, Web behavior, or renderer behavior changes.
+    - No user-provided guide content or raw SP definition is copied into repo assets.
+    - P24 remains draft-only and production_ready remains false.

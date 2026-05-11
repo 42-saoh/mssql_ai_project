@@ -14,6 +14,10 @@ from ai_agent_generation.java_mybatis import (
     JavaMyBatisDtoModelRenderer,
     JavaMyBatisSpWrapperRenderer,
 )
+from ai_agent_generation.migration_guide import (
+    P24_REQUIRED_SECTION_IDS,
+    evaluate_p24_migration_guide_quality,
+)
 from ai_agent_generation.models import (
     DraftFile,
     EvidenceRef,
@@ -39,6 +43,7 @@ __all__ = [
     "JAVA_MYBATIS_POLICY_ARTIFACT_TYPES",
     "JavaMyBatisDtoModelRenderer",
     "JavaMyBatisSpWrapperRenderer",
+    "P24_REQUIRED_SECTION_IDS",
     "REQUESTED_OUTPUT_ALIASES",
     "RenderedArtifact",
     "RenderedBundle",
@@ -46,6 +51,7 @@ __all__ = [
     "GenerationPolicyAssets",
     "GenerationPolicyError",
     "expand_requested_output_type",
+    "evaluate_p24_migration_guide_quality",
     "load_generation_assets",
     "load_generation_policy",
     "load_template_registry",

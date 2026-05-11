@@ -6,3 +6,4 @@
 - `resolve_dev_ports.sh` — 병렬 worktree 별 APP/MCP/WEB 포트를 계산한다.
 - `install_python_locked.sh` — Python 개발/테스트 의존성을 lock 제약 파일 기준으로 설치한다.
 - `install_web_workspace.sh` — `pnpm-lock.yaml` 기준의 web/workspace 설치를 수행하고, 잠금 파일이 없으면 명시적으로 중단한다.
+- `win_git_bash.ps1` — Windows PowerShell 에서 Git Bash 를 경유해 `make`/`pnpm` 계열 명령을 실행한다. WinGet Links shim 대신 실제 WinGet package 경로를 PATH 앞에 붙인다.
