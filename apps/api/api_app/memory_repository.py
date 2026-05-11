@@ -504,5 +504,6 @@ def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
             "status",
             "tokenUsage",
             "latencyMs",
+            "componentInvocations",
         }
     }

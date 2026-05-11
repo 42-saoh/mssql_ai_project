@@ -4,12 +4,12 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PROMPT_VERSION = "prompt:sp_semantic_analysis@0.1.0"
-OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.1.0"
+PROMPT_VERSION = "prompt:sp_semantic_analysis@0.2.0"
+OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.2.0"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
 FAST_TEST_MODEL_PROFILE_ID = "openai_fast_test"
 FAST_TEST_DEFAULT_MODEL = "gpt-5-nano"
@@ -124,9 +124,10 @@ class ModelInvocationRecord:
     provider_request_id: str | None = None
     error_code: str | None = None
     error_message: str | None = None
+    component_invocations: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     def to_storage_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "provider": self.provider,
             "model": self.model,
             "modelProfileId": self.model_profile_id,
@@ -141,6 +142,9 @@ class ModelInvocationRecord:
             "tokenUsage": dict(self.token_usage),
             "latencyMs": self.latency_ms,
         }
+        if self.component_invocations:
+            payload["componentInvocations"] = [dict(item) for item in self.component_invocations]
+        return payload
 
 
 @dataclass(frozen=True)
@@ -173,10 +177,17 @@ def text_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def semantic_output_schema() -> dict[str, Any]:
+def semantic_output_schema(
+    allowed_evidence_refs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    ref_items: dict[str, Any] = {"type": "string"}
+    allowed_refs = [str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()]
+    if allowed_refs:
+        ref_items["enum"] = sorted(set(allowed_refs))
     evidence_ref_array = {
         "type": "array",
-        "items": {"type": "string"},
+        "items": ref_items,
+        "minItems": 1,
     }
     evidence_status = {
         "type": "string",

@@ -159,6 +159,7 @@ def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
     run = agent_runs[0]
     assert run.agent_type == "LLM_SEMANTIC_ANALYST"
     assert run.model_invocation["model"] == model_profile_from_env("openai_fast_test").model
+    assert run.model_invocation["componentInvocations"]
     assert "businessRules" in run.structured_output
     assert "CREATE PROCEDURE" not in str(run.model_invocation)
     assert "CREATE PROCEDURE" not in str(run.structured_output)

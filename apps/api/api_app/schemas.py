@@ -139,6 +139,10 @@ class ModelInvocationSummary(ApiModel):
     status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
     token_usage: dict[str, int] = Field(default_factory=dict, alias="tokenUsage")
     latency_ms: int | None = Field(default=None, alias="latencyMs")
+    component_invocations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="componentInvocations",
+    )
 
 
 class AgentRunSummary(ApiModel):

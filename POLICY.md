@@ -53,10 +53,15 @@
 - raw prompt text, raw OpenAI response text, token/secret, provider credential 은 저장하거나
   노출하지 않는다.
 - 저장 가능한 trace 는 provider, model, model profile, prompt/schema version, input/prompt/output
-  hash, token usage, latency, status, schema-valid structured output 으로 제한한다.
+  hash, token usage, latency, status, schema-valid structured output, sanitized component invocation
+  summary 로 제한한다.
 - LLM inference 는 metadata fact 가 아니며 dependency/table/function/procedure 사실을 확정하는
   근거로 사용할 수 없다. 해당 보강은 `LLM_INFERENCE` evidence 와 `REVIEW_REQUIRED` 검토점으로
   남긴다.
+- LLM claim 의 `evidenceRefs` 는 deterministic fact id 만 사용할 수 있다. prompt/input/output hash,
+  provider response id, raw SQL snippet 같은 trace 값은 claim evidence 로 사용할 수 없다.
+- Dynamic SQL, cross-database, unsupported dependency/table/function/procedure claim 은 LLM 출력에
+  marker 가 없더라도 deterministic guard 가 `REVIEW_REQUIRED` 로 보강해야 한다.
 
 ## 생성 결과 정책
 

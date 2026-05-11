@@ -17,6 +17,8 @@ from ai_agent_runtime.quality_eval import (
     evaluate_p23_semantic_quality,
 )
 from ai_agent_runtime.semantic import (
+    SemanticAnalysisTask,
+    build_semantic_analysis_runs,
     build_semantic_analysis_run,
     merge_llm_semantic_analysis,
 )
@@ -32,8 +34,10 @@ __all__ = [
     "ModelProfile",
     "OpenAIModelGateway",
     "RenderedPrompt",
+    "SemanticAnalysisTask",
     "build_model_gateway_from_env",
     "build_semantic_analysis_run",
+    "build_semantic_analysis_runs",
     "evaluate_p23_semantic_quality",
     "merge_llm_semantic_analysis",
 ]

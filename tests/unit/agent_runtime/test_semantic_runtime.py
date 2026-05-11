@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from ai_agent_runtime import FakeModelGateway, build_semantic_analysis_run
+from ai_agent_runtime import (
+    FakeModelGateway,
+    SemanticAnalysisTask,
+    build_semantic_analysis_run,
+    build_semantic_analysis_runs,
+)
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import semantic_output_schema
 from ai_agent_runtime.quality_eval import evaluate_p23_semantic_quality
@@ -117,6 +122,18 @@ def test_semantic_output_schema_is_strict_for_responses_api() -> None:
         "status",
         "evidenceRefs",
     ]
+    assert business_rule_schema["properties"]["evidenceRefs"]["minItems"] == 1
+
+
+def test_semantic_output_schema_can_constrain_fact_id_evidence_refs() -> None:
+    schema = semantic_output_schema(
+        allowed_evidence_refs=["fact_customer", "fact_status"],
+    )
+    evidence_items = schema["properties"]["businessRules"]["items"]["properties"][
+        "evidenceRefs"
+    ]["items"]
+
+    assert evidence_items["enum"] == ["fact_customer", "fact_status"]
 
 
 def test_semantic_run_payload_excludes_raw_prompt_and_sql_from_storage(monkeypatch: Any) -> None:
@@ -134,6 +151,148 @@ def test_semantic_run_payload_excludes_raw_prompt_and_sql_from_storage(monkeypat
     assert stored["modelInvocation"]["model"] == "gpt-5-nano"
     assert "prompt" not in stored["modelInvocation"]
     assert "CREATE PROCEDURE" not in str(stored)
+
+
+def test_staged_semantic_run_repairs_invalid_evidence_refs(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.usp_Demo",
+        metadata={
+            "deterministicFacts": [
+                {"id": "fact_demo_parameters", "summary": "Demo input parameters."},
+                {"id": "fact_demo_lookup", "summary": "Demo lookup behavior."},
+            ]
+        },
+        static_analysis={"fact_ids": ["fact_demo_parameters", "fact_demo_lookup"]},
+        procedure_definition=None,
+        model_gateway=FakeModelGateway(
+            output_by_target_ref={
+                "dbo.usp_Demo": {
+                    "businessRules": [
+                        {
+                            "category": "DEMO_LOOKUP",
+                            "summary": "Demo lookup behavior.",
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["prompt.inputHash", "not_a_fact"],
+                        }
+                    ],
+                    "modernizationPoints": [],
+                    "riskFlags": [],
+                    "reviewMarkers": [],
+                    "assumptions": [],
+                }
+            }
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    item = payload.structured_output["businessRules"][0]
+    assert set(item["evidenceRefs"]) <= {"fact_demo_parameters", "fact_demo_lookup"}
+    assert item["evidenceRefs"]
+    assert payload.model_invocation.to_storage_dict()["componentInvocations"][0][
+        "stage"
+    ] == "semantic_claims"
+
+
+def test_complex_staged_run_injects_required_review_markers(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.usp_Dynamic",
+        metadata={
+            "deterministicFacts": [
+                {"id": "fact_dynamic_sql", "summary": "Dynamic SQL is present."},
+                {"id": "fact_cross_db", "summary": "Cross database target is dynamic."},
+                {"id": "fact_sp_executesql", "summary": "sys.sp_executesql is used."},
+            ]
+        },
+        static_analysis={
+            "fact_ids": ["fact_dynamic_sql", "fact_cross_db", "fact_sp_executesql"],
+            "patterns": {
+                "dynamic_sql": True,
+                "cross_database_reference": True,
+                "unsupported_dependency_claims_possible": True,
+            },
+        },
+        procedure_definition=None,
+        model_gateway=FakeModelGateway(
+            output_by_target_ref={
+                "dbo.usp_Dynamic": {
+                    "businessRules": [],
+                    "modernizationPoints": [],
+                    "riskFlags": [],
+                    "reviewMarkers": [],
+                    "assumptions": [],
+                }
+            }
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    markers = {
+        marker["code"]: marker
+        for marker in payload.structured_output["reviewMarkers"]
+    }
+    assert set(markers) >= {
+        "UNSUPPORTED_TABLE_CLAIM_REVIEW",
+        "UNSUPPORTED_FUNCTION_CLAIM_REVIEW",
+        "UNSUPPORTED_PROCEDURE_CLAIM_REVIEW",
+    }
+    assert all(marker["status"] == "REVIEW_REQUIRED" for marker in markers.values())
+    assert all(marker["evidenceRefs"] for marker in markers.values())
+
+
+def test_semantic_tasks_can_run_as_independent_sp_units(monkeypatch: Any) -> None:
+    monkeypatch.setenv("LLM_SP_CONCURRENCY", "2")
+
+    runs = build_semantic_analysis_runs(
+        tasks=[
+            SemanticAnalysisTask(
+                target_ref="dbo.usp_First",
+                metadata={"deterministicFacts": [{"id": "fact_first"}]},
+                static_analysis={"fact_ids": ["fact_first"]},
+            ),
+            SemanticAnalysisTask(
+                target_ref="dbo.usp_Second",
+                metadata={"deterministicFacts": [{"id": "fact_second"}]},
+                static_analysis={"fact_ids": ["fact_second"]},
+            ),
+        ],
+        model_gateway=FakeModelGateway(
+            output_by_target_ref={
+                "dbo.usp_First": {
+                    "businessRules": [
+                        {
+                            "category": "FIRST",
+                            "summary": "First SP.",
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["fact_first"],
+                        }
+                    ],
+                    "modernizationPoints": [],
+                    "riskFlags": [],
+                    "reviewMarkers": [],
+                    "assumptions": [],
+                },
+                "dbo.usp_Second": {
+                    "businessRules": [
+                        {
+                            "category": "SECOND",
+                            "summary": "Second SP.",
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["fact_second"],
+                        }
+                    ],
+                    "modernizationPoints": [],
+                    "riskFlags": [],
+                    "reviewMarkers": [],
+                    "assumptions": [],
+                },
+            }
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    assert [run.target_ref for run in runs] == ["dbo.usp_First", "dbo.usp_Second"]
 
 
 def test_p23_quality_report_flags_unsafe_payload_without_leaking_raw_field_name() -> None:

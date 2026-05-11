@@ -172,11 +172,11 @@ PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 기본 실행은 `FakeModelGateway` 를 사용하므로 외부 OpenAI API 를 호출하지 않는다. Remote 실행은
 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 준비된 경우에만 가능하다.
 semantic analysis 기본 모델은 `gpt-5.5`, fast/test profile 기본 모델은 `gpt-5-nano` 다. Optional live confidence testing 에서는 `OPENAI_MODEL_FAST_TEST` 로 `openai_fast_test` 모델을 바꿀 수 있다.
+내부 runtime 은 요청 target 을 SP task 로 감싼 뒤 staged calls 를 수행한다. 단일 API 요청 shape 는 그대로이며, batch API 는 추가하지 않는다. 여러 SP task 실행 경로에서는 `LLM_SP_CONCURRENCY` 기본값 `2` 로 fan-out 을 제한한다.
 
 `GET /api/v1/jobs/{jobId}/agent-runs` 는 sanitized trace summary 만 반환한다. 응답에는
 schema-valid structured output, provider/model/profile, prompt/schema version, input/prompt/output
-hash, token usage, latency, status 가 포함된다. raw prompt, raw SP definition, raw OpenAI response
-text 는 저장하거나 반환하지 않는다.
+hash, token usage, latency, status, optional `componentInvocations` 가 포함된다. raw prompt, raw SP definition, raw OpenAI response text 는 저장하거나 반환하지 않는다.
 
 Platform DB 를 사용할 경우 `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql` 을 운영자가
 수동 적용해야 한다. API 는 해당 DDL 을 자동 실행하지 않는다.

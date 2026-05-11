@@ -772,7 +772,7 @@ def static_analysis_payload(
         snapshot_id=snapshot_id,
         registry_version_refs=[
             {"registry_type": "PROMPT", "version": "prompt:sp_analysis@0.1.0"},
-            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.1.0"},
+            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.2.0"},
             {"registry_type": "MODEL", "version": "model:openai_sp_semantic_analysis@0.1.0"},
         ],
     )

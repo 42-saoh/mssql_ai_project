@@ -26,6 +26,7 @@ def test_p22_openapi_declares_llm_options_trace_and_evidence_type() -> None:
     assert "LLM_INFERENCE" in schemas["EvidenceRef"]["properties"]["type"]["enum"]
     assert "AgentRunSummary" in schemas
     assert "ModelInvocationSummary" in schemas
+    assert "componentInvocations" in schemas["ModelInvocationSummary"]["properties"]
     assert "MODEL" in schemas["RegistryVersion"]["properties"]["registryType"]["enum"]
     assert "SCHEMA" in schemas["RegistryVersion"]["properties"]["registryType"]["enum"]
 
@@ -62,6 +63,7 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
         "LLM_ENABLE_REMOTE=0",
         "LLM_ALLOW_SP_TEXT=0",
         "LLM_LIVE_GATE=0",
+        "LLM_SP_CONCURRENCY=2",
     ):
         assert name in env_text
     assert "OPENAI_API_KEY=\n" in env_text
@@ -76,5 +78,5 @@ def test_p22_registry_route_exposes_model_prompt_and_schema_bindings(monkeypatch
 
     assert "model:openai_sp_semantic_analysis@0.1.0" in versions
     assert "model:openai_fast_test@gpt-5.4-mini@0.1.0" in versions
-    assert "prompt:sp_semantic_analysis@0.1.0" in versions
-    assert "schema:llm_semantic_analysis@0.1.0" in versions
+    assert "prompt:sp_semantic_analysis@0.2.0" in versions
+    assert "schema:llm_semantic_analysis@0.2.0" in versions

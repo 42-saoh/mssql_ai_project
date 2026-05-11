@@ -195,7 +195,9 @@ class OpenAIModelGateway:
                     "type": "json_schema",
                     "name": "llm_semantic_analysis",
                     "strict": True,
-                    "schema": semantic_output_schema(),
+                    "schema": semantic_output_schema(
+                        allowed_evidence_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+                    ),
                 }
             },
         }

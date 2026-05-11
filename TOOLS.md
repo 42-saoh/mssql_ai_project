@@ -109,6 +109,7 @@
 
 - 기본 semantic analysis model: `OPENAI_MODEL_ANALYSIS=gpt-5.5`
 - fast/test model: 기본 `gpt-5-nano`; optional live confidence testing 에서는 `OPENAI_MODEL_FAST_TEST` 로 `openai_fast_test` profile 의 모델을 override 할 수 있음
+- SP task fan-out concurrency: 기본 `LLM_SP_CONCURRENCY=2`
 - 기본 adapter: `FakeModelGateway`
 - remote adapter: `OpenAIModelGateway`
 - 구현 package: `packages/agent-runtime/src/ai_agent_runtime`

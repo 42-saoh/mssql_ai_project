@@ -60,6 +60,8 @@ def test_p23_contract_declares_quality_eval_boundaries() -> None:
         "review_markers",
         "assumptions",
     ]
+    assert contract["scope"]["staged_runtime"]["dynamic_evidence_schema"] is True
+    assert contract["scope"]["staged_runtime"]["default_sp_concurrency"] == 2
     assert all(contract["forbidden_behavior"].values())
 
 
@@ -91,6 +93,8 @@ def test_p23_fixture_keeps_no_raw_trace_and_fast_test_contract() -> None:
     assert fixture["model_profiles"]["fast_test"]["override_env"] == "OPENAI_MODEL_FAST_TEST"
     assert fixture["prompt_contract"]["required_evidence_type"] == "LLM_INFERENCE"
     assert fixture["prompt_contract"]["unsupported_fact_status"] == "REVIEW_REQUIRED"
+    assert fixture["prompt_contract"]["schema_ref"] == "schema:llm_semantic_analysis@0.2.0"
+    assert fixture["prompt_contract"]["staged_runtime"]["sp_fan_out"] is True
     assert fixture["prompt_contract"]["allowed_output_fields"] == [
         "business_rules",
         "modernization_points",

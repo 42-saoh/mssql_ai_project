@@ -8,8 +8,9 @@ from typing import Any
 import pytest
 import yaml
 from ai_agent_runtime import (
+    SemanticAnalysisTask,
     build_model_gateway_from_env,
-    build_semantic_analysis_run,
+    build_semantic_analysis_runs,
     evaluate_p23_semantic_quality,
 )
 from ai_agent_runtime.gateway import model_profile_from_env
@@ -33,18 +34,24 @@ def test_p23_openai_quality_live_gate() -> None:
     gateway = build_model_gateway_from_env()
     expected_model = model_profile_from_env("openai_fast_test").model
     failures: list[str] = []
-    for scenario in fixture["scenarios"]:
-        run = build_semantic_analysis_run(
-            target_ref=scenario["target_ref"],
-            metadata={
-                "dbContext": scenario["db_context"],
-                "deterministicFacts": scenario["deterministic_facts"],
-            },
-            static_analysis=scenario["transient_model_input"]["static_analysis"],
-            procedure_definition=scenario["transient_model_input"]["procedure_definition"],
-            model_gateway=gateway,
-            profile_id="openai_fast_test",
-        )
+    scenarios = list(fixture["scenarios"])
+    runs = build_semantic_analysis_runs(
+        tasks=[
+            SemanticAnalysisTask(
+                target_ref=scenario["target_ref"],
+                metadata={
+                    "dbContext": scenario["db_context"],
+                    "deterministicFacts": scenario["deterministic_facts"],
+                },
+                static_analysis=scenario["transient_model_input"]["static_analysis"],
+                procedure_definition=scenario["transient_model_input"]["procedure_definition"],
+            )
+            for scenario in scenarios
+        ],
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+    for scenario, run in zip(scenarios, runs, strict=True):
         report = evaluate_p23_semantic_quality(
             scenario=scenario,
             run=run,

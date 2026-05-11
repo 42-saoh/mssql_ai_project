@@ -5,8 +5,8 @@ status: contract_ready
 production_ready: false
 depends_on:
   - P22 OpenAI LLM Agent Runtime
-  - prompt:sp_semantic_analysis@0.1.0
-  - schema:llm_semantic_analysis@0.1.0
+  - prompt:sp_semantic_analysis@0.2.0
+  - schema:llm_semantic_analysis@0.2.0
   - model:openai_sp_semantic_analysis@0.1.0
   - model:openai_fast_test@gpt-5-nano@0.1.0
 objective:
@@ -52,6 +52,12 @@ scope:
     new_table_fact_claims: REVIEW_REQUIRED
     new_function_fact_claims: REVIEW_REQUIRED
     low_evidence_business_rule_claims: REVIEW_REQUIRED
+  staged_runtime:
+    sp_fan_out: true
+    default_sp_concurrency_env: LLM_SP_CONCURRENCY
+    default_sp_concurrency: 2
+    dynamic_evidence_schema: true
+    deterministic_review_marker_injection: true
 forbidden_behavior:
   row_data_queries: true
   procedure_execution: true
@@ -84,6 +90,7 @@ trace_policy:
     - output_token_count
     - total_token_count
     - latency_ms
+    - component_invocations
     - status
   allowed_agent_run_fields:
     - agent_run_id

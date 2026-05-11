@@ -81,6 +81,11 @@ flowchart LR
 - evidence binding
 - LLM 사용이 필요한 부분의 제한적 생성
 - OpenAI Responses API 는 `ModelGateway` adapter 뒤에서만 호출
+- SP semantic analysis 는 `SemanticAnalysisTask` 단위로 실행하며 여러 SP task 는 `LLM_SP_CONCURRENCY`
+  기본값 2 안에서 fan-out 할 수 있다. 단일 SP API shape 는 유지한다.
+- 각 SP task 는 complexity 에 따라 semantic claims, review markers, optional repair stage 로 나뉜다.
+- structured output schema 는 deterministic fact id 를 `evidenceRefs` enum 으로 제한하고, runtime 은
+  prompt/input/output hash 같은 trace ref 를 claim evidence 로 저장하지 않도록 repair 한다.
 - raw SP definition 은 명시 옵션이 켜진 실행 중 입력으로만 사용하고 플랫폼 DB,
   artifact, audit log, API 응답에는 저장하지 않음
 
@@ -195,6 +200,8 @@ packages/agent-runtime
   - OpenAI / fake model gateway
   - prompt renderer
   - strict structured output parser
+  - per-SP staged semantic analysis runner
+  - deterministic evidence-ref repair and review marker injection
   - model invocation hash / token / latency summary
 
 packages/generation
@@ -219,8 +226,8 @@ packages/templates
 - `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다.
 - `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다.
 - `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
-- `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. 기본 semantic analysis profile 은 `gpt-5.5`, fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. 기본 테스트는 remote API 를 호출하지 않는다.
-- P23 LLM-assisted SP analysis quality eval 은 simple/medium/complex synthetic fixtures 를 `FakeModelGateway`, `openai_fast_test`, 기본 `gpt-5-nano` 로 fixture-first scoring 한다. Optional live OpenAI quality gate 는 confidence signal 이며 production readiness 기준이 아니다.
+- `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. 기본 semantic analysis profile 은 `gpt-5.5`, fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. P23 이후 semantic runtime 은 SP별 staged calls, dynamic evidence schema, deterministic evidence-ref repair 를 포함한다. 기본 테스트는 remote API 를 호출하지 않는다.
+- P23 LLM-assisted SP analysis quality eval 은 simple/medium/complex synthetic fixtures 를 `FakeModelGateway`, `openai_fast_test`, 기본 `gpt-5-nano` 로 fixture-first scoring 한다. Optional live OpenAI quality gate 는 confidence signal 이며 production readiness 기준이 아니다. Live 품질 gate 실패는 P24 guide generation failure 가 아니라 P23 semantic-analysis confidence failure 로 해석한다.
 - P24 SP migration guide quality eval 은 sanitized simple/medium/complex fixtures 를 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` draft artifact type 으로 렌더링하고 `evaluate_p24_migration_guide_quality` 로 점수화한다. 새 persisted artifact type, API/Web/DB schema 변경, live DB access 는 없으며 Java/MyBatis 는 `draft_only_readiness_notes` 경계에 남긴다.
 - Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후에만 LLM semantic analysis 를 실행한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.

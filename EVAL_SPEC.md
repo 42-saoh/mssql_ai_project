@@ -173,7 +173,7 @@
 - fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있음
 - remote 실행은 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` gate 를 요구
 - raw prompt, raw SP definition, raw OpenAI response text 는 DB/API/artifact/test output 에 저장하지 않음
-- structured output 은 `schema:llm_semantic_analysis@0.1.0` strict JSON schema 를 통과해야 함
+- structured output 은 `schema:llm_semantic_analysis@0.2.0` strict JSON schema 를 통과해야 함
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
 통과 기준:
@@ -200,6 +200,9 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - simple/medium/complex stored procedure scenario matrix 와 authored fixture 를 유지한다
 - fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
 - LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 로 제한한다
+- runtime 은 SP별 `SemanticAnalysisTask` 로 fan-out 가능하며 `LLM_SP_CONCURRENCY=2` 를 기본 병렬도 한계로 둔다
+- live structured schema 는 deterministic fact id 를 `evidenceRefs` enum 으로 제한하고, runtime 은 invalid/trace evidence refs 를 deterministic fact id 로 repair 한다
+- dynamic SQL, cross-DB, unsupported dependency/table/function/procedure claim 의 필수 `REVIEW_REQUIRED` marker 는 deterministic guard 가 보강한다
 - `LLM_INFERENCE` evidence 와 unsupported dependency/table/function claim 의 `REVIEW_REQUIRED` 처리 기준을 둔다
 - scoring runner 는 semantic recall, evidence discipline, overclaim control, storage safety 를 검증하며 raw prompt/SP/provider response text 를 저장하지 않는다
 - raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 fixture trace/API/Web 산출물에 저장하지 않는다

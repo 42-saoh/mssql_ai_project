@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from ai_agent_runtime.gateway import model_profile_from_env
-from ai_agent_runtime.models import FAST_TEST_MODEL_PROFILE_ID
+from ai_agent_runtime.models import (
+    FAST_TEST_MODEL_PROFILE_ID,
+    OUTPUT_SCHEMA_VERSION,
+    PROMPT_VERSION,
+)
 from api_app.schemas import RegistryVersion
 from fastapi import APIRouter
 
@@ -54,12 +58,12 @@ def active_registry_bindings() -> tuple[RegistryVersion, ...]:
         ),
         RegistryVersion(
             registryType="PROMPT",
-            version="prompt:sp_semantic_analysis@0.1.0",
+            version=PROMPT_VERSION,
             active=True,
         ),
         RegistryVersion(
             registryType="SCHEMA",
-            version="schema:llm_semantic_analysis@0.1.0",
+            version=OUTPUT_SCHEMA_VERSION,
             active=True,
         ),
     )

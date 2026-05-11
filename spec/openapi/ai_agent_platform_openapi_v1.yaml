@@ -749,6 +749,12 @@ components:
             type: integer
         latencyMs:
           type: integer
+        componentInvocations:
+          type: array
+          description: Sanitized per-stage model invocation summaries for staged LLM analysis.
+          items:
+            type: object
+            additionalProperties: true
     AgentRunSummary:
       type: object
       required:
