@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from ai_agent_domain import ArtifactType
+from ai_agent_generation import (
+    GenerationContext,
+    evaluate_p24_migration_guide_quality,
+    render_artifact,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = ROOT / "spec" / "eval" / "p24_sp_migration_guide_quality_contract.yaml"
@@ -229,6 +235,65 @@ def test_p24b_storage_safety_payload_is_sanitized() -> None:
         assert scenario["expected_quality_report"]["storageSafetyFindings"] == []
 
 
+def test_p24c_renderer_and_quality_evaluator_score_rendered_artifacts() -> None:
+    fixture = _fixture()
+    expected_fields = set(fixture["report_contract"]["fields"])
+
+    for scenario in _scenarios(fixture):
+        context = _context_from_scenario(scenario)
+        artifacts = (
+            render_artifact(ArtifactType.SP_ANALYSIS_DOC, context),
+            render_artifact(ArtifactType.DEPENDENCY_REPORT, context),
+        )
+        report = evaluate_p24_migration_guide_quality(
+            scenario=scenario,
+            artifacts=artifacts,
+            thresholds=fixture["quality_thresholds"],
+        )
+        expected_report = scenario["expected_quality_report"]
+        serialized_artifacts = "\n".join(artifact.content for artifact in artifacts)
+
+        assert set(report) == expected_fields
+        assert report["status"] == expected_report["status"]
+        assert report["productionReady"] is False
+        assert report["scores"] == expected_report["scores"]
+        assert report["thresholds"] == expected_report["thresholds"]
+        assert report["evidenceRefs"] == expected_report["evidenceRefs"]
+        assert report["sectionCoverage"] == expected_report["sectionCoverage"]
+        assert report["reviewRequiredFindings"] == expected_report["reviewRequiredFindings"]
+        assert report["storageSafetyFindings"] == []
+        assert "generated_source_application: `not_performed`" in serialized_artifacts
+        assert "CREATE PROCEDURE" not in serialized_artifacts
+        assert "raw_prompt" not in serialized_artifacts
+        assert "raw_sp_definition" not in serialized_artifacts
+        assert "raw_openai_response_text" not in serialized_artifacts
+
+
+def test_p24c_quality_evaluator_flags_unsafe_payload_without_leaking_raw_key() -> None:
+    fixture = _fixture()
+    scenario = _scenario("p24_simple_read_only_lookup")
+    context = _context_from_scenario(scenario)
+    artifacts = (
+        render_artifact(ArtifactType.SP_ANALYSIS_DOC, context),
+        render_artifact(ArtifactType.DEPENDENCY_REPORT, context),
+    )
+
+    report = evaluate_p24_migration_guide_quality(
+        scenario=scenario,
+        artifacts=artifacts,
+        thresholds=fixture["quality_thresholds"],
+        additional_storage_payloads=({"raw_prompt": "redacted"},),
+    )
+    serialized = json.dumps(report, ensure_ascii=False, sort_keys=True)
+
+    assert report["status"] == "FAILED"
+    assert report["productionReady"] is False
+    assert report["scores"]["storageSafetyFindings"] == 1
+    assert report["storageSafetyFindings"] == ["FORBIDDEN_STORAGE_FIELD_PRESENT"]
+    assert "raw_prompt" not in serialized
+    assert "redacted" not in serialized
+
+
 def _fixture() -> dict[str, Any]:
     return yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
 
@@ -239,6 +304,66 @@ def _contract() -> dict[str, Any]:
 
 def _scenarios(fixture: Mapping[str, Any]) -> list[dict[str, Any]]:
     return list(fixture["scenarios"])
+
+
+def _scenario(fixture_id: str) -> dict[str, Any]:
+    scenarios = {
+        scenario["fixture_id"]: scenario
+        for scenario in _scenarios(_fixture())
+    }
+    return scenarios[fixture_id]
+
+
+def _context_from_scenario(scenario: Mapping[str, Any]) -> GenerationContext:
+    appendix = scenario.get("appendix_mappings", {}) or {}
+    return GenerationContext.from_mapping(
+        {
+            "sampleId": scenario["fixture_id"],
+            "request": {
+                "systemCode": "P24",
+                "businessCodeLv1": "migration",
+                "businessCodeLv2": scenario["complexity"],
+                "entityName": _entity_name(str(scenario["target_ref"])),
+                "resourceName": scenario["fixture_id"].replace("_", "-"),
+                "description": "P24 sanitized SP migration guide fixture",
+                "generationMode": "migrationGuide",
+                "tableName": scenario["target_ref"],
+                "spName": scenario["target_ref"],
+                "inputParams": [
+                    {
+                        "name": parameter["name"],
+                        "dbType": parameter["sanitized_type"],
+                        "required": False,
+                    }
+                    for parameter in appendix.get("parameters", []) or []
+                ],
+                "resultShape": [
+                    field["name"] for field in appendix.get("result_fields", []) or []
+                ],
+                "migrationGuide": scenario,
+            },
+            "evidence": {
+                "sources": [
+                    {
+                        "type": ref["type"],
+                        "name": ref["object_ref"],
+                        "reason": ref["id"],
+                        "locator": ref["locator"],
+                    }
+                    for ref in scenario["evidence_refs"]
+                ],
+                "assumptions": [
+                    "P24 fixture stores sanitized facts only.",
+                    "P24 remains production_ready: false.",
+                ],
+            },
+        }
+    )
+
+
+def _entity_name(target_ref: str) -> str:
+    raw_name = target_ref.rsplit(".", 1)[-1]
+    return "".join(part[:1].upper() + part[1:] for part in raw_name.split("_") if part)
 
 
 def _required_sections(contract: Mapping[str, Any]) -> set[str]:
@@ -291,8 +416,7 @@ def _score_scenario(
 
 
 def _iter_evidence_claims(scenario: Mapping[str, Any]) -> Iterator[Mapping[str, Any]]:
-    for fact in scenario["sanitized_facts"]:
-        yield fact
+    yield from scenario["sanitized_facts"]
     for section in scenario["section_expectations"]:
         yield section
         yield from section["claims"]
@@ -302,10 +426,8 @@ def _iter_evidence_claims(scenario: Mapping[str, Any]) -> Iterator[Mapping[str, 
         yield branch
         yield from branch["actions"]
     yield from scenario["phase_risk_metrics"]["risk_flags"]
-    for parameter in scenario["appendix_mappings"]["parameters"]:
-        yield parameter
-    for result_field in scenario["appendix_mappings"]["result_fields"]:
-        yield result_field
+    yield from scenario["appendix_mappings"]["parameters"]
+    yield from scenario["appendix_mappings"]["result_fields"]
     yield from scenario["unsupported_claim_expectations"]
 
 

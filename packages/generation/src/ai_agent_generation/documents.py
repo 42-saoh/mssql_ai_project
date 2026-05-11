@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from ai_agent_domain import ArtifactType
 
+from ai_agent_generation.migration_guide import (
+    render_p24_dependency_report_sections,
+    render_p24_migration_guide_sections,
+)
 from ai_agent_generation.models import GenerationContext, RenderedArtifact
 from ai_agent_generation.utils import ensure_trailing_newline
 
@@ -41,6 +45,7 @@ class SPAnalysisDocumentRenderer:
             f"- Stored Procedure: `{context.sp_name}`",
             f"- Table: `{context.table_name}`",
             "",
+            *render_p24_migration_guide_sections(context),
             "## llm_semantic_analysis",
             *_llm_semantic_lines(llm_analysis),
             "",
@@ -93,6 +98,7 @@ class DependencyReportRenderer:
         lines.extend(
             [
                 "",
+                *render_p24_dependency_report_sections(context),
                 "## evidence_summary",
                 *[
                     f"- {source.display_type}: `{source.name}`"

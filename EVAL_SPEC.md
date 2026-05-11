@@ -221,6 +221,13 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 ```
 
 ### 11. P24 SP Migration Guide Quality Eval Contract
+
+P24C implementation status: fixture-first renderer/evaluator coverage is now
+implemented for the existing `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifact
+types. The evaluator scores the rendered artifact pair with no new persisted
+artifact type, no API/schema changes, no live DB access, no raw prompt/SP/provider
+response storage, and `production_ready: false`.
+
 대상:
 - `spec/eval/p24_sp_migration_guide_quality_contract.yaml`
 - `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml`

@@ -2,6 +2,12 @@
 
 ## Summary
 
+P24C update: the generation package now renders the P24 migration guide section
+taxonomy and scores the rendered `SP_ANALYSIS_DOC` plus `DEPENDENCY_REPORT`
+artifact pair with a fixture-first evaluator. P24 remains `production_ready: false`;
+there is still no new persisted artifact type, public API/schema change, live DB
+access, raw prompt/SP/provider-response storage, or PPM-to-PLF fallback.
+
 P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24B adds fixture-first SP migration guide quality scenarios and coverage checks without renderer/runtime changes. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
 
 ## Current Boundaries
@@ -18,7 +24,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | P21 live portal | explicit live gate | Default eval skips without PLF/PPM access. `P21_LIVE_PORTAL_GATE=1` requires PLF workflow repository and read-only PPM metadata access. Missing env is blocker failure, not skip, and does not imply `production_ready: true`. |
 | P22 LLM runtime | implemented with gates | Default tests use `FakeModelGateway`; remote OpenAI calls require `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, and `OPENAI_API_KEY`. Stored traces contain hashes, model/profile/token/latency/status summaries only, not raw prompt, SP definition, or provider response text. |
 | P23 LLM quality eval | fixture-first scored | `spec/eval/p23_llm_sp_analysis_quality_contract.yaml` and `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` define and author simple/medium/complex synthetic quality eval fixtures. `tests/eval/test_p23_llm_sp_analysis_quality.py` validates schema, deterministic evidence binding, fake-gateway `gpt-5-nano` execution, no-raw trace storage, no PPM-to-PLF fallback, and P23C quality scoring. Optional live quality gate output is a confidence signal only; current status remains `production_ready: false`. |
-| P24 migration guide quality | fixture-first authored | `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml` defines simple/medium/complex sanitized guide-quality scenarios for existing `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` expectations. `tests/eval/test_p24_sp_migration_guide_quality.py` validates required section coverage, evidence-linked claims, DML matrix coverage, branch/call-flow coverage, `REVIEW_REQUIRED` unsupported claims, storage safety, PPM target context, no PLF fallback, and `production_ready: false`. |
+| P24 migration guide quality | fixture-first rendered/scored | `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` render P24 guide sections from sanitized fixture facts, and `evaluate_p24_migration_guide_quality` scores the rendered artifact pair. The gate validates required section coverage, evidence-linked claims, DML matrix coverage, branch/call-flow coverage, `REVIEW_REQUIRED` unsupported claims, storage safety, PPM target context, no PLF fallback, and `production_ready: false`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -57,7 +63,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - P19 auth/RBAC enforcement is covered by `tests/integration/api/test_api_auth_rbac.py`, including 401, 403, reviewer success, and reviewer spoofing cases.
 - P21 prompt/fixture/no-mock/Python 3.14 contracts are covered by `tests/contract/test_p21_no_mock_prompt_assets.py` and `tests/unit/web`; default `tests/eval/test_p21_live_portal_no_mock_gate.py` skips unless the live gate is explicitly enabled.
 - P23 LLM quality fixtures and P23C scoring are covered by `tests/eval/test_p23_llm_sp_analysis_quality.py`; default execution uses `FakeModelGateway`, `openai_fast_test`, and `gpt-5-nano` without network calls. A passing fixture-first report requires `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, and `storage_safety_findings <= 0`.
-- P24 migration guide quality fixtures are covered by `tests/eval/test_p24_sp_migration_guide_quality.py`; default execution is fixture-only and does not call OpenAI, PPM, PLF, renderer runtime, or web/API surfaces. A passing fixture-first report requires complete section coverage, evidence-linked claim coverage, DML matrix coverage, branch/call-flow coverage, unsupported claim review markers, and zero storage safety findings.
+- P24 migration guide quality is covered by `tests/eval/test_p24_sp_migration_guide_quality.py`; default execution renders fixture-first `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifacts, then scores them without OpenAI, PPM, PLF, web/API, or schema changes. A passing fixture-first report requires complete section coverage, evidence-linked claim coverage, DML matrix coverage, branch/call-flow coverage, unsupported claim review markers, and zero storage safety findings.
 
 For P15 hard-live validation, run the same suite with `P15_HARD_LIVE_GATE=1` and live PPM read-only metadata access configured:
 
@@ -102,13 +108,13 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 
 This live gate must not be part of the default required suite. If it is skipped, unavailable, or failed, P23 stays `production_ready: false`; treat the result as confidence evidence rather than a production blocker.
 
-For P24B fixture-first guide quality validation, run:
+For P24C fixture-first guide renderer/evaluator validation, run:
 
 ```bash
 make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
 ```
 
-This checks only sanitized fixture expectations and contract assets. It does not require live PPM metadata, does not fall back to PLF, does not store SP source text or user guide text, and does not make P24 production-ready.
+This renders and scores sanitized fixture expectations against existing artifact types. It does not require live PPM metadata, does not fall back to PLF, does not store SP source text or user guide text, and does not make P24 production-ready.
 
 ## P15 Ops Gate
 
@@ -127,7 +133,7 @@ This checks only sanitized fixture expectations and contract assets. It does not
 - Policy: no policy asset change. Forbidden automatic publish, automatic DDL, and row-data access boundaries remain unchanged.
 - Env/profile: default metadata profile is now consistently `master`; platform DB profile `plf` remains available.
 - LLM eval: P23 includes contract quality assets, P23B-authored synthetic fixtures, and P23C fixture-first scoring. Default tests stay fake-gateway-only and preserve no-raw-trace storage.
-- Migration guide eval: P24B adds sanitized guide-quality fixtures and tests only. Renderer population and reusable quality evaluator implementation remain follow-up P24C work.
+- Migration guide eval: P24C renders sanitized guide-quality fixtures into existing draft artifact types and scores the artifact pair with a reusable fixture-first evaluator.
 
 ## Follow-Up Backlog
 
@@ -141,4 +147,4 @@ This checks only sanitized fixture expectations and contract assets. It does not
 8. Keep `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` as deferred future hardening until live auth/RBAC wiring closes without mock headers, hardcoded actors, fixture tokens, or committed secrets.
 9. Keep P21 no-mock portal evidence conditional on PLF/PPM prerequisites; do not claim full production readiness from a local controlled live gate.
 10. Keep optional P23 live quality gate evidence separate from default fixture-first scoring.
-11. Implement P24C renderer/evaluator improvements against the P24B fixture while preserving existing artifact types and draft-only boundaries.
+11. Broaden P24 guide fixtures only after additional sanitized deterministic facts exist; keep current renderer/evaluator fixture-first and draft-only.
