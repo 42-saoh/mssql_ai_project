@@ -73,6 +73,7 @@ MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생�
    - password/token 값은 비워 두고 로컬 비밀 저장소나 `.env` 에서만 채운다.
 2. Python/Web 의존성을 lockfile 기준으로 준비한다.
    - `make setup`
+   - Windows host where Python 3.14 is exposed as `python`: set `PYTHON=python` in `.env`, install Git Bash/GNU Make/pnpm, then use the same `make` commands.
 3. API 와 MCP 서버를 각각 실행한다.
    - `make run-api`
    - `make run-mcp`
@@ -85,7 +86,7 @@ MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생�
    - `make test-web-smoke`
    - `make check`
 
-호스트에 `python` 명령이 없으면 `PYTHON=python3 make setup` 처럼 override 하거나, compile-only 확인은 `python3 -m compileall apps services packages tests` 로 수행한다.
+Host Python must be Python 3.14. The executable name is host-specific: macOS/Linux commonly use `python3.14`, while this Windows workspace uses `.env` `PYTHON=python`.
 
 ## DB 와 스키마 운영 방식
 

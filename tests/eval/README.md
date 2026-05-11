@@ -68,3 +68,19 @@ P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no
 
 이 gate 는 no-mock portal 의 controlled live 확인용이며 `production_ready: true` 주장이 아니다.
 PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않는다.
+
+## P23 LLM SP analysis quality eval
+
+P23 eval 은 기본 실행에서 OpenAI 를 호출하지 않는다. `tests/eval/test_p23_llm_sp_analysis_quality.py` 는 `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` 의 simple/medium/complex synthetic scenarios 를 `FakeModelGateway`, `openai_fast_test`, `gpt-5-nano` 로 반복 실행하고 quality report 의 `status`, `productionReady`, `scores`, `thresholds`, `evidenceRefs`, `validatorResults`, sanitized storage findings 를 검증한다.
+
+통과 기준은 `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 이다. unsupported dependency/table/function claim 은 `REVIEW_REQUIRED` 로 남아야 하고, `LLM_INFERENCE` evidence 는 deterministic fact 를 대체하지 않는다. raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 test output/report/storage payload 에 저장하지 않는다.
+
+```bash
+make test PYTEST_ARGS="tests/contract/test_p23_llm_eval_contract_prompt_assets.py tests/eval"
+```
+
+Optional live quality gate 는 confidence signal 로만 사용한다. gate 가 skip/fail/unavailable 이어도 default P23 fixture-first 결과나 production readiness 를 통과로 바꾸지 않으며, PPM 접근 실패 시 PLF fallback 은 금지한다.
+
+```bash
+LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"
+```

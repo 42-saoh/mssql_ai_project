@@ -205,11 +205,16 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 fixture trace/API/Web 산출물에 저장하지 않는다
 - optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
 
+판정 해석:
+- 통과: 기본 fixture-first P23 테스트가 통과하고 `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 을 만족한다.
+- 보류: fixture-first gate 는 통과했지만 optional live confidence gate 가 skip/fail/unavailable 이거나 로컬 검증 prerequisites 가 준비되지 않았다. 이 경우 P23 confidence signal 만 부족한 상태이며 production readiness 로 해석하지 않는다.
+- 실패/blocker: quality threshold 미달, raw prompt/SP/provider response 저장, `production_ready: true` 주장, PPM-to-PLF fallback, model/profile/prompt/schema drift, 또는 P24 document/code generation 범위를 P23 완료로 표현하는 경우다.
+
 통과 기준:
 - `make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/unit/agent_runtime tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 통과
 - P23A -> P23B -> P23C -> P23D 병합 순서가 manifest 에 명시됨
 - optional live quality gate 는 아래 명령으로 별도 수행하며, 실패해도 production blocker 로 과장하지 않음
-- P23 완료 전까지 `production_ready: false` 유지
+- P23D 완료 후에도 별도 production readiness gate 전까지 `production_ready: false` 유지
 
 ```bash
 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"

@@ -119,7 +119,10 @@ def test_p21_python314_assets_are_active_baseline() -> None:
     )
     lock_readme = (ROOT / "requirements" / "lock" / "README.md").read_text(encoding="utf-8")
 
-    assert "PYTHON ?= python3.14" in makefile
+    assert "PYTHON_FROM_ENV_FILE" in makefile
+    assert "PYTHON ?= $(if $(PYTHON_FROM_ENV_FILE),$(PYTHON_FROM_ENV_FILE),python3.14)" in makefile
+    assert "PNPM_FROM_ENV_FILE" in makefile
+    assert "DOCKER_COMPOSE_FROM_ENV_FILE" in makefile
     assert "PYTHON_LOCK_FILE ?= requirements/lock/py314-dev.txt" in makefile
     assert "$(PYTHON) -m uvicorn" in makefile
     assert "$(PYTHON) -m ruff" in makefile
@@ -202,6 +205,9 @@ def test_p21_env_compose_and_probe_missing_prerequisites(monkeypatch) -> None:
     compose_text = (ROOT / "docker" / "test" / "docker-compose.yml").read_text(encoding="utf-8")
 
     for name in (
+        "PYTHON",
+        "PNPM",
+        "DOCKER_COMPOSE",
         "P21_LIVE_PORTAL_GATE",
         "PORTAL_API_MODE",
         "PORTAL_API_BASE_URL",
@@ -209,7 +215,7 @@ def test_p21_env_compose_and_probe_missing_prerequisites(monkeypatch) -> None:
         "P21_APPROVAL_REVIEWER_LOGIN",
     ):
         assert f"{name}=" in env_text
-        assert name in compose_text or name.startswith("P21_")
+        assert name in compose_text or name.startswith(("P21_", "PYTHON", "PNPM", "DOCKER_COMPOSE"))
 
     for name in (
         "P21_LIVE_PORTAL_GATE",

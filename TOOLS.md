@@ -55,7 +55,7 @@
 - `make`
 
 ### Python 계열
-- `python3.14`
+- Python 3.14 runtime. macOS/Linux commonly expose it as `python3.14`; Windows may use `.env` `PYTHON=python`.
 - `uv` 또는 `pip`
 - `pytest`
 - `ruff`

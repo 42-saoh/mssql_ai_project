@@ -27,6 +27,8 @@ def test_dev_port_and_repro_assets_exist() -> None:
     assert (ROOT / "scripts" / "install_python_locked.sh").exists()
     assert (ROOT / "scripts" / "install_web_workspace.sh").exists()
     assert (ROOT / "requirements" / "lock" / "py314-dev.txt").exists()
+    gitattributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "*.sh text eol=lf" in gitattributes
 
     web_package = yaml.safe_load((ROOT / "apps" / "web" / "package.json").read_text(encoding="utf-8"))
     assert web_package["packageManager"] == "pnpm@10.33.0"

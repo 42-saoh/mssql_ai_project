@@ -60,6 +60,8 @@ services:
         source: ${WORKTREE_PATH:-../..}
         target: /workspace
       - pnpm-store:/pnpm/store
+      - web-root-node-modules:/workspace/node_modules
+      - web-app-node-modules:/workspace/apps/web/node_modules
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -89,3 +91,5 @@ services:
 volumes:
   pip-cache:
   pnpm-store:
+  web-root-node-modules:
+  web-app-node-modules:
