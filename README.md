@@ -73,7 +73,8 @@ MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생�
    - password/token 값은 비워 두고 로컬 비밀 저장소나 `.env` 에서만 채운다.
 2. Python/Web 의존성을 lockfile 기준으로 준비한다.
    - `make setup`
-   - Windows host where Python 3.14 is exposed as `python`: set `PYTHON=python` in `.env`, install Git Bash/GNU Make/pnpm, then use the same `make` commands.
+   - Windows host where Python 3.14 is exposed as `python`: set `PYTHON=python` in `.env`, install Git Bash/GNU Make/pnpm, then run Makefile commands through `scripts/win_git_bash.ps1`.
+   - Windows example: `powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make setup`
 3. API 와 MCP 서버를 각각 실행한다.
    - `make run-api`
    - `make run-mcp`
@@ -87,6 +88,7 @@ MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생�
    - `make check`
 
 Host Python must be Python 3.14. The executable name is host-specific: macOS/Linux commonly use `python3.14`, while this Windows workspace uses `.env` `PYTHON=python`.
+On Windows, prefer `scripts/win_git_bash.ps1` for `make` and `pnpm` commands because the WinGet Links shim can fail under PowerShell while the real package path works from Git Bash.
 
 ## DB 와 스키마 운영 방식
 
@@ -103,3 +105,4 @@ Host Python must be Python 3.14. The executable name is host-specific: macOS/Lin
 - `make test-web-smoke` 는 현재 단계에서 web 자동 테스트 대신 컨테이너 기반 build smoke 를 수행한다.
 - UI 수동/반자동 smoke 가 필요하면 Playwright MCP 와 `browser-automation-smoke` skill 을 사용한다.
 - P06 통합 검증 최소 경로는 `make test PYTEST_ARGS="tests/e2e tests/eval"` 이다.
+- Windows 에서는 같은 검증을 `powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/e2e tests/eval"` 형태로 실행한다.
