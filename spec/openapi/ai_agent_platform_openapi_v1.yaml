@@ -313,6 +313,52 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/MetadataToolSummary"
+  /api/v1/metadata/tools/{toolName}/invoke:
+    post:
+      tags: [metadata]
+      summary: Invoke a public read-only MSSQL Metadata MCP dependency evidence tool.
+      operationId: invokeMetadataTool
+      description: |
+        Invokes only the public P28 dependency-evidence allowlist through the MSSQL Metadata
+        MCP registry boundary: get_dependency_closure and resolve_dependency_reference.
+        The request accepts a structured arguments object only. The response is a sanitized
+        metadata envelope with snapshot and evidence refs; it never returns row data, executes
+        stored procedures, exposes SQL definition text, stores raw metadata, performs DDL/DML,
+        or falls back from PPM to PLF.
+      parameters:
+        - name: toolName
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - get_dependency_closure
+              - resolve_dependency_reference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataToolInvokeRequest"
+      responses:
+        "200":
+          description: Sanitized metadata tool invocation envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataToolInvokeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/metadata/search:
     get:
       tags: [metadata]
@@ -837,7 +883,7 @@ components:
           const: true
     MetadataToolSummary:
       type: object
-      required: [name, description, readOnly]
+      required: [name, description, readOnly, invokable]
       properties:
         name:
           type: string
@@ -846,6 +892,46 @@ components:
         readOnly:
           type: boolean
           const: true
+        invokable:
+          type: boolean
+          description: True only for public API invocation allowlisted metadata tools.
+    MetadataToolInvokeRequest:
+      type: object
+      required: [arguments]
+      additionalProperties: false
+      properties:
+        arguments:
+          type: object
+          additionalProperties: true
+          description: Structured MCP tool arguments only; free-form SQL/write command keys are rejected.
+    MetadataToolInvokeResponse:
+      type: object
+      required: [ok, toolName, dbProfileId, snapshotId, collectedAt, evidenceRefs, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        toolName:
+          type: string
+          enum:
+            - get_dependency_closure
+            - resolve_dependency_reference
+        dbProfileId:
+          type: string
+        snapshotId:
+          type: string
+        collectedAt:
+          type: string
+          format: date-time
+        evidenceRefs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        data:
+          type: object
+          additionalProperties: true
     MetadataSearchObjectType:
       type: string
       enum: [PROCEDURE, TABLE, VIEW, FUNCTION]

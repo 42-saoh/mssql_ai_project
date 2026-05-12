@@ -28,13 +28,16 @@
 - `POST /api/v1/artifacts/{artifactId}/approval-decisions`
 - `GET /api/v1/metadata/db-profiles`
 - `GET /api/v1/metadata/tools`
+- `POST /api/v1/metadata/tools/{toolName}/invoke`
 - `GET /api/v1/metadata/search`
 - `GET /api/v1/registry/versions`
 
-`GET /api/v1/metadata/tools` returns a safe read-only catalog summary only. P27
+`GET /api/v1/metadata/tools` returns a safe read-only catalog summary. P27
 dependency evidence tools (`get_dependency_closure`,
-`resolve_dependency_reference`) appear there when active, but the API does not
-expose input schemas, secrets, or a dedicated metadata tool invocation route.
+`resolve_dependency_reference`) appear there when active and carry
+`invokable=true`. P28 adds `POST /api/v1/metadata/tools/{toolName}/invoke` for
+those two tools only. The API still does not expose input schemas or secrets, and
+Web UI/workflow/persisted artifact/DB schema wiring remains deferred.
 
 ## P09 workflow hardening notes
 
@@ -227,6 +230,16 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
   `PPM_MANIFEST_TEMPLATE_ONLY` blocker 와 빈 결과를 반환한다.
 - required MCP inventory/search capability 가 없으면 `METADATA_SEARCH_MCP_TOOL_MISSING`,
   PPM 접근 실패나 live metadata unavailable 은 해당 MCP blocker code 를 PLF fallback 없이 반환한다.
+
+## Metadata tool invocation
+
+- `POST /api/v1/metadata/tools/{toolName}/invoke` 는 P28 safe fixture-first API slice 로,
+  `get_dependency_closure` 와 `resolve_dependency_reference` 만 public allowlist 로 호출한다.
+- 요청 body 는 `{"arguments": {...}}` 형태만 허용하고, 실제 검증과 실행은 MSSQL MCP registry
+  boundary 를 통한다. free-form SQL/write-capable argument, row data, procedure execution,
+  business DB DDL/DML, raw definition storage, PPM-to-PLF fallback 은 계속 금지한다.
+- 성공 응답은 `ok`, `toolName`, `dbProfileId`, `snapshotId`, `collectedAt`, `evidenceRefs`,
+  `data` envelope 로 제한한다. 오류 응답은 기존 API 표준인 `{detail, code}` 를 유지한다.
 
 ## 남은 리스크와 Future Hardening
 

@@ -51,7 +51,9 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "RequestedOutputType" in data["components"]["schemas"]
     assert "WorkflowStepType" in data["components"]["schemas"]
     assert "/api/v1/metadata/search" in data["paths"]
+    assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
+    assert "MetadataToolInvokeResponse" in data["components"]["schemas"]
 
 
 def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
@@ -115,6 +117,60 @@ def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
     identity_properties = set(schemas["MetadataObjectIdentity"]["properties"])
     assert forbidden_response_fields.isdisjoint(
         response_properties | result_properties | identity_properties
+    )
+
+
+def test_openapi_metadata_tool_invocation_contract_matches_p28_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    operation = openapi["paths"]["/api/v1/metadata/tools/{toolName}/invoke"]["post"]
+    schemas = openapi["components"]["schemas"]
+
+    assert operation["operationId"] == "invokeMetadataTool"
+    assert operation["tags"] == ["metadata"]
+    tool_name = operation["parameters"][0]
+    assert tool_name["name"] == "toolName"
+    assert tool_name["schema"]["enum"] == [
+        "get_dependency_closure",
+        "resolve_dependency_reference",
+    ]
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataToolInvokeRequest"
+    }
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataToolInvokeResponse"
+    }
+    assert schemas["MetadataToolSummary"]["properties"]["invokable"] == {
+        "type": "boolean",
+        "description": "True only for public API invocation allowlisted metadata tools.",
+    }
+    assert schemas["MetadataToolInvokeRequest"]["additionalProperties"] is False
+    assert schemas["MetadataToolInvokeRequest"]["required"] == ["arguments"]
+    assert schemas["MetadataToolInvokeResponse"]["additionalProperties"] is False
+    assert schemas["MetadataToolInvokeResponse"]["required"] == [
+        "ok",
+        "toolName",
+        "dbProfileId",
+        "snapshotId",
+        "collectedAt",
+        "evidenceRefs",
+        "data",
+    ]
+    forbidden_response_fields = {
+        "rowData",
+        "row_data",
+        "definition",
+        "sqlText",
+        "ddl",
+        "dml",
+        "execute",
+        "rawStorage",
+    }
+    assert forbidden_response_fields.isdisjoint(
+        set(schemas["MetadataToolInvokeResponse"]["properties"])
     )
 
 

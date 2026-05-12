@@ -9,6 +9,28 @@ ROOT = Path(__file__).resolve().parents[2]
 PROMPT = ROOT / "ops" / "codex-parallel" / "prompts" / "27_dependency_evidence_tooling_design.md"
 MANIFEST = ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml"
 CONTRACT = ROOT / "spec" / "eval" / "p27_dependency_evidence_tooling_contract.yaml"
+P27_MANIFEST_DEFAULT_VERIFY = (
+    'make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py '
+    "tests/unit/mcp/test_tool_registry.py "
+    "tests/contract/mcp/test_tool_invocation_contract.py "
+    "tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py "
+    "tests/unit/api/test_metadata_service.py "
+    'tests/integration/api/test_api_workflow_routes.py"'
+)
+P28_CONTRACT_DEFAULT_VERIFY = (
+    'make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py '
+    "tests/unit/mcp/test_tool_registry.py "
+    "tests/contract/mcp/test_tool_invocation_contract.py "
+    "tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py "
+    "tests/unit/api/test_metadata_service.py "
+    "tests/unit/api/test_route_surface.py "
+    "tests/integration/api/test_api_workflow_routes.py "
+    'tests/contract/test_openapi_and_env_sample_assets.py"'
+)
+P27_HARD_LIVE_VERIFY = (
+    "P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test "
+    'PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"'
+)
 
 REQUIRED_PROMPT_SECTIONS = (
     "## 공통 운영 철학",
@@ -99,10 +121,10 @@ def test_p27_manifest_declares_prompt_track_and_merge_order() -> None:
     assert "fixtures/mcp/metadata_snapshot.json" in track["target_paths"]
     assert "docker/test/docker-compose.yml" in track["target_paths"]
     assert track["optional_verify"] == [
-        'P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"',
+        P27_HARD_LIVE_VERIFY,
     ]
     assert track["verify"] == [
-        'make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"',
+        P27_MANIFEST_DEFAULT_VERIFY,
         "git diff --check",
     ]
 
@@ -116,19 +138,26 @@ def test_p27_contract_and_prompt_remain_fixture_first_hardened_only() -> None:
     assert contract["status"] == "fixture_first_hardened_with_explicit_live_gate"
     assert contract["production_ready"] is False
     assert contract["scope"]["excluded"] == [
-        "dedicated API invocation endpoint",
         "Web UI wiring",
         "runtime workflow changes",
         "persisted artifact type changes",
         "default live metadata or OpenAI gate requirements",
         "DB schema changes",
     ]
+    assert contract["api_invocation_route"]["path"] == (
+        "/api/v1/metadata/tools/{toolName}/invoke"
+    )
+    assert contract["api_invocation_route"]["status"] == "p28_safe_fixture_first_enabled"
+    assert contract["api_invocation_route"]["allowlisted_tools"] == [
+        "get_dependency_closure",
+        "resolve_dependency_reference",
+    ]
     assert contract["verification"]["default"] == [
-        'make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"',
+        P28_CONTRACT_DEFAULT_VERIFY,
         "git diff --check",
     ]
     assert contract["verification"]["hard_live"] == [
-        'P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"',
+        P27_HARD_LIVE_VERIFY,
     ]
     assert contract["implemented_tools"]["get_dependency_closure"]["active"] is True
     assert contract["implemented_tools"]["get_dependency_closure"]["readOnly"] is True

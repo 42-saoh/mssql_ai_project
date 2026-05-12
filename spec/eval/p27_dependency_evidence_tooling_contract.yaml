@@ -13,15 +13,30 @@ scope:
     - Extend the get_procedure_dependencies contract with optional resolution evidence fields.
     - Expose get_dependency_closure as an active read-only MCP tool with fixture and live repository handlers.
     - Expose resolve_dependency_reference as an active read-only MCP tool with fixture and live repository handlers.
-    - Surface the active tools through the existing /api/v1/metadata/tools summary only.
+    - Surface the active tools through the existing /api/v1/metadata/tools summary.
+    - Expose a P28 safe API invocation route for get_dependency_closure and resolve_dependency_reference only.
     - Add an explicit P27 hard-live PPM evidence gate gated by P27_HARD_LIVE_GATE=1.
     - Keep all dependency evidence as structured metadata with snapshot and evidence refs.
   excluded:
-    - dedicated API invocation endpoint
     - Web UI wiring
     - runtime workflow changes
     - persisted artifact type changes
     - default live metadata or OpenAI gate requirements
+    - DB schema changes
+api_invocation_route:
+  path: /api/v1/metadata/tools/{toolName}/invoke
+  method: POST
+  status: p28_safe_fixture_first_enabled
+  allowlisted_tools:
+    - get_dependency_closure
+    - resolve_dependency_reference
+  response_envelope:
+    required: [ok, toolName, dbProfileId, snapshotId, collectedAt, evidenceRefs, data]
+  excluded:
+    - input schema exposure through /api/v1/metadata/tools
+    - Web UI wiring
+    - runtime workflow changes
+    - persisted artifact type changes
     - DB schema changes
 invariants:
   read_only: true
@@ -137,7 +152,7 @@ quality_gate:
     - P27 hard-live gate falls back to PLF or skips missing prerequisites after P27_HARD_LIVE_GATE=1 is enabled.
 verification:
   default:
-    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"
+    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
     - git diff --check
   hard_live:
     - P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"

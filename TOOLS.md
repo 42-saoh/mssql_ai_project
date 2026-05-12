@@ -79,7 +79,10 @@
   - 범위: procedure/table/column/index/constraint/function/view/extended property
   - 제약: 읽기 전용, 자유 SQL 금지, 실제 데이터 접근 금지
   - P27 fixture-first tools: `get_dependency_closure`, `resolve_dependency_reference`
-    는 active/read-only MCP tool 이며 fixture/live repository handler 를 가진다. 전용 API invocation route, Web UI, workflow wiring 은 아직 없다. `P27_HARD_LIVE_GATE=1` 은 명시적 PPM dependency evidence hard-live gate 이며 기본 테스트에는 포함하지 않는다
+    는 active/read-only MCP tool 이며 fixture/live repository handler 를 가진다. P28 기준
+    `/api/v1/metadata/tools/{toolName}/invoke` 는 이 두 tool 만 public allowlist 로 호출한다.
+    Web UI, workflow wiring 은 아직 없다. `P27_HARD_LIVE_GATE=1` 은 명시적 PPM dependency
+    evidence hard-live gate 이며 기본 테스트에는 포함하지 않는다
 
 ### 선택 MCP
 - `openaiDeveloperDocs`
@@ -182,7 +185,7 @@ powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTE
 - `make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/unit/agent_runtime tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 는 P23/P26 fixture-first LLM quality scoring runner 를 검증한다. 기본 실행은 `FakeModelGateway` 로 수행하며 네트워크를 사용하지 않는다. API/Web live 기본 profile 은 `openai_sp_semantic_analysis` / `gpt-5.5` 이고, optional high-quality live confidence 에서는 `OPENAI_MODEL_ANALYSIS` 로 모델을 바꿀 수 있다. `openai_fast_test` 는 `OPENAI_MODEL_FAST_TEST` 로 바꿀 수 있는 수동 fast/test 선택지다.
 - `LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"` 는 선택적 P23/P26 OpenAI high-quality semantic confidence gate 다. 기본 profile 은 `openai_sp_semantic_analysis` / `OPENAI_MODEL_ANALYSIS` 이며, 실패는 production readiness blocker 로 해석하지 않고 `production_ready: false` 를 유지한다.
 - `make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"` 는 P24 fixture-first SP migration guide renderer/evaluator gate 를 검증한다. 기존 `SP_ANALYSIS_DOC` / `DEPENDENCY_REPORT` artifact type 을 재사용하고, `openai_fast_test` / 기본 `gpt-5-nano` 기준을 유지하며 live OpenAI 또는 live PPM 접근을 기본 필수로 만들지 않는다.
-- `make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"` 는 P27 dependency evidence tooling fixture-first 구현, catalog 계약, prompt/manifest 자산, API tool summary 노출을 검증한다. 새 dependency closure/resolver tool 은 active/read-only/structured-input MCP tool 이며, raw SQL, row data, procedure execution, DDL/DML, raw definition storage, runtime workflow change, PPM-to-PLF fallback 을 허용하지 않는다.
+- `make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"` 는 P27/P28 dependency evidence tooling fixture-first 구현, catalog 계약, prompt/manifest 자산, API tool summary 와 safe invocation route 노출을 검증한다. 새 dependency closure/resolver tool 은 active/read-only/structured-input MCP tool 이며, raw SQL, row data, procedure execution, DDL/DML, raw definition storage, runtime workflow change, PPM-to-PLF fallback 을 허용하지 않는다.
 - `P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"` 는 명시적 P27 hard-live gate 다. `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 closure/resolver evidence 를 검증하며, gate 가 켜진 뒤 PPM profile/env 누락 또는 접근 실패는 skip 이 아니라 blocker failure 다.
 - `scripts/install_web_workspace.sh` 는 docker/test 에서 `/pnpm/store` volume 을 pnpm store 로 사용해 worktree 안에 `.pnpm-store` 를 만들지 않는다.
 - 새 테스트 스위트를 추가할 때는 가능하면 도커 실행 경로를 함께 제공한다.

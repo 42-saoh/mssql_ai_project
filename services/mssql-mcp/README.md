@@ -1,7 +1,7 @@
 # services/mssql-mcp
 
 MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, fixture-backed execution, env-gated live metadata execution 을 제공한다. 활성 catalog tool 은 fixture 경로와 live repository handler 를 모두 가진다.
-P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 fixture-first hardening 상태의 active/read-only dependency evidence tool 이다. 기존 API `/api/v1/metadata/tools` summary 에는 노출되지만, 전용 API invocation route, Web UI, workflow wiring 은 아직 없다. 명시적 `P27_HARD_LIVE_GATE=1` 을 켠 경우에만 PPM hard-live dependency evidence gate 를 실행한다.
+P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 fixture-first hardening 상태의 active/read-only dependency evidence tool 이다. P28 기준 API `/api/v1/metadata/tools` summary 에 `invokable` 상태가 노출되고, `/api/v1/metadata/tools/{toolName}/invoke` 는 두 P27 tool 만 안전하게 호출한다. Web UI 와 workflow wiring 은 아직 없다. 명시적 `P27_HARD_LIVE_GATE=1` 을 켠 경우에만 PPM hard-live dependency evidence gate 를 실행한다.
 
 ## 원칙
 

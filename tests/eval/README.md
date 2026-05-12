@@ -99,10 +99,10 @@ P24 gate 가 통과해도 `production_ready: false` 를 유지한다. Optional l
 
 ## P27 dependency evidence tooling
 
-P27 은 MCP dependency evidence 계약을 fixture-first hardening 상태로 유지한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active/read-only/structured-input MCP tools 로 catalog 에 존재하며 fixture/live repository handler 를 가진다. 기존 API `/api/v1/metadata/tools` summary 에만 노출하고, 전용 invocation endpoint/Web UI/workflow wiring 은 후속 slice 로 둔다.
+P27 은 MCP dependency evidence 계약을 fixture-first hardening 상태로 유지한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active/read-only/structured-input MCP tools 로 catalog 에 존재하며 fixture/live repository handler 를 가진다. P28 기준 기존 API `/api/v1/metadata/tools` summary 는 `invokable` 상태를 노출하고, 전용 invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. Web UI/workflow wiring 은 후속 slice 로 둔다.
 
 ```bash
-make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
 ```
 
 이 gate 는 raw SQL input, raw SP definition 저장, raw prompt/provider response 저장, row data, procedure execution, business DB DDL/DML, PPM-to-PLF fallback 을 허용하지 않는다. Ambiguous/dynamic/unresolved synonym/cross-server/caller-dependent dependency 는 catalog confirmation 전까지 `REVIEW_REQUIRED` 로 유지한다.

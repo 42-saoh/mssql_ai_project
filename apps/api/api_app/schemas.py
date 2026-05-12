@@ -184,6 +184,23 @@ class MetadataToolSummary(ApiModel):
     name: str
     description: str
     read_only: Literal[True] = Field(default=True, alias="readOnly")
+    invokable: bool = False
+
+
+class MetadataToolInvokeRequest(ApiModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    arguments: dict[str, Any]
+
+
+class MetadataToolInvokeResponse(ApiModel):
+    ok: Literal[True]
+    tool_name: str = Field(alias="toolName")
+    db_profile_id: str = Field(alias="dbProfileId")
+    snapshot_id: str = Field(alias="snapshotId")
+    collected_at: str = Field(alias="collectedAt")
+    evidence_refs: list[dict[str, Any]] = Field(default_factory=list, alias="evidenceRefs")
+    data: dict[str, Any]
 
 
 class MetadataSearchBlocker(ApiModel):
