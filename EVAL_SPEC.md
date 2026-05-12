@@ -292,8 +292,10 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
 - confirmed dependency 만 deterministic fact 로 승격 가능하며, ambiguous/dynamic/cross-server/unconfirmed synonym/caller-dependent reference 는 `REVIEW_REQUIRED` 를 유지한다
 - raw SP definition, raw prompt, raw provider response, row data, procedure execution, business DB DDL/DML, free-form SQL input, PPM-to-PLF fallback 은 계속 금지한다
 - P28 기준 `/api/v1/metadata/tools/{toolName}/invoke` 는 `get_dependency_closure` 와
-  `resolve_dependency_reference` 만 안전하게 호출한다. Web UI, runtime workflow 변경,
-  persisted artifact type 변경, DB schema 변경, default live gate 요구는 계속 포함하지 않는다
+  `resolve_dependency_reference` 만 안전하게 호출한다. P29 기준 `/metadata/dependencies`
+  Web diagnostic UI 는 이 route 를 수동 진단용으로 사용하고, runtime workflow 는 PROCEDURE
+  target 에 대해 `get_dependency_closure` evidence digest 만 자동 병합한다. persisted artifact
+  type 변경, DB schema 변경, default live gate 요구는 계속 포함하지 않는다
 - `P27_HARD_LIVE_GATE=1` 로 명시 실행한 경우에만 `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 hard-live closure/resolver gate 를 수행한다. 이때 PPM profile/env 누락, template-only manifest, PPM 접근 실패, PLF fallback 은 blocker failure 다
 - 로컬 host-run 에서 Chakra/legacy proxy 가 `python-tds` 기본 TDS negotiation 을 거부하는 경우 `MSSQL_METADATA_TDS_VERSION=7.0` 으로 명시할 수 있으며, 기본값은 `7.4` 이다
 

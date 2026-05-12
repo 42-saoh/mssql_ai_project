@@ -8,6 +8,7 @@
 - `/` - 최근 jobs, PPM metadata search, draft artifact 목록 요약
 - `/requests/new` - API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect
 - `/metadata/search` - read-only metadata identity/evidence search
+- `/metadata/dependencies` - safe dependency closure/reference diagnostics
 - `/jobs/[jobId]` - 실제 job 상태와 draft artifact 목록
 - `/artifacts/[artifactId]` - artifact preview 와 latest validation 표시
 
@@ -36,6 +37,19 @@
 - Validation 결과의 `REVIEW_REQUIRED` 는 사람 승인 요청이 아니라 evidence caveat 로 표시한다.
 - Approval API/server code 는 추후 재활성화를 위한 deferred capability 로 남지만 Web API client 와
   smoke path 는 호출하지 않는다.
+
+## P29 behavior
+
+- `/metadata/dependencies` is a read-only diagnostic surface for
+  `get_dependency_closure` and `resolve_dependency_reference`.
+- The page uses `/api/v1/metadata/tools` only for `invokable` status and never
+  renders MCP input schemas.
+- The forms accept only structured metadata identifiers, `maxDepth`, and
+  `includeReviewRequired`; there are no free-form SQL, row data, procedure
+  execution, DDL/DML, raw definition, or secret fields.
+- Results render the sanitized invocation envelope: `snapshotId`, `collectedAt`,
+  evidence refs, closure nodes/edges/unresolved references, candidates, and
+  selected resolution.
 
 ## P22 behavior
 

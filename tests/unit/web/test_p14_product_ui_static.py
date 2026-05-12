@@ -42,6 +42,8 @@ def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     source = _web_source().lower()
 
     assert "/api/v1/metadata/search" in source
+    assert "/api/v1/metadata/tools" in source
+    assert "/metadata/dependencies" in source
     assert "/api/v1/artifacts/" in source
     assert "/publish" not in source
     assert "/deploy" not in source
@@ -53,6 +55,30 @@ def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     assert "row data" in source
     assert "ddl/dml" in source
     assert "blocker-row" in source
+
+
+def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure() -> None:
+    layout = (WEB_ROOT / "app" / "layout.tsx").read_text(encoding="utf-8")
+    page = (WEB_ROOT / "app" / "metadata" / "dependencies" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    portal_api = (WEB_ROOT / "lib" / "api" / "portal-api.ts").read_text(encoding="utf-8")
+    http_client = (WEB_ROOT / "lib" / "api" / "http-client.ts").read_text(encoding="utf-8")
+    smoke = (WEB_ROOT / "scripts" / "http-adapter-smoke.mjs").read_text(encoding="utf-8")
+
+    assert 'href="/metadata/dependencies"' in layout
+    assert "Dependency diagnostics" in page
+    assert "get_dependency_closure" in page
+    assert "resolve_dependency_reference" in page
+    assert "api.listMetadataTools()" in page
+    assert "api.invokeMetadataTool" in page
+    assert "inputSchema" not in page
+    assert "input schema" not in page.lower()
+    assert "listMetadataTools" in portal_api
+    assert "invokeMetadataTool" in portal_api
+    assert "/api/v1/metadata/tools/${encodeURIComponent(toolName)}/invoke" in http_client
+    assert "metadataTools.tools.every((tool) => !(\"input\" in tool))" in smoke
+    assert "dependencyClosure.data.unresolved" in smoke
 
 
 def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:

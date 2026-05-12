@@ -99,7 +99,7 @@ P24 gate 가 통과해도 `production_ready: false` 를 유지한다. Optional l
 
 ## P27 dependency evidence tooling
 
-P27 은 MCP dependency evidence 계약을 fixture-first hardening 상태로 유지한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active/read-only/structured-input MCP tools 로 catalog 에 존재하며 fixture/live repository handler 를 가진다. P28 기준 기존 API `/api/v1/metadata/tools` summary 는 `invokable` 상태를 노출하고, 전용 invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. Web UI/workflow wiring 은 후속 slice 로 둔다.
+P27 은 MCP dependency evidence 계약을 fixture-first hardening 상태로 유지한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active/read-only/structured-input MCP tools 로 catalog 에 존재하며 fixture/live repository handler 를 가진다. P28 기준 기존 API `/api/v1/metadata/tools` summary 는 `invokable` 상태를 노출하고, 전용 invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. P29 기준 Web `/metadata/dependencies` diagnostic UI 와 workflow `get_dependency_closure` evidence wiring 이 fixture-first 로 활성화되어 있으며, persisted artifact type 과 DB schema 변경은 여전히 포함하지 않는다.
 
 ```bash
 make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"

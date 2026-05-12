@@ -1,6 +1,6 @@
 profile = "safe-explore"
 approval_policy = "untrusted"
-sandbox_mode = "read-only"
+sandbox_mode = "workspace-write"
 allow_login_shell = false
 web_search = "cached"
 project_root_markers = [".git"]

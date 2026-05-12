@@ -436,6 +436,33 @@ legend {
   margin-top: 18px;
 }
 
+.tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tab-link {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--muted);
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.tab-link:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.tab-link--active {
+  color: #ffffff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 .stage-link-row a {
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -486,7 +513,8 @@ legend {
 .validation-list,
 .evidence-list,
 .registry-list,
-.metadata-result-list {
+.metadata-result-list,
+.tool-summary-grid {
   display: grid;
   gap: 12px;
 }
@@ -505,6 +533,32 @@ legend {
   border-radius: 6px;
   padding: 14px;
   background: #fbfcfc;
+}
+
+.tool-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tool-summary-grid div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  background: #fbfcfc;
+}
+
+.tool-summary-grid code {
+  overflow-wrap: anywhere;
+}
+
+.compact-heading {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
 }
 
 .artifact-row h3,
@@ -681,7 +735,8 @@ legend {
   .output-grid,
   .sample-grid,
   .metric-grid,
-  .timeline {
+  .timeline,
+  .tool-summary-grid {
     grid-template-columns: 1fr;
   }
 

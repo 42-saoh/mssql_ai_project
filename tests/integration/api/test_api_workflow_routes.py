@@ -163,6 +163,90 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
 
 
+def test_workflow_binds_dependency_closure_evidence_to_metadata_and_artifacts(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+) -> None:
+    client, repository = client_and_repository
+
+    submit = client.post(
+        "/api/v1/requests/sp-analysis",
+        json={
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_ProcessOrderBatch",
+            },
+            "outputs": ["DEPENDENCY_REPORT"],
+            "options": {"includeEvidenceRefs": True},
+        },
+    )
+
+    assert submit.status_code == 202
+    assert submit.json()["status"] == "VALIDATION_COMPLETE"
+    metadata = next(iter(repository.metadata_collections.values()))
+    dependency_evidence = metadata.payload["dependencyEvidence"]
+    assert dependency_evidence["toolName"] == "get_dependency_closure"
+    assert dependency_evidence["summary"]["reviewRequiredCount"] >= 1
+    assert dependency_evidence["unresolved"]
+    assert all(edge["resolutionStatus"] == "CONFIRMED" for edge in dependency_evidence["edges"])
+    assert "resolve_dependency_reference" not in str(metadata.payload)
+
+    artifact = next(iter(repository.artifacts.values()))
+    assert artifact.type == ArtifactType.DEPENDENCY_REPORT
+    assert "dependency_closure_evidence" in artifact.content
+    assert "raw_definition" not in artifact.content.lower()
+    assert "row_data" not in artifact.content.lower()
+    assert "select *" not in artifact.content.lower()
+    assert "ddl/dml" not in artifact.content.lower()
+    assert any("dependencies" in ref["locator"] for ref in artifact.evidence_refs)
+
+
+def test_workflow_blocks_ppm_template_only_without_plf_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    monkeypatch.setattr(
+        "api_app.metadata_service.ppm_manifest_selection_mode",
+        lambda: "template_only",
+    )
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        client = TestClient(app)
+        submit = client.post(
+            "/api/v1/requests/sp-analysis",
+            json={
+                "dbProfileId": "ppm",
+                "target": {
+                    "type": "PROCEDURE",
+                    "schema": "dbo",
+                    "name": "usp_GetOrderSummary",
+                },
+                "outputs": ["DEPENDENCY_REPORT"],
+                "options": {"includeEvidenceRefs": True},
+            },
+        )
+        job_id = submit.json()["jobId"]
+        job = client.get(f"/api/v1/jobs/{job_id}")
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert submit.status_code == 202
+    assert submit.json()["status"] == "FAILED"
+    assert job.status_code == 200
+    assert job.json()["status"] == "FAILED"
+    assert job.json()["failureReason"]
+    assert "PPM pilot manifest is template_only" in job.json()["failureReason"]
+    assert "PLF" not in submit.text
+    assert "PLF" not in job.text
+
+
 def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
     client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
 ) -> None:

@@ -8,10 +8,12 @@ from mssql_mcp_app.registry import build_tool_registry
 from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
 from mssql_mcp_app.settings import load_live_metadata_settings
 
+import api_app.metadata_service as metadata_service
 from api_app.live_gate import P21_LIVE_PPM_REQUIRED
 from api_app.metadata_service import (
     METADATA_BLOCKER_MESSAGES,
     MetadataSearchDependencyError,
+    PPM_MANIFEST_TEMPLATE_ONLY,
     load_profiles_for_metadata_request,
     p21_live_portal_enabled,
 )
@@ -38,6 +40,7 @@ class MetadataCollectionResult:
     procedure_definition: dict[str, Any] | None = None
     procedure_parameters: dict[str, Any] | None = None
     procedure_dependencies: dict[str, Any] | None = None
+    dependency_evidence: dict[str, Any] | None = None
     table_schemas: tuple[dict[str, Any], ...] = ()
     status: str = "COLLECTED"
     notes: tuple[str, ...] = ()
@@ -67,6 +70,7 @@ class MetadataCollectionResult:
             "procedureDefinition": self.procedure_definition,
             "procedureParameters": self.procedure_parameters,
             "procedureDependencies": self.procedure_dependencies,
+            "dependencyEvidence": self.dependency_evidence,
             "tableSchemas": list(self.table_schemas),
             "status": self.status,
             "notes": list(self.notes),
@@ -103,6 +107,14 @@ class McpMetadataGateway(MetadataGateway):
             profiles = load_profiles_for_metadata_request(settings, db_profile_id=db_profile_id)
         except MetadataSearchDependencyError as exc:
             raise P21LivePortalPrerequisiteError(exc.detail, code=exc.code) from exc
+        if (
+            db_profile_id == "ppm"
+            and metadata_service.ppm_manifest_selection_mode() != "live_metadata"
+        ):
+            raise P21LivePortalPrerequisiteError(
+                METADATA_BLOCKER_MESSAGES[PPM_MANIFEST_TEMPLATE_ONLY],
+                code=PPM_MANIFEST_TEMPLATE_ONLY,
+            )
         repository = (
             LiveMetadataRepository(settings=settings, profiles=profiles)
             if settings.live_metadata_enabled
@@ -145,6 +157,22 @@ class McpMetadataGateway(MetadataGateway):
             evidence_refs,
             errors,
         )
+        dependency_closure = self._invoke(
+            registry,
+            "get_dependency_closure",
+            {
+                "dbProfileId": db_profile_id,
+                "schema": schema,
+                "objectName": procedure_name,
+                "objectType": "PROCEDURE",
+                "maxDepth": 2,
+                "includeReviewRequired": False,
+            },
+            evidence_refs,
+            errors,
+        )
+        if dependency_closure is not None:
+            evidence_refs.extend(_raw_dependency_evidence_refs(dependency_closure))
         if is_p21_live and (
             definition is None or parameters is None or dependencies is None
         ):
@@ -177,7 +205,11 @@ class McpMetadataGateway(MetadataGateway):
             if table_schema is not None
         )
 
-        payloads = [item for item in (definition, parameters, dependencies) if item]
+        payloads = [
+            item
+            for item in (definition, parameters, dependencies, dependency_closure)
+            if item
+        ]
         snapshot_id = _first_value(payloads, "snapshotId")
         collected_at = _first_value(payloads, "collectedAt")
         if errors and not payloads:
@@ -217,6 +249,7 @@ class McpMetadataGateway(MetadataGateway):
             procedure_definition=definition["data"] if definition else None,
             procedure_parameters=parameters["data"] if parameters else None,
             procedure_dependencies=dependencies["data"] if dependencies else None,
+            dependency_evidence=_dependency_evidence_digest(dependency_closure),
             table_schemas=tuple(item["data"] for item in table_schemas),
             status="COLLECTED" if not errors else "REVIEW_REQUIRED",
             notes=tuple(notes),
@@ -261,7 +294,7 @@ def _first_value(payloads: list[dict[str, Any]], key: str) -> str | None:
 
 def _api_evidence_refs(evidence_refs: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
     converted = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str, str, str | None]] = set()
     for ref in evidence_refs:
         object_name = ref.get("objectName") or ref.get("id") or "metadata"
         object_ref = str(object_name)
@@ -274,8 +307,153 @@ def _api_evidence_refs(evidence_refs: list[dict[str, Any]]) -> tuple[dict[str, A
             "objectRef": object_ref,
             "locator": locator,
         }
-        dedupe_key = (item["type"], item["objectRef"], item["locator"])
+        snapshot_id = ref.get("snapshotId")
+        if snapshot_id:
+            item["snapshotId"] = str(snapshot_id)
+        dedupe_key = (
+            item["type"],
+            item["objectRef"],
+            item["locator"],
+            item.get("snapshotId"),
+        )
         if dedupe_key not in seen:
             converted.append(item)
             seen.add(dedupe_key)
     return tuple(converted)
+
+
+def _dependency_evidence_digest(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    data = dict(payload.get("data") or {})
+    snapshot_id = str(payload.get("snapshotId") or "") or None
+    root_object = _safe_dependency_identity(data.get("rootObject") or {})
+    raw_evidence_refs = _raw_dependency_evidence_refs(payload)
+    evidence_refs = list(_api_evidence_refs(raw_evidence_refs))
+    return {
+        "toolName": str(payload.get("toolName") or "get_dependency_closure"),
+        "dbProfileId": str(payload.get("dbProfileId") or ""),
+        "snapshotId": snapshot_id,
+        "collectedAt": str(payload.get("collectedAt") or ""),
+        "rootObject": root_object,
+        "summary": _safe_dependency_summary(data.get("summary") or {}),
+        "nodes": [
+            _safe_dependency_node(item, snapshot_id=snapshot_id)
+            for item in _dict_items(data.get("nodes"))
+        ],
+        "edges": [
+            _safe_dependency_edge(item, snapshot_id=snapshot_id)
+            for item in _dict_items(data.get("edges"))
+        ],
+        "unresolved": [
+            _safe_dependency_unresolved(item, snapshot_id=snapshot_id)
+            for item in _dict_items(data.get("unresolved"))
+        ],
+        "evidenceRefs": evidence_refs,
+        "caveats": [str(item) for item in data.get("caveats", []) if str(item)],
+        "reviewRequired": bool(data.get("reviewRequired")),
+    }
+
+
+def _raw_dependency_evidence_refs(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = dict(payload.get("data") or {})
+    raw_refs: list[dict[str, Any]] = []
+    raw_refs.extend(_dict_items(payload.get("evidenceRefs")))
+    for collection in ("nodes", "edges", "unresolved", "candidates"):
+        for item in _dict_items(data.get(collection)):
+            raw_refs.extend(_dict_items(item.get("evidenceRefs")))
+            for step in _dict_items(item.get("resolutionChain")):
+                raw_refs.extend(_dict_items(step.get("evidenceRefs")))
+    selected = data.get("selectedResolution")
+    if isinstance(selected, dict):
+        raw_refs.extend(_dict_items(selected.get("evidenceRefs")))
+        for step in _dict_items(selected.get("resolutionChain")):
+            raw_refs.extend(_dict_items(step.get("evidenceRefs")))
+    for ref in raw_refs:
+        if payload.get("snapshotId") and not ref.get("snapshotId"):
+            ref["snapshotId"] = str(payload["snapshotId"])
+    return raw_refs
+
+
+def _safe_dependency_summary(value: dict[str, Any]) -> dict[str, int]:
+    return {
+        "maxDepth": int(value.get("maxDepth") or 0),
+        "nodeCount": int(value.get("nodeCount") or 0),
+        "edgeCount": int(value.get("edgeCount") or 0),
+        "reviewRequiredCount": int(value.get("reviewRequiredCount") or 0),
+    }
+
+
+def _safe_dependency_identity(value: Any) -> dict[str, Any]:
+    item = dict(value) if isinstance(value, dict) else {}
+    return {
+        key: item.get(key)
+        for key in (
+            "database",
+            "server",
+            "schema",
+            "name",
+            "objectType",
+            "sourceScope",
+            "referencedDatabase",
+            "referencedServer",
+        )
+        if item.get(key) is not None
+    }
+
+
+def _safe_dependency_node(item: dict[str, Any], *, snapshot_id: str | None) -> dict[str, Any]:
+    return {
+        **_safe_dependency_identity(item),
+        "id": str(item.get("id") or ""),
+        "reviewStatus": str(item.get("reviewStatus") or "REVIEW_REQUIRED"),
+        "evidenceRefs": list(
+            _api_evidence_refs(_refs_with_snapshot(item.get("evidenceRefs"), snapshot_id))
+        ),
+    }
+
+
+def _safe_dependency_edge(item: dict[str, Any], *, snapshot_id: str | None) -> dict[str, Any]:
+    return {
+        "from": str(item.get("from") or ""),
+        "to": str(item.get("to") or ""),
+        "dependencyType": str(item.get("dependencyType") or "REFERENCE"),
+        "resolutionStatus": str(item.get("resolutionStatus") or "REVIEW_REQUIRED"),
+        "resolutionStrategy": str(item.get("resolutionStrategy") or "UNRESOLVED"),
+        "resolutionConfidence": str(item.get("resolutionConfidence") or "UNKNOWN"),
+        "resolutionEvidenceKind": str(item.get("resolutionEvidenceKind") or "UNRESOLVED"),
+        "unresolvedReason": item.get("unresolvedReason"),
+        "evidenceRefs": list(
+            _api_evidence_refs(_refs_with_snapshot(item.get("evidenceRefs"), snapshot_id))
+        ),
+    }
+
+
+def _safe_dependency_unresolved(item: dict[str, Any], *, snapshot_id: str | None) -> dict[str, Any]:
+    return {
+        **_safe_dependency_identity(item),
+        "dependencyType": str(item.get("dependencyType") or "REFERENCE"),
+        "isAmbiguous": bool(item.get("isAmbiguous")),
+        "reviewStatus": str(item.get("reviewStatus") or "REVIEW_REQUIRED"),
+        "resolutionStatus": str(item.get("resolutionStatus") or "REVIEW_REQUIRED"),
+        "resolutionStrategy": str(item.get("resolutionStrategy") or "UNRESOLVED"),
+        "resolutionConfidence": str(item.get("resolutionConfidence") or "UNKNOWN"),
+        "resolutionEvidenceKind": str(item.get("resolutionEvidenceKind") or "UNRESOLVED"),
+        "unresolvedReason": item.get("unresolvedReason"),
+        "evidenceRefs": list(
+            _api_evidence_refs(_refs_with_snapshot(item.get("evidenceRefs"), snapshot_id))
+        ),
+    }
+
+
+def _refs_with_snapshot(value: Any, snapshot_id: str | None) -> list[dict[str, Any]]:
+    refs = _dict_items(value)
+    if not snapshot_id:
+        return refs
+    return [{**ref, "snapshotId": ref.get("snapshotId") or snapshot_id} for ref in refs]
+
+
+def _dict_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]

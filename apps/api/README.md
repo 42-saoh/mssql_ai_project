@@ -36,8 +36,9 @@
 dependency evidence tools (`get_dependency_closure`,
 `resolve_dependency_reference`) appear there when active and carry
 `invokable=true`. P28 adds `POST /api/v1/metadata/tools/{toolName}/invoke` for
-those two tools only. The API still does not expose input schemas or secrets, and
-Web UI/workflow/persisted artifact/DB schema wiring remains deferred.
+those two tools only. P29 consumes that route from the Web diagnostic UI and the
+workflow dependency-evidence path. The API still does not expose input schemas,
+secrets, persisted artifact type changes, or DB schema changes.
 
 ## P09 workflow hardening notes
 
@@ -232,6 +233,13 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
   PPM 접근 실패나 live metadata unavailable 은 해당 MCP blocker code 를 PLF fallback 없이 반환한다.
 
 ## Metadata tool invocation
+
+P29 consumes this P28 route from the Web diagnostic route
+`/metadata/dependencies` and from workflow metadata collection. Workflow only
+auto-invokes `get_dependency_closure` for PROCEDURE targets, stores a sanitized
+`dependencyEvidence` digest, merges dependency evidence refs into generation
+context and draft artifact evidence, and keeps `resolve_dependency_reference`
+manual-only. PPM metadata unavailability remains a blocker with no PLF fallback.
 
 - `POST /api/v1/metadata/tools/{toolName}/invoke` 는 P28 safe fixture-first API slice 로,
   `get_dependency_closure` 와 `resolve_dependency_reference` 만 public allowlist 로 호출한다.

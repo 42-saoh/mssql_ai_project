@@ -561,6 +561,7 @@ def generation_context_from_request(
                 "authorId": "AI",
                 "llmAnalysis": agent_run.structured_output if agent_run else None,
                 "llmTrace": llm_trace_summary(agent_run),
+                "dependencyEvidence": dependency_evidence_for_generation(metadata),
             },
             "evidence": {
                 "sources": generation_evidence_sources(metadata, sp_name, agent_run),
@@ -626,6 +627,9 @@ def sanitized_metadata_payload(payload: dict[str, object]) -> dict[str, object]:
         sanitized_definition = dict(definition)
         sanitized_definition.pop("definition", None)
         sanitized["procedureDefinition"] = sanitized_definition
+    sanitized["dependencyEvidence"] = dependency_evidence_for_generation_payload(
+        sanitized.get("dependencyEvidence")
+    )
     return sanitized
 
 
@@ -712,6 +716,18 @@ def generation_evidence_sources(
             for table in metadata.table_schemas
             if table.get("schema") and table.get("tableName")
         )
+        dependency_evidence = dependency_evidence_for_generation(metadata)
+        sources.extend(
+            {
+                "type": "dependencyEvidence",
+                "name": str(ref.get("objectRef") or metadata.object_ref),
+                "reason": "MSSQL MCP dependency closure evidence",
+                "locator": str(ref.get("locator") or "MSSQL MCP dependency closure"),
+                "snapshotId": str(ref.get("snapshotId") or metadata.snapshot_id or ""),
+            }
+            for ref in dependency_evidence.get("evidenceRefs", [])
+            if isinstance(ref, dict)
+        )
     if agent_run:
         invocation = agent_run.model_invocation
         output_hash = str(invocation.get("outputHash") or "")
@@ -725,6 +741,43 @@ def generation_evidence_sources(
             }
         )
     return sources
+
+
+def dependency_evidence_for_generation(
+    metadata: MetadataCollectionResult | None,
+) -> dict[str, object]:
+    if metadata is None:
+        return {}
+    return dependency_evidence_for_generation_payload(metadata.dependency_evidence)
+
+
+def dependency_evidence_for_generation_payload(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "toolName": str(value.get("toolName") or "get_dependency_closure"),
+        "dbProfileId": str(value.get("dbProfileId") or ""),
+        "snapshotId": value.get("snapshotId"),
+        "collectedAt": str(value.get("collectedAt") or ""),
+        "rootObject": _safe_dict(value.get("rootObject")),
+        "summary": _safe_dict(value.get("summary")),
+        "nodes": _safe_dict_list(value.get("nodes")),
+        "edges": _safe_dict_list(value.get("edges")),
+        "unresolved": _safe_dict_list(value.get("unresolved")),
+        "evidenceRefs": _safe_dict_list(value.get("evidenceRefs")),
+        "caveats": [str(item) for item in value.get("caveats", []) if str(item)],
+        "reviewRequired": bool(value.get("reviewRequired")),
+    }
+
+
+def _safe_dict(value: object) -> dict[str, object]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _safe_dict_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
 
 
 def generation_assumptions(agent_run: AgentRunRecord | None) -> list[str]:

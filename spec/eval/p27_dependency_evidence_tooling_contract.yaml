@@ -15,11 +15,11 @@ scope:
     - Expose resolve_dependency_reference as an active read-only MCP tool with fixture and live repository handlers.
     - Surface the active tools through the existing /api/v1/metadata/tools summary.
     - Expose a P28 safe API invocation route for get_dependency_closure and resolve_dependency_reference only.
+    - Expose a P29 Web diagnostic UI that invokes the P28 safe API route.
+    - Wire get_dependency_closure evidence into the workflow metadata/generation context.
     - Add an explicit P27 hard-live PPM evidence gate gated by P27_HARD_LIVE_GATE=1.
     - Keep all dependency evidence as structured metadata with snapshot and evidence refs.
   excluded:
-    - Web UI wiring
-    - runtime workflow changes
     - persisted artifact type changes
     - default live metadata or OpenAI gate requirements
     - DB schema changes
@@ -34,10 +34,28 @@ api_invocation_route:
     required: [ok, toolName, dbProfileId, snapshotId, collectedAt, evidenceRefs, data]
   excluded:
     - input schema exposure through /api/v1/metadata/tools
-    - Web UI wiring
-    - runtime workflow changes
     - persisted artifact type changes
     - DB schema changes
+web_diagnostic_ui:
+  route: /metadata/dependencies
+  status: p29_fixture_first_enabled
+  behavior:
+    - Uses /api/v1/metadata/tools summary for invokable status only.
+    - Invokes get_dependency_closure and resolve_dependency_reference through the P28 API route.
+    - Renders snapshotId, collectedAt, evidence refs, nodes, edges, unresolved references, candidates, and selectedResolution only.
+    - Does not expose MCP input schemas, row data, SQL text, raw definitions, DDL/DML controls, procedure execution, or secrets.
+workflow_evidence_wiring:
+  status: p29_fixture_first_enabled
+  automatic_tool:
+    - get_dependency_closure
+  manual_only_tools:
+    - resolve_dependency_reference
+  behavior:
+    - Calls get_dependency_closure for PROCEDURE targets during metadata collection.
+    - Uses maxDepth 2 and includeReviewRequired false; unresolved review-required evidence is still preserved.
+    - Stores only a sanitized dependencyEvidence digest in the existing metadata collection payload.
+    - Merges dependency evidence refs into generation context and draft artifact evidence refs.
+    - Does not introduce persisted artifact type changes, workflow state changes, or DB schema changes.
 invariants:
   read_only: true
   structured_input_only: true
@@ -152,7 +170,7 @@ quality_gate:
     - P27 hard-live gate falls back to PLF or skips missing prerequisites after P27_HARD_LIVE_GATE=1 is enabled.
 verification:
   default:
-    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
+    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_metadata_gateway.py tests/unit/api/test_workflow_service.py tests/unit/api/test_route_surface.py tests/unit/web/test_p14_product_ui_static.py tests/integration/api/test_api_workflow_routes.py tests/e2e/test_fixture_workflow_happy_path.py tests/contract/test_openapi_and_env_sample_assets.py"
     - git diff --check
   hard_live:
     - P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"

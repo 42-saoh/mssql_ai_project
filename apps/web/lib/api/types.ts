@@ -198,6 +198,29 @@ export interface MetadataProfile {
   readOnly: true;
 }
 
+export type MetadataToolName = "get_dependency_closure" | "resolve_dependency_reference";
+
+export interface MetadataToolSummary {
+  name: string;
+  description: string;
+  readOnly: true;
+  invokable: boolean;
+}
+
+export interface MetadataToolInvokeRequest {
+  arguments: Record<string, unknown>;
+}
+
+export interface MetadataToolInvokeResponse {
+  ok: true;
+  toolName: MetadataToolName;
+  dbProfileId: string;
+  snapshotId: string;
+  collectedAt: string;
+  evidenceRefs: Record<string, unknown>[];
+  data: Record<string, unknown>;
+}
+
 export interface MetadataSearchBlocker {
   code: string;
   message: string;

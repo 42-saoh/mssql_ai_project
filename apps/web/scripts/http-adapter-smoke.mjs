@@ -122,6 +122,29 @@ const artifact = await api.getArtifact(analysisSummary.artifactId);
 const validation = await api.validateArtifact(analysisSummary.artifactId);
 const latestValidation = await api.getLatestValidation(analysisSummary.artifactId);
 const profiles = await api.listMetadataProfiles();
+const metadataTools = await api.listMetadataTools();
+const dependencyClosure = await api.invokeMetadataTool("get_dependency_closure", {
+  arguments: {
+    dbProfileId: "master",
+    schema: "dbo",
+    objectName: "usp_ProcessOrderBatch",
+    objectType: "PROCEDURE",
+    maxDepth: 2,
+    includeReviewRequired: false,
+  },
+});
+const dependencyResolution = await api.invokeMetadataTool("resolve_dependency_reference", {
+  arguments: {
+    dbProfileId: "master",
+    sourceObject: {
+      schema: "dbo",
+      name: "usp_GetOrderSummary",
+      objectType: "PROCEDURE",
+    },
+    referencedSchema: "dbo",
+    referencedName: "TB_ORDER",
+  },
+});
 const metadataSearch = await api.searchMetadataObjects({
   dbProfileId: "master",
   query: "order",
@@ -138,6 +161,13 @@ assert(artifact.evidenceRefs.length > 0, "HTTP smoke artifact has no evidence re
 assert(validation.status === "PASSED" || validation.status === "REVIEW_REQUIRED", `Unexpected validation status: ${validation.status}`);
 assert(latestValidation.validationReportId === validation.validationReportId, "Latest validation did not match explicit validation");
 assert(profiles.profiles.every((profile) => profile.readOnly === true), "Metadata profiles must be read-only");
+assert(metadataTools.tools.some((tool) => tool.name === "get_dependency_closure" && tool.invokable === true), "Dependency closure tool must be invokable");
+assert(metadataTools.tools.every((tool) => !("input" in tool)), "Metadata tool summary must not expose input schema");
+assert(dependencyClosure.toolName === "get_dependency_closure", "Dependency closure invocation returned the wrong tool");
+assert(dependencyClosure.data.unresolved?.length > 0, "Dependency closure must preserve unresolved review-required evidence");
+assert(dependencyClosure.data.edges.every((edge) => edge.resolutionStatus === "CONFIRMED"), "Closure graph must hide review-required edges when requested");
+assert(dependencyResolution.toolName === "resolve_dependency_reference", "Dependency resolver invocation returned the wrong tool");
+assert(dependencyResolution.data.selectedResolution?.name === "TB_ORDER", "Dependency resolver did not select the confirmed table");
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
 assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
 assert(registry.versions.length > 0, "Registry versions response is empty");
@@ -154,6 +184,9 @@ for (const [label, payload] of Object.entries({
   validation,
   latestValidation,
   profiles,
+  metadataTools,
+  dependencyClosure,
+  dependencyResolution,
   metadataSearch,
   registry,
 })) {
@@ -183,6 +216,15 @@ assertObserved("GET /api/v1/artifacts/{artifactId}/validation/latest", ({ method
 );
 assertObserved("GET /api/v1/metadata/db-profiles", ({ method, path }) =>
   method === "GET" && path === "/api/v1/metadata/db-profiles",
+);
+assertObserved("GET /api/v1/metadata/tools", ({ method, path }) =>
+  method === "GET" && path === "/api/v1/metadata/tools",
+);
+assertObserved("POST /api/v1/metadata/tools/get_dependency_closure/invoke", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/tools/get_dependency_closure/invoke",
+);
+assertObserved("POST /api/v1/metadata/tools/resolve_dependency_reference/invoke", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/tools/resolve_dependency_reference/invoke",
 );
 assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
   method === "GET" && path.startsWith("/api/v1/metadata/search?"),

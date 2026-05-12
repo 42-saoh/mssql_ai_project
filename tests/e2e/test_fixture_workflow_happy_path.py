@@ -15,6 +15,7 @@ from tests.unit.api.fake_repository import MemoryWorkflowRepository
 def client_and_repository(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[tuple[TestClient, MemoryWorkflowRepository]]:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
     repository = MemoryWorkflowRepository()
@@ -78,6 +79,9 @@ def test_fixture_backed_request_to_validation_complete_happy_path(
     analysis_artifact_id = next(
         artifact["artifactId"] for artifact in artifacts if artifact["type"] == "SP_ANALYSIS_DOC"
     )
+    dependency_artifact_id = next(
+        artifact["artifactId"] for artifact in artifacts if artifact["type"] == "DEPENDENCY_REPORT"
+    )
     preview = client.get(f"/api/v1/artifacts/{analysis_artifact_id}")
     assert preview.status_code == 200
     preview_payload = preview.json()
@@ -94,6 +98,10 @@ def test_fixture_backed_request_to_validation_complete_happy_path(
     }
     assert "dbo.TB_ORDER" in preview_payload["content"]
     assert "REVIEW_REQUIRED" in preview_payload["content"]
+
+    dependency_preview = client.get(f"/api/v1/artifacts/{dependency_artifact_id}")
+    assert dependency_preview.status_code == 200
+    assert "dependency_closure_evidence" in dependency_preview.json()["content"]
 
     validation = client.post(f"/api/v1/artifacts/{analysis_artifact_id}/validation")
     assert validation.status_code == 200

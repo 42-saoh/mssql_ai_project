@@ -406,15 +406,31 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
 
-    service.submit_sp_analysis(_fixture_request())
+    service.submit_sp_analysis(
+        _fixture_request(
+            ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT", "TABLE_COLUMN_METADATA"]
+        )
+    )
 
     metadata = next(iter(repository.metadata_collections.values()))
     assert metadata.payload["snapshotId"] == "mcp-fixture-snapshot-0001"
+    dependency_evidence = metadata.payload["dependencyEvidence"]
+    assert dependency_evidence["toolName"] == "get_dependency_closure"
+    assert dependency_evidence["summary"]["reviewRequiredCount"] >= 1
+    assert dependency_evidence["unresolved"]
+    assert "definition" not in str(dependency_evidence).lower()
 
     contents = "\n".join(artifact.content for artifact in repository.artifacts.values())
     assert "dbo.TB_ORDER" in contents
     assert "Order identifier" in contents
     assert "OrderId" in contents
+    assert "dependency_closure_evidence" in contents
+    assert "FIXTURE_AMBIGUOUS" in contents
+    assert any(
+        "dependencies" in ref["locator"]
+        for artifact in repository.artifacts.values()
+        for ref in artifact.evidence_refs
+    )
 
 
 def test_approve_requires_latest_passed_validation_report() -> None:

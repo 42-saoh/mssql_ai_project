@@ -20,8 +20,12 @@ P27_DEFAULT_VERIFY = (
     "tests/contract/mcp/test_tool_invocation_contract.py "
     "tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py "
     "tests/unit/api/test_metadata_service.py "
+    "tests/unit/api/test_metadata_gateway.py "
+    "tests/unit/api/test_workflow_service.py "
     "tests/unit/api/test_route_surface.py "
+    "tests/unit/web/test_p14_product_ui_static.py "
     "tests/integration/api/test_api_workflow_routes.py "
+    "tests/e2e/test_fixture_workflow_happy_path.py "
     'tests/contract/test_openapi_and_env_sample_assets.py"'
 )
 P27_HARD_LIVE_VERIFY = (
@@ -356,8 +360,6 @@ def test_p27_dependency_evidence_eval_contract_matches_mcp_catalog() -> None:
     assert contract["status"] == "fixture_first_hardened_with_explicit_live_gate"
     assert contract["production_ready"] is False
     assert contract["scope"]["excluded"] == [
-        "Web UI wiring",
-        "runtime workflow changes",
         "persisted artifact type changes",
         "default live metadata or OpenAI gate requirements",
         "DB schema changes",
@@ -371,10 +373,16 @@ def test_p27_dependency_evidence_eval_contract_matches_mcp_catalog() -> None:
     ]
     assert contract["api_invocation_route"]["excluded"] == [
         "input schema exposure through /api/v1/metadata/tools",
-        "Web UI wiring",
-        "runtime workflow changes",
         "persisted artifact type changes",
         "DB schema changes",
+    ]
+    assert contract["web_diagnostic_ui"]["route"] == "/metadata/dependencies"
+    assert contract["web_diagnostic_ui"]["status"] == "p29_fixture_first_enabled"
+    assert contract["workflow_evidence_wiring"]["automatic_tool"] == [
+        "get_dependency_closure",
+    ]
+    assert contract["workflow_evidence_wiring"]["manual_only_tools"] == [
+        "resolve_dependency_reference",
     ]
     assert contract["invariants"]["read_only"] is True
     assert contract["invariants"]["structured_input_only"] is True
