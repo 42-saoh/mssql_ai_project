@@ -17,9 +17,10 @@ scope:
   excluded:
     - MCP handler implementation
     - API or Web wiring
+    - runtime workflow changes
     - persisted artifact type changes
     - fixture suite expansion beyond contract checks
-    - live metadata gate requirements
+    - live metadata or OpenAI gate requirements
 invariants:
   read_only: true
   structured_input_only: true
@@ -118,5 +119,5 @@ quality_gate:
     - Ambiguous, synonym, dynamic, or cross-server evidence is promoted as deterministic without catalog confirmation.
 verification:
   default:
-    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+    - make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
     - git diff --check

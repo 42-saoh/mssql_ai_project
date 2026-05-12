@@ -15,6 +15,24 @@ PLANNED_TOOL_NAMES = {
     "resolve_dependency_reference",
 }
 
+P27_OPTIONAL_RESOLUTION_FIELDS = {
+    "resolutionConfidence",
+    "resolutionEvidenceKind",
+    "unresolvedReason",
+    "resolutionChain",
+}
+
+FORBIDDEN_PLANNED_INPUT_FIELDS = {
+    "query",
+    "sql",
+    "rawSql",
+    "statement",
+    "whereClause",
+    "definition",
+    "procedureDefinition",
+    "rowData",
+}
+
 TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
     "check_database_exists": {
         "dbProfileId": "master",
@@ -122,6 +140,20 @@ TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
 }
 
 
+def _schema_property_names(schema: dict[str, Any]) -> set[str]:
+    names: set[str] = set()
+    properties = schema.get("properties", {})
+    if isinstance(properties, dict):
+        names.update(properties)
+        for child in properties.values():
+            if isinstance(child, dict):
+                names.update(_schema_property_names(child))
+    items = schema.get("items")
+    if isinstance(items, dict):
+        names.update(_schema_property_names(items))
+    return names
+
+
 def test_catalog_contract_declares_all_active_tool_invocations() -> None:
     payload = yaml.safe_load(
         (REPO_ROOT / "spec" / "mcp" / "mssql_metadata_tool_catalog.yaml").read_text(
@@ -154,8 +186,8 @@ def test_p27_dependency_evidence_design_tools_are_contract_only() -> None:
         assert tool["readOnly"] is True
         assert tool["designStatus"] == "planned_p27_design_only"
         assert tool["input"]["type"] == "object"
-        assert "query" not in tool["input"]["properties"]
-        assert "sql" not in tool["input"]["properties"]
+        input_fields = _schema_property_names(tool["input"])
+        assert not FORBIDDEN_PLANNED_INPUT_FIELDS.intersection(input_fields)
         assert "snapshotId" in payload["response"]["success"]["required"]
         assert "collectedAt" in payload["response"]["success"]["required"]
         assert "evidenceRefs" in payload["response"]["success"]["required"]
@@ -177,12 +209,8 @@ def test_p27_dependency_evidence_design_tools_are_contract_only() -> None:
         "resolutionStrategy",
         "evidenceRefs",
     } <= set(edge_item["required"])
-    assert {
-        "resolutionConfidence",
-        "resolutionEvidenceKind",
-        "unresolvedReason",
-        "resolutionChain",
-    } <= set(edge_item["properties"])
+    assert P27_OPTIONAL_RESOLUTION_FIELDS <= set(edge_item["properties"])
+    assert not P27_OPTIONAL_RESOLUTION_FIELDS.intersection(edge_item["required"])
 
     resolver_tool = tools["resolve_dependency_reference"]
     assert resolver_tool["input"]["required"] == [
@@ -198,20 +226,61 @@ def test_p27_dependency_evidence_design_tools_are_contract_only() -> None:
         "evidenceRefs",
         "caveats",
     ]
-    assert {
-        "resolutionConfidence",
-        "resolutionEvidenceKind",
-        "unresolvedReason",
-        "resolutionChain",
-    } <= set(resolver_tool["output"]["properties"])
+    assert P27_OPTIONAL_RESOLUTION_FIELDS <= set(resolver_tool["output"]["properties"])
+    assert not P27_OPTIONAL_RESOLUTION_FIELDS.intersection(resolver_tool["output"]["required"])
 
     dependency_item = payload["response"]["dependencyItem"]
-    assert {
-        "resolutionConfidence",
-        "resolutionEvidenceKind",
-        "unresolvedReason",
-        "resolutionChain",
-    } <= set(dependency_item["properties"])
+    assert P27_OPTIONAL_RESOLUTION_FIELDS <= set(dependency_item["properties"])
+    assert not P27_OPTIONAL_RESOLUTION_FIELDS.intersection(dependency_item["required"])
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [
+        (
+            "get_dependency_closure",
+            {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_GetOrderSummary",
+                "objectType": "PROCEDURE",
+            },
+        ),
+        (
+            "resolve_dependency_reference",
+            {
+                "dbProfileId": "master",
+                "sourceObject": {
+                    "schema": "dbo",
+                    "name": "usp_GetOrderSummary",
+                    "objectType": "PROCEDURE",
+                },
+                "referencedName": "TB_ORDER",
+            },
+        ),
+    ],
+)
+def test_p27_planned_dependency_tools_are_not_invokable_by_default(
+    tool_name: str,
+    arguments: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(f"/tools/{tool_name}/invoke", json={"arguments": arguments})
+
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["toolName"] == tool_name
+    assert payload["error"]["code"] == "INTERNAL_ERROR"
+    assert payload["error"]["details"] == {
+        "toolName": tool_name,
+        "readOnly": True,
+        "active": False,
+    }
+    assert "data" not in payload
 
 
 def test_p27_dependency_evidence_eval_contract_matches_mcp_catalog() -> None:
@@ -228,9 +297,10 @@ def test_p27_dependency_evidence_eval_contract_matches_mcp_catalog() -> None:
     assert contract["scope"]["excluded"] == [
         "MCP handler implementation",
         "API or Web wiring",
+        "runtime workflow changes",
         "persisted artifact type changes",
         "fixture suite expansion beyond contract checks",
-        "live metadata gate requirements",
+        "live metadata or OpenAI gate requirements",
     ]
     assert contract["invariants"]["read_only"] is True
     assert contract["invariants"]["structured_input_only"] is True
@@ -246,6 +316,10 @@ def test_p27_dependency_evidence_eval_contract_matches_mcp_catalog() -> None:
         "resolutionEvidenceKind",
         "unresolvedReason",
         "resolutionChain",
+    ]
+    assert contract["verification"]["default"] == [
+        'make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"',
+        "git diff --check",
     ]
 
 

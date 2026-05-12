@@ -101,9 +101,14 @@ def test_p27_contract_and_prompt_remain_contract_only() -> None:
     assert contract["scope"]["excluded"] == [
         "MCP handler implementation",
         "API or Web wiring",
+        "runtime workflow changes",
         "persisted artifact type changes",
         "fixture suite expansion beyond contract checks",
-        "live metadata gate requirements",
+        "live metadata or OpenAI gate requirements",
+    ]
+    assert contract["verification"]["default"] == [
+        'make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"',
+        "git diff --check",
     ]
     assert contract["planned_tools"]["get_dependency_closure"]["active"] is False
     assert contract["planned_tools"]["get_dependency_closure"]["readOnly"] is True

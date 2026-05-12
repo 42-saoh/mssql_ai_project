@@ -34,7 +34,7 @@ dependency.
 - API or Web wiring.
 - Runtime workflow changes.
 - Persisted artifact type changes.
-- Live OpenAI or live PPM gate requirements.
+- Live metadata, live OpenAI, or live PPM gate requirements.
 - Row data, procedure execution, business DB DDL/DML, raw prompt storage, raw SP
   definition storage, or raw provider response storage.
 
@@ -58,5 +58,5 @@ confirmation, and caller-dependent references remain `REVIEW_REQUIRED`.
 
 ## Verification
 
-- `make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"`
+- `make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"`
 - `git diff --check`

@@ -284,7 +284,7 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
 - standard MCP response envelope 은 `snapshotId`, `collectedAt`, `evidenceRefs` 를 계속 요구한다
 - confirmed dependency 만 deterministic fact 로 승격 가능하며, ambiguous/dynamic/cross-server/unconfirmed synonym/caller-dependent reference 는 `REVIEW_REQUIRED` 를 유지한다
 - raw SP definition, raw prompt, raw provider response, row data, procedure execution, business DB DDL/DML, free-form SQL input, PPM-to-PLF fallback 은 계속 금지한다
-- P27 은 API/Web wiring, MCP handler 구현, persisted artifact type 변경, live gate 요구를 포함하지 않는다
+- P27 은 API/Web wiring, MCP handler 구현, runtime workflow 변경, persisted artifact type 변경, live gate 요구를 포함하지 않는다
 
 판정 해석:
 - 통과: planned tool 계약이 inactive/read-only/structured 로 고정되고, dependency item evidence 확장과 no-raw/no-row/no-fallback policy 가 문서와 테스트에서 일치한다.
@@ -292,7 +292,7 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
 - 실패/blocker: planned tool 이 기본 invokable 로 켜지거나, 자유 SQL/row data/procedure execution/DDL/DML/raw definition storage/PLF fallback 을 허용하거나, 불확실 dependency 를 deterministic fact 로 승격하는 계약이 들어간 경우다.
 
 ```bash
-make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
 ```
 
 ## 초기 fixture 세트

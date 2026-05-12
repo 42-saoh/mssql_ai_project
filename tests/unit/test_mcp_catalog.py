@@ -8,6 +8,38 @@ PLANNED_P27_TOOLS = {
     "resolve_dependency_reference",
 }
 
+P27_OPTIONAL_RESOLUTION_FIELDS = {
+    "resolutionConfidence",
+    "resolutionEvidenceKind",
+    "unresolvedReason",
+    "resolutionChain",
+}
+
+FORBIDDEN_PLANNED_INPUT_FIELDS = {
+    "query",
+    "sql",
+    "rawSql",
+    "statement",
+    "whereClause",
+    "definition",
+    "procedureDefinition",
+    "rowData",
+}
+
+
+def _schema_property_names(schema: dict) -> set[str]:
+    names: set[str] = set()
+    properties = schema.get("properties", {})
+    if isinstance(properties, dict):
+        names.update(properties)
+        for child in properties.values():
+            if isinstance(child, dict):
+                names.update(_schema_property_names(child))
+    items = schema.get("items")
+    if isinstance(items, dict):
+        names.update(_schema_property_names(items))
+    return names
+
 
 def test_mcp_health_and_catalog() -> None:
     client = TestClient(app)
@@ -128,12 +160,8 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     assert dependency_tool["output"]["properties"]["dependencies"]["items"] == {
         "$ref": "#/response/dependencyItem"
     }
-    assert {
-        "resolutionConfidence",
-        "resolutionEvidenceKind",
-        "unresolvedReason",
-        "resolutionChain",
-    } <= set(dependency_item["properties"])
+    assert P27_OPTIONAL_RESOLUTION_FIELDS <= set(dependency_item["properties"])
+    assert not P27_OPTIONAL_RESOLUTION_FIELDS.intersection(dependency_item["required"])
     planned_tools = {
         tool["name"]: tool
         for tool in payload["tools"]
@@ -144,5 +172,7 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
         assert tool["active"] is False
         assert tool["readOnly"] is True
         assert tool["designStatus"] == "planned_p27_design_only"
+        input_fields = _schema_property_names(tool["input"])
+        assert not FORBIDDEN_PLANNED_INPUT_FIELDS.intersection(input_fields)
     for tool in payload["tools"]:
         assert tool["readOnly"] is True
