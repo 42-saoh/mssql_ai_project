@@ -159,6 +159,15 @@ def test_p27_contract_tracks_p28_api_and_p29_web_workflow_slices() -> None:
     assert contract["workflow_evidence_wiring"]["manual_only_tools"] == [
         "resolve_dependency_reference",
     ]
+    boundary = contract["p29b_deferred_boundary"]
+    assert boundary["status"] == "confirmed_deferred"
+    assert boundary["db_migration"] == "deferred"
+    assert boundary["persisted_artifact_type"] == "deferred"
+    assert boundary["workflow_state_transition"] == "deferred"
+    assert boundary["live_ppm_hard_gate"] == "explicit_env_only"
+    assert any("sanitized dependencyEvidence" in item for item in boundary["storage_shape"])
+    assert any("VALIDATION_COMPLETE" in item for item in boundary["workflow_shape"])
+    assert any("P27_HARD_LIVE_GATE=1" in item for item in boundary["verification_boundary"])
     assert contract["verification"]["default"] == [
         P29_CONTRACT_DEFAULT_VERIFY,
         "git diff --check",

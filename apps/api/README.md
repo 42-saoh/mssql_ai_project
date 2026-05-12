@@ -240,6 +240,8 @@ auto-invokes `get_dependency_closure` for PROCEDURE targets, stores a sanitized
 `dependencyEvidence` digest, merges dependency evidence refs into generation
 context and draft artifact evidence, and keeps `resolve_dependency_reference`
 manual-only. PPM metadata unavailability remains a blocker with no PLF fallback.
+P29B confirms this as the persisted boundary: no DB migration, no new persisted
+artifact type, and no workflow state transition is added for dependency evidence.
 
 - `POST /api/v1/metadata/tools/{toolName}/invoke` 는 P28 safe fixture-first API slice 로,
   `get_dependency_closure` 와 `resolve_dependency_reference` 만 public allowlist 로 호출한다.

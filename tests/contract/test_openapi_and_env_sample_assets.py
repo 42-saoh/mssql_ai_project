@@ -193,6 +193,17 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
     assert schemas["ArtifactType"]["enum"] == _enum_values(ArtifactType)
     assert schemas["ArtifactStatus"]["enum"] == _enum_values(ArtifactStatus)
     assert schemas["RequestedOutputType"]["enum"] == _enum_values(RequestedOutputType)
+    p29b_deferred_dependency_storage_names = {
+        "DEPENDENCY_EVIDENCE",
+        "DEPENDENCY_CLOSURE",
+        "DEPENDENCY_EVIDENCE_DIGEST",
+    }
+    assert p29b_deferred_dependency_storage_names.isdisjoint(
+        set(schemas["ArtifactType"]["enum"])
+    )
+    assert p29b_deferred_dependency_storage_names.isdisjoint(
+        set(schemas["RequestedOutputType"]["enum"])
+    )
 
     assert _enum_values(JobStatus) == _ddl_check_values(
         validation_complete_ddl, "CHK_CORE_JOBS_CURRENT_STATUS_CD"

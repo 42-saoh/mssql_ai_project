@@ -296,6 +296,10 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
   Web diagnostic UI 는 이 route 를 수동 진단용으로 사용하고, runtime workflow 는 PROCEDURE
   target 에 대해 `get_dependency_closure` evidence digest 만 자동 병합한다. persisted artifact
   type 변경, DB schema 변경, default live gate 요구는 계속 포함하지 않는다
+- P29B 기준 DB migration, 새 persisted artifact type, workflow state transition 은 deferred 로
+  확정한다. dependency evidence 는 기존 metadata collection payload 의 sanitized
+  `dependencyEvidence` digest 와 기존 draft artifact evidence refs/rendered section 으로만
+  전달한다.
 - `P27_HARD_LIVE_GATE=1` 로 명시 실행한 경우에만 `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 hard-live closure/resolver gate 를 수행한다. 이때 PPM profile/env 누락, template-only manifest, PPM 접근 실패, PLF fallback 은 blocker failure 다
 - 로컬 host-run 에서 Chakra/legacy proxy 가 `python-tds` 기본 TDS negotiation 을 거부하는 경우 `MSSQL_METADATA_TDS_VERSION=7.0` 으로 명시할 수 있으며, 기본값은 `7.4` 이다
 

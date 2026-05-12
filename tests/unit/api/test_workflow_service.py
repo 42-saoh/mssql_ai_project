@@ -406,11 +406,26 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
 
-    service.submit_sp_analysis(
+    _request_record, job = service.submit_sp_analysis(
         _fixture_request(
             ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT", "TABLE_COLUMN_METADATA"]
         )
     )
+
+    assert [status.value for status, _step in job.transitions] == [
+        "COLLECTING_METADATA",
+        "ANALYZING",
+        "GENERATING",
+        "VALIDATING",
+        "VALIDATION_COMPLETE",
+    ]
+    assert {artifact.type for artifact in repository.artifacts.values()} == {
+        ArtifactType.SP_ANALYSIS_DOC,
+        ArtifactType.DEPENDENCY_REPORT,
+        ArtifactType.METADATA_QUERY_RESULT,
+    }
+    artifact_type_values = {artifact.type.value for artifact in repository.artifacts.values()}
+    assert "DEPENDENCY_EVIDENCE" not in artifact_type_values
 
     metadata = next(iter(repository.metadata_collections.values()))
     assert metadata.payload["snapshotId"] == "mcp-fixture-snapshot-0001"
@@ -419,6 +434,9 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     assert dependency_evidence["summary"]["reviewRequiredCount"] >= 1
     assert dependency_evidence["unresolved"]
     assert "definition" not in str(dependency_evidence).lower()
+    assert "sqltext" not in str(dependency_evidence).replace("_", "").lower()
+    assert "rowdata" not in str(dependency_evidence).replace("_", "").lower()
+    assert "resolve_dependency_reference" not in str(metadata.payload)
 
     contents = "\n".join(artifact.content for artifact in repository.artifacts.values())
     assert "dbo.TB_ORDER" in contents
@@ -426,6 +444,7 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     assert "OrderId" in contents
     assert "dependency_closure_evidence" in contents
     assert "FIXTURE_AMBIGUOUS" in contents
+    assert "resolve_dependency_reference" not in contents
     assert any(
         "dependencies" in ref["locator"]
         for artifact in repository.artifacts.values()

@@ -56,6 +56,22 @@ workflow_evidence_wiring:
     - Stores only a sanitized dependencyEvidence digest in the existing metadata collection payload.
     - Merges dependency evidence refs into generation context and draft artifact evidence refs.
     - Does not introduce persisted artifact type changes, workflow state changes, or DB schema changes.
+p29b_deferred_boundary:
+  status: confirmed_deferred
+  db_migration: deferred
+  persisted_artifact_type: deferred
+  workflow_state_transition: deferred
+  live_ppm_hard_gate: explicit_env_only
+  storage_shape:
+    - Existing metadata collection payload carries sanitized dependencyEvidence only.
+    - Existing draft artifacts reuse evidence refs and rendered dependency closure sections.
+    - No raw definition, raw prompt, raw provider response, row data, SQL text, or secret is persisted.
+  workflow_shape:
+    - Default workflow transitions remain COLLECTING_METADATA, ANALYZING, GENERATING, VALIDATING, VALIDATION_COMPLETE.
+    - resolve_dependency_reference remains manual-only through the Web diagnostic UI and P28 safe API route.
+  verification_boundary:
+    - Default verification remains fixture-first.
+    - Hard-live PPM verification runs only with P27_HARD_LIVE_GATE=1 and MSSQL_ENABLE_LIVE_METADATA=1 plus live PPM prerequisites.
 invariants:
   read_only: true
   structured_input_only: true
