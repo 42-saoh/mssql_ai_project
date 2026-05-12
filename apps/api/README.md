@@ -31,6 +31,11 @@
 - `GET /api/v1/metadata/search`
 - `GET /api/v1/registry/versions`
 
+`GET /api/v1/metadata/tools` returns a safe read-only catalog summary only. P27
+dependency evidence tools (`get_dependency_closure`,
+`resolve_dependency_reference`) appear there when active, but the API does not
+expose input schemas, secrets, or a dedicated metadata tool invocation route.
+
 ## P09 workflow hardening notes
 
 - `POST /api/v1/requests/sp-analysis` accepts `Idempotency-Key`. The same key with

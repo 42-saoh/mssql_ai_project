@@ -97,12 +97,19 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 
 P24 gate 가 통과해도 `production_ready: false` 를 유지한다. Optional live confidence evidence 가 없으면 보류로 해석할 수 있지만 기본 필수 테스트로 승격하지 않으며, P25+ Java/MyBatis source expansion 은 별도 작업으로 둔다.
 
-## P27 dependency evidence tooling design
+## P27 dependency evidence tooling
 
-P27 은 첫 단계에서 handler 구현이 아니라 MCP dependency evidence 계약을 고정한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 inactive/read-only/structured-input planned tools 로만 catalog 에 남는다.
+P27 은 MCP dependency evidence 계약을 fixture-first hardening 상태로 유지한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active/read-only/structured-input MCP tools 로 catalog 에 존재하며 fixture/live repository handler 를 가진다. 기존 API `/api/v1/metadata/tools` summary 에만 노출하고, 전용 invocation endpoint/Web UI/workflow wiring 은 후속 slice 로 둔다.
 
 ```bash
-make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"
 ```
 
-이 gate 는 raw SQL input, raw SP definition 저장, raw prompt/provider response 저장, row data, procedure execution, business DB DDL/DML, PPM-to-PLF fallback 을 허용하지 않는다. Ambiguous/dynamic/unresolved synonym/cross-server dependency 는 catalog confirmation 전까지 `REVIEW_REQUIRED` 로 유지한다.
+이 gate 는 raw SQL input, raw SP definition 저장, raw prompt/provider response 저장, row data, procedure execution, business DB DDL/DML, PPM-to-PLF fallback 을 허용하지 않는다. Ambiguous/dynamic/unresolved synonym/cross-server/caller-dependent dependency 는 catalog confirmation 전까지 `REVIEW_REQUIRED` 로 유지한다.
+
+명시적 hard-live 검증은 아래처럼 별도로 실행한다. `P27_HARD_LIVE_GATE=1` 상태에서 PPM profile/env 누락, template-only selected manifest, PPM 접근 실패, PLF fallback 은 skip 이 아니라 blocker failure 다.
+Chakra/legacy proxy 경로에서 `python-tds` 기본 negotiation 이 차단되면 로컬 host-run에 한해 `MSSQL_METADATA_TDS_VERSION=7.0` 을 함께 지정한다.
+
+```bash
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
+```

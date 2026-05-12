@@ -1,7 +1,7 @@
 # services/mssql-mcp
 
 MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, fixture-backed execution, env-gated live metadata execution 을 제공한다. 활성 catalog tool 은 fixture 경로와 live repository handler 를 모두 가진다.
-P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 dependency evidence 강화를 위한 planned inactive catalog 계약이며, 아직 handler/API/Web wiring 은 없다.
+P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 fixture-first hardening 상태의 active/read-only dependency evidence tool 이다. 기존 API `/api/v1/metadata/tools` summary 에는 노출되지만, 전용 API invocation route, Web UI, workflow wiring 은 아직 없다. 명시적 `P27_HARD_LIVE_GATE=1` 을 켠 경우에만 PPM hard-live dependency evidence gate 를 실행한다.
 
 ## 원칙
 
@@ -21,8 +21,13 @@ P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 depen
 
 - host-run (`make run-mcp`, 로컬 uvicorn): `MSSQL_METADATA_HOST=127.0.0.1`
 - `docker/test` 컨테이너 내부: `MSSQL_METADATA_DOCKER_HOST=host.docker.internal`
+- 기본 TDS protocol: `MSSQL_METADATA_TDS_VERSION=7.4`
+- Chakra/legacy proxy 가 기본 TDS negotiation 을 거부하는 로컬 host-run 에서는
+  `MSSQL_METADATA_TDS_VERSION=7.0`
 - profile registry: `config/mssql/local_docker_profiles.yaml`
 - 기본 metadata profile id: `master`
+- runtime override: `.env` 의 `MSSQL_METADATA_DEFAULT_PROFILE_ID=ppm` 은 profile
+  registry 의 정적 default 보다 우선한다.
 - 기본 metadata DB name: `master`
 - platform DB profile id: `plf`
 - pilot analysis target profile id: `ppm`
@@ -87,18 +92,26 @@ evidence is unique and high confidence. Ambiguous names, dynamic SQL markers,
 unresolved synonym targets, cross-server references without catalog confirmation,
 and caller-dependent references remain `REVIEW_REQUIRED`.
 
-P27 also declares planned inactive tools:
+P27 also exposes active read-only fixture-first tools:
 
 - `get_dependency_closure`: bounded procedure/view/function dependency graph,
-  default `maxDepth=2`, hard max `3`, catalog evidence only.
+  default `maxDepth=2`, hard max `3`, catalog evidence only. TABLE objects are
+  leaf nodes; only confirmed PROCEDURE/VIEW/FUNCTION targets are expanded.
 - `resolve_dependency_reference`: structured resolver for unresolved,
   caller-dependent, cross-DB, or synonym references. It returns candidates and
   selects a target only when catalog evidence is unique.
 
-These planned tools remain read-only, structured-input-only, and inactive until a
-future implementation slice adds handlers and fixtures. They must not accept
-free-form SQL, return row data, execute procedures, perform DDL/DML, expose raw
-definition text, or fall back from PPM to PLF.
+These tools remain read-only and structured-input-only. `REVIEW_REQUIRED`
+dependencies are always returned in `unresolved`; when
+`includeReviewRequired=false`, they are hidden from closure graph nodes/edges but
+not discarded. The tools must not accept free-form SQL, return row data, execute
+procedures, perform DDL/DML, expose raw definition text, or fall back from PPM to
+PLF.
+
+`resolve_dependency_reference` selects a deterministic target only when the full
+candidate set has exactly one `CONFIRMED` + `HIGH` confidence candidate. Synonym,
+caller-dependent, dynamic SQL, cross-server, ambiguous, and unresolved references
+remain `REVIEW_REQUIRED` until catalog metadata uniquely confirms them.
 
 `search_metadata_objects` is the query-aware metadata search capability for API
 and UI consumers. It searches procedure/table/view/function identities through
@@ -120,9 +133,9 @@ can use the standardized timeout/attempt details.
 
 ## 다음 구현 우선순위
 
-1. P27 planned dependency evidence tools 를 작은 handler slice 로 구현
+1. P27 dependency evidence 를 실제 PPM catalog 사례에서 더 넓게 검증하고 residual `REVIEW_REQUIRED` 원인을 줄이기
 2. 실제 MCP transport 연결
-3. fixture set 확장과 optional integration smoke 추가
+3. optional integration smoke 추가
 4. PPM dependency caveat 감소를 위한 더 강한 metadata evidence 전략 검증
 
 ## 외부 DB 연결 주의

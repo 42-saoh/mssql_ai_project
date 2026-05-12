@@ -266,9 +266,9 @@ response storage, and `production_ready: false`.
 make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
 ```
 
-### 12. P27 Dependency Evidence Tooling Design Contract
+### 12. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
 
-P27 첫 단계는 MCP handler 구현이 아니라 dependency evidence 계약 확정이다.
+P27 은 dependency evidence 계약을 fixture-first MCP 구현과 명시적 hard-live gate 로 강화한다.
 목표는 AI-heavy semantic analysis 와 P24 guide renderer 에 raw SQL 이 아닌 구조화된
 dependency evidence digest 를 공급할 수 있도록 deterministic metadata 층을 강화하는 것이다.
 
@@ -276,23 +276,33 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
 - `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - `spec/eval/p27_dependency_evidence_tooling_contract.yaml`
 - `tests/unit/test_mcp_catalog.py`
+- `tests/unit/mcp/test_tool_registry.py`
 - `tests/contract/mcp/test_tool_invocation_contract.py`
+- `tests/eval/test_p27_dependency_evidence_hard_live_gate.py`
+- `tests/unit/api/test_metadata_service.py`
+- `tests/integration/api/test_api_workflow_routes.py`
 
 필수 체크:
 - 기존 `get_procedure_dependencies` 계약은 `resolutionStatus`, `resolutionStrategy`, `sourceScope` 를 유지하고 `resolutionConfidence`, `resolutionEvidenceKind`, `unresolvedReason`, `resolutionChain` 을 optional structured evidence 로 선언한다
-- `get_dependency_closure` 와 `resolve_dependency_reference` 는 read-only, structured-input-only, inactive planned tool 로 catalog 에 존재한다
+- `get_dependency_closure` 와 `resolve_dependency_reference` 는 active, read-only, structured-input-only MCP tool 로 catalog 에 존재하고 fixture/live repository handler 를 가진다
+- `get_dependency_closure` 는 `maxDepth <= 3` 을 validator 로 강제하고, `includeReviewRequired=false` 일 때도 review-required dependency 를 `unresolved` 에 보존한다
+- `resolve_dependency_reference` 는 전체 candidate set 이 정확히 하나이고 해당 candidate 가 `CONFIRMED` + `HIGH` 일 때만 `selectedResolution` 을 채운다
+- fixture/mocked-live test 는 confirmed, synonym, caller-dependent, dynamic SQL, cross-server, ambiguous, unresolved dependency 를 구분해 deterministic promotion 경계를 검증한다
 - standard MCP response envelope 은 `snapshotId`, `collectedAt`, `evidenceRefs` 를 계속 요구한다
 - confirmed dependency 만 deterministic fact 로 승격 가능하며, ambiguous/dynamic/cross-server/unconfirmed synonym/caller-dependent reference 는 `REVIEW_REQUIRED` 를 유지한다
 - raw SP definition, raw prompt, raw provider response, row data, procedure execution, business DB DDL/DML, free-form SQL input, PPM-to-PLF fallback 은 계속 금지한다
-- P27 은 API/Web wiring, MCP handler 구현, runtime workflow 변경, persisted artifact type 변경, live gate 요구를 포함하지 않는다
+- P27 은 기존 `/api/v1/metadata/tools` summary 노출만 포함하며, 전용 API invocation endpoint, Web UI, runtime workflow 변경, persisted artifact type 변경, default live gate 요구를 포함하지 않는다
+- `P27_HARD_LIVE_GATE=1` 로 명시 실행한 경우에만 `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 hard-live closure/resolver gate 를 수행한다. 이때 PPM profile/env 누락, template-only manifest, PPM 접근 실패, PLF fallback 은 blocker failure 다
+- 로컬 host-run 에서 Chakra/legacy proxy 가 `python-tds` 기본 TDS negotiation 을 거부하는 경우 `MSSQL_METADATA_TDS_VERSION=7.0` 으로 명시할 수 있으며, 기본값은 `7.4` 이다
 
 판정 해석:
-- 통과: planned tool 계약이 inactive/read-only/structured 로 고정되고, dependency item evidence 확장과 no-raw/no-row/no-fallback policy 가 문서와 테스트에서 일치한다.
-- 보류: 계약은 통과했지만 실제 handler/fixture coverage 가 아직 다음 slice 로 남아 있다. 이는 P27 design-only 범위의 정상 상태이며 production readiness 로 해석하지 않는다.
-- 실패/blocker: planned tool 이 기본 invokable 로 켜지거나, 자유 SQL/row data/procedure execution/DDL/DML/raw definition storage/PLF fallback 을 허용하거나, 불확실 dependency 를 deterministic fact 로 승격하는 계약이 들어간 경우다.
+- 통과: active/read-only/structured tool 계약, fixture/live handler, API summary 노출, dependency item evidence 확장, no-raw/no-row/no-fallback policy 가 문서와 테스트에서 일치한다.
+- 보류: default fixture-first hardening 은 통과했지만 explicit P27 hard-live gate 가 skip/unavailable 이거나 로컬 PPM prerequisites 가 준비되지 않았다. 이는 production readiness 로 해석하지 않는다.
+- 실패/blocker: P27 tool 이 inactive/writable/handler 없는 상태가 되거나, 자유 SQL/row data/procedure execution/DDL/DML/raw definition storage/PLF fallback 을 허용하거나, 불확실 dependency 를 deterministic fact 로 승격하거나, `P27_HARD_LIVE_GATE=1` 상태에서 missing prerequisites 를 skip 하는 경우다.
 
 ```bash
-make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
 
 ## 초기 fixture 세트
@@ -334,7 +344,7 @@ make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_promp
 | OpenAI/LLM runtime 변경 | fake gateway unit + no-raw-trace contract + optional live gate 문서화 |
 | LLM analysis quality eval 변경 | P23 contract prompt asset test + fixture-first fake eval + optional live gate 문서화 |
 | SP migration guide quality eval 변경 | P24 contract prompt asset test + fixture-first renderer/evaluator section/evidence/DML/call-flow eval |
-| Dependency evidence tooling design 변경 | MCP catalog contract + planned inactive tool/read-only/no-raw policy test |
+| Dependency evidence tooling 변경 | MCP catalog contract + active read-only handler/API summary/no-raw policy test |
 
 ## 평가 산출물 형식
 

@@ -326,10 +326,10 @@ tools:
         dependencySummary: { type: object }
 
   - name: get_dependency_closure
-    active: false
+    active: true
     readOnly: true
-    designStatus: planned_p27_design_only
-    description: Planned read-only dependency graph tool. Returns bounded procedure/view/function dependency closure using catalog evidence only; no row data, procedure execution, DDL/DML, free-form SQL, or raw definition text.
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
+    description: Read-only dependency graph tool. Returns bounded procedure/view/function dependency closure using catalog evidence only; no row data, procedure execution, DDL/DML, free-form SQL, or raw definition text.
     input:
       type: object
       required: [dbProfileId, schema, objectName, objectType]
@@ -419,10 +419,10 @@ tools:
             reviewRequiredCount: { type: integer }
 
   - name: resolve_dependency_reference
-    active: false
+    active: true
     readOnly: true
-    designStatus: planned_p27_design_only
-    description: Planned read-only dependency resolver. Reinterprets unresolved, caller-dependent, cross-database, or synonym references using catalog evidence only; ambiguous or unsafe references remain REVIEW_REQUIRED.
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
+    description: Read-only dependency resolver. Reinterprets unresolved, caller-dependent, cross-database, or synonym references using catalog evidence only; ambiguous or unsafe references remain REVIEW_REQUIRED.
     input:
       type: object
       required: [dbProfileId, sourceObject, referencedName]

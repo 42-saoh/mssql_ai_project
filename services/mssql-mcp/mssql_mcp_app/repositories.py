@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from mssql_mcp_app.catalog import repo_root
 from mssql_mcp_app.errors import (
@@ -434,6 +434,89 @@ class FixtureMetadataRepository:
         }
         return self._result(data=data, evidence_refs=[evidence])
 
+    def _handle_get_dependency_closure(self, arguments: dict[str, Any]) -> MetadataToolResult:
+        source_database = source_database_for_profile(
+            arguments["dbProfileId"],
+            payload=self.payload,
+        )
+        source, index = self._find_dependency_source(
+            arguments["objectType"],
+            arguments["schema"],
+            arguments["objectName"],
+        )
+        root_evidence = self._evidence(
+            "dependency-closure-root",
+            arguments["objectType"],
+            source["schema"],
+            source["name"],
+            f"/{_collection_name(arguments['objectType'])}/{index}",
+        )
+
+        def fetch_dependencies(object_type: str, schema: str, name: str) -> list[dict[str, Any]]:
+            dependency_source, dependency_index = self._find_dependency_source(
+                object_type,
+                schema,
+                name,
+            )
+            return _fixture_dependency_items(
+                self,
+                dependency_source.get("dependencies", []),
+                base_path=f"/{_collection_name(object_type)}/{dependency_index}/dependencies",
+                source_database=source_database,
+            )
+
+        data = _dependency_closure_payload(
+            root_object={
+                "database": source_database,
+                "server": None,
+                "schema": source["schema"],
+                "name": source["name"],
+                "objectType": arguments["objectType"],
+            },
+            root_evidence_refs=[root_evidence],
+            fetch_dependencies=fetch_dependencies,
+            max_depth=arguments.get("maxDepth", 2),
+            include_review_required=arguments.get("includeReviewRequired", True),
+        )
+        return self._result(data=data, evidence_refs=[root_evidence])
+
+    def _handle_resolve_dependency_reference(
+        self,
+        arguments: dict[str, Any],
+    ) -> MetadataToolResult:
+        source_object = arguments["sourceObject"]
+        source_database = source_object.get("database") or source_database_for_profile(
+            arguments["dbProfileId"],
+            payload=self.payload,
+        )
+        source, index = self._find_dependency_source(
+            source_object["objectType"],
+            source_object["schema"],
+            source_object["name"],
+        )
+        dependencies = _fixture_dependency_items(
+            self,
+            source.get("dependencies", []),
+            base_path=f"/{_collection_name(source_object['objectType'])}/{index}/dependencies",
+            source_database=source_database,
+        )
+        evidence = self._evidence(
+            "dependency-reference-resolver",
+            source_object["objectType"],
+            source["schema"],
+            source["name"],
+            f"/{_collection_name(source_object['objectType'])}/{index}/dependencies",
+        )
+        data = _dependency_reference_resolution_payload(
+            dependencies,
+            referenced_name=arguments["referencedName"],
+            referenced_schema=arguments.get("referencedSchema"),
+            referenced_database=arguments.get("referencedDatabase"),
+            referenced_server=arguments.get("referencedServer"),
+            fallback_evidence_refs=[evidence],
+        )
+        return self._result(data=data, evidence_refs=data["evidenceRefs"] or [evidence])
+
     def _handle_get_related_db_objects(self, arguments: dict[str, Any]) -> MetadataToolResult:
         top_k = arguments.get("topK", 20)
         object_type = arguments["objectType"]
@@ -672,6 +755,24 @@ class FixtureMetadataRepository:
 
     def _find_function(self, schema: str, name: str) -> tuple[dict[str, Any], int]:
         return self._find_in_collection("functions", schema, name, "FUNCTION")
+
+    def _find_dependency_source(
+        self,
+        object_type: str,
+        schema: str,
+        name: str,
+    ) -> tuple[dict[str, Any], int]:
+        if object_type == "PROCEDURE":
+            return self._find_procedure(schema, name)
+        if object_type == "VIEW":
+            return self._find_view(schema, name)
+        if object_type == "FUNCTION":
+            return self._find_function(schema, name)
+        raise MetadataToolError(
+            OBJECT_NOT_FOUND,
+            "Dependency evidence source must be a procedure, view, or function.",
+            {"objectType": object_type, "schema": schema, "name": name},
+        )
 
     def _find_in_collection(
         self,
@@ -1401,6 +1502,139 @@ class LiveMetadataRepository:
                 "snapshotMode": arguments.get("snapshotMode", "LATEST"),
             },
             evidence_refs=[evidence, module_evidence],
+        )
+
+    def _handle_get_dependency_closure(
+        self,
+        arguments: dict[str, Any],
+    ) -> MetadataToolResult:
+        profile = self._profile(arguments["dbProfileId"])
+        root_object_id = self._ensure_object_id(
+            profile,
+            schema=arguments["schema"],
+            name=arguments["objectName"],
+            object_type=arguments["objectType"],
+            tool_name="get_dependency_closure",
+        )
+        root_evidence = self._live_evidence(
+            "dependency-closure-root",
+            arguments["objectType"],
+            arguments["schema"],
+            arguments["objectName"],
+            "sys.objects",
+        )
+
+        def fetch_dependencies(object_type: str, schema: str, name: str) -> list[dict[str, Any]]:
+            object_id = (
+                root_object_id
+                if (
+                    object_type == arguments["objectType"]
+                    and _same(schema, arguments["schema"])
+                    and _same(name, arguments["objectName"])
+                )
+                else self._ensure_object_id(
+                    profile,
+                    schema=schema,
+                    name=name,
+                    object_type=object_type,
+                    tool_name="get_dependency_closure",
+                )
+            )
+            dependencies = self._dependencies_for_object(
+                profile,
+                object_id=object_id,
+                tool_name="get_dependency_closure",
+            )
+            if object_type == "PROCEDURE":
+                definition_info = self._module_dependency_metadata(
+                    profile,
+                    object_id=object_id,
+                    tool_name="get_dependency_closure",
+                )
+                if "dynamic_sql" in definition_info.get("detectedPatterns", []):
+                    dependencies.append(
+                        _dynamic_sql_dependency_item(
+                            self._live_evidence(
+                                "dependency-closure-module-metadata",
+                                object_type,
+                                schema,
+                                name,
+                                "sys.sql_modules:hash-pattern",
+                            )
+                        )
+                    )
+            return dependencies
+
+        data = _dependency_closure_payload(
+            root_object={
+                "database": profile.database,
+                "server": None,
+                "schema": arguments["schema"],
+                "name": arguments["objectName"],
+                "objectType": arguments["objectType"],
+            },
+            root_evidence_refs=[root_evidence],
+            fetch_dependencies=fetch_dependencies,
+            max_depth=arguments.get("maxDepth", 2),
+            include_review_required=arguments.get("includeReviewRequired", True),
+        )
+        return self._live_result(arguments, data=data, evidence_refs=[root_evidence])
+
+    def _handle_resolve_dependency_reference(
+        self,
+        arguments: dict[str, Any],
+    ) -> MetadataToolResult:
+        profile = self._profile(arguments["dbProfileId"])
+        source_object = arguments["sourceObject"]
+        object_id = self._ensure_object_id(
+            profile,
+            schema=source_object["schema"],
+            name=source_object["name"],
+            object_type=source_object["objectType"],
+            tool_name="resolve_dependency_reference",
+        )
+        dependencies = self._dependencies_for_object(
+            profile,
+            object_id=object_id,
+            tool_name="resolve_dependency_reference",
+        )
+        if source_object["objectType"] == "PROCEDURE":
+            definition_info = self._module_dependency_metadata(
+                profile,
+                object_id=object_id,
+                tool_name="resolve_dependency_reference",
+            )
+            if "dynamic_sql" in definition_info.get("detectedPatterns", []):
+                dependencies.append(
+                    _dynamic_sql_dependency_item(
+                        self._live_evidence(
+                            "dependency-reference-module-metadata",
+                            source_object["objectType"],
+                            source_object["schema"],
+                            source_object["name"],
+                            "sys.sql_modules:hash-pattern",
+                        )
+                    )
+                )
+        evidence = self._live_evidence(
+            "dependency-reference-resolver",
+            source_object["objectType"],
+            source_object["schema"],
+            source_object["name"],
+            "sys.sql_expression_dependencies",
+        )
+        data = _dependency_reference_resolution_payload(
+            dependencies,
+            referenced_name=arguments["referencedName"],
+            referenced_schema=arguments.get("referencedSchema"),
+            referenced_database=arguments.get("referencedDatabase"),
+            referenced_server=arguments.get("referencedServer"),
+            fallback_evidence_refs=[evidence],
+        )
+        return self._live_result(
+            arguments,
+            data=data,
+            evidence_refs=data["evidenceRefs"] or [evidence],
         )
 
     def _handle_get_related_db_objects(self, arguments: dict[str, Any]) -> MetadataToolResult:
@@ -2635,6 +2869,7 @@ class LiveMetadataRepository:
                 password=self.settings.metadata_password,
                 login_timeout=self.settings.connect_timeout_seconds,
                 timeout=self.settings.connect_timeout_seconds,
+                tds_version=self.settings.metadata_tds_version,
                 readonly=True,
                 autocommit=True,
                 appname="mssql-mcp-metadata-discovery",
@@ -2661,7 +2896,7 @@ class LiveMetadataRepository:
         cursor = None
         try:
             cursor = connection.cursor()
-            cursor.execute(sql, tuple(params))
+            cursor.execute(sql, self._prepare_query_params(params))
             columns = [column[0] for column in cursor.description or []]
             return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
         except Exception as exc:  # pragma: no cover - requires live SQL Server
@@ -2689,6 +2924,28 @@ class LiveMetadataRepository:
                 cursor.close()
             connection.close()
 
+    def _prepare_query_params(self, params: list[Any]) -> tuple[Any, ...]:
+        if self.settings.metadata_tds_version != 1879048192:
+            return tuple(params)
+        try:
+            from pytds import tds_base, tds_types  # type: ignore[import-not-found]
+        except Exception:  # pragma: no cover - dependency/runtime issue
+            return tuple(params)
+
+        prepared: list[Any] = []
+        for param in params:
+            if isinstance(param, str):
+                size = min(max(len(param), 1), 4000)
+                prepared.append(
+                    tds_base.Param(
+                        type=tds_types.NVarCharType(size),
+                        value=param,
+                    )
+                )
+            else:
+                prepared.append(param)
+        return tuple(prepared)
+
     def _raise_connection_error(
         self,
         exc: Exception,
@@ -2702,7 +2959,12 @@ class LiveMetadataRepository:
         if profile.id == "ppm":
             if "not exist" in text or "not found" in text or "cannot open database" in text:
                 code = PPM_DB_NOT_FOUND
-            if "access" in text or "permission" in text or "denied" in text:
+            if (
+                "access" in text
+                or "permission" in text
+                or "denied" in text
+                or "login failed" in text
+            ):
                 code = PPM_DB_ACCESS_DENIED
         raise MetadataToolError(
             code,
@@ -2838,6 +3100,7 @@ def _fixture_dependency_items(
                 )
             ],
         )
+        _decorate_dependency_resolution(item)
         items.append(item)
     return items
 
@@ -3170,43 +3433,381 @@ def _dependency_item(
     source_scope: str | None,
     evidence_refs: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    return _decorate_dependency_resolution(
+        {
+            "objectType": object_type,
+            "database": database,
+            "server": server,
+            "schema": schema,
+            "name": name,
+            "referencedDatabase": referenced_database,
+            "referencedServer": referenced_server,
+            "sourceScope": source_scope,
+            "dependencyType": "REFERENCE",
+            "isAmbiguous": bool(is_ambiguous),
+            "reviewStatus": "CONFIRMED"
+            if resolution_status == "CONFIRMED"
+            else "REVIEW_REQUIRED",
+            "resolutionStatus": resolution_status,
+            "resolutionStrategy": resolution_strategy,
+            "evidenceRefs": evidence_refs,
+        }
+    )
+
+
+def _dynamic_sql_dependency_item(evidence_ref: dict[str, Any]) -> dict[str, Any]:
+    return _decorate_dependency_resolution(
+        {
+            "objectType": "UNKNOWN",
+            "database": None,
+            "server": None,
+            "schema": None,
+            "name": None,
+            "referencedDatabase": None,
+            "referencedServer": None,
+            "sourceScope": None,
+            "dependencyType": "DYNAMIC_SQL",
+            "isAmbiguous": True,
+            "reviewStatus": "REVIEW_REQUIRED",
+            "resolutionStatus": "REVIEW_REQUIRED",
+            "resolutionStrategy": "DYNAMIC_SQL_PATTERN",
+            "evidenceRefs": [evidence_ref],
+        }
+    )
+
+
+def _dependency_closure_payload(
+    *,
+    root_object: dict[str, Any],
+    root_evidence_refs: list[dict[str, Any]],
+    fetch_dependencies: Callable[[str, str, str], list[dict[str, Any]]],
+    max_depth: int,
+    include_review_required: bool,
+) -> dict[str, Any]:
+    max_depth = min(max(int(max_depth), 0), 3)
+    root_id = _dependency_node_id(root_object)
+    nodes: dict[str, dict[str, Any]] = {
+        root_id: _dependency_node(root_object, root_evidence_refs, review_status="CONFIRMED")
+    }
+    edges: list[dict[str, Any]] = []
+    unresolved: list[dict[str, Any]] = []
+    visited_sources: set[str] = set()
+    queue: list[tuple[dict[str, Any], int]] = [(root_object, 0)]
+
+    while queue:
+        source, depth = queue.pop(0)
+        source_id = _dependency_node_id(source)
+        if source_id in visited_sources:
+            continue
+        visited_sources.add(source_id)
+        dependencies = fetch_dependencies(
+            str(source["objectType"]),
+            str(source["schema"]),
+            str(source["name"]),
+        )
+        for dependency in dependencies:
+            needs_review = _dependency_needs_review(dependency)
+            if needs_review:
+                unresolved.append(dependency)
+            target_id = _dependency_node_id_from_dependency(dependency)
+            if target_id is None or (needs_review and not include_review_required):
+                continue
+            nodes.setdefault(target_id, _dependency_node_from_dependency(dependency))
+            edges.append(_dependency_edge(source_id, target_id, dependency))
+            if (
+                depth < max_depth
+                and _is_expandable_dependency(dependency, root_database=root_object.get("database"))
+                and target_id not in visited_sources
+            ):
+                queue.append(
+                    (
+                        {
+                            "database": dependency.get("database"),
+                            "server": dependency.get("server"),
+                            "schema": dependency.get("schema"),
+                            "name": dependency.get("name"),
+                            "objectType": dependency.get("objectType"),
+                        },
+                        depth + 1,
+                    )
+                )
+
     return {
-        "objectType": object_type,
-        "database": database,
-        "server": server,
-        "schema": schema,
-        "name": name,
-        "referencedDatabase": referenced_database,
-        "referencedServer": referenced_server,
-        "sourceScope": source_scope,
-        "dependencyType": "REFERENCE",
-        "isAmbiguous": bool(is_ambiguous),
-        "reviewStatus": "CONFIRMED"
-        if resolution_status == "CONFIRMED"
-        else "REVIEW_REQUIRED",
-        "resolutionStatus": resolution_status,
-        "resolutionStrategy": resolution_strategy,
+        "rootObject": {
+            "database": root_object["database"],
+            "schema": root_object["schema"],
+            "name": root_object["name"],
+            "objectType": root_object["objectType"],
+        },
+        "nodes": list(nodes.values()),
+        "edges": edges,
+        "unresolved": unresolved,
+        "summary": {
+            "maxDepth": max_depth,
+            "nodeCount": len(nodes),
+            "edgeCount": len(edges),
+            "reviewRequiredCount": len(unresolved),
+        },
+        "caveats": ["DEPENDENCY_METADATA_INCOMPLETE"] if unresolved else [],
+        "reviewRequired": bool(unresolved),
+    }
+
+
+def _dependency_reference_resolution_payload(
+    dependencies: list[dict[str, Any]],
+    *,
+    referenced_name: str,
+    referenced_schema: str | None,
+    referenced_database: str | None,
+    referenced_server: str | None,
+    fallback_evidence_refs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    candidates = [
+        _dependency_candidate(dependency)
+        for dependency in dependencies
+        if _dependency_matches_reference(
+            dependency,
+            referenced_name=referenced_name,
+            referenced_schema=referenced_schema,
+            referenced_database=referenced_database,
+            referenced_server=referenced_server,
+        )
+    ]
+    confirmed_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.get("resolutionStatus") == "CONFIRMED"
+        and candidate.get("resolutionConfidence") == "HIGH"
+    ]
+    selected = (
+        confirmed_candidates[0]
+        if len(candidates) == 1 and len(confirmed_candidates) == 1
+        else None
+    )
+    evidence_refs = _dedupe_evidence_refs(
+        [
+            ref
+            for candidate in candidates
+            for ref in candidate.get("evidenceRefs", [])
+        ]
+    )
+    if not evidence_refs:
+        evidence_refs = fallback_evidence_refs
+    if selected is not None:
+        status = "CONFIRMED"
+        strategy = "UNIQUE_CATALOG_MATCH"
+        confidence = "HIGH"
+        evidence_kind = selected.get("resolutionEvidenceKind", "CATALOG_OBJECT_ID")
+        unresolved_reason = None
+        caveats: list[str] = []
+    elif candidates:
+        status = "REVIEW_REQUIRED"
+        strategy = "AMBIGUOUS_OR_UNCONFIRMED_CANDIDATES"
+        confidence = "LOW"
+        evidence_kind = "NAME_MATCH_CANDIDATE"
+        unresolved_reason = strategy
+        caveats = ["DEPENDENCY_METADATA_INCOMPLETE"]
+    else:
+        status = "REVIEW_REQUIRED"
+        strategy = "NO_CATALOG_CANDIDATE"
+        confidence = "UNKNOWN"
+        evidence_kind = "UNRESOLVED"
+        unresolved_reason = strategy
+        caveats = ["DEPENDENCY_METADATA_INCOMPLETE"]
+    return {
+        "candidates": candidates,
+        "selectedResolution": selected,
+        "resolutionStatus": status,
+        "resolutionStrategy": strategy,
+        "resolutionConfidence": confidence,
+        "resolutionEvidenceKind": evidence_kind,
+        "unresolvedReason": unresolved_reason,
+        "resolutionChain": [
+            {
+                "step": strategy,
+                "evidenceKind": evidence_kind,
+                "status": status,
+                "evidenceRefs": evidence_refs,
+            }
+        ],
+        "evidenceRefs": evidence_refs,
+        "caveats": caveats,
+        "reviewRequired": bool(caveats),
+    }
+
+
+def _dependency_node_id(source: dict[str, Any]) -> str:
+    return "|".join(
+        str(source.get(key) or "")
+        for key in ("server", "database", "schema", "name", "objectType")
+    )
+
+
+def _dependency_node_id_from_dependency(dependency: dict[str, Any]) -> str | None:
+    if not dependency.get("name") or not dependency.get("schema"):
+        return None
+    return _dependency_node_id(
+        {
+            "server": dependency.get("server"),
+            "database": dependency.get("database"),
+            "schema": dependency.get("schema"),
+            "name": dependency.get("name"),
+            "objectType": dependency.get("objectType"),
+        }
+    )
+
+
+def _dependency_node(
+    source: dict[str, Any],
+    evidence_refs: list[dict[str, Any]],
+    *,
+    review_status: str,
+) -> dict[str, Any]:
+    return {
+        "id": _dependency_node_id(source),
+        "database": source.get("database"),
+        "server": source.get("server"),
+        "schema": source.get("schema"),
+        "name": source.get("name"),
+        "objectType": source.get("objectType"),
+        "sourceScope": source.get("sourceScope"),
+        "reviewStatus": review_status,
         "evidenceRefs": evidence_refs,
     }
 
 
-def _dynamic_sql_dependency_item(evidence_ref: dict[str, Any]) -> dict[str, Any]:
+def _dependency_node_from_dependency(dependency: dict[str, Any]) -> dict[str, Any]:
+    return _dependency_node(
+        dependency,
+        dependency.get("evidenceRefs", []),
+        review_status=dependency.get("reviewStatus", "REVIEW_REQUIRED"),
+    )
+
+
+def _dependency_edge(source_id: str, target_id: str, dependency: dict[str, Any]) -> dict[str, Any]:
     return {
-        "objectType": "UNKNOWN",
-        "database": None,
-        "server": None,
-        "schema": None,
-        "name": None,
-        "referencedDatabase": None,
-        "referencedServer": None,
-        "sourceScope": None,
-        "dependencyType": "DYNAMIC_SQL",
-        "isAmbiguous": True,
-        "reviewStatus": "REVIEW_REQUIRED",
-        "resolutionStatus": "REVIEW_REQUIRED",
-        "resolutionStrategy": "DYNAMIC_SQL_PATTERN",
-        "evidenceRefs": [evidence_ref],
+        "from": source_id,
+        "to": target_id,
+        "dependencyType": dependency.get("dependencyType", "REFERENCE"),
+        "resolutionStatus": dependency.get("resolutionStatus", "REVIEW_REQUIRED"),
+        "resolutionStrategy": dependency.get("resolutionStrategy", "UNRESOLVED"),
+        "resolutionConfidence": dependency.get("resolutionConfidence", "UNKNOWN"),
+        "resolutionEvidenceKind": dependency.get("resolutionEvidenceKind", "UNRESOLVED"),
+        "unresolvedReason": dependency.get("unresolvedReason"),
+        "resolutionChain": dependency.get("resolutionChain", []),
+        "evidenceRefs": dependency.get("evidenceRefs", []),
     }
+
+
+def _is_expandable_dependency(dependency: dict[str, Any], *, root_database: Any) -> bool:
+    return (
+        dependency.get("objectType") in {"PROCEDURE", "VIEW", "FUNCTION"}
+        and dependency.get("resolutionStatus") == "CONFIRMED"
+        and dependency.get("server") in {None, ""}
+        and _same(dependency.get("database"), root_database)
+        and bool(dependency.get("schema"))
+        and bool(dependency.get("name"))
+    )
+
+
+def _dependency_candidate(dependency: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "database": dependency.get("database"),
+        "server": dependency.get("server"),
+        "schema": dependency.get("schema"),
+        "name": dependency.get("name"),
+        "objectType": dependency.get("objectType"),
+        "sourceScope": dependency.get("sourceScope"),
+        "resolutionStatus": dependency.get("resolutionStatus", "REVIEW_REQUIRED"),
+        "resolutionStrategy": dependency.get("resolutionStrategy", "UNRESOLVED"),
+        "resolutionConfidence": dependency.get("resolutionConfidence", "UNKNOWN"),
+        "resolutionEvidenceKind": dependency.get("resolutionEvidenceKind", "UNRESOLVED"),
+        "unresolvedReason": dependency.get("unresolvedReason"),
+        "resolutionChain": dependency.get("resolutionChain", []),
+        "evidenceRefs": dependency.get("evidenceRefs", []),
+    }
+
+
+def _dependency_matches_reference(
+    dependency: dict[str, Any],
+    *,
+    referenced_name: str,
+    referenced_schema: str | None,
+    referenced_database: str | None,
+    referenced_server: str | None,
+) -> bool:
+    if not _same(dependency.get("name"), referenced_name):
+        return False
+    if referenced_schema and not _same(dependency.get("schema"), referenced_schema):
+        return False
+    if referenced_database and not _same(
+        dependency.get("referencedDatabase") or dependency.get("database"),
+        referenced_database,
+    ):
+        return False
+    if referenced_server and not _same(
+        dependency.get("referencedServer") or dependency.get("server"),
+        referenced_server,
+    ):
+        return False
+    return True
+
+
+def _decorate_dependency_resolution(item: dict[str, Any]) -> dict[str, Any]:
+    status = item.get("resolutionStatus", "REVIEW_REQUIRED")
+    strategy = item.get("resolutionStrategy", "UNRESOLVED")
+    evidence_kind = item.get("resolutionEvidenceKind") or _resolution_evidence_kind(
+        strategy,
+        item.get("objectType"),
+        item.get("dependencyType"),
+    )
+    item.setdefault("resolutionConfidence", "HIGH" if status == "CONFIRMED" else "UNKNOWN")
+    item.setdefault("resolutionEvidenceKind", evidence_kind)
+    if status != "CONFIRMED":
+        item.setdefault("unresolvedReason", strategy)
+    else:
+        item.setdefault("unresolvedReason", None)
+    item.setdefault(
+        "resolutionChain",
+        [
+            {
+                "step": strategy,
+                "evidenceKind": evidence_kind,
+                "status": status,
+                "evidenceRefs": item.get("evidenceRefs", []),
+            }
+        ],
+    )
+    return item
+
+
+def _resolution_evidence_kind(strategy: Any, object_type: Any, dependency_type: Any) -> str:
+    strategy_text = str(strategy or "")
+    if dependency_type == "DYNAMIC_SQL" or strategy_text == "DYNAMIC_SQL_PATTERN":
+        return "DYNAMIC_SQL_MARKER"
+    if object_type == "SYNONYM" or "SYNONYM" in strategy_text:
+        return "SYNONYM_METADATA"
+    if "AMBIGUOUS" in strategy_text or "NAME" in strategy_text:
+        return "NAME_MATCH_CANDIDATE"
+    if strategy_text in {
+        "REFERENCED_ID",
+        "SAME_DATABASE_SCHEMA_NAME",
+        "SAME_DATABASE_UNIQUE_NAME",
+        "SAME_DATABASE_EXPLICIT_DATABASE_CATALOG",
+        "SAME_SERVER_CROSS_DATABASE_CATALOG",
+        "FIXTURE_CONFIRMED",
+    }:
+        return "CATALOG_OBJECT_ID"
+    if strategy_text == "UNRESOLVED" or "NOT_FOUND" in strategy_text:
+        return "UNRESOLVED"
+    return "EXPRESSION_DEPENDENCY"
+
+
+def _dedupe_evidence_refs(evidence_refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+    for ref in evidence_refs:
+        deduped.setdefault((ref.get("id"), ref.get("source"), ref.get("path")), ref)
+    return list(deduped.values())
 
 
 def _dependency_evidence_ref(

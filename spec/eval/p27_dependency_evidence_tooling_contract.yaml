@@ -1,26 +1,28 @@
-contract_id: p27_dependency_evidence_tooling_design@0.1.0
+contract_id: p27_dependency_evidence_tooling@0.3.0
 phase: P27
-status: design_contract_ready
+status: fixture_first_hardened_with_explicit_live_gate
 production_ready: false
 source_of_truth:
   - spec/mcp/mssql_metadata_tool_catalog.yaml
   - services/mssql-mcp/README.md
 scope:
   summary: >
-    Design-only dependency evidence tooling contract for strengthening the
+    Fixture-first dependency evidence tooling hardening for strengthening the
     deterministic metadata layer that supports AI-heavy SP analysis.
   included:
     - Extend the get_procedure_dependencies contract with optional resolution evidence fields.
-    - Declare get_dependency_closure as a planned read-only inactive MCP tool.
-    - Declare resolve_dependency_reference as a planned read-only inactive MCP tool.
+    - Expose get_dependency_closure as an active read-only MCP tool with fixture and live repository handlers.
+    - Expose resolve_dependency_reference as an active read-only MCP tool with fixture and live repository handlers.
+    - Surface the active tools through the existing /api/v1/metadata/tools summary only.
+    - Add an explicit P27 hard-live PPM evidence gate gated by P27_HARD_LIVE_GATE=1.
     - Keep all dependency evidence as structured metadata with snapshot and evidence refs.
   excluded:
-    - MCP handler implementation
-    - API or Web wiring
+    - dedicated API invocation endpoint
+    - Web UI wiring
     - runtime workflow changes
     - persisted artifact type changes
-    - fixture suite expansion beyond contract checks
-    - live metadata or OpenAI gate requirements
+    - default live metadata or OpenAI gate requirements
+    - DB schema changes
 invariants:
   read_only: true
   structured_input_only: true
@@ -52,10 +54,11 @@ dependency_resolution_contract:
       - cross-server target is not catalog-confirmed
       - synonym target is not uniquely resolved through catalog metadata
       - candidate list has multiple plausible targets
-planned_tools:
+implemented_tools:
   get_dependency_closure:
-    active: false
+    active: true
     readOnly: true
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
     input:
       required: [dbProfileId, schema, objectName, objectType]
       defaults:
@@ -67,8 +70,9 @@ planned_tools:
       required: [rootObject, nodes, edges, unresolved, summary]
       edge_required: [dependencyType, resolutionStatus, resolutionStrategy, evidenceRefs]
   resolve_dependency_reference:
-    active: false
+    active: true
     readOnly: true
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
     input:
       required: [dbProfileId, sourceObject, referencedName]
       optional:
@@ -94,6 +98,15 @@ fixture_contract_cases:
   synonym_target_unconfirmed:
     expected_status: REVIEW_REQUIRED
     deterministic_fact_allowed: false
+  caller_dependent_reference:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  cross_server_reference:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  unresolved_reference:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
   dynamic_sql_marker:
     expected_status: REVIEW_REQUIRED
     deterministic_fact_allowed: false
@@ -108,16 +121,23 @@ llm_input_boundary:
   ambiguous_or_dynamic_usage: LLM_INFERENCE with REVIEW_REQUIRED caveat
 quality_gate:
   pass:
-    - Catalog declares planned tools as read-only, inactive, structured-input only.
+    - Catalog declares P27 dependency tools as active, read-only, structured-input only.
+    - Fixture and live repositories expose handlers for both P27 dependency tools.
+    - Fixture and mocked-live tests cover confirmed, synonym, caller-dependent, dynamic, cross-server, ambiguous, and unresolved evidence.
+    - P27_HARD_LIVE_GATE=1 validates selected PPM procedures without PLF fallback when explicitly enabled.
+    - MSSQL_METADATA_TDS_VERSION defaults to 7.4 and may be set to 7.0 for local legacy gateway/proxy live validation.
     - Standard response envelope still requires snapshotId, collectedAt, and evidenceRefs.
     - get_procedure_dependencies declares the P27 resolution evidence fields.
-    - Docs state P27 is design-only and production_ready remains false.
+    - Docs state P27 is fixture-first hardened and production_ready remains false.
   fail:
-    - Planned tools are active or invokable by default.
+    - P27 dependency tools are inactive, writable, or missing handlers.
     - Any tool accepts free-form SQL or row-data style input.
     - Any contract allows procedure execution, DDL/DML, raw definition storage, or PPM-to-PLF fallback.
-    - Ambiguous, synonym, dynamic, or cross-server evidence is promoted as deterministic without catalog confirmation.
+    - Ambiguous, synonym, dynamic, caller-dependent, or cross-server evidence is promoted as deterministic without catalog confirmation.
+    - P27 hard-live gate falls back to PLF or skips missing prerequisites after P27_HARD_LIVE_GATE=1 is enabled.
 verification:
   default:
-    - make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"
     - git diff --check
+  hard_live:
+    - P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"

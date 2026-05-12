@@ -299,6 +299,21 @@ def _object_identity_for_tool(
             schema=arguments.get("schema"),
             name=arguments.get("objectName"),
         )
+    if tool_name == "get_dependency_closure":
+        return _identity(
+            source_database=source_database,
+            object_type=arguments.get("objectType") or "OBJECT",
+            schema=arguments.get("schema"),
+            name=arguments.get("objectName"),
+        )
+    if tool_name == "resolve_dependency_reference":
+        source_object = arguments.get("sourceObject") or {}
+        return _identity(
+            source_database=source_database,
+            object_type="DEPENDENCY_REFERENCE",
+            schema=source_object.get("schema"),
+            name=arguments.get("referencedName"),
+        )
     if tool_name in {
         "search_tables",
         "search_columns",

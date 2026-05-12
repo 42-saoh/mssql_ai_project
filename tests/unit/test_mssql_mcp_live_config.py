@@ -1,10 +1,20 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from mssql_mcp_app.main import app
 from mssql_mcp_app.profiles import get_default_profile, load_db_profiles
 from mssql_mcp_app.settings import load_live_metadata_settings
+
+
+@pytest.fixture(autouse=True)
+def _repo_profile_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("MSSQL_METADATA_DEFAULT_PROFILE_ID", "master")
+    monkeypatch.setenv(
+        "MSSQL_METADATA_PROFILE_FILE",
+        "config/mssql/local_docker_profiles.yaml",
+    )
 
 
 def test_profile_registry_file_exposes_master_default() -> None:
@@ -16,6 +26,25 @@ def test_profile_registry_file_exposes_master_default() -> None:
     assert default_profile.database == "master"
     assert {profile.id for profile in profiles} >= {"plf", "master", "ppm"}
     assert next(profile for profile in profiles if profile.id == "ppm").database == "PPM"
+
+
+def test_env_default_profile_overrides_registry_default(monkeypatch) -> None:
+    monkeypatch.setenv("MSSQL_METADATA_DEFAULT_PROFILE_ID", "ppm")
+
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    default_profile = get_default_profile(profiles)
+
+    assert default_profile.id == "ppm"
+    assert default_profile.database == "PPM"
+
+
+def test_live_metadata_settings_parses_tds_version_alias(monkeypatch) -> None:
+    monkeypatch.setenv("MSSQL_METADATA_TDS_VERSION", "7.0")
+
+    settings = load_live_metadata_settings()
+
+    assert settings.metadata_tds_version == 1879048192
 
 
 def test_ready_endpoint_skips_live_check_when_disabled(monkeypatch) -> None:

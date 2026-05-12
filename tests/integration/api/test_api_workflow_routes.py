@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -166,6 +167,9 @@ def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
             idempotency_key=None,
         )
         job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+        repository.jobs[job.job_id].created_at = job.created_at + timedelta(
+            milliseconds=index,
+        )
         created_job_ids.append(job.job_id)
 
     response = client.get("/api/v1/jobs", params={"limit": 2})
@@ -451,8 +455,12 @@ def test_metadata_and_registry_routes_are_safe_skeletons(client: TestClient) -> 
 
     tools = client.get("/api/v1/metadata/tools")
     assert tools.status_code == 200
-    assert "get_table_schema" in {tool["name"] for tool in tools.json()["tools"]}
+    tool_names = {tool["name"] for tool in tools.json()["tools"]}
+    assert "get_table_schema" in tool_names
+    assert "get_dependency_closure" in tool_names
+    assert "resolve_dependency_reference" in tool_names
     assert all(tool["readOnly"] is True for tool in tools.json()["tools"])
+    assert not any("input" in tool for tool in tools.json()["tools"])
 
     registry = client.get("/api/v1/registry/versions")
     assert registry.status_code == 200

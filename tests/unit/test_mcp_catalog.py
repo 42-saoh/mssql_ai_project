@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from mssql_mcp_app.catalog import TOOL_CATALOG
 from mssql_mcp_app.main import app
 
-PLANNED_P27_TOOLS = {
+P27_DEPENDENCY_TOOLS = {
     "get_dependency_closure",
     "resolve_dependency_reference",
 }
@@ -15,7 +15,7 @@ P27_OPTIONAL_RESOLUTION_FIELDS = {
     "resolutionChain",
 }
 
-FORBIDDEN_PLANNED_INPUT_FIELDS = {
+FORBIDDEN_DEPENDENCY_INPUT_FIELDS = {
     "query",
     "sql",
     "rawSql",
@@ -67,13 +67,13 @@ def test_mcp_health_and_catalog() -> None:
         assert "input" in tool
         assert "password" not in tool
         assert "connectionString" not in tool
-    planned_tools = {
+    p27_tools = {
         tool["name"]: tool
         for tool in catalog.json()["tools"]
-        if tool["name"] in PLANNED_P27_TOOLS
+        if tool["name"] in P27_DEPENDENCY_TOOLS
     }
-    assert set(planned_tools) == PLANNED_P27_TOOLS
-    assert all(tool["active"] is False for tool in planned_tools.values())
+    assert set(p27_tools) == P27_DEPENDENCY_TOOLS
+    assert all(tool["active"] is True for tool in p27_tools.values())
 
 
 def test_mcp_yaml_catalog_matches_service_catalog() -> None:
@@ -162,17 +162,17 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     }
     assert P27_OPTIONAL_RESOLUTION_FIELDS <= set(dependency_item["properties"])
     assert not P27_OPTIONAL_RESOLUTION_FIELDS.intersection(dependency_item["required"])
-    planned_tools = {
+    p27_tools = {
         tool["name"]: tool
         for tool in payload["tools"]
-        if tool["name"] in PLANNED_P27_TOOLS
+        if tool["name"] in P27_DEPENDENCY_TOOLS
     }
-    assert set(planned_tools) == PLANNED_P27_TOOLS
-    for tool in planned_tools.values():
-        assert tool["active"] is False
+    assert set(p27_tools) == P27_DEPENDENCY_TOOLS
+    for tool in p27_tools.values():
+        assert tool["active"] is True
         assert tool["readOnly"] is True
-        assert tool["designStatus"] == "planned_p27_design_only"
+        assert tool["implementationStatus"] == "fixture_first_hardened_with_explicit_live_gate"
         input_fields = _schema_property_names(tool["input"])
-        assert not FORBIDDEN_PLANNED_INPUT_FIELDS.intersection(input_fields)
+        assert not FORBIDDEN_DEPENDENCY_INPUT_FIELDS.intersection(input_fields)
     for tool in payload["tools"]:
         assert tool["readOnly"] is True

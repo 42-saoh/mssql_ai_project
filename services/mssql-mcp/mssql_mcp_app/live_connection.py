@@ -48,6 +48,7 @@ def probe_profile_connection(
             password=settings.metadata_password,
             login_timeout=settings.connect_timeout_seconds,
             timeout=settings.connect_timeout_seconds,
+            tds_version=settings.metadata_tds_version,
             readonly=True,
             autocommit=True,
             appname="mssql-mcp-readiness",

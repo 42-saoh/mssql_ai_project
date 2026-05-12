@@ -55,8 +55,10 @@
 
 - host-run 값: `.env` 에 `MSSQL_METADATA_HOST=127.0.0.1`, `PLATFORM_DB_HOST=127.0.0.1`
 - docker/test 내부 값: `.env` 에 `MSSQL_METADATA_DOCKER_HOST=host.docker.internal`, `PLATFORM_DB_DOCKER_HOST=host.docker.internal`
+- 기본 TDS protocol 값: `MSSQL_METADATA_TDS_VERSION=7.4`; Chakra/legacy proxy 경로에서 `python-tds` negotiation 이 차단되면 로컬 host-run 에 한해 `7.0` 으로 낮춘다.
 - 기본 profile registry: `config/mssql/local_docker_profiles.yaml`
 - 기본 metadata profile id: `master`
+- `.env` 의 `MSSQL_METADATA_DEFAULT_PROFILE_ID` 값은 registry 파일의 정적 default 보다 우선한다.
 - platform DB profile id: `plf`
 
 live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1` 로 켠 뒤 테스트 컨테이너 또는 로컬 `run-mcp` 프로세스에서 readiness endpoint 를 확인한다. live tool query execution 은 아직 optional adapter boundary 이며, 기본 테스트/e2e/eval 은 fixture-first 로 유지한다.
@@ -71,6 +73,8 @@ P15 hard-live gate 는 명시 실행할 때만 live PPM 을 호출한다. 기본
 
 PPM 이 없거나 접근 권한이 없으면 PLF 로 대체하지 않는다. 이 실패는 `LIVE_PPM_EVAL_REQUIRED`, `LIVE_METADATA_UNAVAILABLE`, `PPM_DB_NOT_FOUND`, `PPM_DB_ACCESS_DENIED`, `METADATA_READ_ONLY_PERMISSION_INSUFFICIENT` 같은 blocker 로 취급한다.
 
+P27 dependency evidence hard-live gate 는 `P27_HARD_LIVE_GATE=1` 을 명시할 때만 `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 closure/resolver evidence 를 검증한다. 기본 테스트는 fixture/mocked-live 로 유지하며, gate 를 켠 상태에서 PPM 접근 또는 read-only metadata 권한이 없으면 skip 이 아니라 blocker failure 로 보고한다.
+
 P21 no-mock portal gate 는 `P21_LIVE_PORTAL_GATE=1` 을 명시할 때만 PLF workflow repository 와 read-only PPM metadata access 를 함께 검증한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 은 web-test 환경으로 pass-through 되며, missing PLF/PPM 은 skip 이 아니라 prerequisite blocker 로 보고한다.
 
 worktree 포트 전략은 계속 `make dev-ports` 를 기준으로 한다. P15 eval 자체는 API/MCP/Web dev server port 를 점유하지 않지만, 병렬 worker 가 수동 smoke 를 병행할 때는 hard-coded 8000/8100/3000 대신 worktree 별 계산값을 사용한다.
@@ -83,6 +87,7 @@ make test-build
 make test
 make test PYTEST_ARGS="tests/e2e tests/eval"
 P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
 make test-web-smoke
 ```

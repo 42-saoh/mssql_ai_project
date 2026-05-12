@@ -1065,25 +1065,38 @@ waves:
           - make test-web-smoke
           - git diff --check
   - wave: W14
-    description: P27 dependency evidence tooling design prompt pack
+    description: P27 dependency evidence tooling fixture-first hardening
     tracks:
       - id: P27
-        branch: feat/p27-dependency-evidence-tooling-design
-        worktree: ../wt/p27-dependency-evidence-tooling-design
+        branch: feat/p27-dependency-evidence-tooling
+        worktree: ../wt/p27-dependency-evidence-tooling
         prompt: prompts/27_dependency_evidence_tooling_design.md
         role: mcp_engineer
-        skills: [mcp-tooling-design, quality-gate-review, docs-sync]
+        skills: [mcp-tooling-design, eval-fixture-authoring, quality-gate-review, docs-sync]
         depends_on: [P24D]
         target_paths:
           - spec/eval/p27_dependency_evidence_tooling_contract.yaml
           - spec/mcp/mssql_metadata_tool_catalog.yaml
           - services/mssql-mcp/README.md
+          - services/mssql-mcp/mssql_mcp_app/schema_validation.py
+          - services/mssql-mcp/mssql_mcp_app/registry.py
+          - services/mssql-mcp/mssql_mcp_app/repositories.py
+          - apps/api/README.md
+          - .env.example
+          - docker/test/docker-compose.yml
+          - docker/test/README.md
+          - fixtures/mcp/metadata_snapshot.json
           - tasks/0027-dependency-evidence-tooling-design.md
           - ops/codex-parallel/REQUEST_MANIFEST.yaml
           - ops/codex-parallel/prompts/27_dependency_evidence_tooling_design.md
+          - tests/eval/test_p27_dependency_evidence_hard_live_gate.py
+          - tests/unit/mcp/test_tool_registry.py
+          - tests/unit/api/test_metadata_service.py
+          - tests/integration/api/test_api_workflow_routes.py
           - tests/unit/test_mcp_catalog.py
           - tests/contract/mcp/test_tool_invocation_contract.py
           - tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py
+          - tests/eval/README.md
           - EVAL_SPEC.md
           - TOOLS.md
           - docs/integration-eval-status.md
@@ -1093,9 +1106,10 @@ waves:
           - db/schema/
           - spec/openapi/
           - spec/policy/
-          - fixtures/
           - config/mssql/local_docker_profiles.yaml
         verify:
-          - make test PYTEST_ARGS="tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/test_mcp_catalog.py tests/contract/mcp/test_tool_invocation_contract.py"
+          - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"
           - git diff --check
+        optional_verify:
+          - P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27]

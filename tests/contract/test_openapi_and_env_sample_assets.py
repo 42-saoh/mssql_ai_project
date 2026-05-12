@@ -189,7 +189,9 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "MSSQL_METADATA_USER=readonly_metadata_user\n" in text
     assert "MSSQL_METADATA_USER=sa" not in text
     assert "MSSQL_METADATA_DEFAULT_PROFILE_ID=master" in text
+    assert "MSSQL_METADATA_TDS_VERSION=7.4" in text
     assert "P21_LIVE_PORTAL_GATE=0" in text
+    assert "P27_HARD_LIVE_GATE=0" in text
     assert "PORTAL_API_MODE=http" in text
     assert "PORTAL_API_BASE_URL=\n" in text
     assert "TPsaoh" not in text
