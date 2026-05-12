@@ -8,7 +8,7 @@
 - `PLF` 는 platform DB, `PPM` 은 pilot analysis target DB 이며, PPM 접근 실패 시 PLF fallback 은 금지한다.
 - row data, procedure execution, business DB DDL/DML, 자동 반영, secret 저장은 금지한다.
 - raw prompt, raw SP definition, raw OpenAI response text 는 trace/API/Web 산출물에 저장하지 않는다.
-- fast/test profile 은 `gpt-5-nano` 로 고정한다.
+- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다.
 
 ## 목표
 

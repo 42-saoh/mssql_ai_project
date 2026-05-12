@@ -8,7 +8,7 @@
 
 ## Goal
 
-사용자가 제공한 migration guide 수준 이상의 SP 분석/이관 가이드 품질을 계약화한다. P24A 는 contract, prompt pack, manifest wiring, task brief, contract test 만 추가하며 renderer/eval runner/API/Web/DB behavior 는 바꾸지 않는다.
+사용자가 제공한 migration guide 수준 이상의 SP 분석/이관 가이드 품질을 계약화한다. P24A 는 contract, prompt pack, manifest wiring, task brief, contract test 만 추가하며 renderer/eval runner/API/Web/DB behavior 는 바꾸지 않는다. P24B 는 sanitized fixture suite 를 추가했고, P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` renderer/evaluator 로 fixture-first scoring 을 구현했다. P24D 는 이 상태를 문서/readiness 관점에서 동기화한다.
 
 ## Context
 
@@ -36,10 +36,14 @@
 - Manifest 의 split track, dependency, merge order 선언
 - P24 task brief 작성
 - P24A contract prompt asset test 추가
+- P24B sanitized simple/medium/complex fixture 와 expected quality report 작성
+- P24C 기존 artifact type renderer/evaluator scoring 검증
+- P24D pass/hold/fail interpretation 과 docs readiness 동기화
 
 ## Out of Scope
 
-- renderer/eval runner 구현
+- 새 persisted artifact type 추가
+- P24A 범위의 renderer/eval runner 구현
 - runtime/API/Web behavior 변경
 - DB schema 변경
 - fixture 에 실제 운영 SP 원문 또는 사용자 제공 guide 본문 저장
@@ -85,11 +89,14 @@
 - P24 split-track manifest update
 - P24 task brief
 - P24 contract prompt asset test
+- P24 sanitized fixture suite and fixture-first quality evaluator coverage
+- P24D docs readiness updates for pass/hold/fail boundaries
 
 ## Verification
 
 - 실행할 테스트:
-  - `make test PYTEST_ARGS="tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"`
+  - `make test PYTEST_ARGS="tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py tests/eval"`
+  - `make test-web-smoke`
   - `git diff --check`
 - 계약 검증:
   - required section coverage threshold
@@ -106,10 +113,11 @@
 - P24 계약과 prompt pack 이 존재한다.
 - Manifest 에 P24A -> P24B -> P24C -> P24D 병합 순서가 있다.
 - Contract test 가 통과한다.
+- Fixture-first P24 renderer/evaluator eval 이 통과한다.
 - P24 는 `production_ready: false` 로 남는다.
 
 ## Notes / Risks
 
-- 가정: P24B/P24C 는 P24A 계약을 기준으로 fixture/eval/renderer 를 별도 구현한다.
-- 오픈 이슈: 실제 migration guide renderer 의 section population 방식은 P24C 에서 확정한다.
+- P24C 는 기존 persisted artifact type 재사용을 기준으로 닫혔으며, 새 artifact type 추가는 범위 밖이다.
+- Optional live confidence evidence 는 기본 필수 테스트가 아니며 production readiness claim 으로 해석하지 않는다.
 - 후속 작업: Java/MyBatis draft generation 확장은 guide readiness note 와 별도 구현 트랙으로 유지한다.

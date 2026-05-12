@@ -226,6 +226,7 @@ class JavaMyBatisDraftRendererBase:
         risk_lines = self._sql_risk_marker_lines()
         checklist_lines = self._review_checklist_lines()
         todo_lines = self._todo_lines(context)
+        llm_conversion_lines = self._llm_conversion_lines(context)
         unconfirmed_lines = [
             f"- REVIEW_REQUIRED: {marker}" for marker in self.assets.todo_markers()
         ]
@@ -297,6 +298,9 @@ class JavaMyBatisDraftRendererBase:
             "",
             "## sql_risk_markers",
             *risk_lines,
+            "",
+            "## llm_conversion_guidance",
+            *llm_conversion_lines,
             "",
             "## unconfirmed_areas",
             *unconfirmed_lines,
@@ -562,6 +566,28 @@ class JavaMyBatisDraftRendererBase:
             for marker in self.assets.todo_markers()
         )
         return lines
+
+    def _llm_conversion_lines(self, context: GenerationContext) -> list[str]:
+        payload = context.value("llmAnalysis", {}) or {}
+        if not isinstance(payload, dict):
+            return ["- status: NOT_REQUESTED"]
+        guidance = payload.get("conversionGuidance", []) or []
+        insights = payload.get("migrationGuideInsights", []) or []
+        if not guidance and not insights:
+            return ["- status: NO_CONVERSION_GUIDANCE_RETURNED"]
+        lines = []
+        for item in guidance:
+            if isinstance(item, dict):
+                lines.append(
+                    f"- {item.get('status', 'REVIEW_REQUIRED')} `{item.get('code')}`: "
+                    f"{item.get('summary')}"
+                )
+        for item in insights:
+            if isinstance(item, dict):
+                lines.append(
+                    f"- guide `{item.get('section')}`: {item.get('summary')}"
+                )
+        return lines or ["- status: NO_CONVERSION_GUIDANCE_RETURNED"]
 
 
 class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):

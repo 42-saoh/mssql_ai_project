@@ -14,6 +14,7 @@ export type JobStatus =
   | "ANALYZING"
   | "GENERATING"
   | "VALIDATING"
+  | "VALIDATION_COMPLETE"
   | "REVIEW_PENDING"
   | "APPROVED"
   | "REJECTED"
@@ -96,6 +97,7 @@ export interface SPAnalysisOptions {
   useLlmAnalysis?: boolean;
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   allowSpDefinitionToModel?: boolean;
+  useAiToolOrchestration?: boolean;
 }
 
 export interface SubmitRequestResponse {
@@ -132,6 +134,7 @@ export interface ModelInvocationSummary {
   status: "SUCCEEDED" | "FAILED" | "SKIPPED";
   tokenUsage?: Record<string, number>;
   latencyMs?: number | null;
+  componentInvocations?: Record<string, unknown>[];
 }
 
 export interface AgentRunSummary {
@@ -197,6 +200,29 @@ export interface MetadataProfile {
   readOnly: true;
 }
 
+export type MetadataToolName = "get_dependency_closure" | "resolve_dependency_reference";
+
+export interface MetadataToolSummary {
+  name: string;
+  description: string;
+  readOnly: true;
+  invokable: boolean;
+}
+
+export interface MetadataToolInvokeRequest {
+  arguments: Record<string, unknown>;
+}
+
+export interface MetadataToolInvokeResponse {
+  ok: true;
+  toolName: MetadataToolName;
+  dbProfileId: string;
+  snapshotId: string;
+  collectedAt: string;
+  evidenceRefs: Record<string, unknown>[];
+  data: Record<string, unknown>;
+}
+
 export interface MetadataSearchBlocker {
   code: string;
   message: string;
@@ -239,6 +265,122 @@ export interface MetadataSearchResponse {
   caveats: string[];
   reviewRequired: boolean;
   blockers: MetadataSearchBlocker[];
+}
+
+export interface MetadataAnalysisOptions {
+  useLlmAnalysis?: boolean;
+  useAiToolOrchestration?: boolean;
+  llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
+  maxTargets?: number;
+}
+
+export interface MetadataAnalysisRequest {
+  dbProfileId: string;
+  query?: string;
+  target?: MetadataObjectIdentity;
+  objectTypes?: MetadataSearchObjectType[];
+  options?: MetadataAnalysisOptions;
+}
+
+export interface MetadataAnalysisInsight {
+  code: string;
+  objectRef: string;
+  summary: string;
+  status: "INFERRED_DESCRIPTION" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export type MetadataInsightCategory =
+  | "COLUMN_RISK"
+  | "RELATIONSHIP"
+  | "INDEX"
+  | "CONSTRAINT"
+  | "DOCUMENTATION_GAP"
+  | "DTO_READINESS"
+  | "DEPENDENCY";
+
+export interface MetadataObjectProfile {
+  objectRef: string;
+  objectType: string;
+  columnCount: number;
+  primaryKeyCount: number;
+  foreignKeyCount: number;
+  indexCount: number;
+  constraintCount: number;
+  descriptionCoverage: number;
+  reviewRequired: boolean;
+  evidenceRefs: string[];
+  sourceFactIds: string[];
+}
+
+export interface MetadataInsightGroup {
+  category: MetadataInsightCategory;
+  insights: MetadataAnalysisInsight[];
+}
+
+export interface MetadataDependencyGraphNode {
+  id: string;
+  objectRef: string;
+  objectType: string;
+  status: "CONFIRMED" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export interface MetadataDependencyGraphEdge {
+  from: string;
+  to: string;
+  relationshipType: string;
+  status: "CONFIRMED" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export interface MetadataDependencyGraph {
+  nodes: MetadataDependencyGraphNode[];
+  edges: MetadataDependencyGraphEdge[];
+  unresolved: Record<string, unknown>[];
+}
+
+export interface MetadataDtoReadiness {
+  objectRef: string;
+  status: "READY" | "PARTIAL" | "REVIEW_REQUIRED";
+  fieldCount: number;
+  reviewReasons: string[];
+  evidenceRefs: string[];
+}
+
+export interface MetadataAnalysisReviewMarker {
+  code: string;
+  message: string;
+  status: "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export interface MetadataAnalysisResponse {
+  dbProfileId: string;
+  mode: "QUERY" | "TARGET";
+  query?: string;
+  target?: MetadataObjectIdentity;
+  objectTypes: MetadataSearchObjectType[];
+  sourceProfile: string;
+  sourceDatabase: string;
+  snapshotId?: string;
+  collectedAt?: string;
+  targets: MetadataSearchResult[];
+  summary: string;
+  objectInsights: MetadataAnalysisInsight[];
+  objectProfiles: MetadataObjectProfile[];
+  insightGroups: MetadataInsightGroup[];
+  dependencyGraph: MetadataDependencyGraph;
+  dtoReadiness: MetadataDtoReadiness[];
+  aiToolEvidence: Record<string, unknown>;
+  deterministicFacts: Record<string, unknown>[];
+  reviewMarkers: MetadataAnalysisReviewMarker[];
+  assumptions: string[];
+  caveats: string[];
+  reviewRequired: boolean;
+  blockers: MetadataSearchBlocker[];
+  modelInvocation?: ModelInvocationSummary | null;
+  componentInvocations: Record<string, unknown>[];
 }
 
 export interface RegistryVersion {

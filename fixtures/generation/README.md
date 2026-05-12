@@ -11,6 +11,11 @@
 - P12 생성기/검증기가 evidence, TODO, generator metadata, review checklist 를 빠뜨리지 않도록 회귀 기준 제공
 - P05 이후 API/artifact preview 에서도 동일한 예시를 재사용 가능
 
+P24C migration guide renderer/evaluator 는 기존 `SP_ANALYSIS_DOC` 와
+`DEPENDENCY_REPORT` draft artifact type 만 재사용한다. Java/MyBatis 는
+`draft_only_readiness_notes` 로만 언급하며 generated source application 은
+`not_performed` 상태다.
+
 PPM object-name golden 확장은 field/parameter/result-shape metadata evidence 가
 충분할 때만 추가한다. P17B 는 `live_metadata` PPM object set 을 draft artifact
 manifest 로 고정하지만, 없는 컬럼/파라미터/결과 형태를 추론해서 Java/MyBatis

@@ -1,0 +1,103 @@
+production_ready: false
+status: authored_p31
+contract: metadata_object_insight_depth
+quality_thresholds:
+  required_object_profiles_min: 1
+  required_metadata_profile_fact_refs_min: 1
+  required_dependency_edges_min: 1
+  required_dto_readiness_min: 1
+  storage_safety_findings_max: 0
+scenarios:
+  - fixture_id: p31_table_object_depth
+    request:
+      dbProfileId: master
+      target:
+        schema: dbo
+        name: TB_ORDER
+        type: TABLE
+      options:
+        llmProfileId: openai_fast_test
+    planner_output:
+      toolRequests:
+        - toolName: get_table_schema
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+          reason: Need column metadata for object profile and DTO readiness.
+          expectedEvidenceUse: Anchor column risk, documentation gap, and DTO field count.
+        - toolName: get_table_constraints
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+          reason: Need PK/FK metadata.
+          expectedEvidenceUse: Anchor relationship and constraint insights.
+        - toolName: get_table_indexes
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+          reason: Need index metadata.
+          expectedEvidenceUse: Anchor index insight.
+        - toolName: get_extended_properties
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            objectName: TB_ORDER
+            objectType: TABLE
+          reason: Need documentation metadata.
+          expectedEvidenceUse: Anchor documentation gap review.
+        - toolName: get_related_db_objects
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            objectName: TB_ORDER
+            objectType: TABLE
+          reason: Need related object graph metadata.
+          expectedEvidenceUse: Anchor dependency graph edges.
+      assumptions: []
+      reviewMarkers: []
+    expected:
+      objectRef: dbo.TB_ORDER
+      requiredCategories:
+        - COLUMN_RISK
+        - RELATIONSHIP
+        - INDEX
+        - CONSTRAINT
+        - DOCUMENTATION_GAP
+        - DTO_READINESS
+      requiredFactIdPrefix: metadata.profile.
+      requiredToolFactPrefix: mcp.get_table_schema.
+      forbiddenFragments:
+        - CREATE PROCEDURE
+        - rowData
+        - row_data
+        - do-not-return
+  - fixture_id: p31_adversarial_depth_planner_blocked
+    request:
+      dbProfileId: master
+      target:
+        schema: dbo
+        name: TB_ORDER
+        type: TABLE
+      options:
+        llmProfileId: openai_fast_test
+    planner_output:
+      toolRequests:
+        - toolName: get_table_schema
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+            sql: SELECT * FROM dbo.TB_ORDER
+            secret: do-not-return
+          reason: Unsafe adversarial table profile request.
+          expectedEvidenceUse: Should be blocked by policy.
+      assumptions: []
+      reviewMarkers: []
+    expected:
+      requiredBlockedCode: AI_TOOL_FORBIDDEN_ARGUMENT
+      forbiddenFragments:
+        - SELECT *
+        - do-not-return

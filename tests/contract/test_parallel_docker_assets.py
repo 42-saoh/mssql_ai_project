@@ -22,6 +22,8 @@ def test_parallel_docker_assets_exist() -> None:
     assert "web-root-node-modules:/workspace/node_modules" in compose
     assert "web-app-node-modules:/workspace/apps/web/node_modules" in compose
     assert "P15_HARD_LIVE_GATE" in compose
+    assert "P27_HARD_LIVE_GATE" in compose
+    assert "MSSQL_METADATA_TDS_VERSION" in compose
     assert "corepack prepare pnpm@10.33.0 --activate" in web_dockerfile
 
     web_install = (root / "scripts" / "install_web_workspace.sh").read_text(encoding="utf-8")

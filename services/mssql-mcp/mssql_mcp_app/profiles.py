@@ -49,10 +49,13 @@ def load_db_profiles(settings: LiveMetadataSettings, *, repo_root: Path | None =
 
     if profile_path.exists():
         payload = yaml.safe_load(profile_path.read_text(encoding="utf-8")) or {}
-        default_profile_id = (
-            str(payload.get("defaultProfileId", settings.default_profile_id)).strip()
-            or settings.default_profile_id
-        )
+        if settings.default_profile_id_from_env:
+            default_profile_id = settings.default_profile_id
+        else:
+            default_profile_id = (
+                str(payload.get("defaultProfileId", settings.default_profile_id)).strip()
+                or settings.default_profile_id
+            )
         records = payload.get("profiles", [])
         if not isinstance(records, list):
             raise ValueError("'profiles' must be a list in the metadata profile file.")

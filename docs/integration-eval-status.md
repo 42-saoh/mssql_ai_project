@@ -8,23 +8,26 @@ artifact pair with a fixture-first evaluator. P24 remains `production_ready: fal
 there is still no new persisted artifact type, public API/schema change, live DB
 access, raw prompt/SP/provider-response storage, or PPM-to-PLF fallback.
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation → approval decision recording path. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24B adds fixture-first SP migration guide quality scenarios and coverage checks without renderer/runtime changes. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
+P27 adds fixture-first hardened dependency evidence tooling: `get_procedure_dependencies` now declares optional resolution confidence/evidence fields, while `get_dependency_closure` and `resolve_dependency_reference` are active read-only MCP tools with fixture/live repository handlers and safe API tool-summary exposure. P28 adds the safe API invocation endpoint for those two tools only. P29 adds the read-only Web diagnostic UI and workflow `get_dependency_closure` evidence wiring. P29B confirms the deferred boundary: no DB migration, persisted artifact type, or workflow state transition is introduced; dependency evidence remains a sanitized digest plus existing draft artifact evidence refs. An explicit `P27_HARD_LIVE_GATE=1` validates selected PPM dependency evidence when enabled. No default live gate, row-data access, raw definition storage, procedure execution, DDL/DML, or PLF fallback is introduced.
+
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation path. P25 changes the default workflow terminal state to `VALIDATION_COMPLETE` and disables the review decision UI while retaining the approval API/server code as a deferred capability. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/deferred approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24 now has contract assets, sanitized guide-quality fixtures, and P24C renderer/evaluator scoring over existing draft artifact types. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
 
 ## Current Boundaries
 
 | Area | Status | Notes |
 |---|---|---|
-| API workflow | implemented | FastAPI routes submit the request, create a job, generate draft artifacts, validate, and record approval decisions. |
+| API workflow | implemented | FastAPI routes submit the request, create a job, generate draft artifacts, validate, and stop at `VALIDATION_COMPLETE`. Approval decision routes remain implemented as deferred compatibility but are outside the default P25 flow. |
 | Metadata collection | fixture-first | Default path uses `fixtures/mcp/metadata_snapshot.json` through the MSSQL MCP registry boundary. |
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
-| Web portal | no-mock HTTP runtime | P21 default runtime requires explicit `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL`; missing API/PLF/PPM prerequisites render API `{code, detail}` blockers instead of mock adapter or demo ids. |
+| Web portal | no-mock HTTP runtime | P21 default runtime requires explicit `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL`; missing API/PLF/PPM prerequisites render API `{code, detail}` blockers instead of mock adapter or demo ids. P25 removes the review decision page and approval CTA from the default UI. |
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | conditional scoped candidate | P17D records live pilot release as `CONDITIONAL_GO` only for the draft-only scoped candidate. This does not make the platform production-ready and does not authorize publish/export, DDL/DML, row-data access, procedure execution, deployment, or PLF fallback. |
 | P18/P19 productization readiness | conditional open | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain deferred future hardening before any production-grade enterprise Auth/RBAC claim. |
 | P21 live portal | explicit live gate | Default eval skips without PLF/PPM access. `P21_LIVE_PORTAL_GATE=1` requires PLF workflow repository and read-only PPM metadata access. Missing env is blocker failure, not skip, and does not imply `production_ready: true`. |
 | P22 LLM runtime | implemented with gates | Default tests use `FakeModelGateway`; remote OpenAI calls require `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, and `OPENAI_API_KEY`. Stored traces contain hashes, model/profile/token/latency/status summaries only, not raw prompt, SP definition, or provider response text. |
-| P23 LLM quality eval | fixture-first scored | `spec/eval/p23_llm_sp_analysis_quality_contract.yaml` and `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` define and author simple/medium/complex synthetic quality eval fixtures. `tests/eval/test_p23_llm_sp_analysis_quality.py` validates schema, deterministic evidence binding, fake-gateway `gpt-5-nano` execution, no-raw trace storage, no PPM-to-PLF fallback, and P23C quality scoring. Optional live quality gate output is a confidence signal only; current status remains `production_ready: false`. |
+| P23 LLM quality eval | fixture-first scored | `spec/eval/p23_llm_sp_analysis_quality_contract.yaml` and `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` define and author simple/medium/complex synthetic quality eval fixtures. `tests/eval/test_p23_llm_sp_analysis_quality.py` validates schema, deterministic evidence binding, fake-gateway execution with `openai_fast_test`, no-raw trace storage, no PPM-to-PLF fallback, and P23C/P26 quality scoring. Optional live quality gate uses high-quality `openai_sp_semantic_analysis` and `OPENAI_MODEL_ANALYSIS`; `openai_fast_test` still defaults to `gpt-5-nano` with `OPENAI_MODEL_FAST_TEST` for manual fast/test runs. Optional live output is a confidence signal only; current status remains `production_ready: false`. |
 | P24 migration guide quality | fixture-first rendered/scored | `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` render P24 guide sections from sanitized fixture facts, and `evaluate_p24_migration_guide_quality` scores the rendered artifact pair. The gate validates required section coverage, evidence-linked claims, DML matrix coverage, branch/call-flow coverage, `REVIEW_REQUIRED` unsupported claims, storage safety, PPM target context, no PLF fallback, and `production_ready: false`. |
+| P27 dependency evidence tooling | fixture-first hardened | `spec/eval/p27_dependency_evidence_tooling_contract.yaml` and the MCP catalog define active read-only dependency closure/resolution tools plus optional dependency resolution evidence fields. P28 safe API invocation, P29 Web diagnostics, and workflow closure evidence wiring are fixture-first enabled; persisted artifact type and DB schema changes remain deferred. Ambiguous/dynamic/unresolved/cross-server/caller-dependent references stay `REVIEW_REQUIRED`. Explicit hard-live evidence runs only with `P27_HARD_LIVE_GATE=1`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
@@ -41,20 +44,21 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/manual_approval_audit_p17_v1.yaml`: P17C human approval and audit binding for the P17B artifact set/version and validation report.
 - `fixtures/eval/productization_gap_closure_p18_v1.yaml`: P18/P19 productization fixture recording P18A canonical closure, P18B HTTP adapter smoke evidence, production auth/RBAC source documentation, fixture-backed enforcement, and the deferred live wiring hardening item.
 - `fixtures/eval/live_portal_no_mock_p21_v1.yaml`: P21 no-mock portal and Python 3.14 contract fixture recording required pages, HTTP-only Web boundary, PLF/PPM prerequisites, live gate blocker behavior, and `production_ready: false`.
-- `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`: P23B-authored simple/medium/complex synthetic LLM-assisted SP semantic analysis quality fixtures, including deterministic facts, transient model input, golden semantic outputs, `gpt-5-nano` fast/test profile, `LLM_INFERENCE`, `REVIEW_REQUIRED`, no-raw-trace storage expectations, and `production_ready: false`.
-- `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml`: P24B-authored simple/medium/complex synthetic SP migration guide quality fixtures, including required section taxonomy, dependency inventory, DML matrix, branch call flow, phase/risk metrics, appendix mappings, evidence refs, unsupported claim `REVIEW_REQUIRED`, storage safety, `gpt-5-nano` fast/test profile, and `production_ready: false`.
+- `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`: P23B/P26 simple/medium/complex synthetic LLM-assisted SP semantic analysis quality fixtures, including deterministic facts, transient model input, golden semantic/guide/conversion outputs, high-quality semantic default posture with `OPENAI_MODEL_ANALYSIS` live override, `gpt-5-nano` fast/test default with `OPENAI_MODEL_FAST_TEST` manual override, `LLM_INFERENCE`, `REVIEW_REQUIRED`, no-raw-trace storage expectations, and `production_ready: false`.
+- `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml`: P24B-authored simple/medium/complex synthetic SP migration guide quality fixtures, including required section taxonomy, dependency inventory, DML matrix, branch call flow, phase/risk metrics, appendix mappings, evidence refs, unsupported claim `REVIEW_REQUIRED`, storage safety, `gpt-5-nano` fast/test default, `OPENAI_MODEL_FAST_TEST` optional live override, and `production_ready: false`.
 - `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`: P23 quality contract that separates P23A contract assets, P23B fixture authoring, P23C fixture-first eval runner/scoring, and P23D readiness documentation.
+- `spec/eval/p27_dependency_evidence_tooling_contract.yaml`: P27 fixture-first hardening contract for dependency evidence fields, active read-only MCP tools, P28 safe API invocation, P29 Web diagnostics and workflow evidence wiring, explicit hard-live gate, no-raw/no-row/no-fallback policy, and deferred persisted artifact/DB schema boundaries.
 
 ## Verification Scope
 
 `make test PYTEST_ARGS="tests/e2e tests/eval"` verifies the default fixture-first/eval gate:
 
-- request acceptance returns `REVIEW_PENDING`
+- request acceptance returns `VALIDATION_COMPLETE`
 - job current step is `VALIDATE`
 - persisted artifact types are generated instead of returning `JAVA_MYBATIS_DRAFT` as a storage type
 - evidence and registry refs are present where implemented
-- validation reports keep draft artifacts in review-required state
-- approval decisions are recorded without publishing
+- validation reports keep `REVIEW_REQUIRED` as an evidence caveat without turning default artifacts into review-pending UI work
+- approval decision recording is retained in server compatibility tests only, not default e2e/Web smoke
 - eval fixtures parse and match generated workflow summaries
 - P15 hard-live fixture contract, metrics, redaction, permission-check schema, and blocker policy are valid
 - P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing
@@ -62,8 +66,9 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - P18B HTTP adapter smoke can be run with `python3.14 tests/e2e/web_http_adapter_smoke.py`; the dockerized python test suite may skip this smoke when node/pnpm are unavailable.
 - P19 auth/RBAC enforcement is covered by `tests/integration/api/test_api_auth_rbac.py`, including 401, 403, reviewer success, and reviewer spoofing cases.
 - P21 prompt/fixture/no-mock/Python 3.14 contracts are covered by `tests/contract/test_p21_no_mock_prompt_assets.py` and `tests/unit/web`; default `tests/eval/test_p21_live_portal_no_mock_gate.py` skips unless the live gate is explicitly enabled.
-- P23 LLM quality fixtures and P23C scoring are covered by `tests/eval/test_p23_llm_sp_analysis_quality.py`; default execution uses `FakeModelGateway`, `openai_fast_test`, and `gpt-5-nano` without network calls. A passing fixture-first report requires `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, and `storage_safety_findings <= 0`.
-- P24 migration guide quality is covered by `tests/eval/test_p24_sp_migration_guide_quality.py`; default execution renders fixture-first `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifacts, then scores them without OpenAI, PPM, PLF, web/API, or schema changes. A passing fixture-first report requires complete section coverage, evidence-linked claim coverage, DML matrix coverage, branch/call-flow coverage, unsupported claim review markers, and zero storage safety findings.
+- P23/P26 LLM quality fixtures and scoring are covered by `tests/eval/test_p23_llm_sp_analysis_quality.py`; default test execution uses `FakeModelGateway`, while API/Web defaults now select high-quality semantic analysis, transient SP definition input, and the `openai_sp_semantic_analysis` profile for live execution. Optional live confidence uses `OPENAI_MODEL_ANALYSIS`; `openai_fast_test` still defaults to `gpt-5-nano` and may be overridden with `OPENAI_MODEL_FAST_TEST` for manual fast/test runs. A passing fixture-first report requires `semantic_recall >= 0.75`, `guide_conversion_recall >= 0.8`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, and `storage_safety_findings <= 0`.
+- P24 migration guide quality is covered by `tests/eval/test_p24_sp_migration_guide_quality.py`; default execution renders fixture-first `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifacts, then scores them without live OpenAI, PPM, PLF, web/API, or schema access. A passing fixture-first report requires complete section coverage, evidence-linked claim coverage, DML matrix coverage, branch/call-flow coverage, unsupported claim review markers, and zero storage safety findings.
+- P27 dependency evidence tooling is covered by `tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py`, `tests/unit/test_mcp_catalog.py`, `tests/unit/mcp/test_tool_registry.py`, `tests/contract/mcp/test_tool_invocation_contract.py`, `tests/unit/api/test_metadata_service.py`, and `tests/integration/api/test_api_workflow_routes.py`; the checks keep the tools active/read-only/structured-only, verify fixture/mocked-live handler behavior, expose them only through metadata tool summary, and avoid default live PPM or OpenAI gates. `tests/eval/test_p27_dependency_evidence_hard_live_gate.py` is explicit hard-live coverage for approved PPM environments.
 
 For P15 hard-live validation, run the same suite with `P15_HARD_LIVE_GATE=1` and live PPM read-only metadata access configured:
 
@@ -107,6 +112,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 ```
 
 This live gate must not be part of the default required suite. If it is skipped, unavailable, or failed, P23 stays `production_ready: false`; treat the result as confidence evidence rather than a production blocker.
+P26 live confidence uses the high-quality `openai_sp_semantic_analysis` profile by default; `openai_fast_test` remains a manual fast/test option.
 
 For P24C fixture-first guide renderer/evaluator validation, run:
 
@@ -115,6 +121,30 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 ```
 
 This renders and scores sanitized fixture expectations against existing artifact types. It does not require live PPM metadata, does not fall back to PLF, does not store SP source text or user guide text, and does not make P24 production-ready.
+
+P24 status interpretation:
+
+- `PASSED`: the fixture-first renderer/evaluator meets every threshold, keeps `productionReady: false`, preserves `REVIEW_REQUIRED` for unsupported or low-evidence claims, and has no storage safety findings or PPM-to-PLF fallback.
+- `HOLD`: the fixture-first gate passes, but optional live confidence evidence is skipped, unavailable, failed, or blocked by local prerequisites. This is confidence evidence only and must not become a production readiness claim.
+- `FAILED`/blocker: any threshold miss, forbidden storage payload, PLF fallback for PPM, production-ready or automatic conversion claim, row-data access, procedure execution, business DB DDL/DML, automatic apply/deploy, or P25+ Java/MyBatis expansion described as P24 completion.
+
+For P27 dependency evidence tooling validation, run:
+
+```bash
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/integration/api/test_api_workflow_routes.py"
+```
+
+For explicit P27 hard-live validation, run:
+
+```bash
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
+```
+
+P27 status interpretation:
+
+- `PASSED`: catalog, handler, contract, and API summary tests agree that the new dependency tools are active/read-only/structured-only, `get_procedure_dependencies` declares the resolution evidence fields, and standard MCP responses retain snapshot/evidence refs.
+- `HOLD`: fixture-first tooling passes but explicit P27 hard-live evidence is skipped/unavailable or local PPM prerequisites are missing. This is expected outside approved live environments and does not imply production readiness.
+- `FAILED`/blocker: P27 tools become inactive, writable, or handlerless, any contract accepts free-form SQL or row data, raw definition/provider/prompt storage is allowed, PPM falls back to PLF, uncertain dependencies are promoted as deterministic facts, or `P27_HARD_LIVE_GATE=1` skips missing prerequisites.
 
 ## P15 Ops Gate
 
@@ -128,18 +158,18 @@ This renders and scores sanitized fixture expectations against existing artifact
 
 - OpenAPI: P21 adds recent jobs and latest validation read routes. Requested output groups remain separate from persisted artifact types.
 - Domain: P18A adds the minimal versioned `CanonicalAnalysisModel` contract in `packages/domain` and keeps missing snapshot/registry/evidence bindings as explicit analysis blockers.
-- MCP catalog: no tool surface change. Tools remain read-only and structured-argument only.
-- Validation rules: no rule change. Existing evidence/review-required rules drive e2e/eval expectations.
-- Policy: no policy asset change. Forbidden automatic publish, automatic DDL, and row-data access boundaries remain unchanged.
-- Env/profile: default metadata profile is now consistently `master`; platform DB profile `plf` remains available.
-- LLM eval: P23 includes contract quality assets, P23B-authored synthetic fixtures, and P23C fixture-first scoring. Default tests stay fake-gateway-only and preserve no-raw-trace storage.
+- MCP catalog: P27 dependency closure/reference resolution tools are active read-only fixture-first hardened tools with structured arguments and safe API summary exposure only.
+- Validation rules: P26 adds guide/conversion recall scoring for LLM semantic quality while existing evidence/review-required rules continue to drive e2e/eval expectations.
+- Policy: P26 documents high-quality semantic analysis defaults, while forbidden automatic publish, automatic DDL, row-data access, raw prompt/SP/provider-response storage, and PLF fallback boundaries remain unchanged.
+- Env/profile: default metadata profile is now consistently `master`; platform DB profile `plf` remains available. Live MSSQL uses `MSSQL_METADATA_TDS_VERSION=7.4` by default, with `7.0` available for local Chakra/legacy proxy paths that reject default `python-tds` negotiation.
+- LLM eval: P23/P26 includes contract quality assets, synthetic fixtures, staged high-quality semantic scoring, and guide/conversion recall. Default tests stay fake-gateway-only and preserve no-raw-trace storage.
 - Migration guide eval: P24C renders sanitized guide-quality fixtures into existing draft artifact types and scores the artifact pair with a reusable fixture-first evaluator.
 
 ## Follow-Up Backlog
 
 1. Implement real read-only live metadata adapter queries behind the MCP boundary.
 2. Broaden CanonicalAnalysisModel coverage beyond the minimal P18A fixture-first contract.
-3. Add publish API only after validation/approval semantics are fully enforced.
+3. Add publish API only after future approval semantics are explicitly reintroduced and fully enforced.
 4. Verify auth/RBAC live wiring against an approved IdP/JWKS endpoint and PLF role membership source before claiming production-grade enterprise Auth/RBAC.
 5. Expand eval fixtures beyond the single happy path to dynamic SQL, temp tables, transaction/TRY-CATCH, DDL drafts, and failure paths.
 6. Mature DDL draft renderer while keeping schema apply/manual review outside automation.
@@ -148,3 +178,4 @@ This renders and scores sanitized fixture expectations against existing artifact
 9. Keep P21 no-mock portal evidence conditional on PLF/PPM prerequisites; do not claim full production readiness from a local controlled live gate.
 10. Keep optional P23 live quality gate evidence separate from default fixture-first scoring.
 11. Broaden P24 guide fixtures only after additional sanitized deterministic facts exist; keep current renderer/evaluator fixture-first and draft-only.
+12. Use explicit P27 hard-live results to reduce residual `REVIEW_REQUIRED` dependency evidence where catalog metadata can uniquely confirm targets, without introducing persisted artifact type changes, DB schema changes, or PLF fallback.

@@ -17,15 +17,16 @@ def test_p22_openapi_declares_llm_options_trace_and_evidence_type() -> None:
 
     assert "/api/v1/jobs/{jobId}/agent-runs" in openapi["paths"]
     options = schemas["SPAnalysisOptions"]["properties"]
-    assert options["useLlmAnalysis"]["default"] is False
+    assert options["useLlmAnalysis"]["default"] is True
     assert options["llmProfileId"]["enum"] == [
         "openai_sp_semantic_analysis",
         "openai_fast_test",
     ]
-    assert options["allowSpDefinitionToModel"]["default"] is False
+    assert options["allowSpDefinitionToModel"]["default"] is True
     assert "LLM_INFERENCE" in schemas["EvidenceRef"]["properties"]["type"]["enum"]
     assert "AgentRunSummary" in schemas
     assert "ModelInvocationSummary" in schemas
+    assert "componentInvocations" in schemas["ModelInvocationSummary"]["properties"]
     assert "MODEL" in schemas["RegistryVersion"]["properties"]["registryType"]["enum"]
     assert "SCHEMA" in schemas["RegistryVersion"]["properties"]["registryType"]["enum"]
 
@@ -57,23 +58,31 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
     env_text = (ROOT / ".env.example").read_text(encoding="utf-8")
 
     for name in (
+        "LLM_REMOTE_PROVIDER=openai",
+        "OPENAI_RESPONSES_URL=",
         "OPENAI_MODEL_ANALYSIS=gpt-5.5",
         "OPENAI_MODEL_FAST_TEST=gpt-5-nano",
+        "PGPT_MODEL_ANALYSIS=gpt-4o",
+        "PGPT_MODEL_FAST_TEST=gpt-4o-mini",
         "LLM_ENABLE_REMOTE=0",
         "LLM_ALLOW_SP_TEXT=0",
         "LLM_LIVE_GATE=0",
+        "LLM_SP_CONCURRENCY=2",
     ):
         assert name in env_text
     assert "OPENAI_API_KEY=\n" in env_text
     assert "sk-" not in env_text
 
 
-def test_p22_registry_route_exposes_model_prompt_and_schema_bindings() -> None:
-    registry = (ROOT / "apps" / "api" / "api_app" / "routes" / "registry.py").read_text(
-        encoding="utf-8"
-    )
+def test_p22_registry_route_exposes_model_prompt_and_schema_bindings(monkeypatch) -> None:
+    from api_app.routes.registry import active_registry_bindings
 
-    assert "model:openai_sp_semantic_analysis@0.1.0" in registry
-    assert "model:openai_fast_test@gpt-5-nano@0.1.0" in registry
-    assert "prompt:sp_semantic_analysis@0.1.0" in registry
-    assert "schema:llm_semantic_analysis@0.1.0" in registry
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
+    monkeypatch.delenv("PGPT_MODEL_FAST_TEST", raising=False)
+    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "gpt-5.4-mini")
+    versions = {binding.version for binding in active_registry_bindings()}
+
+    assert "model:openai_sp_semantic_analysis@0.1.0" in versions
+    assert "model:openai_fast_test@gpt-5.4-mini@0.1.0" in versions
+    assert "prompt:sp_semantic_analysis@0.3.0" in versions
+    assert "schema:llm_semantic_analysis@0.3.0" in versions

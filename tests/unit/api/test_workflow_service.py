@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
+from ai_agent_runtime.gateway import model_profile_from_env
+from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from api_app.lifecycle import WorkflowStateError
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
@@ -14,6 +18,7 @@ from tests.unit.api.fake_repository import MemoryWorkflowRepository
 def fixture_metadata_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
 
 
 def _request(outputs: list[str] | None = None) -> SPAnalysisRequest:
@@ -98,20 +103,64 @@ def _passed_sp_analysis_content() -> str:
     )
 
 
+def _model_invocation(
+    *,
+    prompt,
+    profile,
+    provider: str,
+    structured_output: dict,
+) -> ModelInvocationRecord:
+    return ModelInvocationRecord(
+        provider=provider,
+        model=profile.model,
+        model_profile_id=profile.profile_id,
+        model_registry_ref=profile.registry_ref,
+        reasoning_effort=profile.reasoning_effort,
+        prompt_version=prompt.prompt_version,
+        output_schema_version=prompt.output_schema_version,
+        input_hash=prompt.input_hash,
+        prompt_hash=prompt.prompt_hash,
+        output_hash=stable_json_hash(structured_output),
+        status=AgentRunStatus.SUCCEEDED,
+        structured_output=structured_output,
+        token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+        latency_ms=0,
+    )
+
+
+def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_OrderRequest_Select",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+        }
+    )
+
+    assert request.options.use_llm_analysis is True
+    assert request.options.use_ai_tool_orchestration is True
+    assert request.options.allow_sp_definition_to_model is True
+    assert request.options.llm_profile_id == "openai_sp_semantic_analysis"
+
+
 def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
 
     request_record, job = service.submit_sp_analysis(_request())
 
-    assert request_record.status == JobStatus.REVIEW_PENDING
-    assert job.status == JobStatus.REVIEW_PENDING
+    assert request_record.status == JobStatus.VALIDATION_COMPLETE
+    assert job.status == JobStatus.VALIDATION_COMPLETE
     assert [status.value for status, _step in job.transitions] == [
         "COLLECTING_METADATA",
         "ANALYZING",
         "GENERATING",
         "VALIDATING",
-        "REVIEW_PENDING",
+        "VALIDATION_COMPLETE",
     ]
 
     artifact_types = {artifact.type for artifact in repository.artifacts.values()}
@@ -157,7 +206,8 @@ def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
     assert len(agent_runs) == 1
     run = agent_runs[0]
     assert run.agent_type == "LLM_SEMANTIC_ANALYST"
-    assert run.model_invocation["model"] == "gpt-5-nano"
+    assert run.model_invocation["model"] == model_profile_from_env("openai_fast_test").model
+    assert run.model_invocation["componentInvocations"]
     assert "businessRules" in run.structured_output
     assert "CREATE PROCEDURE" not in str(run.model_invocation)
     assert "CREATE PROCEDURE" not in str(run.structured_output)
@@ -168,6 +218,353 @@ def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
         for ref in artifact.evidence_refs
     )
     assert any(event.action == "AGENT_RUN_RECORDED" for event in repository.audit_events)
+
+
+def test_llm_prompt_receives_dependency_evidence_and_can_bind_claim_refs() -> None:
+    class DependencyEvidenceSpyGateway:
+        def __init__(self) -> None:
+            self.prompt_payloads: list[dict] = []
+            self.dependency_fact_refs: list[str] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            prompt_payload = json.loads(prompt.user_prompt)
+            self.prompt_payloads.append(prompt_payload)
+            dependency_evidence = prompt_payload["metadata"]["dependencyEvidence"]
+            assert dependency_evidence["toolName"] == "get_dependency_closure"
+            assert dependency_evidence["evidenceRefs"]
+            assert "definition" not in prompt_payload["metadata"]["procedureDefinition"]
+            fact_ref = next(
+                ref
+                for ref in prompt_payload["evidenceRefContract"]["allowedFactIds"]
+                if "dependencies" in ref
+            )
+            self.dependency_fact_refs.append(fact_ref)
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "DEPENDENCY_EVIDENCE_BOUND_RULE",
+                        "summary": "Dependency closure evidence anchored the semantic claim.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [fact_ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return ModelInvocationRecord(
+                provider="spy",
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+                token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+                latency_ms=0,
+            )
+
+    repository = MemoryWorkflowRepository()
+    spy_gateway = DependencyEvidenceSpyGateway()
+    service = WorkflowService(repository, model_gateway=spy_gateway)
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_ProcessOrderBatch",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": True,
+                "llmProfileId": "openai_fast_test",
+                "allowSpDefinitionToModel": False,
+            },
+        }
+    )
+
+    _request_record, job = service.submit_sp_analysis(request)
+
+    run = repository.list_agent_runs(job.job_id)[0]
+    artifact = next(iter(repository.artifacts.values()))
+    assert spy_gateway.prompt_payloads
+    assert spy_gateway.dependency_fact_refs
+    assert run.structured_output["businessRules"][0]["evidenceRefs"] == [
+        spy_gateway.dependency_fact_refs[0]
+    ]
+    assert "Dependency closure evidence anchored the semantic claim." in artifact.content
+    assert "dependencyEvidence" in spy_gateway.prompt_payloads[0]["metadata"]
+
+
+def test_ai_tool_orchestration_invokes_internal_read_only_tool_and_binds_fact_ref(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ToolPlanningSpyGateway:
+        def __init__(self) -> None:
+            self.planner_prompts: list[dict] = []
+            self.semantic_prompts: list[dict] = []
+            self.ai_tool_fact_refs: list[str] = []
+
+        def plan_metadata_tools(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.planner_prompts.append(payload)
+            assert any(
+                tool["name"] == "get_table_schema"
+                for tool in payload["toolCapabilities"]
+            )
+            structured_output = {
+                "toolRequests": [],
+                "assumptions": [],
+                "reviewMarkers": [],
+            }
+            if payload["round"] == 1:
+                structured_output["toolRequests"].append(
+                    {
+                        "toolName": "get_table_schema",
+                        "arguments": {
+                            "dbProfileId": "master",
+                            "schema": "dbo",
+                            "tableName": "TB_ORDER",
+                            "topK": 99,
+                        },
+                        "reason": "Need table columns for semantic claims.",
+                        "expectedEvidenceUse": "Anchor result-shape guidance.",
+                    }
+                )
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-planner",
+                structured_output=structured_output,
+            )
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.semantic_prompts.append(payload)
+            ai_tool_evidence = payload["metadata"]["aiToolEvidence"]
+            assert ai_tool_evidence["toolResults"]
+            assert "definition" not in str(ai_tool_evidence).lower()
+            assert "CREATE PROCEDURE" not in str(ai_tool_evidence)
+            fact_ref = next(
+                ref
+                for ref in payload["evidenceRefContract"]["allowedFactIds"]
+                if ref.startswith("mcp.get_table_schema.")
+            )
+            self.ai_tool_fact_refs.append(fact_ref)
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "AI_TOOL_SCHEMA_BOUND_RULE",
+                        "summary": "AI-selected table schema evidence anchored this claim.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [fact_ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-semantic",
+                structured_output=structured_output,
+            )
+
+    class InternalRegistrySpy:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        def invoke_payload(self, tool_name: str, payload: dict) -> dict:
+            arguments = payload["arguments"]
+            self.calls.append((tool_name, dict(arguments)))
+            return {
+                "ok": True,
+                "toolName": tool_name,
+                "dbProfileId": arguments["dbProfileId"],
+                "snapshotId": "fixture:ai-tool",
+                "collectedAt": "2026-05-12T00:00:00Z",
+                "evidenceRefs": [
+                    {
+                        "id": "evt_table_schema",
+                        "source": "fixture",
+                        "path": "fixtures/mcp/metadata_snapshot.json#/tables/TB_ORDER",
+                        "objectType": "TABLE",
+                        "objectName": "dbo.TB_ORDER",
+                    }
+                ],
+                "data": {
+                    "schema": arguments["schema"],
+                    "tableName": arguments["tableName"],
+                    "columns": [{"name": "OrderId", "dataType": "int"}],
+                    "definition": "CREATE PROCEDURE dbo.ShouldNotPersist AS SELECT 1",
+                },
+            }
+
+    registry = InternalRegistrySpy()
+    monkeypatch.setattr(
+        "api_app.ai_tool_orchestrator.build_tool_registry",
+        lambda **_kwargs: registry,
+    )
+    repository = MemoryWorkflowRepository()
+    gateway = ToolPlanningSpyGateway()
+    service = WorkflowService(repository, model_gateway=gateway)
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_GetOrderSummary",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": True,
+                "useAiToolOrchestration": True,
+                "llmProfileId": "openai_fast_test",
+                "allowSpDefinitionToModel": False,
+            },
+        }
+    )
+
+    _request_record, job = service.submit_sp_analysis(request)
+
+    run = repository.list_agent_runs(job.job_id)[0]
+    metadata = next(iter(repository.metadata_collections.values()))
+    artifact = next(iter(repository.artifacts.values()))
+    assert registry.calls == [
+        (
+            "get_table_schema",
+            {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "tableName": "TB_ORDER",
+                "topK": 20,
+            },
+        )
+    ]
+    assert metadata.payload["aiToolEvidence"]["toolCallCount"] == 1
+    assert "definition" not in str(metadata.payload["aiToolEvidence"]).lower()
+    assert "CREATE PROCEDURE" not in str(metadata.payload)
+    assert run.structured_output["businessRules"][0]["evidenceRefs"] == [
+        gateway.ai_tool_fact_refs[0]
+    ]
+    assert any(
+        component["stage"] == "ai_tool_execution"
+        and component["toolName"] == "get_table_schema"
+        and component["status"] == "SUCCEEDED"
+        for component in run.model_invocation["componentInvocations"]
+    )
+    assert "AI-selected table schema evidence anchored this claim." in artifact.content
+
+
+def test_ai_tool_orchestration_blocks_adversarial_tool_plan_without_storing_raw_args() -> None:
+    class AdversarialPlanningGateway:
+        def plan_metadata_tools(self, *, prompt, profile) -> ModelInvocationRecord:
+            structured_output = {
+                "toolRequests": [
+                    {
+                        "toolName": "get_table_schema",
+                        "arguments": {
+                            "dbProfileId": "master",
+                            "schema": "dbo",
+                            "tableName": "TB_ORDER",
+                            "sql": "DROP TABLE dbo.TB_ORDER",
+                            "password": "supersecret",
+                        },
+                        "reason": "malicious request",
+                        "expectedEvidenceUse": "should be blocked",
+                    }
+                ],
+                "assumptions": [],
+                "reviewMarkers": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-planner",
+                structured_output=structured_output,
+            )
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            structured_output = {
+                "businessRules": [],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-semantic",
+                structured_output=structured_output,
+            )
+
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository, model_gateway=AdversarialPlanningGateway())
+
+    _request_record, job = service.submit_sp_analysis(_llm_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    metadata = next(iter(repository.metadata_collections.values()))
+    run = repository.list_agent_runs(job.job_id)[0]
+    stored_text = str(metadata.payload) + str(run.model_invocation) + str(run.structured_output)
+    assert metadata.payload["aiToolEvidence"]["blockedRequests"]
+    assert metadata.payload["aiToolEvidence"]["reviewMarkers"][0]["code"] == (
+        "AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED"
+    )
+    assert "DROP TABLE" not in stored_text
+    assert "supersecret" not in stored_text
+    assert any(
+        marker["code"] == "AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED"
+        for marker in run.structured_output["reviewMarkers"]
+    )
+
+
+def test_remote_high_quality_requires_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "1")
+    monkeypatch.setenv("LLM_ALLOW_SP_TEXT", "1")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    request_record, job = service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    assert request_record.status == JobStatus.FAILED
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == "OPENAI_API_KEY_MISSING"
+    assert "OPENAI_API_KEY" in str(job.error_message)
+
+
+def test_remote_high_quality_requires_sp_text_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only-key")
+    monkeypatch.delenv("LLM_ALLOW_SP_TEXT", raising=False)
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    request_record, job = service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    assert request_record.status == JobStatus.FAILED
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == "LLM_SP_TEXT_NOT_ALLOWED"
+    assert "LLM_ALLOW_SP_TEXT=1" in str(job.error_message)
 
 
 def test_submit_replays_same_idempotency_key_for_same_payload() -> None:
@@ -269,6 +666,19 @@ def test_repository_rejects_unsupported_job_transition() -> None:
         )
 
 
+def test_validation_complete_is_terminal_job_status() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    _request_record, job = service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    with pytest.raises(WorkflowStateError, match="terminal status VALIDATION_COMPLETE"):
+        repository.transition_job(
+            job.job_id,
+            status=JobStatus.CANCELED,
+            current_step=WorkflowStepType.VALIDATE,
+        )
+
+
 def test_memory_repository_fail_job_persists_error_state_and_request_status() -> None:
     repository = MemoryWorkflowRepository()
     request = repository.create_request(
@@ -342,15 +752,50 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
 
-    service.submit_sp_analysis(_fixture_request())
+    _request_record, job = service.submit_sp_analysis(
+        _fixture_request(
+            ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT", "TABLE_COLUMN_METADATA"]
+        )
+    )
+
+    assert [status.value for status, _step in job.transitions] == [
+        "COLLECTING_METADATA",
+        "ANALYZING",
+        "GENERATING",
+        "VALIDATING",
+        "VALIDATION_COMPLETE",
+    ]
+    assert {artifact.type for artifact in repository.artifacts.values()} == {
+        ArtifactType.SP_ANALYSIS_DOC,
+        ArtifactType.DEPENDENCY_REPORT,
+        ArtifactType.METADATA_QUERY_RESULT,
+    }
+    artifact_type_values = {artifact.type.value for artifact in repository.artifacts.values()}
+    assert "DEPENDENCY_EVIDENCE" not in artifact_type_values
 
     metadata = next(iter(repository.metadata_collections.values()))
     assert metadata.payload["snapshotId"] == "mcp-fixture-snapshot-0001"
+    dependency_evidence = metadata.payload["dependencyEvidence"]
+    assert dependency_evidence["toolName"] == "get_dependency_closure"
+    assert dependency_evidence["summary"]["reviewRequiredCount"] >= 1
+    assert dependency_evidence["unresolved"]
+    assert "definition" not in str(dependency_evidence).lower()
+    assert "sqltext" not in str(dependency_evidence).replace("_", "").lower()
+    assert "rowdata" not in str(dependency_evidence).replace("_", "").lower()
+    assert "resolve_dependency_reference" not in str(metadata.payload)
 
     contents = "\n".join(artifact.content for artifact in repository.artifacts.values())
     assert "dbo.TB_ORDER" in contents
     assert "Order identifier" in contents
     assert "OrderId" in contents
+    assert "dependency_closure_evidence" in contents
+    assert "FIXTURE_AMBIGUOUS" in contents
+    assert "resolve_dependency_reference" not in contents
+    assert any(
+        "dependencies" in ref["locator"]
+        for artifact in repository.artifacts.values()
+        for ref in artifact.evidence_refs
+    )
 
 
 def test_approve_requires_latest_passed_validation_report() -> None:
@@ -370,7 +815,7 @@ def test_approve_requires_latest_passed_validation_report() -> None:
 
     gate_report = service.evaluate_publish_gate(artifact.artifact_id)
 
-    assert repository.artifacts[artifact.artifact_id].status.value == "REVIEW_PENDING"
+    assert repository.artifacts[artifact.artifact_id].status.value == "DRAFT"
     assert gate_report.status == "FAILED"
     assert gate_report.storage_result == "FAIL"
     assert gate_report.checks[0]["ruleId"] == "workflow.approval.before_publish"

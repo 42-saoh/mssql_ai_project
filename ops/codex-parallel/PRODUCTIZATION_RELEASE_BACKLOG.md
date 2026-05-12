@@ -135,7 +135,7 @@ Dependencies: P09, P11, and P12.
 
 Scope:
 
-- Productize validation result shape, reviewer checklist, approval decision recording, audit event shape, and publish gate checks.
+- Productize validation result shape, reviewer checklist, deferred approval decision recording, audit event shape, and publish gate checks.
 - Keep schema/spec changes as blockers.
 
 Acceptance criteria:
@@ -285,7 +285,7 @@ Dependencies: P17D.
 
 Scope:
 
-- Prove `PORTAL_API_MODE=http` against local API routes for request, job, artifact, validation, approval decision recording, metadata search, and registry versions.
+- Prove `PORTAL_API_MODE=http` against local API routes for request, job, artifact, validation, metadata search, and registry versions. P25 keeps approval decision recording as deferred server compatibility, outside the default Web smoke path.
 - Keep mock adapter available for demo/dev but separate it from release evidence.
 - Define production auth/RBAC source of truth, role matrix, enforcement, and negative tests, or keep `AUTH_RBAC_PRODUCTION_SOURCE_UNRESOLVED`.
 

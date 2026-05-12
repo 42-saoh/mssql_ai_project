@@ -225,6 +225,147 @@ def test_fixture_metadata_object_search_uses_ppm_without_plf_fallback() -> None:
     assert all(result["sourceDatabase"] == "PPM" for result in payload["data"]["results"])
 
 
+def test_fixture_dependency_closure_collects_confirmed_and_review_required_edges() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    payload = registry.invoke_payload(
+        "get_dependency_closure",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+                "maxDepth": 2,
+                "includeReviewRequired": True,
+            }
+        },
+    )
+
+    data = payload["data"]
+    node_names = {node["name"] for node in data["nodes"]}
+    assert {"usp_ProcessOrderBatch", "usp_GetOrderSummary", "TB_ORDER"} <= node_names
+    assert any(edge["resolutionStatus"] == "CONFIRMED" for edge in data["edges"])
+    assert data["unresolved"]
+    assert data["summary"]["maxDepth"] == 2
+    assert data["reviewRequired"] is True
+
+
+def test_fixture_dependency_closure_can_hide_review_required_graph_items() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    payload = registry.invoke_payload(
+        "get_dependency_closure",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+                "maxDepth": 2,
+                "includeReviewRequired": False,
+            }
+        },
+    )
+
+    data = payload["data"]
+    assert data["unresolved"]
+    assert all(edge["resolutionStatus"] == "CONFIRMED" for edge in data["edges"])
+    assert all(node["reviewStatus"] == "CONFIRMED" for node in data["nodes"])
+
+
+def test_fixture_dependency_reference_resolver_selects_confirmed_only() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    confirmed = registry.invoke_payload(
+        "resolve_dependency_reference",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "sourceObject": {
+                    "schema": "dbo",
+                    "name": "usp_GetOrderSummary",
+                    "objectType": "PROCEDURE",
+                },
+                "referencedSchema": "dbo",
+                "referencedName": "TB_ORDER",
+            }
+        },
+    )
+    review = registry.invoke_payload(
+        "resolve_dependency_reference",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "sourceObject": {
+                    "schema": "dbo",
+                    "name": "usp_GetOrderSummary",
+                    "objectType": "PROCEDURE",
+                },
+                "referencedSchema": "dbo",
+                "referencedName": "TB_ORDER_LINE",
+            }
+        },
+    )
+
+    assert confirmed["data"]["resolutionStatus"] == "CONFIRMED"
+    assert confirmed["data"]["selectedResolution"]["name"] == "TB_ORDER"
+    assert confirmed["data"]["selectedResolution"]["resolutionConfidence"] == "HIGH"
+    assert confirmed["data"]["reviewRequired"] is False
+
+    assert review["data"]["resolutionStatus"] == "REVIEW_REQUIRED"
+    assert review["data"]["selectedResolution"] is None
+    assert review["data"]["reviewRequired"] is True
+
+
+@pytest.mark.parametrize(
+    ("referenced_name", "referenced_schema", "expected_strategy"),
+    [
+        ("SYN_ORDER_ARCHIVE", "dbo", "AMBIGUOUS_OR_UNCONFIRMED_CANDIDATES"),
+        ("usp_LateBoundOrderHook", None, "AMBIGUOUS_OR_UNCONFIRMED_CANDIDATES"),
+        ("TB_REMOTE_ORDER", "dbo", "AMBIGUOUS_OR_UNCONFIRMED_CANDIDATES"),
+        ("MissingOrderTarget", "dbo", "AMBIGUOUS_OR_UNCONFIRMED_CANDIDATES"),
+    ],
+)
+def test_fixture_dependency_reference_resolver_keeps_uncertain_targets_review_required(
+    referenced_name: str,
+    referenced_schema: str | None,
+    expected_strategy: str,
+) -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+    arguments: dict[str, Any] = {
+        "dbProfileId": "master",
+        "sourceObject": {
+            "schema": "dbo",
+            "name": "usp_ProcessOrderBatch",
+            "objectType": "PROCEDURE",
+        },
+        "referencedName": referenced_name,
+    }
+    if referenced_schema is not None:
+        arguments["referencedSchema"] = referenced_schema
+
+    payload = registry.invoke_payload(
+        "resolve_dependency_reference",
+        {"arguments": arguments},
+    )
+
+    data = payload["data"]
+    assert data["candidates"]
+    assert data["resolutionStatus"] == "REVIEW_REQUIRED"
+    assert data["resolutionStrategy"] == expected_strategy
+    assert data["selectedResolution"] is None
+    assert data["reviewRequired"] is True
+
+
 def test_tool_invocation_rejects_free_form_sql_argument(monkeypatch) -> None:
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     client = TestClient(app)
@@ -332,6 +473,60 @@ def test_tool_invocation_rejects_missing_required_argument(monkeypatch) -> None:
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"]["code"] == "INVALID_ARGUMENTS"
+
+
+def test_tool_invocation_rejects_dependency_closure_depth_above_contract_max(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/get_dependency_closure/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+                "maxDepth": 4,
+            }
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "INVALID_ARGUMENTS"
+    assert payload["error"]["details"] == {
+        "arguments.maxDepth": "must be less than or equal to 3"
+    }
+
+
+def test_tool_invocation_rejects_non_boolean_dependency_closure_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/get_dependency_closure/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+                "includeReviewRequired": "false",
+            }
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_ARGUMENTS"
+    assert response.json()["error"]["details"] == {
+        "arguments.includeReviewRequired": "must be a boolean"
+    }
 
 
 def test_tool_invocation_validation_error_does_not_echo_secret_like_values(monkeypatch) -> None:
@@ -738,7 +933,11 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
 
     def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
         self.queried_databases.append(database)
-        assert tool_name == "get_procedure_dependencies"
+        assert tool_name in {
+            "get_procedure_dependencies",
+            "get_dependency_closure",
+            "resolve_dependency_reference",
+        }
         if "FROM sys.sql_modules AS m" in sql:
             assert "LIKE '%" not in sql
             assert "%sp_executesql%" not in sql
@@ -1113,3 +1312,282 @@ def test_live_procedure_dependency_resolver_marks_dynamic_sql_review_required() 
     assert dependency["reviewStatus"] == "REVIEW_REQUIRED"
     assert payload["data"]["caveats"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
     assert payload["data"]["reviewRequired"] is True
+
+
+def test_live_dependency_closure_collects_same_database_confirmed_dependency() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[
+            _dependency_row(
+                referenced_id=101,
+                direct_schema_name="dbo",
+                direct_object_name="TB_ORDER",
+                direct_object_type="U ",
+            )
+        ]
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "get_dependency_closure",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "schema": "dbo",
+                "objectName": "usp_Selected",
+                "objectType": "PROCEDURE",
+                "maxDepth": 2,
+                "includeReviewRequired": True,
+            }
+        },
+    )
+
+    data = payload["data"]
+    assert data["rootObject"]["name"] == "usp_Selected"
+    assert data["summary"]["maxDepth"] == 2
+    assert data["summary"]["edgeCount"] == 1
+    assert data["edges"][0]["resolutionStatus"] == "CONFIRMED"
+    assert data["nodes"][1]["name"] == "TB_ORDER"
+    assert data["unresolved"] == []
+    assert data["reviewRequired"] is False
+
+
+def test_live_dependency_closure_keeps_review_required_unresolved_when_hidden() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[
+            _dependency_row(referenced_schema_name=None, catalog_match_count=2),
+        ]
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "get_dependency_closure",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "schema": "dbo",
+                "objectName": "usp_Selected",
+                "objectType": "PROCEDURE",
+                "includeReviewRequired": False,
+            }
+        },
+    )
+
+    data = payload["data"]
+    assert data["unresolved"]
+    assert data["edges"] == []
+    assert [node["name"] for node in data["nodes"]] == ["usp_Selected"]
+    assert data["reviewRequired"] is True
+
+
+def test_live_dependency_reference_resolver_selects_same_database_confirmed_dependency() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[
+            _dependency_row(
+                referenced_id=101,
+                direct_schema_name="dbo",
+                direct_object_name="TB_ORDER",
+                direct_object_type="U ",
+            )
+        ]
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "resolve_dependency_reference",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "sourceObject": {
+                    "schema": "dbo",
+                    "name": "usp_Selected",
+                    "objectType": "PROCEDURE",
+                },
+                "referencedSchema": "dbo",
+                "referencedName": "TB_ORDER",
+            }
+        },
+    )
+
+    data = payload["data"]
+    assert data["resolutionStatus"] == "CONFIRMED"
+    assert data["selectedResolution"]["name"] == "TB_ORDER"
+    assert data["selectedResolution"]["resolutionConfidence"] == "HIGH"
+    assert data["reviewRequired"] is False
+
+
+def test_live_dependency_reference_resolver_confirms_same_server_cross_database_catalog() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[_dependency_row(referenced_database_name="OtherDB")],
+        external_database_rows=[{"name": "OtherDB", "state_desc": "ONLINE"}],
+        external_catalog_rows=[
+            {
+                "external_catalog_match_count": 1,
+                "external_matched_schema_name": "dbo",
+                "external_matched_object_name": "TB_ORDER",
+                "external_matched_object_type": "U ",
+                "external_synonym_schema_name": None,
+                "external_synonym_name": None,
+                "external_synonym_base_object_name": None,
+            }
+        ],
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "resolve_dependency_reference",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "sourceObject": {
+                    "schema": "dbo",
+                    "name": "usp_Selected",
+                    "objectType": "PROCEDURE",
+                },
+                "referencedDatabase": "OtherDB",
+                "referencedSchema": "dbo",
+                "referencedName": "TB_ORDER",
+            }
+        },
+    )
+
+    data = payload["data"]
+    assert data["resolutionStatus"] == "CONFIRMED"
+    assert data["selectedResolution"]["database"] == "OtherDB"
+    assert data["selectedResolution"]["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
+    assert data["reviewRequired"] is False
+
+
+@pytest.mark.parametrize(
+    "dependency_rows,module_rows,reference",
+    [
+        (
+            [_dependency_row(referenced_schema_name=None, catalog_match_count=2)],
+            None,
+            {"referencedName": "TB_ORDER"},
+        ),
+        (
+            [
+                _dependency_row(
+                    referenced_server_name="LinkedServer",
+                    referenced_database_name="OtherDB",
+                )
+            ],
+            None,
+            {"referencedSchema": "dbo", "referencedName": "TB_ORDER"},
+        ),
+        (
+            [
+                _dependency_row(
+                    referenced_id=202,
+                    direct_schema_name="dbo",
+                    direct_object_name="SYN_ORDER",
+                    direct_object_type="SN",
+                    synonym_schema_name="dbo",
+                    synonym_name="SYN_ORDER",
+                    synonym_base_object_name="[OtherDB].[dbo].[TB_ORDER]",
+                )
+            ],
+            None,
+            {"referencedSchema": "dbo", "referencedName": "SYN_ORDER"},
+        ),
+        (
+            [
+                _dependency_row(
+                    referenced_schema_name=None,
+                    referenced_entity_name="usp_LateBound",
+                    is_caller_dependent=1,
+                )
+            ],
+            None,
+            {"referencedName": "usp_LateBound"},
+        ),
+        (
+            [_dependency_row(referenced_entity_name="MissingThing")],
+            None,
+            {"referencedSchema": "dbo", "referencedName": "MissingThing"},
+        ),
+        (
+            [],
+            [
+                {
+                    "definition_hash": "012345",
+                    "definition_length": 512,
+                    "has_definition_access": 1,
+                    "has_dynamic_sql": 1,
+                    "has_temp_table": 0,
+                }
+            ],
+            {"referencedSchema": "dbo", "referencedName": "TB_ORDER"},
+        ),
+    ],
+)
+def test_live_dependency_reference_resolver_keeps_uncertain_references_review_required(
+    dependency_rows: list[dict[str, Any]],
+    module_rows: list[dict[str, Any]] | None,
+    reference: dict[str, str],
+) -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=dependency_rows,
+        module_rows=module_rows,
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    arguments = {
+        "dbProfileId": "ppm",
+        "sourceObject": {
+            "schema": "dbo",
+            "name": "usp_Selected",
+            "objectType": "PROCEDURE",
+        },
+        **reference,
+    }
+
+    payload = registry.invoke_payload(
+        "resolve_dependency_reference",
+        {"arguments": arguments},
+    )
+
+    data = payload["data"]
+    assert data["resolutionStatus"] == "REVIEW_REQUIRED"
+    assert data["selectedResolution"] is None
+    assert data["reviewRequired"] is True
+
+
+def test_live_dependency_reference_resolver_refuses_confirmed_candidate_when_review_candidate_matches() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[
+            _dependency_row(
+                referenced_id=101,
+                direct_schema_name="dbo",
+                direct_object_name="TB_ORDER",
+                direct_object_type="U ",
+            ),
+            _dependency_row(
+                referenced_server_name="LinkedServer",
+                referenced_database_name="OtherDB",
+            ),
+        ],
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "resolve_dependency_reference",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "sourceObject": {
+                    "schema": "dbo",
+                    "name": "usp_Selected",
+                    "objectType": "PROCEDURE",
+                },
+                "referencedSchema": "dbo",
+                "referencedName": "TB_ORDER",
+            }
+        },
+    )
+
+    data = payload["data"]
+    assert len(data["candidates"]) == 2
+    assert data["resolutionStatus"] == "REVIEW_REQUIRED"
+    assert data["selectedResolution"] is None
+    assert data["reviewRequired"] is True

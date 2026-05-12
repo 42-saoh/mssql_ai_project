@@ -18,18 +18,29 @@ from api_app.schemas import (
     MetadataSearchBlocker,
     MetadataSearchResponse,
     MetadataSearchResult,
+    MetadataToolInvokeResponse,
     MetadataToolSummary,
 )
 
 METADATA_SEARCH_MCP_TOOL_MISSING = "METADATA_SEARCH_MCP_TOOL_MISSING"
+METADATA_TOOL_INVOCATION_NOT_ALLOWED = "METADATA_TOOL_INVOCATION_NOT_ALLOWED"
 PPM_MANIFEST_TEMPLATE_ONLY = "PPM_MANIFEST_TEMPLATE_ONLY"
 DEPENDENCY_METADATA_INCOMPLETE = "DEPENDENCY_METADATA_INCOMPLETE"
 
 DEFAULT_METADATA_SEARCH_OBJECT_TYPES = ("PROCEDURE", "TABLE", "VIEW", "FUNCTION")
 METADATA_SEARCH_TOOL_NAME = "search_metadata_objects"
+PUBLIC_METADATA_TOOL_INVOCATION_ALLOWLIST = frozenset(
+    {
+        "get_dependency_closure",
+        "resolve_dependency_reference",
+    }
+)
 METADATA_BLOCKER_MESSAGES = {
     METADATA_SEARCH_MCP_TOOL_MISSING: (
         "Required read-only MSSQL MCP metadata search capability is unavailable."
+    ),
+    METADATA_TOOL_INVOCATION_NOT_ALLOWED: (
+        "Requested metadata tool is not exposed through the public API invocation route."
     ),
     PPM_MANIFEST_TEMPLATE_ONLY: (
         "PPM pilot manifest is template_only, so real object names must not be returned."
@@ -87,12 +98,52 @@ def list_safe_metadata_tools() -> list[MetadataToolSummary]:
                 name=tool.name,
                 description=tool.description,
                 readOnly=True,
+                invokable=tool.name in PUBLIC_METADATA_TOOL_INVOCATION_ALLOWLIST,
             )
             for tool in tools
             if tool.active and tool.read_only
         ]
     except ModuleNotFoundError:
         return _tools_from_yaml()
+
+
+def invoke_metadata_tool(
+    *,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> MetadataToolInvokeResponse:
+    normalized_tool_name = tool_name.strip()
+    if normalized_tool_name not in PUBLIC_METADATA_TOOL_INVOCATION_ALLOWLIST:
+        raise MetadataSearchDependencyError(
+            code=METADATA_TOOL_INVOCATION_NOT_ALLOWED,
+            detail=METADATA_BLOCKER_MESSAGES[METADATA_TOOL_INVOCATION_NOT_ALLOWED],
+            status_code=403,
+        )
+
+    settings = load_live_metadata_settings()
+    db_profile_id = str(arguments.get("dbProfileId") or "").strip()
+    profiles = (
+        load_profiles_for_metadata_request(settings, db_profile_id=db_profile_id)
+        if db_profile_id
+        else load_db_profiles(settings, repo_root=repo_root())
+    )
+
+    if db_profile_id == "ppm" and ppm_manifest_selection_mode() != "live_metadata":
+        raise MetadataSearchDependencyError(
+            code=PPM_MANIFEST_TEMPLATE_ONLY,
+            detail=METADATA_BLOCKER_MESSAGES[PPM_MANIFEST_TEMPLATE_ONLY],
+            status_code=503,
+        )
+
+    registry = build_tool_registry(
+        repository=metadata_search_repository(settings, profiles),
+        profiles=profiles,
+    )
+    payload = registry.invoke_payload(
+        normalized_tool_name,
+        {"arguments": arguments},
+    )
+    return MetadataToolInvokeResponse.model_validate(payload)
 
 
 def search_metadata_objects(
@@ -265,6 +316,7 @@ def _tools_from_yaml() -> list[MetadataToolSummary]:
             name=str(item["name"]),
             description=str(item.get("description", "")),
             readOnly=True,
+            invokable=str(item["name"]) in PUBLIC_METADATA_TOOL_INVOCATION_ALLOWLIST,
         )
         for item in payload.get("tools", [])
         if item.get("active", True) and item.get("readOnly", payload.get("readOnly")) is True

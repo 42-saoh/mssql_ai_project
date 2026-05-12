@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 
 import yaml
-
 from ai_agent_domain.models import (
     REQUESTED_OUTPUT_ARTIFACT_TYPES,
     ArtifactStatus,
@@ -13,7 +12,6 @@ from ai_agent_domain.models import (
     RequestedOutputType,
     WorkflowStepType,
 )
-
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,8 +22,9 @@ def _enum_values(enum_type: type) -> list[str]:
 
 def _ddl_check_values(ddl_text: str, constraint_name: str) -> list[str]:
     match = re.search(
-        rf"CONSTRAINT {constraint_name} CHECK \([^\n]+ IN \(([^)]+)\)\)",
+        rf"CONSTRAINT {constraint_name} CHECK\s*\([^)]*?IN\s*\(([^)]+)\)",
         ddl_text,
+        re.S,
     )
     assert match is not None, constraint_name
     return re.findall(r"'([^']+)'", match.group(1))
@@ -45,12 +44,22 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "/api/v1/jobs/{jobId}" in data["paths"]
     assert "/api/v1/artifacts/{artifactId}/validation/latest" in data["paths"]
     assert "SPAnalysisRequest" in data["components"]["schemas"]
+    assert (
+        data["components"]["schemas"]["SPAnalysisOptions"]["properties"][
+            "useAiToolOrchestration"
+        ]["default"]
+        is True
+    )
     assert "Artifact" in data["components"]["schemas"]
     assert "ValidationReport" in data["components"]["schemas"]
     assert "RequestedOutputType" in data["components"]["schemas"]
     assert "WorkflowStepType" in data["components"]["schemas"]
     assert "/api/v1/metadata/search" in data["paths"]
+    assert "/api/v1/metadata/analyze" in data["paths"]
+    assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
+    assert "MetadataAnalysisResponse" in data["components"]["schemas"]
+    assert "MetadataToolInvokeResponse" in data["components"]["schemas"]
 
 
 def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
@@ -117,6 +126,106 @@ def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
     )
 
 
+def test_openapi_metadata_tool_invocation_contract_matches_p28_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    operation = openapi["paths"]["/api/v1/metadata/tools/{toolName}/invoke"]["post"]
+    schemas = openapi["components"]["schemas"]
+
+    assert operation["operationId"] == "invokeMetadataTool"
+    assert operation["tags"] == ["metadata"]
+    tool_name = operation["parameters"][0]
+    assert tool_name["name"] == "toolName"
+    assert tool_name["schema"]["enum"] == [
+        "get_dependency_closure",
+        "resolve_dependency_reference",
+    ]
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataToolInvokeRequest"
+    }
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataToolInvokeResponse"
+    }
+    assert schemas["MetadataToolSummary"]["properties"]["invokable"] == {
+        "type": "boolean",
+        "description": "True only for public API invocation allowlisted metadata tools.",
+    }
+    assert schemas["MetadataToolInvokeRequest"]["additionalProperties"] is False
+    assert schemas["MetadataToolInvokeRequest"]["required"] == ["arguments"]
+    assert schemas["MetadataToolInvokeResponse"]["additionalProperties"] is False
+    assert schemas["MetadataToolInvokeResponse"]["required"] == [
+        "ok",
+        "toolName",
+        "dbProfileId",
+        "snapshotId",
+        "collectedAt",
+        "evidenceRefs",
+        "data",
+    ]
+    forbidden_response_fields = {
+        "rowData",
+        "row_data",
+        "definition",
+        "sqlText",
+        "ddl",
+        "dml",
+        "execute",
+        "rawStorage",
+    }
+    assert forbidden_response_fields.isdisjoint(
+        set(schemas["MetadataToolInvokeResponse"]["properties"])
+    )
+
+
+def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    operation = openapi["paths"]["/api/v1/metadata/analyze"]["post"]
+    schemas = openapi["components"]["schemas"]
+
+    assert operation["operationId"] == "analyzeMetadata"
+    assert operation["tags"] == ["metadata"]
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisRequest"
+    }
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisResponse"
+    }
+    options = schemas["MetadataAnalysisOptions"]["properties"]
+    assert options["useLlmAnalysis"]["default"] is True
+    assert options["useAiToolOrchestration"]["default"] is True
+    assert options["maxTargets"]["maximum"] == 5
+    response_properties = set(schemas["MetadataAnalysisResponse"]["properties"])
+    assert {
+        "aiToolEvidence",
+        "deterministicFacts",
+        "objectInsights",
+        "objectProfiles",
+        "insightGroups",
+        "dependencyGraph",
+        "dtoReadiness",
+        "reviewMarkers",
+        "componentInvocations",
+    } <= response_properties
+    forbidden_response_fields = {
+        "rowData",
+        "row_data",
+        "definition",
+        "sqlText",
+        "ddl",
+        "dml",
+        "execute",
+        "rawStorage",
+    }
+    assert forbidden_response_fields.isdisjoint(response_properties)
+
+
 def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
@@ -127,15 +236,29 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
     ddl_text = (ROOT / "db" / "schema" / "ai_agent_platform_schema_v2_dbo_prefix.sql").read_text(
         encoding="utf-8"
     )
+    validation_complete_ddl = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v4_validation_complete_status.sql"
+    ).read_text(encoding="utf-8")
 
     assert schemas["JobStatus"]["enum"] == _enum_values(JobStatus)
     assert schemas["WorkflowStepType"]["enum"] == _enum_values(WorkflowStepType)
     assert schemas["ArtifactType"]["enum"] == _enum_values(ArtifactType)
     assert schemas["ArtifactStatus"]["enum"] == _enum_values(ArtifactStatus)
     assert schemas["RequestedOutputType"]["enum"] == _enum_values(RequestedOutputType)
+    p29b_deferred_dependency_storage_names = {
+        "DEPENDENCY_EVIDENCE",
+        "DEPENDENCY_CLOSURE",
+        "DEPENDENCY_EVIDENCE_DIGEST",
+    }
+    assert p29b_deferred_dependency_storage_names.isdisjoint(
+        set(schemas["ArtifactType"]["enum"])
+    )
+    assert p29b_deferred_dependency_storage_names.isdisjoint(
+        set(schemas["RequestedOutputType"]["enum"])
+    )
 
     assert _enum_values(JobStatus) == _ddl_check_values(
-        ddl_text, "CHK_CORE_JOBS_CURRENT_STATUS_CD"
+        validation_complete_ddl, "CHK_CORE_JOBS_CURRENT_STATUS_CD"
     )
     assert _enum_values(ArtifactType) == _ddl_check_values(ddl_text, "CHK_ARTIFACTS_TYPE_CD")
     assert _enum_values(ArtifactStatus) == _ddl_check_values(
@@ -185,7 +308,9 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "MSSQL_METADATA_USER=readonly_metadata_user\n" in text
     assert "MSSQL_METADATA_USER=sa" not in text
     assert "MSSQL_METADATA_DEFAULT_PROFILE_ID=master" in text
+    assert "MSSQL_METADATA_TDS_VERSION=7.4" in text
     assert "P21_LIVE_PORTAL_GATE=0" in text
+    assert "P27_HARD_LIVE_GATE=0" in text
     assert "PORTAL_API_MODE=http" in text
     assert "PORTAL_API_BASE_URL=\n" in text
     assert "TPsaoh" not in text

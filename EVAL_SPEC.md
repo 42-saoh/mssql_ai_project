@@ -80,12 +80,13 @@
 대상:
 - validation reports
 - preview
-- approval records
+- deferred approval records
 - publish gating
 
 필수 체크:
 - validation 없이 publish 불가
-- approval decision trace 저장
+- P25 기본 workflow 는 approval decision 없이 `VALIDATION_COMPLETE` 에서 멈춤
+- deferred approval decision trace 저장 경로는 서버 호환성 테스트로만 유지
 - reject 후 재검증 없이 publish 불가
 
 통과 기준:
@@ -105,7 +106,7 @@
 - 민감 환경값 log/fixture 유출 없음
 - 정책 문서와 구현이 모순되지 않음
 - production identity source 가 verified OIDC/JWT 로 문서화되어 있고 role source 가 PLF auth table 로 연결됨
-- validation/approval enforcement 구현 시 unauthorized negative test 가 존재함
+- validation/deferred approval enforcement 구현 시 unauthorized negative test 가 존재함
 - live IdP/JWKS 와 PLF role membership 검증이 없으면 production-grade enterprise Auth/RBAC claim 을 금지하고 deferred future hardening 으로 유지함
 
 통과 기준:
@@ -130,13 +131,14 @@
 - job status
 - draft artifact preview
 - validation report
-- approval decision recording
+- validation-complete terminal draft status
 
 필수 체크:
 - 기본 경로는 `master` metadata profile 과 fixture-backed MCP snapshot 을 사용
-- job 은 `REVIEW_PENDING`, current step 은 `VALIDATE`
+- job 은 `VALIDATION_COMPLETE`, current step 은 `VALIDATE`
 - persisted artifact type 이 OpenAPI requested output group 과 구분됨
-- 승인 decision 은 기록만 수행하며 publish 상태로 전이하지 않음
+- validation `REVIEW_REQUIRED` 는 user review flow 가 아니라 evidence caveat 로 유지됨
+- approval decision API 는 deferred compatibility 로 남지만 기본 happy path, Web UI, smoke path 에 포함하지 않음
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 통과
@@ -153,7 +155,7 @@
 - `requirements/lock/py314-dev.txt`, `python:3.14-slim`, `requires-python >=3.14`, Ruff `py314` target 이 현재 기준임
 - Web functional pages 는 mock adapter 나 demo ids 에 의존하지 않음
 - `/artifacts/[artifactId]` page-load 는 validation write 를 만들지 않고 latest validation GET 만 수행함
-- `/review/decision` 은 preview-only 가 아니라 approval decision API 를 호출함
+- P25 기준 `/review/decision` 화면과 approval CTA 는 기본 Web UI 에서 제거되며 직접 접근은 404 로 처리됨
 - `P21_LIVE_PORTAL_GATE=1` 에서 PLF/PPM env 가 없으면 skip 이 아니라 blocker failure 로 보고함
 
 통과 기준:
@@ -170,10 +172,13 @@
 
 필수 체크:
 - 기본 테스트는 `FakeModelGateway` 를 사용하고 외부 OpenAI API 를 호출하지 않음
-- fast/test profile 은 `gpt-5-nano` 로 고정
+- semantic analysis profile 기본값은 `gpt-5.5` 이며 `OPENAI_MODEL_ANALYSIS` 로 live confidence 모델을 바꿀 수 있음. fast/test profile 은 수동 평가 선택지로 남고 기본값은 `gpt-5-nano` 다.
 - remote 실행은 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` gate 를 요구
 - raw prompt, raw SP definition, raw OpenAI response text 는 DB/API/artifact/test output 에 저장하지 않음
-- structured output 은 `schema:llm_semantic_analysis@0.1.0` strict JSON schema 를 통과해야 함
+- `useAiToolOrchestration=true` 가 기본값이며 `useLlmAnalysis=false` 이면 자동 비활성화됨
+- metadata tool planning 은 strict `schema:mssql_metadata_tool_plan@0.1.0` 출력만 허용하고,
+  실제 MCP 실행은 workflow deterministic policy gate 와 내부 registry 로만 수행함
+- structured output 은 `schema:llm_semantic_analysis@0.3.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
 통과 기준:
@@ -198,15 +203,20 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - P23A 는 계약/프롬프트 자산을 만들고, P23B 는 synthetic simple/medium/complex fixture 와 fake-gateway 검증을 추가한다
 - P23C 는 P23B fixture 를 `FakeModelGateway` 로 반복 실행하고 quality score 를 계산한다
 - simple/medium/complex stored procedure scenario matrix 와 authored fixture 를 유지한다
-- fast/test profile 은 `gpt-5-nano` 로 고정한다
-- LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `assumptions` 로 제한한다
+- P26 live confidence 는 기본적으로 `openai_sp_semantic_analysis` / `OPENAI_MODEL_ANALYSIS` 를 사용한다. fast/test profile 은 수동 평가 선택지로 남고 기본값은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 바꿀 수 있다.
+- LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 로 제한한다
+- runtime 은 SP별 `SemanticAnalysisTask` 로 fan-out 가능하며 `LLM_SP_CONCURRENCY=2` 를 기본 병렬도 한계로 둔다
+- live structured schema 는 deterministic fact id 를 `evidenceRefs` enum 으로 제한하고, runtime 은 invalid/trace evidence refs 를 deterministic fact id 로 repair 한다
+- dynamic SQL, cross-DB, unsupported dependency/table/function/procedure claim 의 필수 `REVIEW_REQUIRED` marker 는 deterministic guard 가 보강한다
 - `LLM_INFERENCE` evidence 와 unsupported dependency/table/function claim 의 `REVIEW_REQUIRED` 처리 기준을 둔다
 - scoring runner 는 semantic recall, evidence discipline, overclaim control, storage safety 를 검증하며 raw prompt/SP/provider response text 를 저장하지 않는다
+- storage safety 는 adversarial raw SQL/provider-trace echo payload 를 실패로 판정하며, runtime 은 저장 전 sanitizer 와 `LLM_OUTPUT_STORAGE_SANITIZED` review marker 로 이를 차단한다
+- bounded AI tool orchestration 결과는 sanitized `aiToolEvidence` 와 `mcp.<toolName>.<hash>` deterministic fact id 로만 semantic prompt 에 전달한다
 - raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 fixture trace/API/Web 산출물에 저장하지 않는다
 - optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
 
 판정 해석:
-- 통과: 기본 fixture-first P23 테스트가 통과하고 `semantic_recall >= 0.75`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 을 만족한다.
+- 통과: 기본 fixture-first P23 테스트가 통과하고 `semantic_recall >= 0.75`, `guide_conversion_recall >= 0.8`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, `storage_safety_findings <= 0` 을 만족한다.
 - 보류: fixture-first gate 는 통과했지만 optional live confidence gate 가 skip/fail/unavailable 이거나 로컬 검증 prerequisites 가 준비되지 않았다. 이 경우 P23 confidence signal 만 부족한 상태이며 production readiness 로 해석하지 않는다.
 - 실패/blocker: quality threshold 미달, raw prompt/SP/provider response 저장, `production_ready: true` 주장, PPM-to-PLF fallback, model/profile/prompt/schema drift, 또는 P24 document/code generation 범위를 P23 완료로 표현하는 경우다.
 
@@ -235,12 +245,19 @@ response storage, and `production_ready: false`.
 - `tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py`
 
 필수 체크:
-- P24B 는 renderer/runtime/API/Web/DB schema 변경 없이 fixture-first guide quality expectation 만 추가한다
+- P24A 는 contract/prompt/task/manifest 자산을 고정하고, P24B 는 sanitized fixture-first guide quality expectation 을 추가하며, P24C 는 기존 artifact type renderer/evaluator 로 fixture 를 점수화한다
 - simple/medium/complex synthetic scenarios 가 required section taxonomy, dependency inventory, DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, evidence refs 를 포함한다
-- fast/test profile 은 `gpt-5-nano` 로 고정한다
+- P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 를 재사용하고 새 persisted artifact type, API/Web/DB schema 변경, live DB access 를 만들지 않는다
+- fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
 - fixture 와 expected report 는 raw prompt, raw SP definition, raw OpenAI response text, row data, secret, 사용자 제공 guide 본문, 실제 운영 SP 원문을 저장하지 않는다
 - unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 모두 `REVIEW_REQUIRED` 로 남긴다
 - PPM 접근 실패 시 PLF fallback 은 금지하고 `production_ready: false` 를 유지한다
+- Java/MyBatis 는 `draft_only_readiness_notes` 로만 다루며 generated source application 은 수행하지 않는다
+
+판정 해석:
+- 통과: fixture-first renderer/evaluator report 가 모든 P24 threshold 를 만족하고 `productionReady: false`, storage safety findings 0, PLF fallback 없음, unsupported claim `REVIEW_REQUIRED` 를 유지한다.
+- 보류: 필수 fixture-first gate 는 통과했지만 optional live confidence evidence 가 skip/fail/unavailable 이거나 로컬 검증 prerequisites 가 준비되지 않았다. 이는 confidence evidence 부족이며 production readiness 로 해석하지 않는다.
+- 실패/blocker: threshold 미달, raw prompt/SP/provider response/row data/secret 저장, PPM-to-PLF fallback, `production_ready: true` 또는 자동 전환 완료 주장, automatic conversion/apply, row data 조회, procedure execution, business DB DDL/DML 요구, 또는 P25+ Java/MyBatis 확장을 P24 완료로 표현하는 경우다.
 
 통과 기준:
 - `required_section_coverage >= 1.0`
@@ -252,6 +269,100 @@ response storage, and `production_ready: false`.
 
 ```bash
 make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
+```
+
+### 12. P30 Metadata AI-MCP Analysis Gate
+
+대상:
+- `POST /api/v1/metadata/analyze`
+- `fixtures/eval/metadata_ai_mcp_analysis_p30_v1.yaml`
+- `tests/eval/test_p30_metadata_ai_mcp_analysis.py`
+
+필수 체크:
+- 기존 `GET /api/v1/metadata/search` 는 deterministic search 로 유지하고 LLM 호출을 기본 포함하지 않는다
+- analyze API 는 `query` 또는 단일 `target` 중 하나만 받아 response-only 분석을 수행한다
+- `useLlmAnalysis=true`, `useAiToolOrchestration=true`, `maxTargets=3` 이 analyze API 기본값이다
+- LLM planner 는 active/read-only MCP catalog 를 후보로 보지만 실행은 내부 registry/policy gate 로만 수행한다
+- public metadata invoke API allowlist 는 `get_dependency_closure`, `resolve_dependency_reference` 로 유지한다
+- response 는 sanitized `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id,
+  metadata insights, review markers 만 반환하고 raw SQL/definition, row data, procedure execution,
+  DDL/DML, secret, raw prompt/provider response text 를 반환하지 않는다
+- adversarial planner 가 write/free-form SQL/secret-like argument 를 요청하면 workflow failure 가 아니라
+  `AI_METADATA_ANALYSIS_REVIEW_REQUIRED` marker 와 blocked request digest 로 남긴다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- optional live OpenAI/PPM confidence 는 별도 승인 환경에서만 판정하고, 기본 gate 는 fixture-first 로 유지한다
+
+### 13. P31 Metadata Object Insight Depth Gate
+
+대상:
+- `POST /api/v1/metadata/analyze`
+- `fixtures/eval/metadata_object_insight_depth_p31_v1.yaml`
+- `tests/eval/test_p31_metadata_object_insight_depth.py`
+
+필수 체크:
+- analyze API 는 response-only 로 유지하고 DB migration, persisted artifact, workflow state transition 을 추가하지 않는다
+- TABLE 대상은 schema/constraints/indexes/extended properties/related objects evidence 로 `objectProfiles`, `insightGroups`, `dependencyGraph`, `dtoReadiness` 를 반환한다
+- PROCEDURE/VIEW/FUNCTION 대상은 dependency/docs/related-object 중심으로 확장 가능하되 raw definition text 는 prompt/response/trace 에 남기지 않는다
+- object profile 과 graph 요약은 `metadata.profile.<hash>` deterministic fact id 로 승격되고, LLM insight/dto claim 은 `mcp.*`, `metadata.profile.*`, `metadata.search.*` fact id 만 evidence 로 사용할 수 있다
+- public metadata invoke API allowlist 는 계속 `get_dependency_closure`, `resolve_dependency_reference` 로 제한한다
+- adversarial planner 가 write/free-form SQL/secret-like argument 를 요청하면 workflow failure 가 아니라 blocked request digest 와 review marker 로 남긴다
+- raw SQL/definition, row data, procedure execution, DDL/DML, secret, raw prompt/provider response text 를 반환하지 않는다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- `make test-web-smoke` 통과
+- optional live OpenAI/PPM confidence 는 별도 승인 환경에서만 판정하고, 기본 gate 는 fixture-first 로 유지한다
+
+### 14. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
+
+P27 은 dependency evidence 계약을 fixture-first MCP 구현과 명시적 hard-live gate 로 강화한다.
+목표는 AI-heavy semantic analysis 와 P24 guide renderer 에 raw SQL 이 아닌 구조화된
+dependency evidence digest 를 공급할 수 있도록 deterministic metadata 층을 강화하는 것이다.
+
+대상:
+- `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- `spec/eval/p27_dependency_evidence_tooling_contract.yaml`
+- `tests/unit/test_mcp_catalog.py`
+- `tests/unit/mcp/test_tool_registry.py`
+- `tests/contract/mcp/test_tool_invocation_contract.py`
+- `tests/eval/test_p27_dependency_evidence_hard_live_gate.py`
+- `tests/unit/api/test_metadata_service.py`
+- `tests/integration/api/test_api_workflow_routes.py`
+
+필수 체크:
+- 기존 `get_procedure_dependencies` 계약은 `resolutionStatus`, `resolutionStrategy`, `sourceScope` 를 유지하고 `resolutionConfidence`, `resolutionEvidenceKind`, `unresolvedReason`, `resolutionChain` 을 optional structured evidence 로 선언한다
+- `get_dependency_closure` 와 `resolve_dependency_reference` 는 active, read-only, structured-input-only MCP tool 로 catalog 에 존재하고 fixture/live repository handler 를 가진다
+- `get_dependency_closure` 는 `maxDepth <= 3` 을 validator 로 강제하고, `includeReviewRequired=false` 일 때도 review-required dependency 를 `unresolved` 에 보존한다
+- `resolve_dependency_reference` 는 전체 candidate set 이 정확히 하나이고 해당 candidate 가 `CONFIRMED` + `HIGH` 일 때만 `selectedResolution` 을 채운다
+- fixture/mocked-live test 는 confirmed, synonym, caller-dependent, dynamic SQL, cross-server, ambiguous, unresolved dependency 를 구분해 deterministic promotion 경계를 검증한다
+- standard MCP response envelope 은 `snapshotId`, `collectedAt`, `evidenceRefs` 를 계속 요구한다
+- confirmed dependency 만 deterministic fact 로 승격 가능하며, ambiguous/dynamic/cross-server/unconfirmed synonym/caller-dependent reference 는 `REVIEW_REQUIRED` 를 유지한다
+- raw SP definition, raw prompt, raw provider response, row data, procedure execution, business DB DDL/DML, free-form SQL input, PPM-to-PLF fallback 은 계속 금지한다
+- P28 기준 `/api/v1/metadata/tools/{toolName}/invoke` 는 `get_dependency_closure` 와
+  `resolve_dependency_reference` 만 안전하게 호출한다. P29 기준 `/metadata/dependencies`
+  Web diagnostic UI 는 이 route 를 수동 진단용으로 사용하고, runtime workflow 는 PROCEDURE
+  target 에 대해 `get_dependency_closure` evidence digest 만 자동 병합한다. persisted artifact
+  type 변경, DB schema 변경, default live gate 요구는 계속 포함하지 않는다
+- bounded AI tool orchestration 은 public invoke API 를 넓히지 않고, 내부 workflow 에서만 active/read-only
+  catalog 전체를 후보로 사용한다. free-form SQL/write-like/profile-switch/row-data/secret-like
+  요청은 blocked request 와 `AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED` marker 로 남겨야 한다.
+- P29B 기준 DB migration, 새 persisted artifact type, workflow state transition 은 deferred 로
+  확정한다. dependency evidence 는 기존 metadata collection payload 의 sanitized
+  `dependencyEvidence` digest 와 기존 draft artifact evidence refs/rendered section 으로만
+  전달한다.
+- `P27_HARD_LIVE_GATE=1` 로 명시 실행한 경우에만 `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 hard-live closure/resolver gate 를 수행한다. 이때 PPM profile/env 누락, template-only manifest, PPM 접근 실패, PLF fallback 은 blocker failure 다
+- 로컬 host-run 에서 Chakra/legacy proxy 가 `python-tds` 기본 TDS negotiation 을 거부하는 경우 `MSSQL_METADATA_TDS_VERSION=7.0` 으로 명시할 수 있으며, 기본값은 `7.4` 이다
+
+판정 해석:
+- 통과: active/read-only/structured tool 계약, fixture/live handler, API summary 노출, dependency item evidence 확장, no-raw/no-row/no-fallback policy 가 문서와 테스트에서 일치한다.
+- 보류: default fixture-first hardening 은 통과했지만 explicit P27 hard-live gate 가 skip/unavailable 이거나 로컬 PPM prerequisites 가 준비되지 않았다. 이는 production readiness 로 해석하지 않는다.
+- 실패/blocker: P27 tool 이 inactive/writable/handler 없는 상태가 되거나, 자유 SQL/row data/procedure execution/DDL/DML/raw definition storage/PLF fallback 을 허용하거나, 불확실 dependency 를 deterministic fact 로 승격하거나, `P27_HARD_LIVE_GATE=1` 상태에서 missing prerequisites 를 skip 하는 경우다.
+
+```bash
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
 
 ## 초기 fixture 세트
@@ -292,7 +403,8 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 | auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |
 | OpenAI/LLM runtime 변경 | fake gateway unit + no-raw-trace contract + optional live gate 문서화 |
 | LLM analysis quality eval 변경 | P23 contract prompt asset test + fixture-first fake eval + optional live gate 문서화 |
-| SP migration guide quality eval 변경 | P24 contract prompt asset test + fixture-first section/evidence/DML/call-flow eval |
+| SP migration guide quality eval 변경 | P24 contract prompt asset test + fixture-first renderer/evaluator section/evidence/DML/call-flow eval |
+| Dependency evidence tooling 변경 | MCP catalog contract + active read-only handler/API summary/no-raw policy test |
 
 ## 평가 산출물 형식
 

@@ -3,6 +3,43 @@ from fastapi.testclient import TestClient
 from mssql_mcp_app.catalog import TOOL_CATALOG
 from mssql_mcp_app.main import app
 
+P27_DEPENDENCY_TOOLS = {
+    "get_dependency_closure",
+    "resolve_dependency_reference",
+}
+
+P27_OPTIONAL_RESOLUTION_FIELDS = {
+    "resolutionConfidence",
+    "resolutionEvidenceKind",
+    "unresolvedReason",
+    "resolutionChain",
+}
+
+FORBIDDEN_DEPENDENCY_INPUT_FIELDS = {
+    "query",
+    "sql",
+    "rawSql",
+    "statement",
+    "whereClause",
+    "definition",
+    "procedureDefinition",
+    "rowData",
+}
+
+
+def _schema_property_names(schema: dict) -> set[str]:
+    names: set[str] = set()
+    properties = schema.get("properties", {})
+    if isinstance(properties, dict):
+        names.update(properties)
+        for child in properties.values():
+            if isinstance(child, dict):
+                names.update(_schema_property_names(child))
+    items = schema.get("items")
+    if isinstance(items, dict):
+        names.update(_schema_property_names(items))
+    return names
+
 
 def test_mcp_health_and_catalog() -> None:
     client = TestClient(app)
@@ -21,13 +58,22 @@ def test_mcp_health_and_catalog() -> None:
     assert "list_functions" in names
     assert "search_metadata_objects" in names
     assert "get_procedure_definition" in names
+    assert "get_dependency_closure" in names
+    assert "resolve_dependency_reference" in names
     assert "find_similar_tables" in names
     for tool in catalog.json()["tools"]:
         assert tool["readOnly"] is True
-        assert tool["active"] is True
+        assert isinstance(tool["active"], bool)
         assert "input" in tool
         assert "password" not in tool
         assert "connectionString" not in tool
+    p27_tools = {
+        tool["name"]: tool
+        for tool in catalog.json()["tools"]
+        if tool["name"] in P27_DEPENDENCY_TOOLS
+    }
+    assert set(p27_tools) == P27_DEPENDENCY_TOOLS
+    assert all(tool["active"] is True for tool in p27_tools.values())
 
 
 def test_mcp_yaml_catalog_matches_service_catalog() -> None:
@@ -114,6 +160,19 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     assert dependency_tool["output"]["properties"]["dependencies"]["items"] == {
         "$ref": "#/response/dependencyItem"
     }
-    for tool in payload["tools"]:
+    assert P27_OPTIONAL_RESOLUTION_FIELDS <= set(dependency_item["properties"])
+    assert not P27_OPTIONAL_RESOLUTION_FIELDS.intersection(dependency_item["required"])
+    p27_tools = {
+        tool["name"]: tool
+        for tool in payload["tools"]
+        if tool["name"] in P27_DEPENDENCY_TOOLS
+    }
+    assert set(p27_tools) == P27_DEPENDENCY_TOOLS
+    for tool in p27_tools.values():
         assert tool["active"] is True
+        assert tool["readOnly"] is True
+        assert tool["implementationStatus"] == "fixture_first_hardened_with_explicit_live_gate"
+        input_fields = _schema_property_names(tool["input"])
+        assert not FORBIDDEN_DEPENDENCY_INPUT_FIELDS.intersection(input_fields)
+    for tool in payload["tools"]:
         assert tool["readOnly"] is True

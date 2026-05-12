@@ -123,6 +123,51 @@
           "dependencyType": "DYNAMIC_SQL",
           "isAmbiguous": true,
           "reviewStatus": "REVIEW_REQUIRED"
+        },
+        {
+          "objectType": "SYNONYM",
+          "schema": "dbo",
+          "name": "SYN_ORDER_ARCHIVE",
+          "dependencyType": "REFERENCE",
+          "isAmbiguous": true,
+          "reviewStatus": "REVIEW_REQUIRED",
+          "resolutionStatus": "REVIEW_REQUIRED",
+          "resolutionStrategy": "SYNONYM_TARGET_REVIEW_REQUIRED"
+        },
+        {
+          "objectType": "PROCEDURE",
+          "schema": null,
+          "name": "usp_LateBoundOrderHook",
+          "dependencyType": "EXECUTE",
+          "isAmbiguous": false,
+          "reviewStatus": "REVIEW_REQUIRED",
+          "resolutionStatus": "REVIEW_REQUIRED",
+          "resolutionStrategy": "CALLER_DEPENDENT_REFERENCE"
+        },
+        {
+          "objectType": "TABLE",
+          "database": "RemoteOrderDB",
+          "server": "LinkedOrderServer",
+          "schema": "dbo",
+          "name": "TB_REMOTE_ORDER",
+          "referencedDatabase": "RemoteOrderDB",
+          "referencedServer": "LinkedOrderServer",
+          "sourceScope": null,
+          "dependencyType": "REFERENCE",
+          "isAmbiguous": false,
+          "reviewStatus": "REVIEW_REQUIRED",
+          "resolutionStatus": "REVIEW_REQUIRED",
+          "resolutionStrategy": "CROSS_SERVER_REFERENCE"
+        },
+        {
+          "objectType": "UNKNOWN",
+          "schema": "dbo",
+          "name": "MissingOrderTarget",
+          "dependencyType": "REFERENCE",
+          "isAmbiguous": false,
+          "reviewStatus": "REVIEW_REQUIRED",
+          "resolutionStatus": "REVIEW_REQUIRED",
+          "resolutionStrategy": "UNRESOLVED"
         }
       ],
       "extendedProperties": [

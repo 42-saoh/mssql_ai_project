@@ -17,6 +17,8 @@
 - DB 접근은 메타데이터 조회 전용이다.
 - 앱/생성기/분석 로직은 MSSQL 에 직접 접근하지 않는다.
 - 메타데이터 접근은 `services/mssql-mcp` 경계로 집중한다.
+- Dependency closure/reference resolution 은 structured MCP metadata evidence 만 사용하며 자유 SQL,
+  raw definition 저장, row data, procedure execution, business DB DDL/DML 을 허용하지 않는다.
 - 실제 row data 를 요구하는 기능은 범위 밖으로 간주한다.
 
 ## 승인 정책
@@ -48,22 +50,43 @@
 - OpenAI API 호출은 `LLM_ENABLE_REMOTE=1` 이 설정된 경우에만 허용한다.
 - Stored Procedure definition 원문을 모델 입력으로 보내려면 request option
   `allowSpDefinitionToModel=true` 와 환경변수 `LLM_ALLOW_SP_TEXT=1` 이 모두 필요하다.
+- P26 기본 API/Web 옵션은 high-quality semantic analysis 를 선택하지만, live OpenAI 실행은
+  `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 준비된 경우에만 허용한다.
+  기본 fixture/test 실행은 fake gateway 를 사용해 외부 OpenAI 를 호출하지 않는다.
 - SP definition 원문은 transient request input 으로만 허용하며 플랫폼 DB, artifact,
   audit log, test snapshot, API response 에 저장하지 않는다.
 - raw prompt text, raw OpenAI response text, token/secret, provider credential 은 저장하거나
   노출하지 않는다.
 - 저장 가능한 trace 는 provider, model, model profile, prompt/schema version, input/prompt/output
-  hash, token usage, latency, status, schema-valid structured output 으로 제한한다.
+  hash, token usage, latency, status, schema-valid structured output, sanitized component invocation
+  summary 로 제한한다.
 - LLM inference 는 metadata fact 가 아니며 dependency/table/function/procedure 사실을 확정하는
   근거로 사용할 수 없다. 해당 보강은 `LLM_INFERENCE` evidence 와 `REVIEW_REQUIRED` 검토점으로
   남긴다.
+- LLM claim 의 `evidenceRefs` 는 deterministic fact id 만 사용할 수 있다. prompt/input/output hash,
+  provider response id, raw SQL snippet 같은 trace 값은 claim evidence 로 사용할 수 없다.
+- Dynamic SQL, cross-database, unsupported dependency/table/function/procedure claim 은 LLM 출력에
+  marker 가 없더라도 deterministic guard 가 `REVIEW_REQUIRED` 로 보강해야 한다.
+- AI metadata tool orchestration 은 bounded planner 방식만 허용한다. LLM 은 tool request plan 을
+  strict schema 로 제안할 수 있지만 실제 MCP 실행은 workflow 의 allowlisted active/read-only catalog,
+  profile 고정, call budget, structured argument guard, sanitized output storage 를 통과해야 한다.
+  public metadata invoke API allowlist 는 이 기능 때문에 확장하지 않는다.
+- Metadata analysis API 의 AI-MCP orchestration 도 같은 경계를 따른다. `POST /api/v1/metadata/analyze`
+  는 response-only 분석이며, 기존 search endpoint 를 LLM 호출 경로로 바꾸지 않는다. 분석 응답에는
+  sanitized evidence digest, deterministic fact id, object profile/graph/dto readiness 요약만 포함하고
+  raw definition, row data, free-form SQL, procedure execution, DDL/DML, secrets,
+  raw prompt/provider response text 는 포함하지 않는다.
 
 ## 생성 결과 정책
 
 - 모든 생성 결과는 초안이다. 승인 전 확정본이 아니다.
 - 근거가 명확한 내용과 추론 기반 내용을 구분한다.
-- 불확실한 결과는 `REVIEW_REQUIRED` 또는 동등한 상태를 표시한다.
+- 불확실한 결과는 `REVIEW_REQUIRED` 또는 동등한 상태를 표시한다. P25 이후 이 표기는 사용자 승인 플로우 요구가 아니라 분석 불확실성/evidence caveat 의미다.
 - artifact 는 버전, 생성기 버전, snapshot, registry refs 를 추적 가능해야 한다.
+- P25 기본 product flow 는 validation 이후 `VALIDATION_COMPLETE` 에서 멈추며 review UI 를 노출하지 않는다. Approval API/server code 는 deferred capability 로 남기되 기본 workflow 완료 조건이나 production readiness 근거로 사용하지 않는다.
+- SP migration guide quality gate 는 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 초안 품질 평가로만 해석한다. 통과 결과도 production-ready, 자동 전환 완료, 자동 적용 승인으로 표현하지 않는다.
+- Unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
+- Ambiguous dependency, unresolved synonym target, dynamic SQL marker, cross-server target without catalog confirmation, caller-dependent reference 는 deterministic fact 로 승격하지 않고 `REVIEW_REQUIRED` 로 유지한다.
 
 ## 코드 변경 정책
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Production actor and role source is documented for P18B. P19 adds fixture-covered API enforcement for validation and approval actions. Live IdP/JWKS and PLF role lookup wiring is deferred future hardening, tracked as `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED`. The current platform may be opened for controlled conditional use, but it must not be described as production-grade enterprise Auth/RBAC or `production_ready: true`.
+Production actor and role source is documented for P18B. P19 adds fixture-covered API enforcement for validation and deferred approval actions. P25 disables the review UI and removes approval decisions from the default workflow, while keeping the approval API as deferred server capability. Live IdP/JWKS and PLF role lookup wiring is deferred future hardening, tracked as `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED`. The current platform may be opened for controlled conditional use, but it must not be described as production-grade enterprise Auth/RBAC or `production_ready: true`.
 
 ## Identity Source
 
@@ -36,7 +36,7 @@ The canonical seeded role names are `USER`, `REVIEWER`, `ADMIN`, and `AUDITOR`. 
 | View own job and artifact preview | Allow | Allow | Allow | Allow |
 | View any job and artifact preview | Deny | Allow | Allow | Allow |
 | Run artifact validation | Deny | Allow | Allow | Deny |
-| Record approval decision | Deny | Allow | Allow | Deny |
+| Record deferred approval decision | Deny | Allow | Allow | Deny |
 | Manage DB profiles, registry, and policy settings | Deny | Deny | Allow | Deny |
 | View audit and read-only evidence reports | Deny | Deny | Allow | Allow |
 
@@ -54,7 +54,7 @@ P19 implements route-level checks for:
 - `POST /api/v1/artifacts/{artifactId}/validation`
 - `POST /api/v1/artifacts/{artifactId}/approval-decisions`
 
-Both actions require `REVIEWER` or `ADMIN`. Approval decisions also require the request body reviewer to match the verified actor identity, preventing reviewer spoofing.
+Both actions require `REVIEWER` or `ADMIN`. Approval decisions also require the request body reviewer to match the verified actor identity, preventing reviewer spoofing. P25 keeps the approval route for deferred compatibility only; the default workflow, Web UI, e2e happy path, and Web smoke do not call it.
 
 Negative route coverage lives in `tests/integration/api/test_api_auth_rbac.py`. The tests generate ephemeral JWT signing material at runtime and do not commit tokens or fixture secrets.
 
@@ -83,7 +83,7 @@ AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/
 ```
 
 The helper `apps/api/scripts/auth_rbac_live_probe.py` performs only JWT verification and
-PLF role lookup. It does not call validation/approval routes and does not create workflow,
+PLF role lookup. It does not call validation/deferred approval routes and does not create workflow,
 approval, validation, or audit writes. A passing result may record only redacted evidence:
 pass/fail, role category, blocker code, and a short summary.
 Missing live env or failed live verification is reported as a deferred prerequisite

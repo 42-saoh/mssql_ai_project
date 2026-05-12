@@ -50,7 +50,6 @@ web_contract:
     - /metadata/search
     - /jobs/[jobId]
     - /artifacts/[artifactId]
-    - /review/decision
   page_requirements:
     /requests/new:
       submits_to_api: POST /api/v1/requests/sp-analysis
@@ -59,9 +58,6 @@ web_contract:
       latest_validation_read: GET /api/v1/artifacts/{artifactId}/validation/latest
       page_load_validation_write_allowed: false
       explicit_run_validation_action: POST /api/v1/artifacts/{artifactId}/validation
-    /review/decision:
-      persisted_decision_action: POST /api/v1/artifacts/{artifactId}/approval-decisions
-      preview_only_allowed: false
 api_contract:
   required_routes:
     - GET /api/v1/jobs

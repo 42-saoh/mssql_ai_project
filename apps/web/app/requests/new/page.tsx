@@ -34,10 +34,11 @@ async function submitRequest(formData: FormData) {
       includeEvidenceRefs: formData.get("includeEvidenceRefs") === "on",
       includeModernizationHints: formData.get("includeModernizationHints") === "on",
       useLlmAnalysis: formData.get("useLlmAnalysis") === "on",
-      llmProfileId: String(formData.get("llmProfileId") ?? "openai_fast_test") as
+      llmProfileId: String(formData.get("llmProfileId") ?? "openai_sp_semantic_analysis") as
         | "openai_sp_semantic_analysis"
         | "openai_fast_test",
       allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
+      useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
     },
   });
   redirect(`/jobs/${response.jobId}`);

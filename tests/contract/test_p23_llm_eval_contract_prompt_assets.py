@@ -41,7 +41,13 @@ def test_p23_contract_declares_quality_eval_boundaries() -> None:
     assert contract["phase"] == "P23"
     assert contract["production_ready"] is False
     assert contract["runtime_profiles"]["fast_test"]["default_model"] == "gpt-5-nano"
+    assert contract["runtime_profiles"]["fast_test"]["override_env"] == (
+        "OPENAI_MODEL_FAST_TEST"
+    )
     assert contract["runtime_profiles"]["semantic_analysis"]["default_model"] == "gpt-5.5"
+    assert contract["runtime_profiles"]["semantic_analysis"]["override_env"] == (
+        "OPENAI_MODEL_ANALYSIS"
+    )
     assert "model:openai_fast_test@gpt-5-nano@0.1.0" in contract["depends_on"]
     assert contract["scope"]["required_evidence_type"] == "LLM_INFERENCE"
     assert contract["scope"]["validator_obligation"] == {
@@ -55,8 +61,13 @@ def test_p23_contract_declares_quality_eval_boundaries() -> None:
         "modernization_points",
         "risk_flags",
         "review_markers",
+        "conversion_guidance",
+        "migration_guide_insights",
         "assumptions",
     ]
+    assert contract["scope"]["staged_runtime"]["dynamic_evidence_schema"] is True
+    assert contract["scope"]["staged_runtime"]["default_sp_concurrency"] == 2
+    assert contract["scope"]["staged_runtime"]["high_quality_default"] is True
     assert all(contract["forbidden_behavior"].values())
 
 
@@ -85,13 +96,22 @@ def test_p23_fixture_keeps_no_raw_trace_and_fast_test_contract() -> None:
 
     assert fixture["production_ready"] is False
     assert fixture["model_profiles"]["fast_test"]["default_model"] == "gpt-5-nano"
+    assert fixture["model_profiles"]["fast_test"]["override_env"] == "OPENAI_MODEL_FAST_TEST"
+    assert fixture["model_profiles"]["semantic_analysis"]["override_env"] == (
+        "OPENAI_MODEL_ANALYSIS"
+    )
     assert fixture["prompt_contract"]["required_evidence_type"] == "LLM_INFERENCE"
     assert fixture["prompt_contract"]["unsupported_fact_status"] == "REVIEW_REQUIRED"
+    assert fixture["prompt_contract"]["schema_ref"] == "schema:llm_semantic_analysis@0.3.0"
+    assert fixture["prompt_contract"]["staged_runtime"]["sp_fan_out"] is True
+    assert fixture["prompt_contract"]["staged_runtime"]["high_quality_default"] is True
     assert fixture["prompt_contract"]["allowed_output_fields"] == [
         "business_rules",
         "modernization_points",
         "risk_flags",
         "review_markers",
+        "conversion_guidance",
+        "migration_guide_insights",
         "assumptions",
     ]
     assert fixture["safety_expectations"]["forbidden_storage_fields"] == [
@@ -145,6 +165,7 @@ def test_p23_prompts_capture_split_contract_and_policy_rules() -> None:
         assert "P23" in text
         assert "production_ready: false" in text
         assert "`gpt-5-nano`" in text
+        assert "OPENAI_MODEL_FAST_TEST" in text
         assert "`PLF`" in text
         assert "`PPM`" in text
         assert "PLF fallback" in text
@@ -195,4 +216,5 @@ def test_p23_docs_reference_contract_prompt_slice() -> None:
         assert "spec/eval/p23_llm_sp_analysis_quality_contract.yaml" in text
         assert "fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml" in text
         assert "gpt-5-nano" in text
+        assert "OPENAI_MODEL_FAST_TEST" in text
         assert "production_ready: false" in text

@@ -22,7 +22,7 @@ export default function RootLayout({
           <nav aria-label="Primary navigation">
             <Link href="/requests/new">New request</Link>
             <Link href="/metadata/search">Metadata search</Link>
-            <Link href="/review/decision">Review decision</Link>
+            <Link href="/metadata/dependencies">Dependency diagnostics</Link>
           </nav>
         </header>
         <main className="app-main">{children}</main>

@@ -271,7 +271,7 @@ def assess_evidence(
     if review_required_count:
         notes.append("Some evidence refs are marked REVIEW_REQUIRED.")
     if todos:
-        notes.append("Manual TODOs remain before approval.")
+        notes.append("Manual TODOs remain as validation caveats.")
     return EvidenceAssessment(
         status=EvidenceStatus.REVIEW_REQUIRED if review_required else EvidenceStatus.OBSERVED,
         review_required=review_required,

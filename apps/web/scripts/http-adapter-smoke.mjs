@@ -37,7 +37,7 @@ function assertObserved(label, predicate) {
 }
 
 function assertNoForbiddenPath() {
-  const forbiddenFragments = ["/publish", "/export", "/deploy", "/execute"];
+  const forbiddenFragments = ["/publish", "/export", "/deploy", "/execute", "/approval-decisions"];
   const forbidden = observedRequests.find(({ path }) =>
     forbiddenFragments.some((fragment) => path.includes(fragment)),
   );
@@ -121,31 +121,73 @@ assert(analysisSummary, "HTTP smoke could not find SP_ANALYSIS_DOC artifact summ
 const artifact = await api.getArtifact(analysisSummary.artifactId);
 const validation = await api.validateArtifact(analysisSummary.artifactId);
 const latestValidation = await api.getLatestValidation(analysisSummary.artifactId);
-const approval = await api.createApprovalDecision(analysisSummary.artifactId, {
-  decision: "REQUEST_CHANGES",
-  reviewer: "web-http-smoke@example.com",
-  comment: "P18B HTTP adapter smoke records a review decision only.",
-});
 const profiles = await api.listMetadataProfiles();
+const metadataTools = await api.listMetadataTools();
+const dependencyClosure = await api.invokeMetadataTool("get_dependency_closure", {
+  arguments: {
+    dbProfileId: "master",
+    schema: "dbo",
+    objectName: "usp_ProcessOrderBatch",
+    objectType: "PROCEDURE",
+    maxDepth: 2,
+    includeReviewRequired: false,
+  },
+});
+const dependencyResolution = await api.invokeMetadataTool("resolve_dependency_reference", {
+  arguments: {
+    dbProfileId: "master",
+    sourceObject: {
+      schema: "dbo",
+      name: "usp_GetOrderSummary",
+      objectType: "PROCEDURE",
+    },
+    referencedSchema: "dbo",
+    referencedName: "TB_ORDER",
+  },
+});
 const metadataSearch = await api.searchMetadataObjects({
   dbProfileId: "master",
   query: "order",
   objectTypes: ["PROCEDURE", "TABLE"],
   limit: 5,
 });
+const metadataAnalysis = await api.analyzeMetadata({
+  dbProfileId: "master",
+  query: "order",
+  objectTypes: ["PROCEDURE", "TABLE"],
+  options: {
+    useLlmAnalysis: true,
+    useAiToolOrchestration: true,
+    llmProfileId: "openai_fast_test",
+    maxTargets: 3,
+  },
+});
 const registry = await api.listRegistryVersions();
 
-assert(submitted.status === "REVIEW_PENDING", `Unexpected submit status: ${submitted.status}`);
+assert(submitted.status === "VALIDATION_COMPLETE", `Unexpected submit status: ${submitted.status}`);
 assert(job.currentStep === "VALIDATE", `Unexpected job current step: ${job.currentStep}`);
 assert(jobs.jobs.some((item) => item.jobId === job.jobId), "Recent jobs did not include submitted job");
 assert(listed.artifacts.length > 0, "HTTP smoke returned no artifacts");
 assert(artifact.evidenceRefs.length > 0, "HTTP smoke artifact has no evidence refs");
 assert(validation.status === "PASSED" || validation.status === "REVIEW_REQUIRED", `Unexpected validation status: ${validation.status}`);
 assert(latestValidation.validationReportId === validation.validationReportId, "Latest validation did not match explicit validation");
-assert(approval.decision === "REQUEST_CHANGES", `Unexpected approval decision: ${approval.decision}`);
 assert(profiles.profiles.every((profile) => profile.readOnly === true), "Metadata profiles must be read-only");
+assert(metadataTools.tools.some((tool) => tool.name === "get_dependency_closure" && tool.invokable === true), "Dependency closure tool must be invokable");
+assert(metadataTools.tools.every((tool) => !("input" in tool)), "Metadata tool summary must not expose input schema");
+assert(dependencyClosure.toolName === "get_dependency_closure", "Dependency closure invocation returned the wrong tool");
+assert(dependencyClosure.data.unresolved?.length > 0, "Dependency closure must preserve unresolved review-required evidence");
+assert(dependencyClosure.data.edges.every((edge) => edge.resolutionStatus === "CONFIRMED"), "Closure graph must hide review-required edges when requested");
+assert(dependencyResolution.toolName === "resolve_dependency_reference", "Dependency resolver invocation returned the wrong tool");
+assert(dependencyResolution.data.selectedResolution?.name === "TB_ORDER", "Dependency resolver did not select the confirmed table");
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
 assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
+assert(metadataAnalysis.sourceProfile === "master", `Unexpected analysis source profile: ${metadataAnalysis.sourceProfile}`);
+assert(metadataAnalysis.deterministicFacts.length > 0, "Metadata analysis must include deterministic facts");
+assert(Array.isArray(metadataAnalysis.objectProfiles), "Metadata analysis must include objectProfiles");
+assert(Array.isArray(metadataAnalysis.insightGroups), "Metadata analysis must include insightGroups");
+assert(metadataAnalysis.dependencyGraph?.nodes, "Metadata analysis must include dependencyGraph");
+assert(Array.isArray(metadataAnalysis.dtoReadiness), "Metadata analysis must include dtoReadiness");
+assert(metadataAnalysis.summary.length > 0, "Metadata analysis summary is empty");
 assert(registry.versions.length > 0, "Registry versions response is empty");
 
 assertNoPublishedState(listed.artifacts, artifact);
@@ -159,9 +201,12 @@ for (const [label, payload] of Object.entries({
   artifact,
   validation,
   latestValidation,
-  approval,
   profiles,
+  metadataTools,
+  dependencyClosure,
+  dependencyResolution,
   metadataSearch,
+  metadataAnalysis,
   registry,
 })) {
   assertNoForbiddenPayload(payload, label);
@@ -188,14 +233,23 @@ assertObserved("POST /api/v1/artifacts/{artifactId}/validation", ({ method, path
 assertObserved("GET /api/v1/artifacts/{artifactId}/validation/latest", ({ method, path }) =>
   method === "GET" && /^\/api\/v1\/artifacts\/[^/]+\/validation\/latest$/.test(path),
 );
-assertObserved("POST /api/v1/artifacts/{artifactId}/approval-decisions", ({ method, path }) =>
-  method === "POST" && /^\/api\/v1\/artifacts\/[^/]+\/approval-decisions$/.test(path),
-);
 assertObserved("GET /api/v1/metadata/db-profiles", ({ method, path }) =>
   method === "GET" && path === "/api/v1/metadata/db-profiles",
 );
+assertObserved("GET /api/v1/metadata/tools", ({ method, path }) =>
+  method === "GET" && path === "/api/v1/metadata/tools",
+);
+assertObserved("POST /api/v1/metadata/tools/get_dependency_closure/invoke", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/tools/get_dependency_closure/invoke",
+);
+assertObserved("POST /api/v1/metadata/tools/resolve_dependency_reference/invoke", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/tools/resolve_dependency_reference/invoke",
+);
 assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
   method === "GET" && path.startsWith("/api/v1/metadata/search?"),
+);
+assertObserved("POST /api/v1/metadata/analyze", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/analyze",
 );
 assertObserved("GET /api/v1/registry/versions", ({ method, path }) =>
   method === "GET" && path === "/api/v1/registry/versions",
@@ -209,7 +263,6 @@ console.log(
       baseUrl,
       jobStatus: job.status,
       validationStatus: validation.status,
-      approvalDecision: approval.decision,
       observedRequests,
       deferredProductizationItem: "AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED",
     },

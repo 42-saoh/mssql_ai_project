@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -9,29 +8,28 @@ from ai_agent_runtime.models import (
     LlmSemanticAnalysisOutput,
     stable_json_hash,
 )
+from ai_agent_runtime.storage_safety import storage_safety_findings
 
 P23_SUITE_ID = "p23_llm_sp_analysis_quality"
 LLM_INFERENCE_EVIDENCE_TYPE = "LLM_INFERENCE"
 
-_OUTPUT_FIELDS = ("businessRules", "modernizationPoints", "riskFlags", "reviewMarkers")
+_OUTPUT_FIELDS = (
+    "businessRules",
+    "modernizationPoints",
+    "riskFlags",
+    "reviewMarkers",
+    "conversionGuidance",
+    "migrationGuideInsights",
+)
+_GUIDE_CONVERSION_FIELDS = ("conversionGuidance", "migrationGuideInsights")
 _KEY_FIELDS = {
     "businessRules": "category",
     "modernizationPoints": "code",
     "riskFlags": "code",
     "reviewMarkers": "code",
+    "conversionGuidance": "code",
+    "migrationGuideInsights": "section",
 }
-_FORBIDDEN_STORAGE_KEYS = frozenset(
-    {
-        "raw_prompt",
-        "raw_sp_definition",
-        "raw_openai_response_text",
-        "row_data",
-        "secrets",
-    }
-)
-_FORBIDDEN_TEXT_MARKERS = ("CREATE OR ALTER PROCEDURE",)
-
-
 def evaluate_p23_semantic_quality(
     *,
     scenario: Mapping[str, Any],
@@ -44,6 +42,11 @@ def evaluate_p23_semantic_quality(
     fact_ids = frozenset(str(fact["id"]) for fact in scenario["deterministic_facts"])
 
     semantic_recall = _semantic_recall(expected_output, actual_output)
+    guide_conversion_recall = _semantic_recall(
+        expected_output,
+        actual_output,
+        field_names=_GUIDE_CONVERSION_FIELDS,
+    )
     evidence_discipline = _evidence_discipline(actual_output, fact_ids)
     validator_results = _validator_results(
         scenario.get("unsupported_claim_expectations", ()),
@@ -53,7 +56,7 @@ def evaluate_p23_semantic_quality(
         1 for result in validator_results if result["status"] != "REVIEW_REQUIRED"
     )
 
-    storage_findings = _storage_safety_findings(
+    storage_findings = storage_safety_findings(
         payloads=(run.to_storage_dict(), *additional_storage_payloads),
         procedure_definition=str(
             scenario.get("transient_model_input", {}).get("procedure_definition", "")
@@ -68,6 +71,7 @@ def evaluate_p23_semantic_quality(
         "status": _status(
             scores={
                 "semanticRecall": semantic_recall,
+                "guideConversionRecall": guide_conversion_recall,
                 "evidenceDiscipline": evidence_discipline,
                 "unreviewedOverclaims": unreviewed_overclaims,
                 "storageSafetyFindings": len(storage_findings),
@@ -76,6 +80,7 @@ def evaluate_p23_semantic_quality(
         ),
         "scores": {
             "semanticRecall": semantic_recall,
+            "guideConversionRecall": guide_conversion_recall,
             "evidenceDiscipline": evidence_discipline,
             "unreviewedOverclaims": unreviewed_overclaims,
             "storageSafetyFindings": len(storage_findings),
@@ -95,7 +100,7 @@ def evaluate_p23_semantic_quality(
         },
     }
 
-    report_findings = _storage_safety_findings(
+    report_findings = storage_safety_findings(
         payloads=(base_report,),
         procedure_definition=str(
             scenario.get("transient_model_input", {}).get("procedure_definition", "")
@@ -127,16 +132,24 @@ def _normalize_output(output: Mapping[str, Any]) -> dict[str, Any]:
 def _normalize_thresholds(thresholds: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "semanticRecallMin": float(thresholds["semantic_recall_min"]),
+        "guideConversionRecallMin": float(
+            thresholds.get("guide_conversion_recall_min", thresholds["semantic_recall_min"])
+        ),
         "evidenceDisciplineMin": float(thresholds["evidence_discipline_min"]),
         "unreviewedOverclaimsMax": int(thresholds["unreviewed_overclaims_max"]),
         "storageSafetyFindingsMax": int(thresholds["storage_safety_findings_max"]),
     }
 
 
-def _semantic_recall(expected_output: Mapping[str, Any], actual_output: Mapping[str, Any]) -> float:
+def _semantic_recall(
+    expected_output: Mapping[str, Any],
+    actual_output: Mapping[str, Any],
+    *,
+    field_names: Sequence[str] = _OUTPUT_FIELDS,
+) -> float:
     expected_items = [
         (field_name, expected_item)
-        for field_name in _OUTPUT_FIELDS
+        for field_name in field_names
         for expected_item in expected_output[field_name]
     ]
     if not expected_items:
@@ -213,38 +226,6 @@ def _validator_results(
     ]
 
 
-def _storage_safety_findings(
-    *,
-    payloads: Sequence[Mapping[str, Any]],
-    procedure_definition: str,
-) -> list[dict[str, str]]:
-    findings: list[dict[str, str]] = []
-    for payload in payloads:
-        findings.extend(
-            {"code": "FORBIDDEN_STORAGE_FIELD_PRESENT"}
-            for key in _iter_mapping_keys(payload)
-            if key in _FORBIDDEN_STORAGE_KEYS
-        )
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-        if procedure_definition and procedure_definition in serialized:
-            findings.append({"code": "PROCEDURE_TEXT_PRESENT"})
-        if any(marker in serialized for marker in _FORBIDDEN_TEXT_MARKERS):
-            findings.append({"code": "PROCEDURE_TEXT_MARKER_PRESENT"})
-    return findings
-
-
-def _iter_mapping_keys(value: Any) -> Sequence[str]:
-    keys: list[str] = []
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            keys.append(str(key))
-            keys.extend(_iter_mapping_keys(item))
-    elif isinstance(value, Sequence) and not isinstance(value, str | bytes):
-        for item in value:
-            keys.extend(_iter_mapping_keys(item))
-    return keys
-
-
 def _evidence_refs(item: Mapping[str, Any]) -> list[str]:
     value = item.get("evidenceRefs") or item.get("evidence_refs") or []
     return [str(ref) for ref in value]
@@ -252,6 +233,8 @@ def _evidence_refs(item: Mapping[str, Any]) -> list[str]:
 
 def _status(*, scores: Mapping[str, float | int], thresholds: Mapping[str, Any]) -> str:
     if scores["semanticRecall"] < thresholds["semanticRecallMin"]:
+        return "FAILED"
+    if scores["guideConversionRecall"] < thresholds["guideConversionRecallMin"]:
         return "FAILED"
     if scores["evidenceDiscipline"] < thresholds["evidenceDisciplineMin"]:
         return "FAILED"

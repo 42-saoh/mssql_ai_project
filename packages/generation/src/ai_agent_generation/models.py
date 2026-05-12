@@ -55,6 +55,7 @@ class EvidenceSource:
             "table": "Table",
             "view": "View",
             "function": "Function",
+            "dependencyEvidence": "Dependency Evidence",
             "llmInference": "LLM Inference",
             "policy": "Policy",
         }
@@ -62,7 +63,14 @@ class EvidenceSource:
 
     @property
     def evidence_type(self) -> str:
-        if self.type in {"storedProcedure", "procedure", "table", "view", "function"}:
+        if self.type in {
+            "storedProcedure",
+            "procedure",
+            "table",
+            "view",
+            "function",
+            "dependencyEvidence",
+        }:
             return "MSSQL_METADATA"
         if self.type == "llmInference":
             return "LLM_INFERENCE"

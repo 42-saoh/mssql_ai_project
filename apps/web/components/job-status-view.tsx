@@ -14,11 +14,14 @@ const workflowSteps = [
   "ANALYZE",
   "GENERATE",
   "VALIDATE",
-  "REVIEW",
 ] as const;
 
 function stepState(job: Job, step: (typeof workflowSteps)[number]) {
-  if (job.status === "APPROVED" || job.status === "REJECTED") {
+  if (
+    job.status === "VALIDATION_COMPLETE" ||
+    job.status === "APPROVED" ||
+    job.status === "REJECTED"
+  ) {
     return "done";
   }
 
@@ -114,8 +117,8 @@ export function JobStatusView({
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Approval-gated flow</p>
-            <h2>Draft to review status</h2>
+            <p className="eyebrow">Validation flow</p>
+            <h2>Draft to validation complete</h2>
           </div>
         </div>
         <ol className="timeline">

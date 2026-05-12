@@ -79,6 +79,39 @@ response:
       resolutionStrategy:
         type: string
         description: Deterministic catalog resolution strategy or review-required reason.
+      resolutionConfidence:
+        type: string
+        enum: [HIGH, MEDIUM, LOW, UNKNOWN]
+        description: Catalog-evidence confidence for deterministic dependency resolution; unknown or low confidence must not be promoted as a deterministic fact.
+      resolutionEvidenceKind:
+        type: string
+        enum: [CATALOG_OBJECT_ID, EXPRESSION_DEPENDENCY, SYNONYM_METADATA, NAME_MATCH_CANDIDATE, DYNAMIC_SQL_MARKER, UNRESOLVED]
+        description: Metadata-only evidence class used to resolve or hold the dependency.
+      unresolvedReason:
+        type: string
+        nullable: true
+        description: Safe reason for unresolved or review-required dependency evidence, without raw SQL definition text.
+      resolutionChain:
+        type: array
+        description: Metadata-only resolution steps, for example expression dependency -> synonym metadata -> candidate object.
+        items:
+          type: object
+          required: [step, evidenceKind, status]
+          properties:
+            step: { type: string }
+            evidenceKind: { type: string }
+            status: { type: string }
+            evidenceRefs:
+              type: array
+              items:
+                type: object
+                required: [id, source, path]
+                properties:
+                  id: { type: string }
+                  source: { type: string }
+                  path: { type: string }
+                  objectType: { type: string }
+                  objectName: { type: string }
       evidenceRefs:
         type: array
         items:
@@ -291,6 +324,177 @@ tools:
               items: { type: string }
             hasDefinitionAccess: { type: boolean }
         dependencySummary: { type: object }
+
+  - name: get_dependency_closure
+    active: true
+    readOnly: true
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
+    description: Read-only dependency graph tool. Returns bounded procedure/view/function dependency closure using catalog evidence only; no row data, procedure execution, DDL/DML, free-form SQL, or raw definition text.
+    input:
+      type: object
+      required: [dbProfileId, schema, objectName, objectType]
+      properties:
+        dbProfileId: { type: string }
+        schema: { type: string }
+        objectName: { type: string }
+        objectType: { type: string, enum: [PROCEDURE, VIEW, FUNCTION] }
+        maxDepth: { type: integer, default: 2, maximum: 3 }
+        includeReviewRequired: { type: boolean, default: true }
+    output:
+      type: object
+      required: [rootObject, nodes, edges, unresolved, summary]
+      properties:
+        rootObject:
+          type: object
+          required: [database, schema, name, objectType]
+          properties:
+            database: { type: string }
+            schema: { type: string }
+            name: { type: string }
+            objectType: { type: string, enum: [PROCEDURE, VIEW, FUNCTION] }
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, schema, name, objectType, evidenceRefs]
+            properties:
+              id: { type: string }
+              database: { type: string }
+              server: { type: string, nullable: true }
+              schema: { type: string }
+              name: { type: string }
+              objectType: { type: string }
+              sourceScope: { type: string, nullable: true }
+              reviewStatus: { type: string, enum: [CONFIRMED, REVIEW_REQUIRED] }
+              evidenceRefs:
+                type: array
+                items:
+                  type: object
+                  required: [id, source, path]
+                  properties:
+                    id: { type: string }
+                    source: { type: string }
+                    path: { type: string }
+                    objectType: { type: string }
+                    objectName: { type: string }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [from, to, dependencyType, resolutionStatus, resolutionStrategy, evidenceRefs]
+            properties:
+              from: { type: string }
+              to: { type: string }
+              dependencyType: { type: string }
+              resolutionStatus: { type: string, enum: [CONFIRMED, REVIEW_REQUIRED] }
+              resolutionStrategy: { type: string }
+              resolutionConfidence: { type: string, enum: [HIGH, MEDIUM, LOW, UNKNOWN] }
+              resolutionEvidenceKind: { type: string }
+              unresolvedReason: { type: string, nullable: true }
+              resolutionChain:
+                type: array
+                items: { type: object }
+              evidenceRefs:
+                type: array
+                items:
+                  type: object
+                  required: [id, source, path]
+                  properties:
+                    id: { type: string }
+                    source: { type: string }
+                    path: { type: string }
+                    objectType: { type: string }
+                    objectName: { type: string }
+        unresolved:
+          type: array
+          items:
+            $ref: '#/response/dependencyItem'
+        summary:
+          type: object
+          required: [maxDepth, nodeCount, edgeCount, reviewRequiredCount]
+          properties:
+            maxDepth: { type: integer }
+            nodeCount: { type: integer }
+            edgeCount: { type: integer }
+            reviewRequiredCount: { type: integer }
+
+  - name: resolve_dependency_reference
+    active: true
+    readOnly: true
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
+    description: Read-only dependency resolver. Reinterprets unresolved, caller-dependent, cross-database, or synonym references using catalog evidence only; ambiguous or unsafe references remain REVIEW_REQUIRED.
+    input:
+      type: object
+      required: [dbProfileId, sourceObject, referencedName]
+      properties:
+        dbProfileId: { type: string }
+        sourceObject:
+          type: object
+          required: [schema, name, objectType]
+          properties:
+            database: { type: string }
+            schema: { type: string }
+            name: { type: string }
+            objectType: { type: string, enum: [PROCEDURE, VIEW, FUNCTION] }
+        referencedDatabase: { type: string }
+        referencedServer: { type: string }
+        referencedSchema: { type: string }
+        referencedName: { type: string }
+    output:
+      type: object
+      required: [candidates, selectedResolution, resolutionStatus, resolutionStrategy, evidenceRefs, caveats]
+      properties:
+        candidates:
+          type: array
+          items:
+            type: object
+            required: [schema, name, objectType, resolutionConfidence, evidenceRefs]
+            properties:
+              database: { type: string }
+              server: { type: string, nullable: true }
+              schema: { type: string }
+              name: { type: string }
+              objectType: { type: string }
+              sourceScope: { type: string, nullable: true }
+              resolutionConfidence: { type: string, enum: [HIGH, MEDIUM, LOW, UNKNOWN] }
+              resolutionEvidenceKind: { type: string }
+              evidenceRefs:
+                type: array
+                items:
+                  type: object
+                  required: [id, source, path]
+                  properties:
+                    id: { type: string }
+                    source: { type: string }
+                    path: { type: string }
+                    objectType: { type: string }
+                    objectName: { type: string }
+        selectedResolution:
+          type: object
+          nullable: true
+          description: Present only when catalog evidence uniquely confirms a dependency target.
+        resolutionStatus: { type: string, enum: [CONFIRMED, REVIEW_REQUIRED] }
+        resolutionStrategy: { type: string }
+        resolutionConfidence: { type: string, enum: [HIGH, MEDIUM, LOW, UNKNOWN] }
+        resolutionEvidenceKind: { type: string }
+        unresolvedReason: { type: string, nullable: true }
+        resolutionChain:
+          type: array
+          items: { type: object }
+        evidenceRefs:
+          type: array
+          items:
+            type: object
+            required: [id, source, path]
+            properties:
+              id: { type: string }
+              source: { type: string }
+              path: { type: string }
+              objectType: { type: string }
+              objectName: { type: string }
+        caveats:
+          type: array
+          items: { type: string }
 
   - name: get_related_db_objects
     active: true

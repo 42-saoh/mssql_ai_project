@@ -85,7 +85,15 @@ def _validate_value(
     if expected_type == "integer":
         if not isinstance(value, int) or isinstance(value, bool):
             raise _invalid(path, "must be an integer")
+        maximum = schema.get("maximum")
+        if maximum is not None and value > maximum:
+            raise _invalid(path, f"must be less than or equal to {maximum}")
         _validate_enum(schema, value, path)
+        return value
+
+    if expected_type == "boolean":
+        if not isinstance(value, bool):
+            raise _invalid(path, "must be a boolean")
         return value
 
     if expected_type == "array":

@@ -1,0 +1,192 @@
+contract_id: p27_dependency_evidence_tooling@0.3.0
+phase: P27
+status: fixture_first_hardened_with_explicit_live_gate
+production_ready: false
+source_of_truth:
+  - spec/mcp/mssql_metadata_tool_catalog.yaml
+  - services/mssql-mcp/README.md
+scope:
+  summary: >
+    Fixture-first dependency evidence tooling hardening for strengthening the
+    deterministic metadata layer that supports AI-heavy SP analysis.
+  included:
+    - Extend the get_procedure_dependencies contract with optional resolution evidence fields.
+    - Expose get_dependency_closure as an active read-only MCP tool with fixture and live repository handlers.
+    - Expose resolve_dependency_reference as an active read-only MCP tool with fixture and live repository handlers.
+    - Surface the active tools through the existing /api/v1/metadata/tools summary.
+    - Expose a P28 safe API invocation route for get_dependency_closure and resolve_dependency_reference only.
+    - Expose a P29 Web diagnostic UI that invokes the P28 safe API route.
+    - Wire get_dependency_closure evidence into the workflow metadata/generation context.
+    - Add an explicit P27 hard-live PPM evidence gate gated by P27_HARD_LIVE_GATE=1.
+    - Keep all dependency evidence as structured metadata with snapshot and evidence refs.
+  excluded:
+    - persisted artifact type changes
+    - default live metadata or OpenAI gate requirements
+    - DB schema changes
+api_invocation_route:
+  path: /api/v1/metadata/tools/{toolName}/invoke
+  method: POST
+  status: p28_safe_fixture_first_enabled
+  allowlisted_tools:
+    - get_dependency_closure
+    - resolve_dependency_reference
+  response_envelope:
+    required: [ok, toolName, dbProfileId, snapshotId, collectedAt, evidenceRefs, data]
+  excluded:
+    - input schema exposure through /api/v1/metadata/tools
+    - persisted artifact type changes
+    - DB schema changes
+web_diagnostic_ui:
+  route: /metadata/dependencies
+  status: p29_fixture_first_enabled
+  behavior:
+    - Uses /api/v1/metadata/tools summary for invokable status only.
+    - Invokes get_dependency_closure and resolve_dependency_reference through the P28 API route.
+    - Renders snapshotId, collectedAt, evidence refs, nodes, edges, unresolved references, candidates, and selectedResolution only.
+    - Does not expose MCP input schemas, row data, SQL text, raw definitions, DDL/DML controls, procedure execution, or secrets.
+workflow_evidence_wiring:
+  status: p29_fixture_first_enabled
+  automatic_tool:
+    - get_dependency_closure
+  manual_only_tools:
+    - resolve_dependency_reference
+  behavior:
+    - Calls get_dependency_closure for PROCEDURE targets during metadata collection.
+    - Uses maxDepth 2 and includeReviewRequired false; unresolved review-required evidence is still preserved.
+    - Stores only a sanitized dependencyEvidence digest in the existing metadata collection payload.
+    - Merges dependency evidence refs into generation context and draft artifact evidence refs.
+    - Does not introduce persisted artifact type changes, workflow state changes, or DB schema changes.
+p29b_deferred_boundary:
+  status: confirmed_deferred
+  db_migration: deferred
+  persisted_artifact_type: deferred
+  workflow_state_transition: deferred
+  live_ppm_hard_gate: explicit_env_only
+  storage_shape:
+    - Existing metadata collection payload carries sanitized dependencyEvidence only.
+    - Existing draft artifacts reuse evidence refs and rendered dependency closure sections.
+    - No raw definition, raw prompt, raw provider response, row data, SQL text, or secret is persisted.
+  workflow_shape:
+    - Default workflow transitions remain COLLECTING_METADATA, ANALYZING, GENERATING, VALIDATING, VALIDATION_COMPLETE.
+    - resolve_dependency_reference remains manual-only through the Web diagnostic UI and P28 safe API route.
+  verification_boundary:
+    - Default verification remains fixture-first.
+    - Hard-live PPM verification runs only with P27_HARD_LIVE_GATE=1 and MSSQL_ENABLE_LIVE_METADATA=1 plus live PPM prerequisites.
+invariants:
+  read_only: true
+  structured_input_only: true
+  snapshot_required: true
+  collected_at_required: true
+  evidence_refs_required: true
+  ppm_to_plf_fallback_allowed: false
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  business_db_ddl_dml_allowed: false
+  raw_sp_definition_storage_allowed: false
+  raw_prompt_storage_allowed: false
+  raw_provider_response_storage_allowed: false
+dependency_resolution_contract:
+  existing_tool: get_procedure_dependencies
+  added_fields:
+    - resolutionConfidence
+    - resolutionEvidenceKind
+    - unresolvedReason
+    - resolutionChain
+  deterministic_promotion:
+    allowed_when:
+      - resolutionStatus is CONFIRMED
+      - resolutionConfidence is HIGH
+      - evidenceRefs point to catalog metadata, not raw SQL or row data
+    blocked_when:
+      - target is ambiguous
+      - target depends on dynamic SQL text
+      - cross-server target is not catalog-confirmed
+      - synonym target is not uniquely resolved through catalog metadata
+      - candidate list has multiple plausible targets
+implemented_tools:
+  get_dependency_closure:
+    active: true
+    readOnly: true
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
+    input:
+      required: [dbProfileId, schema, objectName, objectType]
+      defaults:
+        maxDepth: 2
+        includeReviewRequired: true
+      limits:
+        maxDepth_hard_max: 3
+    output:
+      required: [rootObject, nodes, edges, unresolved, summary]
+      edge_required: [dependencyType, resolutionStatus, resolutionStrategy, evidenceRefs]
+  resolve_dependency_reference:
+    active: true
+    readOnly: true
+    implementationStatus: fixture_first_hardened_with_explicit_live_gate
+    input:
+      required: [dbProfileId, sourceObject, referencedName]
+      optional:
+        - referencedDatabase
+        - referencedServer
+        - referencedSchema
+    output:
+      required:
+        - candidates
+        - selectedResolution
+        - resolutionStatus
+        - resolutionStrategy
+        - evidenceRefs
+        - caveats
+fixture_contract_cases:
+  same_database_confirmed_dependency:
+    expected_status: CONFIRMED
+    deterministic_fact_allowed: true
+  same_server_cross_database_confirmed_dependency:
+    expected_status: CONFIRMED
+    deterministic_fact_allowed: true
+    caveat: PPM must not fall back to PLF if the target database is unavailable.
+  synonym_target_unconfirmed:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  caller_dependent_reference:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  cross_server_reference:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  unresolved_reference:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  dynamic_sql_marker:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+  ambiguous_name_candidates:
+    expected_status: REVIEW_REQUIRED
+    deterministic_fact_allowed: false
+    expected_behavior: Return candidates without selecting a deterministic resolution.
+llm_input_boundary:
+  p24_and_semantic_runtime_input: dependency evidence digest only
+  raw_sql_definition_to_llm_for_dependency_digest: false
+  confirmed_dependency_usage: deterministic fact
+  ambiguous_or_dynamic_usage: LLM_INFERENCE with REVIEW_REQUIRED caveat
+quality_gate:
+  pass:
+    - Catalog declares P27 dependency tools as active, read-only, structured-input only.
+    - Fixture and live repositories expose handlers for both P27 dependency tools.
+    - Fixture and mocked-live tests cover confirmed, synonym, caller-dependent, dynamic, cross-server, ambiguous, and unresolved evidence.
+    - P27_HARD_LIVE_GATE=1 validates selected PPM procedures without PLF fallback when explicitly enabled.
+    - MSSQL_METADATA_TDS_VERSION defaults to 7.4 and may be set to 7.0 for local legacy gateway/proxy live validation.
+    - Standard response envelope still requires snapshotId, collectedAt, and evidenceRefs.
+    - get_procedure_dependencies declares the P27 resolution evidence fields.
+    - Docs state P27 is fixture-first hardened and production_ready remains false.
+  fail:
+    - P27 dependency tools are inactive, writable, or missing handlers.
+    - Any tool accepts free-form SQL or row-data style input.
+    - Any contract allows procedure execution, DDL/DML, raw definition storage, or PPM-to-PLF fallback.
+    - Ambiguous, synonym, dynamic, caller-dependent, or cross-server evidence is promoted as deterministic without catalog confirmation.
+    - P27 hard-live gate falls back to PLF or skips missing prerequisites after P27_HARD_LIVE_GATE=1 is enabled.
+verification:
+  default:
+    - make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_metadata_gateway.py tests/unit/api/test_workflow_service.py tests/unit/api/test_route_surface.py tests/unit/web/test_p14_product_ui_static.py tests/integration/api/test_api_workflow_routes.py tests/e2e/test_fixture_workflow_happy_path.py tests/contract/test_openapi_and_env_sample_assets.py"
+    - git diff --check
+  hard_live:
+    - P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"

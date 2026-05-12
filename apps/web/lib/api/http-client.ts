@@ -1,6 +1,12 @@
 import { readPortalApiError } from "./errors.ts";
 import type { PortalApi } from "./portal-api.ts";
-import type { ApprovalDecisionRequest, MetadataSearchRequest, SPAnalysisRequest } from "./types.ts";
+import type {
+  MetadataAnalysisRequest,
+  MetadataSearchRequest,
+  MetadataToolInvokeRequest,
+  MetadataToolName,
+  SPAnalysisRequest,
+} from "./types.ts";
 
 interface HttpPortalApiOptions {
   baseUrl: string;
@@ -97,20 +103,24 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       );
     },
 
-    createApprovalDecision(artifactId: string, request: ApprovalDecisionRequest) {
+    listMetadataProfiles() {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/db-profiles");
+    },
+
+    listMetadataTools() {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/tools");
+    },
+
+    invokeMetadataTool(toolName: MetadataToolName, request: MetadataToolInvokeRequest) {
       return readJson(
         fetcher,
         baseUrl,
-        `/api/v1/artifacts/${encodeURIComponent(artifactId)}/approval-decisions`,
+        `/api/v1/metadata/tools/${encodeURIComponent(toolName)}/invoke`,
         {
           method: "POST",
           json: request,
         },
       );
-    },
-
-    listMetadataProfiles() {
-      return readJson(fetcher, baseUrl, "/api/v1/metadata/db-profiles");
     },
 
     searchMetadataObjects(request: MetadataSearchRequest) {
@@ -128,6 +138,13 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       }
 
       return readJson(fetcher, baseUrl, `/api/v1/metadata/search?${params.toString()}`);
+    },
+
+    analyzeMetadata(request: MetadataAnalysisRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/analyze", {
+        method: "POST",
+        json: request,
+      });
     },
 
     listRegistryVersions() {

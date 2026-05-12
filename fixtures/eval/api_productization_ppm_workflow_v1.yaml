@@ -39,14 +39,11 @@ sample_requests:
       options:
         includeEvidenceRefs: true
     expected:
-      job_status: REVIEW_PENDING
+      job_status: VALIDATION_COMPLETE
       current_step: VALIDATE
       artifact_statuses_allowed:
         - DRAFT
         - VALIDATED
-        - REVIEW_PENDING
-        - APPROVED
-        - REJECTED
       artifact_statuses_forbidden:
         - PUBLISHED
       caveats: []
@@ -65,7 +62,7 @@ sample_requests:
       options:
         includeEvidenceRefs: true
     expected:
-      job_status: REVIEW_PENDING
+      job_status: VALIDATION_COMPLETE
       current_step: VALIDATE
       artifact_statuses_forbidden:
         - PUBLISHED
@@ -86,7 +83,7 @@ sample_requests:
       options:
         includeEvidenceRefs: true
     expected:
-      job_status: REVIEW_PENDING
+      job_status: VALIDATION_COMPLETE
       current_step: VALIDATE
       artifact_statuses_forbidden:
         - PUBLISHED

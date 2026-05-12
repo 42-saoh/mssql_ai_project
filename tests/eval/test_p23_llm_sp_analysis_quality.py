@@ -25,6 +25,8 @@ GOLDEN_OUTPUT_FIELDS = {
     "modernization_points",
     "risk_flags",
     "review_markers",
+    "conversion_guidance",
+    "migration_guide_insights",
     "assumptions",
 }
 OUTPUT_LIST_FIELDS = (
@@ -32,6 +34,8 @@ OUTPUT_LIST_FIELDS = (
     "modernization_points",
     "risk_flags",
     "review_markers",
+    "conversion_guidance",
+    "migration_guide_insights",
 )
 
 
@@ -63,6 +67,10 @@ def test_p23b_golden_outputs_are_schema_valid_and_minimum_complete() -> None:
         assert len(output["modernization_points"]) >= minimums["modernization_points_min"]
         assert len(output["risk_flags"]) >= minimums["risk_flags_min"]
         assert len(output["review_markers"]) >= minimums["review_markers_min"]
+        assert len(output["conversion_guidance"]) >= minimums["conversion_guidance_min"]
+        assert len(output["migration_guide_insights"]) >= minimums[
+            "migration_guide_insights_min"
+        ]
         assert len(output["assumptions"]) >= minimums["assumptions_min"]
 
 
@@ -167,7 +175,7 @@ def test_p23b_default_runtime_path_uses_fake_gateway_and_sanitized_storage(
 
 
 def test_p23c_fixture_first_quality_runner_scores_all_scenarios(monkeypatch: Any) -> None:
-    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "not-used-for-p23c")
+    monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "gpt-5.4-mini")
     fixture = _fixture()
     gateway = _fixture_gateway(fixture)
 
@@ -184,6 +192,13 @@ def test_p23c_fixture_first_quality_runner_scores_all_scenarios(monkeypatch: Any
         assert report["status"] == "PASSED", _metric_message(scenario, "status", report["status"])
         assert scores["semanticRecall"] >= thresholds["semanticRecallMin"], _metric_message(
             scenario, "semanticRecall", scores["semanticRecall"]
+        )
+        assert scores["guideConversionRecall"] >= thresholds["guideConversionRecallMin"], (
+            _metric_message(
+                scenario,
+                "guideConversionRecall",
+                scores["guideConversionRecall"],
+            )
         )
         assert scores["evidenceDiscipline"] >= thresholds["evidenceDisciplineMin"], (
             _metric_message(scenario, "evidenceDiscipline", scores["evidenceDiscipline"])
@@ -230,6 +245,44 @@ def test_p23c_quality_report_is_reproducible_and_sanitized(monkeypatch: Any) -> 
         assert "raw_prompt" not in serialized
         assert "raw_sp_definition" not in serialized
         assert "raw_openai_response_text" not in serialized
+
+
+def test_p23c_quality_runner_fails_adversarial_raw_sql_echo_payload(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    fixture = _fixture()
+    scenario = _scenario("p23_simple_read_only_lookup")
+    procedure_definition = scenario["transient_model_input"]["procedure_definition"]
+    run = _build_run(scenario, _fixture_gateway(fixture))
+
+    report = evaluate_p23_semantic_quality(
+        scenario=scenario,
+        run=run,
+        thresholds=fixture["quality_thresholds"],
+        additional_storage_payloads=(
+            {
+                "structuredOutput": {
+                    "businessRules": [
+                        {
+                            "category": "ADVERSARIAL_SQL_ECHO",
+                            "summary": procedure_definition,
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["fact_p23_simple_lookup"],
+                        }
+                    ]
+                }
+            },
+        ),
+    )
+    serialized = json.dumps(report, ensure_ascii=False, sort_keys=True)
+
+    assert report["status"] == "FAILED"
+    assert report["storageSafety"]["findingCount"] >= 1
+    assert {
+        "PROCEDURE_TEXT_PRESENT",
+        "PROCEDURE_TEXT_MARKER_PRESENT",
+    }.intersection(report["storageSafety"]["findingCodes"])
+    assert procedure_definition not in serialized
+    assert "CREATE OR ALTER PROCEDURE" not in serialized
 
 
 def _fixture() -> dict[str, Any]:

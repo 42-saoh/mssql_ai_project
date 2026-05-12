@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable
+from dataclasses import replace as dataclass_replace
 
 from ai_agent_analysis import analyze_stored_procedure
 from ai_agent_domain import ArtifactType, JobStatus, RequestedOutputType, WorkflowStepType
@@ -14,6 +16,7 @@ from ai_agent_generation import (
 )
 from ai_agent_generation.models import GENERATOR_VERSION
 from ai_agent_runtime import (
+    AgentRunPayload,
     ModelGateway,
     ModelGatewayError,
     build_model_gateway_from_env,
@@ -31,6 +34,7 @@ from ai_agent_validation import (
     validate_publish_gate,
 )
 
+from api_app.ai_tool_orchestrator import AiToolOrchestrator
 from api_app.metadata_gateway import McpMetadataGateway, MetadataCollectionResult, MetadataGateway
 from api_app.repositories import (
     AgentRunRecord,
@@ -75,6 +79,7 @@ class WorkflowService:
         self.repository = repository
         self.metadata_gateway = metadata_gateway or McpMetadataGateway()
         self.model_gateway = model_gateway or build_model_gateway_from_env()
+        self.ai_tool_orchestrator = AiToolOrchestrator(model_gateway=self.model_gateway)
 
     def submit_sp_analysis(
         self,
@@ -147,10 +152,29 @@ class WorkflowService:
             status=JobStatus.ANALYZING,
             current_step=WorkflowStepType.ANALYZE,
         )
+        definition_text = procedure_definition_text(metadata)
+        static_analysis = static_analysis_payload(
+            definition_text,
+            source_name=f"{request.target['schema']}.{request.target['name']}",
+            snapshot_id=metadata.snapshot_id,
+        )
+        orchestration = self.ai_tool_orchestrator.run(
+            request_record=request,
+            metadata=metadata,
+            static_analysis=static_analysis,
+        )
+        metadata = orchestration.metadata
+        self.repository.save_metadata_collection(
+            job_id=job_id,
+            status=metadata.status,
+            payload=sanitized_metadata_payload(metadata.as_dict()),
+        )
         agent_run = self._run_llm_semantic_analysis(
             job_id,
             request_record=request,
             metadata=metadata,
+            static_analysis=static_analysis,
+            ai_tool_component_invocations=orchestration.component_invocations,
         )
         self.repository.transition_job(
             job_id,
@@ -168,7 +192,7 @@ class WorkflowService:
         next_status = (
             JobStatus.FAILED
             if any(report.status == "FAILED" for report in reports)
-            else JobStatus.REVIEW_PENDING
+            else JobStatus.VALIDATION_COMPLETE
         )
         return self.repository.transition_job(
             job_id,
@@ -287,11 +311,6 @@ class WorkflowService:
             schema=str(target["schema"]),
             procedure_name=str(target["name"]),
         )
-        self.repository.save_metadata_collection(
-            job_id=job_id,
-            status=metadata.status,
-            payload=sanitized_metadata_payload(metadata.as_dict()),
-        )
         return metadata
 
     def _generate_artifacts(
@@ -350,6 +369,8 @@ class WorkflowService:
         *,
         request_record: WorkRequestRecord,
         metadata: MetadataCollectionResult,
+        static_analysis: dict[str, object],
+        ai_tool_component_invocations: tuple[dict[str, object], ...] = (),
     ) -> AgentRunRecord | None:
         if not bool(request_record.options.get("useLlmAnalysis", False)):
             return None
@@ -361,21 +382,35 @@ class WorkflowService:
             if bool(request_record.options.get("allowSpDefinitionToModel", False))
             else None
         )
+        if (
+            os.getenv("LLM_ENABLE_REMOTE", "0").strip() == "1"
+            and bool(request_record.options.get("allowSpDefinitionToModel", False))
+            and os.getenv("LLM_ALLOW_SP_TEXT", "0").strip() != "1"
+        ):
+            raise ModelGatewayError(
+                "LLM_ALLOW_SP_TEXT=1 is required before high-quality live analysis.",
+                code="LLM_SP_TEXT_NOT_ALLOWED",
+            )
         try:
             run_payload = build_semantic_analysis_run(
                 target_ref=object_ref,
                 metadata=metadata.as_dict(),
-                static_analysis=static_analysis_payload(
-                    definition_text,
-                    source_name=object_ref,
-                    snapshot_id=metadata.snapshot_id,
-                ),
+                static_analysis=static_analysis,
                 procedure_definition=definition_for_model,
                 model_gateway=self.model_gateway,
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
             )
-        except ModelGatewayError as exc:
-            raise RuntimeError(f"{exc.code}: {exc}") from exc
+        except ModelGatewayError:
+            raise
+        if ai_tool_component_invocations or (
+            metadata.ai_tool_evidence
+            and metadata.ai_tool_evidence.get("reviewMarkers")
+        ):
+            run_payload = _append_ai_tool_components(
+                run_payload,
+                ai_tool_component_invocations=ai_tool_component_invocations,
+                metadata=metadata,
+            )
         return self.repository.save_agent_run(
             job_id=job_id,
             agent_type=run_payload.agent_type,
@@ -551,6 +586,8 @@ def generation_context_from_request(
                 "authorId": "AI",
                 "llmAnalysis": agent_run.structured_output if agent_run else None,
                 "llmTrace": llm_trace_summary(agent_run),
+                "dependencyEvidence": dependency_evidence_for_generation(metadata),
+                "aiToolEvidence": ai_tool_evidence_for_generation(metadata),
             },
             "evidence": {
                 "sources": generation_evidence_sources(metadata, sp_name, agent_run),
@@ -616,6 +653,12 @@ def sanitized_metadata_payload(payload: dict[str, object]) -> dict[str, object]:
         sanitized_definition = dict(definition)
         sanitized_definition.pop("definition", None)
         sanitized["procedureDefinition"] = sanitized_definition
+    sanitized["dependencyEvidence"] = dependency_evidence_for_generation_payload(
+        sanitized.get("dependencyEvidence")
+    )
+    sanitized["aiToolEvidence"] = ai_tool_evidence_for_generation_payload(
+        sanitized.get("aiToolEvidence")
+    )
     return sanitized
 
 
@@ -702,13 +745,26 @@ def generation_evidence_sources(
             for table in metadata.table_schemas
             if table.get("schema") and table.get("tableName")
         )
+        dependency_evidence = dependency_evidence_for_generation(metadata)
+        sources.extend(
+            {
+                "type": "dependencyEvidence",
+                "name": str(ref.get("objectRef") or metadata.object_ref),
+                "reason": "MSSQL MCP dependency closure evidence",
+                "locator": str(ref.get("locator") or "MSSQL MCP dependency closure"),
+                "snapshotId": str(ref.get("snapshotId") or metadata.snapshot_id or ""),
+            }
+            for ref in dependency_evidence.get("evidenceRefs", [])
+            if isinstance(ref, dict)
+        )
     if agent_run:
         invocation = agent_run.model_invocation
+        output_hash = str(invocation.get("outputHash") or "")
         sources.append(
             {
                 "type": "llmInference",
-                "name": agent_run.agent_run_id,
-                "reason": str(invocation.get("outputHash") or agent_run.summary),
+                "name": output_hash or agent_run.target_ref,
+                "reason": output_hash or agent_run.summary,
                 "locator": "agent-runtime.modelInvocation.outputHash",
                 "snapshotId": None,
             }
@@ -716,11 +772,69 @@ def generation_evidence_sources(
     return sources
 
 
+def dependency_evidence_for_generation(
+    metadata: MetadataCollectionResult | None,
+) -> dict[str, object]:
+    if metadata is None:
+        return {}
+    return dependency_evidence_for_generation_payload(metadata.dependency_evidence)
+
+
+def ai_tool_evidence_for_generation(
+    metadata: MetadataCollectionResult | None,
+) -> dict[str, object]:
+    if metadata is None:
+        return {}
+    return ai_tool_evidence_for_generation_payload(metadata.ai_tool_evidence)
+
+
+def ai_tool_evidence_for_generation_payload(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "status": str(value.get("status") or ""),
+        "toolCallCount": int(value.get("toolCallCount") or 0),
+        "toolResults": _safe_dict_list(value.get("toolResults")),
+        "blockedRequests": _safe_dict_list(value.get("blockedRequests")),
+        "reviewMarkers": _safe_dict_list(value.get("reviewMarkers")),
+        "caveats": [str(item) for item in value.get("caveats", []) if str(item)],
+    }
+
+
+def dependency_evidence_for_generation_payload(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "toolName": str(value.get("toolName") or "get_dependency_closure"),
+        "dbProfileId": str(value.get("dbProfileId") or ""),
+        "snapshotId": value.get("snapshotId"),
+        "collectedAt": str(value.get("collectedAt") or ""),
+        "rootObject": _safe_dict(value.get("rootObject")),
+        "summary": _safe_dict(value.get("summary")),
+        "nodes": _safe_dict_list(value.get("nodes")),
+        "edges": _safe_dict_list(value.get("edges")),
+        "unresolved": _safe_dict_list(value.get("unresolved")),
+        "evidenceRefs": _safe_dict_list(value.get("evidenceRefs")),
+        "caveats": [str(item) for item in value.get("caveats", []) if str(item)],
+        "reviewRequired": bool(value.get("reviewRequired")),
+    }
+
+
+def _safe_dict(value: object) -> dict[str, object]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _safe_dict_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
 def generation_assumptions(agent_run: AgentRunRecord | None) -> list[str]:
     assumptions = [WORKFLOW_METADATA_NOTE]
     if agent_run:
         assumptions.append(
-            "REVIEW_REQUIRED: LLM semantic analysis is inferred and requires human review."
+            "REVIEW_REQUIRED: LLM semantic analysis is inferred and remains a validation caveat."
         )
         assumptions.extend(str(item) for item in agent_run.structured_output.get("assumptions", []))
     return list(dedupe_strings(assumptions))
@@ -750,6 +864,91 @@ def llm_trace_summary(agent_run: AgentRunRecord | None) -> dict[str, object] | N
     }
 
 
+def _append_ai_tool_components(
+    run_payload: AgentRunPayload,
+    *,
+    ai_tool_component_invocations: tuple[dict[str, object], ...],
+    metadata: MetadataCollectionResult,
+) -> AgentRunPayload:
+    existing_components = tuple(run_payload.model_invocation.component_invocations)
+    invocation = dataclass_replace(
+        run_payload.model_invocation,
+        component_invocations=(
+            *ai_tool_component_invocations,
+            *existing_components,
+        ),
+    )
+    output = _append_ai_tool_review_markers(
+        run_payload.structured_output,
+        metadata=metadata,
+    )
+    invocation = dataclass_replace(
+        invocation,
+        structured_output=output,
+        output_hash=_stable_output_hash(output),
+    )
+    return dataclass_replace(
+        run_payload,
+        structured_output=output,
+        model_invocation=invocation,
+        summary=_summary_with_ai_tool_markers(run_payload.summary, metadata),
+    )
+
+
+def _append_ai_tool_review_markers(
+    structured_output: dict[str, object],
+    *,
+    metadata: MetadataCollectionResult,
+) -> dict[str, object]:
+    output = {
+        key: list(value) if isinstance(value, list) else value
+        for key, value in structured_output.items()
+    }
+    markers = output.setdefault("reviewMarkers", [])
+    if not isinstance(markers, list):
+        return output
+    evidence = metadata.ai_tool_evidence or {}
+    for marker in evidence.get("reviewMarkers", []):
+        if not isinstance(marker, dict):
+            continue
+        marker_code = str(marker.get("code") or "")
+        if not marker_code:
+            continue
+        if any(
+            isinstance(existing, dict) and existing.get("code") == marker_code
+            for existing in markers
+        ):
+            continue
+        markers.append(
+            {
+                "code": marker_code,
+                "message": str(marker.get("message") or ""),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": [
+                    str(ref) for ref in marker.get("evidenceRefs", []) if str(ref)
+                ],
+            }
+        )
+    return output
+
+
+def _stable_output_hash(output: dict[str, object]) -> str:
+    from ai_agent_runtime.models import stable_json_hash
+
+    return stable_json_hash(output)
+
+
+def _summary_with_ai_tool_markers(
+    summary: str,
+    metadata: MetadataCollectionResult,
+) -> str:
+    evidence = metadata.ai_tool_evidence or {}
+    marker_count = len(evidence.get("reviewMarkers", []))
+    if not marker_count:
+        return summary
+    return f"{summary}, {marker_count} AI tool orchestration review markers"
+
+
 def procedure_definition_text(metadata: MetadataCollectionResult) -> str | None:
     definition_payload = metadata.procedure_definition or {}
     value = definition_payload.get("definition")
@@ -772,7 +971,7 @@ def static_analysis_payload(
         snapshot_id=snapshot_id,
         registry_version_refs=[
             {"registry_type": "PROMPT", "version": "prompt:sp_analysis@0.1.0"},
-            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.1.0"},
+            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.3.0"},
             {"registry_type": "MODEL", "version": "model:openai_sp_semantic_analysis@0.1.0"},
         ],
     )

@@ -55,7 +55,7 @@ P21 no-mock functional portal 계약, live gate, prompt pack, readiness 문서�
 ## 구현 범위
 
 - `fixtures/eval/live_portal_no_mock_p21_v1.yaml` 를 기존 파일 기준으로 갱신하고 Python 3.14, PLF required, PPM required, Web HTTP API only, `production_ready: false` 를 명시한다.
-- P21 functional pages `/`, `/requests/new`, `/metadata/search`, `/jobs/[jobId]`, `/artifacts/[artifactId]`, `/review/decision` 를 fixture 에 선언한다.
+- P25 기준 P21 functional page fixture 는 `/`, `/requests/new`, `/metadata/search`, `/jobs/[jobId]`, `/artifacts/[artifactId]` 만 선언하고 `/review/decision` 은 제거 상태로 둔다.
 - `tests/contract/test_p21_no_mock_prompt_assets.py` 를 기존 파일 기준으로 유지/갱신해 prompt/manifest/fixture/docs/env/compose/no-mock 계약을 검증한다.
 - `tests/eval/test_p21_live_portal_no_mock_gate.py` 를 기존 파일 기준으로 갱신해 default skip without PLF/PPM access, live prerequisite blocker failure, explicit live pass path 를 검증한다.
 - 문서에서 이전 Python active baseline 을 Python 3.14 로 교체한다.

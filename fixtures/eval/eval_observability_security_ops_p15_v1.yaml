@@ -198,7 +198,7 @@ sample_scenarios:
     expected_active_blockers: []
   - sample_id: p15-fixture-workflow-reproducibility-smoke
     readiness_label: fixture_first_reproducibility_baseline
-    expected_job_status: REVIEW_PENDING
+    expected_job_status: VALIDATION_COMPLETE
     expected_current_step: VALIDATE
     forbidden_artifact_statuses:
       - PUBLISHED

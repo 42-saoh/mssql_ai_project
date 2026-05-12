@@ -194,7 +194,7 @@ def _verify_user_without_review_role(
             "fail",
             role_category=_role_category(roles),
             blocker_code="AUTH_RBAC_LIVE_USER_ROLE_SEPARATION_FAILED",
-            summary="User token mapped to a validation/approval-capable PLF role.",
+            summary="User token mapped to a validation/deferred approval-capable PLF role.",
         )
     return _check(
         "user_token_role_separation",

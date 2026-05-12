@@ -5,22 +5,24 @@ status: contract_ready
 production_ready: false
 depends_on:
   - P22 OpenAI LLM Agent Runtime
-  - prompt:sp_semantic_analysis@0.1.0
-  - schema:llm_semantic_analysis@0.1.0
+  - prompt:sp_semantic_analysis@0.3.0
+  - schema:llm_semantic_analysis@0.3.0
   - model:openai_sp_semantic_analysis@0.1.0
   - model:openai_fast_test@gpt-5-nano@0.1.0
 objective:
   Build a repeatable simple/medium/complex evaluation suite for LLM-assisted
-  stored procedure semantic analysis without expanding runtime behavior in the
-  contract slice.
+  stored procedure semantic analysis, migration guide quality, and Java/MyBatis
+  conversion readiness without expanding runtime storage or apply behavior.
 runtime_profiles:
   semantic_analysis:
     default_model: gpt-5.5
     profile_id: openai_sp_semantic_analysis
+    override_env: OPENAI_MODEL_ANALYSIS
     remote_gate_required: true
   fast_test:
     default_model: gpt-5-nano
     profile_id: openai_fast_test
+    override_env: OPENAI_MODEL_FAST_TEST
     remote_gate_required: false
 environment_gates:
   remote_llm:
@@ -30,6 +32,7 @@ environment_gates:
       - OPENAI_API_KEY
     optional_env:
       - OPENAI_MODEL_ANALYSIS
+      - OPENAI_MODEL_FAST_TEST
       - LLM_LIVE_GATE=1
   default_tests:
     use_fake_gateway: true
@@ -40,6 +43,8 @@ scope:
     - modernization_points
     - risk_flags
     - review_markers
+    - conversion_guidance
+    - migration_guide_insights
     - assumptions
   required_evidence_type: LLM_INFERENCE
   deterministic_facts_source:
@@ -50,6 +55,20 @@ scope:
     new_table_fact_claims: REVIEW_REQUIRED
     new_function_fact_claims: REVIEW_REQUIRED
     low_evidence_business_rule_claims: REVIEW_REQUIRED
+  staged_runtime:
+    sp_fan_out: true
+    default_sp_concurrency_env: LLM_SP_CONCURRENCY
+    default_sp_concurrency: 2
+    dynamic_evidence_schema: true
+    deterministic_review_marker_injection: true
+    high_quality_default: true
+    stages:
+      - deterministic_evidence_digest
+      - business_rule_extraction
+      - conversion_readiness
+      - migration_guide_insights
+      - evidence_critic
+      - repair
 forbidden_behavior:
   row_data_queries: true
   procedure_execution: true
@@ -82,6 +101,7 @@ trace_policy:
     - output_token_count
     - total_token_count
     - latency_ms
+    - component_invocations
     - status
   allowed_agent_run_fields:
     - agent_run_id
@@ -97,6 +117,9 @@ quality_dimensions:
   semantic_recall:
     description: Expected business rules, risks, and assumptions are present.
     minimum_score: 0.75
+  guide_conversion_recall:
+    description: Expected migration guide and Java/MyBatis conversion guidance is present.
+    minimum_score: 0.8
   evidence_discipline:
     description: Claims are tied to existing deterministic facts or review markers.
     minimum_score: 0.9
@@ -148,5 +171,6 @@ acceptance:
     - P23 work is decomposed into independent prompts.
     - The quality contract names required scenarios, gates, fields, and safety rules.
     - No live OpenAI call is required for default contract validation.
-    - Fast/test model remains gpt-5-nano.
+    - High-quality live confidence uses openai_sp_semantic_analysis and may be overridden by OPENAI_MODEL_ANALYSIS.
+    - Fast/test model defaults to gpt-5-nano and may be overridden by OPENAI_MODEL_FAST_TEST for manual fast/test runs.
     - Production readiness remains false until PPM live gated eval passes.

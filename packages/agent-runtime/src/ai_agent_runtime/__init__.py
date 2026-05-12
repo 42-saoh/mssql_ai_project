@@ -5,9 +5,13 @@ from ai_agent_runtime.gateway import (
     OpenAIModelGateway,
     build_model_gateway_from_env,
 )
+from ai_agent_runtime.metadata_analysis import build_metadata_analysis_run
 from ai_agent_runtime.models import (
     AgentRunPayload,
+    AiToolPlanningOutput,
+    AiToolRequest,
     LlmSemanticAnalysisOutput,
+    MetadataAnalysisOutput,
     ModelInvocationRecord,
     ModelProfile,
     RenderedPrompt,
@@ -17,23 +21,31 @@ from ai_agent_runtime.quality_eval import (
     evaluate_p23_semantic_quality,
 )
 from ai_agent_runtime.semantic import (
+    SemanticAnalysisTask,
     build_semantic_analysis_run,
+    build_semantic_analysis_runs,
     merge_llm_semantic_analysis,
 )
 
 __all__ = [
     "AgentRunPayload",
+    "AiToolPlanningOutput",
+    "AiToolRequest",
     "FakeModelGateway",
     "LLM_INFERENCE_EVIDENCE_TYPE",
     "LlmSemanticAnalysisOutput",
+    "MetadataAnalysisOutput",
     "ModelGateway",
     "ModelGatewayError",
     "ModelInvocationRecord",
     "ModelProfile",
     "OpenAIModelGateway",
     "RenderedPrompt",
+    "SemanticAnalysisTask",
     "build_model_gateway_from_env",
+    "build_metadata_analysis_run",
     "build_semantic_analysis_run",
+    "build_semantic_analysis_runs",
     "evaluate_p23_semantic_quality",
     "merge_llm_semantic_analysis",
 ]

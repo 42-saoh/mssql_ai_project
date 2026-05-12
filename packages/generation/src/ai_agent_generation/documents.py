@@ -81,6 +81,7 @@ class DependencyReportRenderer:
 
     def render(self, context: GenerationContext) -> RenderedArtifact:
         llm_analysis = _llm_analysis(context)
+        dependency_evidence = _dependency_evidence(context)
         lines = [
             f"# {context.entity_name} Dependency Report Draft",
             "",
@@ -88,6 +89,7 @@ class DependencyReportRenderer:
             "- status: DRAFT",
             "- REVIEW_REQUIRED: 호출 그래프는 canonical dependency resolver 결과로 확정",
             f"- rootProcedure: `{context.sp_name}`",
+            *_dependency_summary_lines(dependency_evidence),
             "",
             "## dependency_table",
             "| kind | object | evidence |",
@@ -97,6 +99,9 @@ class DependencyReportRenderer:
             lines.append(f"| {source.display_type} | `{source.name}` | {source.reason} |")
         lines.extend(
             [
+                "",
+                "## dependency_closure_evidence",
+                *_dependency_closure_lines(dependency_evidence),
                 "",
                 *render_p24_dependency_report_sections(context),
                 "## evidence_summary",
@@ -134,6 +139,67 @@ def _llm_analysis(context: GenerationContext) -> dict:
     return dict(payload) if isinstance(payload, dict) else {}
 
 
+def _dependency_evidence(context: GenerationContext) -> dict:
+    payload = context.value("dependencyEvidence", {}) or {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _dependency_summary_lines(payload: dict) -> list[str]:
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        return ["- dependencyClosure: NOT_AVAILABLE"]
+    return [
+        f"- dependencyClosureTool: `{payload.get('toolName', 'get_dependency_closure')}`",
+        f"- dependencySnapshot: `{payload.get('snapshotId') or 'REVIEW_REQUIRED'}`",
+        f"- closureNodes: {summary.get('nodeCount', 0)}",
+        f"- closureEdges: {summary.get('edgeCount', 0)}",
+        f"- unresolvedReviewRequired: {summary.get('reviewRequiredCount', 0)}",
+    ]
+
+
+def _dependency_closure_lines(payload: dict) -> list[str]:
+    if not payload:
+        return ["- REVIEW_REQUIRED: dependency closure evidence was not available."]
+    lines = [
+        "| status | object | kind | strategy |",
+        "|---|---|---|---|",
+    ]
+    for edge in _dict_items(payload.get("edges")):
+        lines.append(
+            "| "
+            f"{edge.get('resolutionStatus', 'REVIEW_REQUIRED')} | "
+            f"`{_table_text(edge.get('to', 'unknown'))}` | "
+            f"{_table_text(edge.get('dependencyType', 'REFERENCE'))} | "
+            f"{_table_text(edge.get('resolutionStrategy', 'UNRESOLVED'))} |"
+        )
+    for item in _dict_items(payload.get("unresolved")):
+        object_ref = ".".join(
+            str(part)
+            for part in (item.get("schema"), item.get("name"))
+            if part
+        )
+        lines.append(
+            "| "
+            f"{item.get('resolutionStatus', 'REVIEW_REQUIRED')} | "
+            f"`{_table_text(object_ref or 'unresolved')}` | "
+            f"{_table_text(item.get('dependencyType', 'REFERENCE'))} | "
+            f"{_table_text(item.get('resolutionStrategy', 'UNRESOLVED'))} |"
+        )
+    if len(lines) == 2:
+        lines.append("| CONFIRMED | `no dependencies returned` | none | none |")
+    return lines
+
+
+def _dict_items(value: object) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _table_text(value: object) -> str:
+    return str(value).replace("|", "/")
+
+
 def _llm_semantic_lines(payload: dict) -> list[str]:
     if not payload:
         return ["- status: NOT_REQUESTED"]
@@ -142,6 +208,10 @@ def _llm_semantic_lines(payload: dict) -> list[str]:
         lines.append(f"- Business rule ({rule.get('category')}): {rule.get('summary')}")
     for point in payload.get("modernizationPoints", []) or []:
         lines.append(f"- Modernization ({point.get('code')}): {point.get('summary')}")
+    for guidance in payload.get("conversionGuidance", []) or []:
+        lines.append(f"- Conversion guidance ({guidance.get('code')}): {guidance.get('summary')}")
+    for insight in payload.get("migrationGuideInsights", []) or []:
+        lines.append(f"- Guide insight ({insight.get('section')}): {insight.get('summary')}")
     for marker in payload.get("reviewMarkers", []) or []:
         lines.append(f"- Review marker ({marker.get('code')}): {marker.get('message')}")
     return lines

@@ -10,7 +10,7 @@ from ai_agent_domain import (
     RequestedOutputType,
     WorkflowStepType,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ApiModel(BaseModel):
@@ -36,14 +36,18 @@ class SPAnalysisOptions(ApiModel):
         default=True,
         alias="includeModernizationHints",
     )
-    use_llm_analysis: bool = Field(default=False, alias="useLlmAnalysis")
+    use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
     llm_profile_id: Literal[
         "openai_sp_semantic_analysis",
         "openai_fast_test",
     ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
     allow_sp_definition_to_model: bool = Field(
-        default=False,
+        default=True,
         alias="allowSpDefinitionToModel",
+    )
+    use_ai_tool_orchestration: bool = Field(
+        default=True,
+        alias="useAiToolOrchestration",
     )
 
 
@@ -139,6 +143,10 @@ class ModelInvocationSummary(ApiModel):
     status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
     token_usage: dict[str, int] = Field(default_factory=dict, alias="tokenUsage")
     latency_ms: int | None = Field(default=None, alias="latencyMs")
+    component_invocations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="componentInvocations",
+    )
 
 
 class AgentRunSummary(ApiModel):
@@ -180,6 +188,23 @@ class MetadataToolSummary(ApiModel):
     name: str
     description: str
     read_only: Literal[True] = Field(default=True, alias="readOnly")
+    invokable: bool = False
+
+
+class MetadataToolInvokeRequest(ApiModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    arguments: dict[str, Any]
+
+
+class MetadataToolInvokeResponse(ApiModel):
+    ok: Literal[True]
+    tool_name: str = Field(alias="toolName")
+    db_profile_id: str = Field(alias="dbProfileId")
+    snapshot_id: str = Field(alias="snapshotId")
+    collected_at: str = Field(alias="collectedAt")
+    evidence_refs: list[dict[str, Any]] = Field(default_factory=list, alias="evidenceRefs")
+    data: dict[str, Any]
 
 
 class MetadataSearchBlocker(ApiModel):
@@ -219,6 +244,173 @@ class MetadataSearchResponse(ApiModel):
     caveats: list[str] = Field(default_factory=list)
     review_required: bool = Field(default=False, alias="reviewRequired")
     blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
+
+
+class MetadataAnalysisOptions(ApiModel):
+    use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
+    use_ai_tool_orchestration: bool = Field(
+        default=True,
+        alias="useAiToolOrchestration",
+    )
+    llm_profile_id: Literal[
+        "openai_sp_semantic_analysis",
+        "openai_fast_test",
+    ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
+    max_targets: int = Field(default=3, ge=1, le=5, alias="maxTargets")
+
+
+class MetadataAnalysisRequest(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId", min_length=1)
+    query: str | None = Field(default=None, min_length=1)
+    target: MetadataObjectIdentity | None = None
+    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
+        default_factory=list,
+        alias="objectTypes",
+    )
+    options: MetadataAnalysisOptions = Field(default_factory=MetadataAnalysisOptions)
+
+    @model_validator(mode="after")
+    def validate_query_or_target(self) -> MetadataAnalysisRequest:
+        has_query = bool((self.query or "").strip())
+        has_target = self.target is not None
+        if has_query == has_target:
+            raise ValueError(
+                "metadata analysis request must provide exactly one of query or target."
+            )
+        return self
+
+
+class MetadataAnalysisInsight(ApiModel):
+    code: str
+    object_ref: str = Field(alias="objectRef")
+    summary: str
+    status: Literal["INFERRED_DESCRIPTION", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+MetadataInsightCategory = Literal[
+    "COLUMN_RISK",
+    "RELATIONSHIP",
+    "INDEX",
+    "CONSTRAINT",
+    "DOCUMENTATION_GAP",
+    "DTO_READINESS",
+    "DEPENDENCY",
+]
+
+
+class MetadataObjectProfile(ApiModel):
+    object_ref: str = Field(alias="objectRef")
+    object_type: str = Field(alias="objectType")
+    column_count: int = Field(default=0, alias="columnCount")
+    primary_key_count: int = Field(default=0, alias="primaryKeyCount")
+    foreign_key_count: int = Field(default=0, alias="foreignKeyCount")
+    index_count: int = Field(default=0, alias="indexCount")
+    constraint_count: int = Field(default=0, alias="constraintCount")
+    description_coverage: float = Field(default=0.0, ge=0.0, le=1.0, alias="descriptionCoverage")
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    source_fact_ids: list[str] = Field(default_factory=list, alias="sourceFactIds")
+
+
+class MetadataInsightGroup(ApiModel):
+    category: MetadataInsightCategory
+    insights: list[MetadataAnalysisInsight] = Field(default_factory=list)
+
+
+class MetadataDependencyGraphNode(ApiModel):
+    id: str
+    object_ref: str = Field(alias="objectRef")
+    object_type: str = Field(alias="objectType")
+    status: Literal["CONFIRMED", "REVIEW_REQUIRED"] = "CONFIRMED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataDependencyGraphEdge(ApiModel):
+    from_object_ref: str = Field(alias="from")
+    to_object_ref: str = Field(alias="to")
+    relationship_type: str = Field(alias="relationshipType")
+    status: Literal["CONFIRMED", "REVIEW_REQUIRED"] = "CONFIRMED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataDependencyGraph(ApiModel):
+    nodes: list[MetadataDependencyGraphNode] = Field(default_factory=list)
+    edges: list[MetadataDependencyGraphEdge] = Field(default_factory=list)
+    unresolved: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MetadataDtoReadiness(ApiModel):
+    object_ref: str = Field(alias="objectRef")
+    status: Literal["READY", "PARTIAL", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    field_count: int = Field(default=0, alias="fieldCount")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataAnalysisReviewMarker(ApiModel):
+    code: str
+    message: str
+    status: Literal["REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataAnalysisResponse(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId")
+    mode: Literal["QUERY", "TARGET"]
+    query: str | None = None
+    target: MetadataObjectIdentity | None = None
+    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
+        default_factory=list,
+        alias="objectTypes",
+    )
+    source_profile: str = Field(alias="sourceProfile")
+    source_database: str = Field(alias="sourceDatabase")
+    snapshot_id: str | None = Field(default=None, alias="snapshotId")
+    collected_at: str | None = Field(default=None, alias="collectedAt")
+    targets: list[MetadataSearchResult] = Field(default_factory=list)
+    summary: str
+    object_insights: list[MetadataAnalysisInsight] = Field(
+        default_factory=list,
+        alias="objectInsights",
+    )
+    object_profiles: list[MetadataObjectProfile] = Field(
+        default_factory=list,
+        alias="objectProfiles",
+    )
+    insight_groups: list[MetadataInsightGroup] = Field(
+        default_factory=list,
+        alias="insightGroups",
+    )
+    dependency_graph: MetadataDependencyGraph = Field(
+        default_factory=MetadataDependencyGraph,
+        alias="dependencyGraph",
+    )
+    dto_readiness: list[MetadataDtoReadiness] = Field(
+        default_factory=list,
+        alias="dtoReadiness",
+    )
+    ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
+    deterministic_facts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="deterministicFacts",
+    )
+    review_markers: list[MetadataAnalysisReviewMarker] = Field(
+        default_factory=list,
+        alias="reviewMarkers",
+    )
+    assumptions: list[str] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
+    model_invocation: ModelInvocationSummary | None = Field(
+        default=None,
+        alias="modelInvocation",
+    )
+    component_invocations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="componentInvocations",
+    )
 
 
 class RegistryVersion(ApiModel):

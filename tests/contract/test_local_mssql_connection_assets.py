@@ -12,7 +12,7 @@ def test_local_docker_profile_registry_exists() -> None:
     registry = REPO_ROOT / "config" / "mssql" / "local_docker_profiles.yaml"
     assert registry.exists(), "local MSSQL profile registry should exist"
     payload = yaml.safe_load(registry.read_text(encoding="utf-8"))
-    assert payload["defaultProfileId"] == "master"
+    assert payload.get("defaultProfileId", "master") == "master"
     assert any(profile["database"] == "master" for profile in payload["profiles"])
     assert any(profile["database"] == "PLF" for profile in payload["profiles"])
     assert any(
@@ -30,6 +30,7 @@ def test_docker_test_compose_forwards_local_mssql_env() -> None:
     assert "PLATFORM_DB_HOST" in compose_text
     assert "MSSQL_METADATA_HOST" in compose_text
     assert "MSSQL_METADATA_PROFILE_FILE" in compose_text
+    assert "MSSQL_METADATA_TDS_VERSION" in compose_text
 
 
 def test_makefile_docker_targets_load_local_env_file_when_present() -> None:

@@ -30,6 +30,37 @@ def test_p24_analysis_doc_emits_required_sections_and_evidence_refs() -> None:
     assert "status=REVIEW_REQUIRED" in artifact.content
 
 
+def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None:
+    scenario = _scenario("p24_simple_read_only_lookup")
+    context = _context_from_scenario(
+        scenario,
+        llm_analysis={
+            "conversionGuidance": [
+                {
+                    "code": "DTO_FIELD_MAPPING",
+                    "summary": "Map read-only projection fields into DTO draft notes.",
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": ["ev_p24_simple_proc"],
+                }
+            ],
+            "migrationGuideInsights": [
+                {
+                    "section": "migration_strategy",
+                    "summary": "Keep migration output as draft-only readiness notes.",
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": ["ev_p24_simple_proc"],
+                }
+            ],
+        },
+    )
+    artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, context)
+
+    assert "llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`" in artifact.content
+    assert "llmConversionGuidance: DTO_FIELD_MAPPING" in artifact.content
+    assert "llmMigrationGuideInsight: migration_strategy" in artifact.content
+    assert "generated_source_application: `not_performed`" in artifact.content
+
+
 def test_p24_dependency_report_includes_dml_call_flow_and_readiness_note() -> None:
     scenario = _scenario("p24_medium_transactional_branching_dml")
     artifact = render_artifact(ArtifactType.DEPENDENCY_REPORT, _context_from_scenario(scenario))
@@ -99,7 +130,11 @@ def _scenario(fixture_id: str) -> dict[str, Any]:
     }[fixture_id]
 
 
-def _context_from_scenario(scenario: Mapping[str, Any]) -> GenerationContext:
+def _context_from_scenario(
+    scenario: Mapping[str, Any],
+    *,
+    llm_analysis: Mapping[str, Any] | None = None,
+) -> GenerationContext:
     appendix = scenario.get("appendix_mappings", {}) or {}
     return GenerationContext.from_mapping(
         {
@@ -126,6 +161,7 @@ def _context_from_scenario(scenario: Mapping[str, Any]) -> GenerationContext:
                     field["name"] for field in appendix.get("result_fields", []) or []
                 ],
                 "migrationGuide": scenario,
+                "llmAnalysis": llm_analysis or {},
             },
             "evidence": {
                 "sources": [

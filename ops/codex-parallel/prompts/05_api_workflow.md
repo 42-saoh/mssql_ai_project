@@ -21,10 +21,10 @@ In Scope:
 - FastAPI app structure 정리
 - request/job/artifact routes
 - artifact preview and validation endpoint skeleton
-- approval decision recording skeleton
+- deferred approval decision recording skeleton
 - metadata profile/tools proxy 또는 stub route
 - registry version binding stub route
-- workflow transitions: submitted → collecting_metadata → analyzing → generating → validating → review_pending / failed
+- workflow transitions: submitted → collecting_metadata → analyzing → generating → validating → validation_complete / failed
 - validation/approval/publish gate skeleton. publish 실행이 아니라 gate 표현만
 - in-memory repositories or stub persistence adapters
 - integration tests and unit tests

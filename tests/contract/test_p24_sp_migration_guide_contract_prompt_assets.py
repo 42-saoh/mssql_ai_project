@@ -68,6 +68,9 @@ def test_p24_contract_declares_migration_guide_quality_boundaries() -> None:
     assert contract["reference_policy"]["copy_reference_content_to_repo"] is False
     assert contract["reference_policy"]["copy_raw_sp_text_to_repo"] is False
     assert contract["runtime_profiles"]["fast_test"]["default_model"] == "gpt-5-nano"
+    assert contract["runtime_profiles"]["fast_test"]["override_env"] == (
+        "OPENAI_MODEL_FAST_TEST"
+    )
     assert contract["scope"]["existing_artifact_types"] == [
         "SP_ANALYSIS_DOC",
         "DEPENDENCY_REPORT",
@@ -131,6 +134,7 @@ def test_p24_prompts_capture_split_contract_and_policy_rules() -> None:
         assert "P24" in text
         assert "production_ready: false" in text
         assert "`gpt-5-nano`" in text
+        assert "OPENAI_MODEL_FAST_TEST" in text
         assert "`PLF`" in text
         assert "`PPM`" in text
         assert "PLF fallback" in text
@@ -187,6 +191,9 @@ def test_p24b_fixture_asset_records_fixture_only_boundaries() -> None:
     assert fixture["status"] == "authored_p24b"
     assert fixture["production_ready"] is False
     assert fixture["model_profiles"]["fast_test"]["default_model"] == "gpt-5-nano"
+    assert fixture["model_profiles"]["fast_test"]["override_env"] == (
+        "OPENAI_MODEL_FAST_TEST"
+    )
     assert fixture["artifact_scope"]["existing_artifact_types"] == [
         "SP_ANALYSIS_DOC",
         "DEPENDENCY_REPORT",

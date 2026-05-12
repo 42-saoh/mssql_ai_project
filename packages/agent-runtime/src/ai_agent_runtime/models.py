@@ -2,18 +2,28 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PROMPT_VERSION = "prompt:sp_semantic_analysis@0.1.0"
-OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.1.0"
+PROMPT_VERSION = "prompt:sp_semantic_analysis@0.3.0"
+OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.3.0"
+TOOL_PLANNER_PROMPT_VERSION = "prompt:mssql_metadata_tool_planner@0.1.0"
+TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_tool_plan@0.1.0"
+METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.0"
+METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.0"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
 FAST_TEST_MODEL_PROFILE_ID = "openai_fast_test"
+FAST_TEST_DEFAULT_MODEL = "gpt-5-nano"
 SEMANTIC_MODEL_REGISTRY_REF = "model:openai_sp_semantic_analysis@0.1.0"
-FAST_TEST_MODEL_REGISTRY_REF = "model:openai_fast_test@gpt-5-nano@0.1.0"
+FAST_TEST_MODEL_REGISTRY_REF = f"model:openai_fast_test@{FAST_TEST_DEFAULT_MODEL}@0.1.0"
+
+
+def fast_test_model_registry_ref(model: str) -> str:
+    return f"model:openai_fast_test@{model}@0.1.0"
 
 
 class AgentRunStatus(StrEnum):
@@ -67,6 +77,20 @@ class LlmReviewMarker(StrictModel):
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
 
 
+class LlmConversionGuidance(StrictModel):
+    code: str
+    summary: str
+    status: LlmEvidenceStatus = LlmEvidenceStatus.REVIEW_REQUIRED
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class LlmMigrationGuideInsight(StrictModel):
+    section: str
+    summary: str
+    status: LlmEvidenceStatus = LlmEvidenceStatus.REVIEW_REQUIRED
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
 class LlmSemanticAnalysisOutput(StrictModel):
     business_rules: list[LlmBusinessRule] = Field(default_factory=list, alias="businessRules")
     modernization_points: list[LlmModernizationPoint] = Field(
@@ -74,6 +98,80 @@ class LlmSemanticAnalysisOutput(StrictModel):
         alias="modernizationPoints",
     )
     risk_flags: list[LlmRiskFlag] = Field(default_factory=list, alias="riskFlags")
+    review_markers: list[LlmReviewMarker] = Field(default_factory=list, alias="reviewMarkers")
+    conversion_guidance: list[LlmConversionGuidance] = Field(
+        default_factory=list,
+        alias="conversionGuidance",
+    )
+    migration_guide_insights: list[LlmMigrationGuideInsight] = Field(
+        default_factory=list,
+        alias="migrationGuideInsights",
+    )
+    assumptions: list[str] = Field(default_factory=list)
+
+    def to_storage_dict(self) -> dict[str, Any]:
+        return self.model_dump(by_alias=True, mode="json")
+
+
+class AiToolRequest(StrictModel):
+    tool_name: str = Field(alias="toolName")
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    reason: str
+    expected_evidence_use: str = Field(alias="expectedEvidenceUse")
+
+
+class AiToolPlanningOutput(StrictModel):
+    tool_requests: list[AiToolRequest] = Field(default_factory=list, alias="toolRequests")
+    assumptions: list[str] = Field(default_factory=list)
+    review_markers: list[LlmReviewMarker] = Field(default_factory=list, alias="reviewMarkers")
+
+    def to_storage_dict(self) -> dict[str, Any]:
+        return self.model_dump(by_alias=True, mode="json")
+
+
+class MetadataAnalysisInsight(StrictModel):
+    code: str
+    object_ref: str = Field(alias="objectRef")
+    summary: str
+    status: LlmEvidenceStatus = LlmEvidenceStatus.REVIEW_REQUIRED
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataAnalysisInsightGroup(StrictModel):
+    category: Literal[
+        "COLUMN_RISK",
+        "RELATIONSHIP",
+        "INDEX",
+        "CONSTRAINT",
+        "DOCUMENTATION_GAP",
+        "DTO_READINESS",
+        "DEPENDENCY",
+    ]
+    insights: list[MetadataAnalysisInsight] = Field(default_factory=list)
+
+
+class MetadataAnalysisDtoReadiness(StrictModel):
+    object_ref: str = Field(alias="objectRef")
+    status: Literal["READY", "PARTIAL", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    field_count: int = Field(default=0, alias="fieldCount")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataAnalysisOutput(StrictModel):
+    summary: str
+    object_insights: list[MetadataAnalysisInsight] = Field(
+        default_factory=list,
+        alias="objectInsights",
+    )
+    insight_groups: list[MetadataAnalysisInsightGroup] = Field(
+        default_factory=list,
+        alias="insightGroups",
+    )
+    dto_readiness: list[MetadataAnalysisDtoReadiness] = Field(
+        default_factory=list,
+        alias="dtoReadiness",
+    )
     review_markers: list[LlmReviewMarker] = Field(default_factory=list, alias="reviewMarkers")
     assumptions: list[str] = Field(default_factory=list)
 
@@ -119,9 +217,10 @@ class ModelInvocationRecord:
     provider_request_id: str | None = None
     error_code: str | None = None
     error_message: str | None = None
+    component_invocations: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     def to_storage_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "provider": self.provider,
             "model": self.model,
             "modelProfileId": self.model_profile_id,
@@ -136,6 +235,9 @@ class ModelInvocationRecord:
             "tokenUsage": dict(self.token_usage),
             "latencyMs": self.latency_ms,
         }
+        if self.component_invocations:
+            payload["componentInvocations"] = [dict(item) for item in self.component_invocations]
+        return payload
 
 
 @dataclass(frozen=True)
@@ -168,10 +270,17 @@ def text_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def semantic_output_schema() -> dict[str, Any]:
+def semantic_output_schema(
+    allowed_evidence_refs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    ref_items: dict[str, Any] = {"type": "string"}
+    allowed_refs = [str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()]
+    if allowed_refs:
+        ref_items["enum"] = sorted(set(allowed_refs))
     evidence_ref_array = {
         "type": "array",
-        "items": {"type": "string"},
+        "items": ref_items,
+        "minItems": 1,
     }
     evidence_status = {
         "type": "string",
@@ -240,6 +349,34 @@ def semantic_output_schema() -> dict[str, Any]:
                     "additionalProperties": False,
                 },
             },
+            "conversionGuidance": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "status": evidence_status,
+                        "evidenceRefs": evidence_ref_array,
+                    },
+                    "required": ["code", "summary", "status", "evidenceRefs"],
+                    "additionalProperties": False,
+                },
+            },
+            "migrationGuideInsights": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "section": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "status": evidence_status,
+                        "evidenceRefs": evidence_ref_array,
+                    },
+                    "required": ["section", "summary", "status", "evidenceRefs"],
+                    "additionalProperties": False,
+                },
+            },
             "assumptions": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -249,6 +386,192 @@ def semantic_output_schema() -> dict[str, Any]:
             "businessRules",
             "modernizationPoints",
             "riskFlags",
+            "reviewMarkers",
+            "conversionGuidance",
+            "migrationGuideInsights",
+            "assumptions",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def metadata_tool_planning_output_schema(
+    tool_names: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    tool_name_schema: dict[str, Any] = {"type": "string"}
+    allowed_tool_names = [str(name) for name in (tool_names or ()) if str(name).strip()]
+    if allowed_tool_names:
+        tool_name_schema["enum"] = sorted(set(allowed_tool_names))
+    evidence_status = {
+        "type": "string",
+        "enum": [LlmEvidenceStatus.REVIEW_REQUIRED.value],
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "toolRequests": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "toolName": tool_name_schema,
+                        "arguments": {"type": "object"},
+                        "reason": {"type": "string"},
+                        "expectedEvidenceUse": {"type": "string"},
+                    },
+                    "required": [
+                        "toolName",
+                        "arguments",
+                        "reason",
+                        "expectedEvidenceUse",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "assumptions": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "reviewMarkers": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string"},
+                        "message": {"type": "string"},
+                        "status": evidence_status,
+                        "evidenceRefs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "required": ["code", "message", "status", "evidenceRefs"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["toolRequests", "assumptions", "reviewMarkers"],
+        "additionalProperties": False,
+    }
+
+
+def metadata_analysis_output_schema(
+    allowed_evidence_refs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    ref_items: dict[str, Any] = {"type": "string"}
+    allowed_refs = [str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()]
+    if allowed_refs:
+        ref_items["enum"] = sorted(set(allowed_refs))
+    evidence_ref_array = {
+        "type": "array",
+        "items": ref_items,
+        "minItems": 1,
+    }
+    evidence_status = {
+        "type": "string",
+        "enum": [status.value for status in LlmEvidenceStatus],
+    }
+    review_status = {
+        "type": "string",
+        "enum": [LlmEvidenceStatus.REVIEW_REQUIRED.value],
+    }
+    insight_item_schema = {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string"},
+            "objectRef": {"type": "string"},
+            "summary": {"type": "string"},
+            "status": evidence_status,
+            "evidenceRefs": evidence_ref_array,
+        },
+        "required": ["code", "objectRef", "summary", "status", "evidenceRefs"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "objectInsights": {
+                "type": "array",
+                "items": insight_item_schema,
+            },
+            "insightGroups": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "COLUMN_RISK",
+                                "RELATIONSHIP",
+                                "INDEX",
+                                "CONSTRAINT",
+                                "DOCUMENTATION_GAP",
+                                "DTO_READINESS",
+                                "DEPENDENCY",
+                            ],
+                        },
+                        "insights": {
+                            "type": "array",
+                            "items": insight_item_schema,
+                        },
+                    },
+                    "required": ["category", "insights"],
+                    "additionalProperties": False,
+                },
+            },
+            "dtoReadiness": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "objectRef": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["READY", "PARTIAL", "REVIEW_REQUIRED"],
+                        },
+                        "fieldCount": {"type": "integer", "minimum": 0},
+                        "reviewReasons": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "evidenceRefs": evidence_ref_array,
+                    },
+                    "required": [
+                        "objectRef",
+                        "status",
+                        "fieldCount",
+                        "reviewReasons",
+                        "evidenceRefs",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "reviewMarkers": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string"},
+                        "message": {"type": "string"},
+                        "status": review_status,
+                        "evidenceRefs": evidence_ref_array,
+                    },
+                    "required": ["code", "message", "status", "evidenceRefs"],
+                    "additionalProperties": False,
+                },
+            },
+            "assumptions": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": [
+            "summary",
+            "objectInsights",
+            "insightGroups",
+            "dtoReadiness",
             "reviewMarkers",
             "assumptions",
         ],

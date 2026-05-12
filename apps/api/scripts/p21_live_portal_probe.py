@@ -77,11 +77,6 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
         metadata_result = _search_ppm_metadata(client)
         request_result = _submit_workflow(client, metadata_result)
         validation_result = _validate_artifact(client, request_result["artifactId"])
-        approval_result = _record_approval(
-            client,
-            request_result["artifactId"],
-            validation_result.get("validationReportId"),
-        )
     except ProbeFailure as exc:
         return _result(
             status="failed",
@@ -95,13 +90,12 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
         blocker_code=None,
         summary=(
             "P21 live portal gate passed with PLF workflow access, live PPM metadata "
-            "search, explicit validation, and persisted approval decision."
+            "search, and explicit validation."
         ),
         checks=[
             _check("ppm_metadata_search", "pass", summary=metadata_result["summary"]),
             _check("workflow_submit", "pass", summary=request_result["summary"]),
             _check("explicit_validation", "pass", summary=validation_result["summary"]),
-            _check("approval_decision", "pass", summary=approval_result["summary"]),
         ],
     )
 
@@ -183,6 +177,19 @@ def _submit_workflow(client: TestClient, metadata_result: dict[str, Any]) -> dic
                 )
             ],
         )
+    if payload.get("status") != "VALIDATION_COMPLETE":
+        raise ProbeFailure(
+            blocker_code="P25_VALIDATION_COMPLETE_STATUS_MISMATCH",
+            summary="Workflow did not stop at VALIDATION_COMPLETE after validation.",
+            checks=[
+                _check(
+                    "workflow_submit",
+                    "fail",
+                    blocker_code="P25_VALIDATION_COMPLETE_STATUS_MISMATCH",
+                    summary=f"Unexpected job status: {payload.get('status')}",
+                )
+            ],
+        )
     artifacts = client.get(f"/api/v1/jobs/{job_id}/artifacts")
     if artifacts.status_code != 200:
         raise ProbeFailure.from_response(
@@ -217,36 +224,6 @@ def _validate_artifact(client: TestClient, artifact_id: str) -> dict[str, Any]:
         "validationReportId": payload.get("validationReportId"),
         "summary": "Explicit validation action persisted a PLF validation report.",
     }
-
-
-def _record_approval(
-    client: TestClient,
-    artifact_id: str,
-    validation_report_id: str | None,
-) -> dict[str, str]:
-    reviewer = (
-        os.getenv("P21_APPROVAL_REVIEWER_LOGIN")
-        or os.getenv("PLATFORM_DB_REQUESTER_LOGIN")
-        or "codex-api-local"
-    )
-    payload: dict[str, str] = {
-        "decision": "REQUEST_CHANGES",
-        "reviewer": reviewer,
-        "comment": "P21 live portal gate redacted approval decision.",
-    }
-    if validation_report_id:
-        payload["validationReportId"] = validation_report_id
-    response = client.post(
-        f"/api/v1/artifacts/{artifact_id}/approval-decisions",
-        json=payload,
-    )
-    if response.status_code != 201:
-        raise ProbeFailure.from_response(
-            response,
-            fallback_blocker="P21_LIVE_PLF_UNAVAILABLE",
-            check_name="approval_decision",
-        )
-    return {"summary": "Approval decision was persisted through the PLF workflow API."}
 
 
 class ProbeFailure(RuntimeError):

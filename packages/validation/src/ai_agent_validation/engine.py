@@ -108,7 +108,7 @@ def validate_artifact(
         )
 
     if review_required or _has_review_marker(content, assumptions):
-        manual_review_points.append("Draft artifact requires human review before approval/publish.")
+        manual_review_points.append("Draft artifact has validation caveats before downstream use.")
     for assumption in assumptions:
         manual_review_points.append(assumption)
 
@@ -166,7 +166,7 @@ def validate_publish_gate(
         checks=(check,),
         manual_review_points=()
         if result == ValidationCheckResult.PASS
-        else (f"Review or approval is missing for {operation_value}.",),
+        else (f"Governance evidence is missing for {operation_value}.",),
         metadata={"gate": operation_value},
     )
 
@@ -383,7 +383,7 @@ def _review_required_marker_check(
             rule_id="generator.uncertainty.marker",
             severity=ValidationSeverity.WARNING,
             result=ValidationCheckResult.REVIEW_REQUIRED,
-            message="Draft uncertainty is explicitly marked for human review.",
+            message="Draft uncertainty is explicitly marked as a validation caveat.",
         )
     if review_required:
         return ValidationCheck(

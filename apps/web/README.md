@@ -7,10 +7,10 @@
 
 - `/` - 최근 jobs, PPM metadata search, draft artifact 목록 요약
 - `/requests/new` - API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect
-- `/metadata/search` - read-only metadata identity/evidence search
+- `/metadata/search` - read-only metadata identity/evidence search and explicit metadata analyze action
+- `/metadata/dependencies` - safe dependency closure/reference diagnostics
 - `/jobs/[jobId]` - 실제 job 상태와 draft artifact 목록
 - `/artifacts/[artifactId]` - artifact preview 와 latest validation 표시
-- `/review/decision` - API approval decision recording form
 
 ## API boundary
 
@@ -29,13 +29,44 @@
 - `/artifacts/[artifactId]` 는 page-load 에 validation write 를 만들지 않는다.
   Latest validation 은 `GET /api/v1/artifacts/{artifactId}/validation/latest` 로 읽고,
   validation write 는 사용자가 `Run validation` 을 누를 때만 실행한다.
-- `/review/decision` 은 preview-only 가 아니라
-  `POST /api/v1/artifacts/{artifactId}/approval-decisions` 를 호출한다.
 - PLF/PPM/API prerequisites 가 없으면 dependency blocker 를 렌더링한다.
+
+## P25 behavior
+
+- `/review/decision` 화면과 approval CTA 는 기본 Web UI 에서 제거되었고 직접 접근은 404 로 처리한다.
+- Validation 결과의 `REVIEW_REQUIRED` 는 사람 승인 요청이 아니라 evidence caveat 로 표시한다.
+- Approval API/server code 는 추후 재활성화를 위한 deferred capability 로 남지만 Web API client 와
+  smoke path 는 호출하지 않는다.
+
+## P29 behavior
+
+- `/metadata/dependencies` is a read-only diagnostic surface for
+  `get_dependency_closure` and `resolve_dependency_reference`.
+- The page uses `/api/v1/metadata/tools` only for `invokable` status and never
+  renders MCP input schemas.
+- The forms accept only structured metadata identifiers, `maxDepth`, and
+  `includeReviewRequired`; there are no free-form SQL, row data, procedure
+  execution, DDL/DML, raw definition, or secret fields.
+- Results render the sanitized invocation envelope: `snapshotId`, `collectedAt`,
+  evidence refs, closure nodes/edges/unresolved references, candidates, and
+  selected resolution.
+
+## Metadata analysis behavior
+
+- `/metadata/search` keeps deterministic search as the default page load. The `Analyze metadata`
+  action calls `POST /api/v1/metadata/analyze` explicitly.
+- The analysis panel renders response-only `summary`, `objectInsights`, `objectProfiles`,
+  `insightGroups`, `dependencyGraph`, `dtoReadiness`, deterministic fact count, sanitized
+  tool-call count, review markers, and caveats.
+- The Web client does not expose MCP input schemas, raw definition text, row data, procedure
+  execution, DDL/DML controls, or raw provider traces.
 
 ## P22 behavior
 
-- `/requests/new` 는 LLM semantic analysis option 을 API `SPAnalysisOptions` 로 전송한다.
+- `/requests/new` 는 P26 high-quality hybrid 기본값으로 LLM semantic analysis option 을 API
+  `SPAnalysisOptions` 로 전송한다. 기본 선택은 semantic analysis profile, LLM analysis enabled,
+  bounded AI metadata tool orchestration enabled, transient SP definition input allowed 이며
+  fast/test profile 은 수동 선택지로만 남긴다.
 - `/jobs/[jobId]` 는 `GET /api/v1/jobs/{jobId}/agent-runs` 로 sanitized LLM trace summary 를 읽어
   model, prompt/schema version, input/output hash, token usage, latency, status 를 표시한다.
 - `/artifacts/[artifactId]` 는 artifact 의 job id 가 있을 때 같은 sanitized trace summary 를 표시한다.

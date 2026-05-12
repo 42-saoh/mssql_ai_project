@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from ai_agent_domain import ArtifactType
+from ai_agent_runtime.gateway import model_profile_from_env
 from api_app.dependencies import get_repository, get_workflow_service, reset_application_state
 from api_app.main import app
 from api_app.repositories import ValidationReportRecord
@@ -30,6 +32,7 @@ def client_and_repository(
 ) -> Iterator[tuple[TestClient, MemoryWorkflowRepository]]:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     app.dependency_overrides[get_repository] = lambda: repository
@@ -61,6 +64,18 @@ def _sp_analysis_payload(outputs: list[str] | None = None) -> dict:
     }
 
 
+def _normalized_response_keys(value: Any) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            keys.add(str(key).replace("_", "").lower())
+            keys.update(_normalized_response_keys(nested))
+    elif isinstance(value, list):
+        for item in value:
+            keys.update(_normalized_response_keys(item))
+    return keys
+
+
 def _sp_analysis_llm_payload(outputs: list[str] | None = None) -> dict:
     payload = _sp_analysis_payload(outputs or ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"])
     payload["target"] = {
@@ -77,7 +92,7 @@ def _sp_analysis_llm_payload(outputs: list[str] | None = None) -> dict:
     return payload
 
 
-def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None:
+def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> None:
     headers = {"X-Correlation-ID": "corr-route-flow"}
     submit = client.post(
         "/api/v1/requests/sp-analysis",
@@ -103,7 +118,7 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     submitted = submit.json()
     assert submitted["requestId"].startswith("req_")
     assert submitted["jobId"].startswith("job_")
-    assert submitted["status"] == "REVIEW_PENDING"
+    assert submitted["status"] == "VALIDATION_COMPLETE"
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
@@ -147,21 +162,89 @@ def test_sp_analysis_request_to_artifact_review_flow(client: TestClient) -> None
     assert latest_validation.json()["artifactId"] == artifact_id
     assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
 
-    approval = client.post(
-        f"/api/v1/artifacts/{artifact_id}/approval-decisions",
-        headers=headers,
+
+def test_workflow_binds_dependency_closure_evidence_to_metadata_and_artifacts(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+) -> None:
+    client, repository = client_and_repository
+
+    submit = client.post(
+        "/api/v1/requests/sp-analysis",
         json={
-            "decision": "REQUEST_CHANGES",
-            "reviewer": "reviewer@example.com",
-            "comment": "API skeleton decision recording only",
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_ProcessOrderBatch",
+            },
+            "outputs": ["DEPENDENCY_REPORT"],
+            "options": {"includeEvidenceRefs": True},
         },
     )
-    assert approval.status_code == 201
-    assert approval.headers["X-Correlation-ID"] == "corr-route-flow"
-    assert approval.json()["artifactId"] == artifact_id
-    assert approval.json()["decision"] == "REQUEST_CHANGES"
-    assert "validationReportId" not in approval.json()
-    assert "reviewerChecklist" not in approval.json()
+
+    assert submit.status_code == 202
+    assert submit.json()["status"] == "VALIDATION_COMPLETE"
+    metadata = next(iter(repository.metadata_collections.values()))
+    dependency_evidence = metadata.payload["dependencyEvidence"]
+    assert dependency_evidence["toolName"] == "get_dependency_closure"
+    assert dependency_evidence["summary"]["reviewRequiredCount"] >= 1
+    assert dependency_evidence["unresolved"]
+    assert all(edge["resolutionStatus"] == "CONFIRMED" for edge in dependency_evidence["edges"])
+    assert "resolve_dependency_reference" not in str(metadata.payload)
+
+    artifact = next(iter(repository.artifacts.values()))
+    assert artifact.type == ArtifactType.DEPENDENCY_REPORT
+    assert "dependency_closure_evidence" in artifact.content
+    assert "raw_definition" not in artifact.content.lower()
+    assert "row_data" not in artifact.content.lower()
+    assert "select *" not in artifact.content.lower()
+    assert "ddl/dml" not in artifact.content.lower()
+    assert any("dependencies" in ref["locator"] for ref in artifact.evidence_refs)
+
+
+def test_workflow_blocks_ppm_template_only_without_plf_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    monkeypatch.setattr(
+        "api_app.metadata_service.ppm_manifest_selection_mode",
+        lambda: "template_only",
+    )
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        client = TestClient(app)
+        submit = client.post(
+            "/api/v1/requests/sp-analysis",
+            json={
+                "dbProfileId": "ppm",
+                "target": {
+                    "type": "PROCEDURE",
+                    "schema": "dbo",
+                    "name": "usp_GetOrderSummary",
+                },
+                "outputs": ["DEPENDENCY_REPORT"],
+                "options": {"includeEvidenceRefs": True},
+            },
+        )
+        job_id = submit.json()["jobId"]
+        job = client.get(f"/api/v1/jobs/{job_id}")
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert submit.status_code == 202
+    assert submit.json()["status"] == "FAILED"
+    assert job.status_code == 200
+    assert job.json()["status"] == "FAILED"
+    assert job.json()["failureReason"]
+    assert "PPM pilot manifest is template_only" in job.json()["failureReason"]
+    assert "PLF" not in submit.text
+    assert "PLF" not in job.text
 
 
 def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
@@ -180,6 +263,9 @@ def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
             idempotency_key=None,
         )
         job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+        repository.jobs[job.job_id].created_at = job.created_at + timedelta(
+            milliseconds=index,
+        )
         created_job_ids.append(job.job_id)
 
     response = client.get("/api/v1/jobs", params={"limit": 2})
@@ -195,6 +281,7 @@ def test_latest_validation_route_does_not_create_validation_write(
 ) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
     repository = CountingValidationRepository()
     service = WorkflowService(repository)
     app.dependency_overrides[get_repository] = lambda: repository
@@ -313,8 +400,9 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     assert payload["jobId"] == job_id
     assert len(payload["agentRuns"]) == 1
     run = payload["agentRuns"][0]
-    assert run["modelInvocation"]["model"] == "gpt-5-nano"
-    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.1.0"
+    assert run["modelInvocation"]["model"] == model_profile_from_env("openai_fast_test").model
+    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.3.0"
+    assert run["modelInvocation"]["componentInvocations"]
     assert "structuredOutput" in run
     assert "CREATE PROCEDURE" not in str(payload)
 
@@ -464,8 +552,16 @@ def test_metadata_and_registry_routes_are_safe_skeletons(client: TestClient) -> 
 
     tools = client.get("/api/v1/metadata/tools")
     assert tools.status_code == 200
-    assert "get_table_schema" in {tool["name"] for tool in tools.json()["tools"]}
+    tool_names = {tool["name"] for tool in tools.json()["tools"]}
+    assert "get_table_schema" in tool_names
+    assert "get_dependency_closure" in tool_names
+    assert "resolve_dependency_reference" in tool_names
     assert all(tool["readOnly"] is True for tool in tools.json()["tools"])
+    invokable_by_name = {tool["name"]: tool["invokable"] for tool in tools.json()["tools"]}
+    assert invokable_by_name["get_dependency_closure"] is True
+    assert invokable_by_name["resolve_dependency_reference"] is True
+    assert invokable_by_name["get_table_schema"] is False
+    assert not any("input" in tool for tool in tools.json()["tools"])
 
     registry = client.get("/api/v1/registry/versions")
     assert registry.status_code == 200
@@ -473,6 +569,155 @@ def test_metadata_and_registry_routes_are_safe_skeletons(client: TestClient) -> 
     assert {"PROMPT", "TEMPLATE", "POLICY", "DB_PROFILE", "GENERATOR"}.issubset(
         registry_types
     )
+
+
+def test_metadata_tool_invocation_route_returns_safe_dependency_closure(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/metadata/tools/get_dependency_closure/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+                "maxDepth": 2,
+                "includeReviewRequired": False,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) == {
+        "ok",
+        "toolName",
+        "dbProfileId",
+        "snapshotId",
+        "collectedAt",
+        "evidenceRefs",
+        "data",
+    }
+    assert payload["ok"] is True
+    assert payload["toolName"] == "get_dependency_closure"
+    assert payload["dbProfileId"] == "master"
+    assert payload["evidenceRefs"]
+    assert payload["data"]["unresolved"]
+    assert payload["data"]["reviewRequired"] is True
+    assert all(edge["resolutionStatus"] == "CONFIRMED" for edge in payload["data"]["edges"])
+
+    forbidden_keys = {
+        "rowdata",
+        "rawdefinition",
+        "definitiontext",
+        "sqltext",
+        "ddl",
+        "dml",
+        "execute",
+        "procedureexecution",
+    }
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(payload))
+
+
+def test_metadata_tool_invocation_route_resolves_unique_reference(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/metadata/tools/resolve_dependency_reference/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "sourceObject": {
+                    "schema": "dbo",
+                    "name": "usp_GetOrderSummary",
+                    "objectType": "PROCEDURE",
+                },
+                "referencedSchema": "dbo",
+                "referencedName": "TB_ORDER",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["resolutionStatus"] == "CONFIRMED"
+    assert data["selectedResolution"]["name"] == "TB_ORDER"
+    assert data["selectedResolution"]["resolutionConfidence"] == "HIGH"
+    assert data["reviewRequired"] is False
+
+
+def test_metadata_tool_invocation_route_rejects_disallowed_and_invalid_inputs(
+    client: TestClient,
+) -> None:
+    disallowed = client.post(
+        "/api/v1/metadata/tools/get_table_schema/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "tableName": "TB_ORDER",
+            }
+        },
+    )
+    invalid_depth = client.post(
+        "/api/v1/metadata/tools/get_dependency_closure/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+                "maxDepth": 4,
+                "secretToken": "do-not-echo",
+            }
+        },
+    )
+    free_form_sql = client.post(
+        "/api/v1/metadata/tools/get_dependency_closure/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+                "sql": "select * from TB_ORDER",
+            }
+        },
+    )
+
+    assert disallowed.status_code == 403
+    assert disallowed.json()["code"] == "METADATA_TOOL_INVOCATION_NOT_ALLOWED"
+    assert invalid_depth.status_code == 400
+    assert invalid_depth.json()["code"] == "INVALID_ARGUMENTS"
+    assert "do-not-echo" not in invalid_depth.text
+    assert free_form_sql.status_code == 403
+    assert free_form_sql.json()["code"] == "READ_ONLY_VIOLATION"
+    assert "select * from" not in free_form_sql.text.lower()
+
+
+def test_metadata_tool_invocation_route_blocks_ppm_template_only_without_plf_fallback(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "api_app.metadata_service.ppm_manifest_selection_mode",
+        lambda: "template_only",
+    )
+
+    response = client.post(
+        "/api/v1/metadata/tools/get_dependency_closure/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "ppm",
+                "schema": "dbo",
+                "objectName": "usp_ProcessOrderBatch",
+                "objectType": "PROCEDURE",
+            }
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "PPM_MANIFEST_TEMPLATE_ONLY"
+    assert "PLF" not in response.text
 
 
 def test_metadata_search_returns_read_only_identity_response(client: TestClient) -> None:
@@ -538,6 +783,55 @@ def test_metadata_search_validation_and_dependency_error_shapes(client: TestClie
     assert missing_profile.status_code == 404
     assert missing_profile.json()["code"] == "PROFILE_NOT_FOUND"
     assert set(missing_profile.json()) == {"detail", "code"}
+
+
+def test_metadata_analysis_route_supports_query_and_target_modes(
+    client: TestClient,
+) -> None:
+    query_response = client.post(
+        "/api/v1/metadata/analyze",
+        json={
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "options": {"llmProfileId": "openai_fast_test", "maxTargets": 2},
+        },
+    )
+    target_response = client.post(
+        "/api/v1/metadata/analyze",
+        json={
+            "dbProfileId": "master",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": True},
+        },
+    )
+
+    assert query_response.status_code == 200
+    query_payload = query_response.json()
+    assert query_payload["mode"] == "QUERY"
+    assert query_payload["targets"]
+    assert query_payload["deterministicFacts"]
+    assert "objectProfiles" in query_payload
+    assert "insightGroups" in query_payload
+    assert "dependencyGraph" in query_payload
+    assert "dtoReadiness" in query_payload
+    assert query_payload["modelInvocation"]["outputSchemaVersion"] == (
+        "schema:mssql_metadata_analysis@0.1.0"
+    )
+    assert query_payload["aiToolEvidence"]["status"] in {"SUCCEEDED", "REVIEW_REQUIRED"}
+
+    assert target_response.status_code == 200
+    target_payload = target_response.json()
+    assert target_payload["mode"] == "TARGET"
+    assert target_payload["modelInvocation"] is None
+    assert any(
+        marker["code"] == "AI_METADATA_ANALYSIS_SKIPPED"
+        for marker in target_payload["reviewMarkers"]
+    )
+
+    serialized = f"{query_response.text} {target_response.text}".lower()
+    forbidden_fields = ("rowdata", "row_data", "definition", "sqltext", "ddl", "dml")
+    assert not any(field in serialized for field in forbidden_fields)
 
 
 def test_unknown_resources_return_not_found(client: TestClient) -> None:
