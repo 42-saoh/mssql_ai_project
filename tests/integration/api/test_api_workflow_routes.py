@@ -819,11 +819,13 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
         "schema:mssql_metadata_analysis@0.1.0"
     )
     assert query_payload["aiToolEvidence"]["status"] in {"SUCCEEDED", "REVIEW_REQUIRED"}
+    assert query_payload["aiToolEvidence"]["plannerMetrics"]["claimAnalysisAvailable"] is True
 
     assert target_response.status_code == 200
     target_payload = target_response.json()
     assert target_payload["mode"] == "TARGET"
     assert target_payload["modelInvocation"] is None
+    assert target_payload["aiToolEvidence"]["plannerMetrics"]["status"] == "SKIPPED"
     assert any(
         marker["code"] == "AI_METADATA_ANALYSIS_SKIPPED"
         for marker in target_payload["reviewMarkers"]

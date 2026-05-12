@@ -315,7 +315,32 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 - `make test-web-smoke` 통과
 - optional live OpenAI/PPM confidence 는 별도 승인 환경에서만 판정하고, 기본 gate 는 fixture-first 로 유지한다
 
-### 14. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
+### 14. P32 Live Confidence + Planner Effectiveness Gate
+
+P32 는 bounded AI-MCP planner 가 실제로 유용한 metadata evidence 를 수집하고 그 evidence 가 최종 claim 에
+인용되는지를 fixture-first 로 측정한다. Live OpenAI+PPM 조합은 명시적 confidence gate 로만 실행한다.
+
+대상:
+- `aiToolEvidence.plannerMetrics`
+- `fixtures/eval/live_confidence_planner_effectiveness_p32_v1.yaml`
+- `tests/eval/test_p32_live_confidence_planner_effectiveness.py`
+
+필수 체크:
+- SP workflow trace 와 Metadata Analyze response 는 planned/executed/blocked/failed/deduped call count,
+  evidence fact count, cited fact count, evidence utilization, claim support rate 를 sanitized summary 로 노출한다
+- planner effectiveness 는 `mcp.*` 와 `metadata.profile.*` fact id 만 tool-grounded evidence 로 인정한다
+- duplicate request 는 dedupe count 로 잡히고 중복 internal MCP invocation 을 만들지 않는다
+- blocked unsafe request 와 individual tool failure 는 workflow failure 가 아니라 `REVIEW_REQUIRED` metrics/status 와 review marker 로 남긴다
+- under-utilized planner evidence 는 `REVIEW_REQUIRED` metrics/status 로 잡힌다
+- raw SQL/definition, row data, procedure execution, DDL/DML, secret, raw prompt/provider response text 를 반환하지 않는다
+- `P32_LIVE_CONFIDENCE_GATE=1` 일 때만 remote LLM 과 live PPM metadata 를 결합한다. Env/profile/prerequisite 누락은 gate enabled 상태에서 blocker failure 이며, 기본 실행은 `NOT_RUN_CONFIDENCE_ONLY` 다
+- live confidence 성공은 production readiness 가 아니라 confidence signal 이며 `production_ready: false` 를 유지한다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/unit/agent_runtime/test_planner_effectiveness.py tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p32_live_confidence_planner_effectiveness.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- 선택 live: `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"`
+
+### 15. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
 
 P27 은 dependency evidence 계약을 fixture-first MCP 구현과 명시적 hard-live gate 로 강화한다.
 목표는 AI-heavy semantic analysis 와 P24 guide renderer 에 raw SQL 이 아닌 구조화된

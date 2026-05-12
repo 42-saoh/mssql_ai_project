@@ -12,6 +12,9 @@ from ai_agent_runtime.models import (
     AiToolPlanningOutput,
     stable_json_hash,
 )
+from ai_agent_runtime.planner_effectiveness import (
+    attach_planner_metrics_to_ai_tool_evidence,
+)
 from ai_agent_runtime.prompts import render_metadata_tool_planning_prompt
 from ai_agent_runtime.storage_safety import sanitize_value_for_storage
 from mssql_mcp_app.catalog import ToolSpec, load_tool_catalog
@@ -176,6 +179,7 @@ class AiToolOrchestrator:
                 ],
                 caveats=["AI_TOOL_ORCHESTRATION_SKIPPED"],
                 blocked_requests=[],
+                component_invocations=[],
             )
             return AiToolOrchestrationResult(metadata=enriched, component_invocations=())
 
@@ -195,6 +199,7 @@ class AiToolOrchestrator:
                 ],
                 caveats=["AI_TOOL_ORCHESTRATION_SKIPPED"],
                 blocked_requests=[],
+                component_invocations=[],
             )
             return AiToolOrchestrationResult(metadata=enriched, component_invocations=())
 
@@ -214,6 +219,10 @@ class AiToolOrchestrator:
         blocked_requests: list[dict[str, Any]] = []
         caveats: list[str] = []
         seen_requests: set[tuple[str, str]] = set()
+        planned_request_count = 0
+        deduped_request_count = 0
+        failed_tool_call_count = 0
+        budget_exhausted = False
 
         try:
             registry = _build_internal_registry(request_record.db_profile_id)
@@ -234,6 +243,7 @@ class AiToolOrchestrator:
                 review_markers=[marker],
                 caveats=["AI_TOOL_ORCHESTRATION_SKIPPED"],
                 blocked_requests=[],
+                component_invocations=[],
             )
             return AiToolOrchestrationResult(metadata=enriched, component_invocations=())
 
@@ -277,6 +287,7 @@ class AiToolOrchestrator:
                     "toolRequestCount": len(plan.tool_requests),
                 }
             )
+            planned_request_count += len(plan.tool_requests)
             for marker in plan.review_markers:
                 marker_payload = marker.model_dump(by_alias=True, mode="json")
                 if not marker_payload.get("evidenceRefs"):
@@ -289,6 +300,7 @@ class AiToolOrchestrator:
             for request in plan.tool_requests:
                 if len(tool_results) >= self.max_tool_calls:
                     caveats.append("AI_TOOL_CALL_BUDGET_EXHAUSTED")
+                    budget_exhausted = True
                     break
                 decision = policy.decide(
                     tool_name=request.tool_name,
@@ -299,6 +311,7 @@ class AiToolOrchestrator:
                     stable_json_hash(decision.arguments),
                 )
                 if request_key in seen_requests:
+                    deduped_request_count += 1
                     continue
                 seen_requests.add(request_key)
                 if not decision.allowed:
@@ -332,6 +345,7 @@ class AiToolOrchestrator:
                         {"arguments": decision.arguments},
                     )
                 except MetadataToolError as exc:
+                    failed_tool_call_count += 1
                     review_markers.append(
                         _review_marker(
                             "AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED",
@@ -397,6 +411,11 @@ class AiToolOrchestrator:
             review_markers=review_markers,
             caveats=caveats,
             blocked_requests=blocked_requests,
+            component_invocations=component_invocations,
+            planned_request_count=planned_request_count,
+            failed_tool_call_count=failed_tool_call_count,
+            deduped_request_count=deduped_request_count,
+            budget_exhausted=budget_exhausted,
         )
         return AiToolOrchestrationResult(
             metadata=enriched,
@@ -600,6 +619,11 @@ def _metadata_with_ai_tool_evidence(
     review_markers: list[dict[str, Any]],
     caveats: list[str],
     blocked_requests: list[dict[str, Any]],
+    component_invocations: list[dict[str, Any]],
+    planned_request_count: int | None = None,
+    failed_tool_call_count: int | None = None,
+    deduped_request_count: int | None = None,
+    budget_exhausted: bool | None = None,
 ) -> MetadataCollectionResult:
     evidence = {
         "status": status,
@@ -609,6 +633,15 @@ def _metadata_with_ai_tool_evidence(
         "reviewMarkers": _dedupe_markers(review_markers),
         "caveats": _dedupe_strings(caveats),
     }
+    evidence = attach_planner_metrics_to_ai_tool_evidence(
+        evidence,
+        deterministic_facts=deterministic_facts,
+        component_invocations=component_invocations,
+        planned_request_count=planned_request_count,
+        failed_tool_call_count=failed_tool_call_count,
+        deduped_request_count=deduped_request_count,
+        budget_exhausted=budget_exhausted,
+    )
     existing_facts = list(metadata.deterministic_facts)
     return replace(
         metadata,

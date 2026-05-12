@@ -355,6 +355,34 @@ export interface MetadataAnalysisReviewMarker {
   evidenceRefs: string[];
 }
 
+export interface PlannerMetrics {
+  status?: string;
+  plannedRequestCount?: number;
+  executedToolCallCount?: number;
+  blockedRequestCount?: number;
+  failedToolCallCount?: number;
+  dedupedRequestCount?: number;
+  budgetExhausted?: boolean;
+  evidenceFactCount?: number;
+  citedEvidenceFactCount?: number;
+  evidenceUtilization?: number;
+  claimCount?: number;
+  supportedClaimCount?: number;
+  claimSupportRate?: number;
+  claimAnalysisAvailable?: boolean;
+  validFactPrefixes?: string[];
+}
+
+export interface AiToolEvidenceSummary {
+  status?: string;
+  toolCallCount?: number;
+  blockedRequests?: Record<string, unknown>[];
+  reviewMarkers?: Record<string, unknown>[];
+  caveats?: string[];
+  plannerMetrics?: PlannerMetrics;
+  [key: string]: unknown;
+}
+
 export interface MetadataAnalysisResponse {
   dbProfileId: string;
   mode: "QUERY" | "TARGET";
@@ -372,7 +400,7 @@ export interface MetadataAnalysisResponse {
   insightGroups: MetadataInsightGroup[];
   dependencyGraph: MetadataDependencyGraph;
   dtoReadiness: MetadataDtoReadiness[];
-  aiToolEvidence: Record<string, unknown>;
+  aiToolEvidence: AiToolEvidenceSummary;
   deterministicFacts: Record<string, unknown>[];
   reviewMarkers: MetadataAnalysisReviewMarker[];
   assumptions: string[];

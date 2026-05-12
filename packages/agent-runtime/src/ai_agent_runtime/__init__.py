@@ -16,6 +16,11 @@ from ai_agent_runtime.models import (
     ModelProfile,
     RenderedPrompt,
 )
+from ai_agent_runtime.planner_effectiveness import (
+    VALID_TOOL_FACT_PREFIXES,
+    attach_planner_metrics_to_ai_tool_evidence,
+    build_planner_metrics,
+)
 from ai_agent_runtime.quality_eval import (
     LLM_INFERENCE_EVIDENCE_TYPE,
     evaluate_p23_semantic_quality,
@@ -42,8 +47,11 @@ __all__ = [
     "OpenAIModelGateway",
     "RenderedPrompt",
     "SemanticAnalysisTask",
+    "VALID_TOOL_FACT_PREFIXES",
+    "attach_planner_metrics_to_ai_tool_evidence",
     "build_model_gateway_from_env",
     "build_metadata_analysis_run",
+    "build_planner_metrics",
     "build_semantic_analysis_run",
     "build_semantic_analysis_runs",
     "evaluate_p23_semantic_quality",

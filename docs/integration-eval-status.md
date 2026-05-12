@@ -27,6 +27,8 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | P22 LLM runtime | implemented with gates | Default tests use `FakeModelGateway`; remote OpenAI calls require `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, and `OPENAI_API_KEY`. Stored traces contain hashes, model/profile/token/latency/status summaries only, not raw prompt, SP definition, or provider response text. |
 | P23 LLM quality eval | fixture-first scored | `spec/eval/p23_llm_sp_analysis_quality_contract.yaml` and `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` define and author simple/medium/complex synthetic quality eval fixtures. `tests/eval/test_p23_llm_sp_analysis_quality.py` validates schema, deterministic evidence binding, fake-gateway execution with `openai_fast_test`, no-raw trace storage, no PPM-to-PLF fallback, and P23C/P26 quality scoring. Optional live quality gate uses high-quality `openai_sp_semantic_analysis` and `OPENAI_MODEL_ANALYSIS`; `openai_fast_test` still defaults to `gpt-5-nano` with `OPENAI_MODEL_FAST_TEST` for manual fast/test runs. Optional live output is a confidence signal only; current status remains `production_ready: false`. |
 | P24 migration guide quality | fixture-first rendered/scored | `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` render P24 guide sections from sanitized fixture facts, and `evaluate_p24_migration_guide_quality` scores the rendered artifact pair. The gate validates required section coverage, evidence-linked claims, DML matrix coverage, branch/call-flow coverage, `REVIEW_REQUIRED` unsupported claims, storage safety, PPM target context, no PLF fallback, and `production_ready: false`. |
+| P30/P31 metadata analysis | response-only fixture-first | Metadata Analyze keeps search deterministic and runs bounded internal-only AI-MCP orchestration only inside `POST /api/v1/metadata/analyze`. P31 adds object profiles, grouped insights, dependency graph, DTO readiness, and `metadata.profile.*` facts without DB migration or persisted artifacts. |
+| P32 planner effectiveness | fixture-first plus optional live confidence | `aiToolEvidence.plannerMetrics` records sanitized planned/executed/blocked/failed/deduped counts, evidence utilization, and claim support rate. `tests/eval/test_p32_live_confidence_planner_effectiveness.py` is fixture-first by default; `P32_LIVE_CONFIDENCE_GATE=1` adds remote LLM plus live PPM metadata confidence only and does not imply `production_ready: true`. |
 | P27 dependency evidence tooling | fixture-first hardened | `spec/eval/p27_dependency_evidence_tooling_contract.yaml` and the MCP catalog define active read-only dependency closure/resolution tools plus optional dependency resolution evidence fields. P28 safe API invocation, P29 Web diagnostics, and workflow closure evidence wiring are fixture-first enabled; persisted artifact type and DB schema changes remain deferred. Ambiguous/dynamic/unresolved/cross-server/caller-dependent references stay `REVIEW_REQUIRED`. Explicit hard-live evidence runs only with `P27_HARD_LIVE_GATE=1`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
@@ -46,6 +48,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/live_portal_no_mock_p21_v1.yaml`: P21 no-mock portal and Python 3.14 contract fixture recording required pages, HTTP-only Web boundary, PLF/PPM prerequisites, live gate blocker behavior, and `production_ready: false`.
 - `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`: P23B/P26 simple/medium/complex synthetic LLM-assisted SP semantic analysis quality fixtures, including deterministic facts, transient model input, golden semantic/guide/conversion outputs, high-quality semantic default posture with `OPENAI_MODEL_ANALYSIS` live override, `gpt-5-nano` fast/test default with `OPENAI_MODEL_FAST_TEST` manual override, `LLM_INFERENCE`, `REVIEW_REQUIRED`, no-raw-trace storage expectations, and `production_ready: false`.
 - `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml`: P24B-authored simple/medium/complex synthetic SP migration guide quality fixtures, including required section taxonomy, dependency inventory, DML matrix, branch call flow, phase/risk metrics, appendix mappings, evidence refs, unsupported claim `REVIEW_REQUIRED`, storage safety, `gpt-5-nano` fast/test default, `OPENAI_MODEL_FAST_TEST` optional live override, and `production_ready: false`.
+- `fixtures/eval/live_confidence_planner_effectiveness_p32_v1.yaml`: P32 planner effectiveness and live confidence fixture, including duplicate/deduped planner requests, blocked unsafe args, under-utilized evidence, optional OpenAI+PPM live confidence, and `production_ready: false`.
 - `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`: P23 quality contract that separates P23A contract assets, P23B fixture authoring, P23C fixture-first eval runner/scoring, and P23D readiness documentation.
 - `spec/eval/p27_dependency_evidence_tooling_contract.yaml`: P27 fixture-first hardening contract for dependency evidence fields, active read-only MCP tools, P28 safe API invocation, P29 Web diagnostics and workflow evidence wiring, explicit hard-live gate, no-raw/no-row/no-fallback policy, and deferred persisted artifact/DB schema boundaries.
 
@@ -121,6 +124,15 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 ```
 
 This renders and scores sanitized fixture expectations against existing artifact types. It does not require live PPM metadata, does not fall back to PLF, does not store SP source text or user guide text, and does not make P24 production-ready.
+
+For P32 planner effectiveness and optional live confidence, run:
+
+```bash
+make test PYTEST_ARGS="tests/unit/agent_runtime/test_planner_effectiveness.py tests/eval/test_p32_live_confidence_planner_effectiveness.py"
+P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"
+```
+
+The first command is fixture-first and does not call live OpenAI/PPM. The second command requires `OPENAI_API_KEY` and read-only `ppm` metadata access; success is confidence evidence only and does not change production readiness.
 
 P24 status interpretation:
 

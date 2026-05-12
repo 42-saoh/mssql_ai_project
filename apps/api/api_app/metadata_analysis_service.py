@@ -12,6 +12,9 @@ from ai_agent_runtime.gateway import (
 )
 from ai_agent_runtime.metadata_analysis import build_metadata_analysis_run
 from ai_agent_runtime.models import AiToolPlanningOutput, stable_json_hash
+from ai_agent_runtime.planner_effectiveness import (
+    attach_planner_metrics_to_ai_tool_evidence,
+)
 from ai_agent_runtime.prompts import render_metadata_tool_planning_prompt
 from mssql_mcp_app.catalog import load_tool_catalog
 from mssql_mcp_app.errors import MetadataToolError
@@ -222,6 +225,22 @@ class MetadataAnalysisService:
             MetadataAnalysisReviewMarker.model_validate(marker)
             for marker in _dedupe_markers(review_markers)
         ]
+        dependency_graph_model = MetadataDependencyGraph.model_validate(
+            object_depth.dependency_graph
+        )
+        analysis_payload = {
+            "objectInsights": [item.to_response() for item in object_insights],
+            "insightGroups": [group.to_response() for group in insight_groups],
+            "dependencyGraph": dependency_graph_model.to_response(),
+            "dtoReadiness": [item.to_response() for item in dto_readiness],
+            "reviewMarkers": [marker.to_response() for marker in marker_models],
+        }
+        ai_tool_evidence = attach_planner_metrics_to_ai_tool_evidence(
+            tool_run.evidence,
+            deterministic_facts=deterministic_facts,
+            component_invocations=tool_run.component_invocations,
+            structured_output=analysis_payload,
+        )
         return MetadataAnalysisResponse(
             dbProfileId=request.db_profile_id,
             mode="QUERY" if request.query else "TARGET",
@@ -242,11 +261,9 @@ class MetadataAnalysisService:
                 for profile in object_depth.object_profiles
             ],
             insightGroups=insight_groups,
-            dependencyGraph=MetadataDependencyGraph.model_validate(
-                object_depth.dependency_graph
-            ),
+            dependencyGraph=dependency_graph_model,
             dtoReadiness=dto_readiness,
-            aiToolEvidence=tool_run.evidence,
+            aiToolEvidence=ai_tool_evidence,
             deterministicFacts=deterministic_facts,
             reviewMarkers=marker_models,
             assumptions=assumptions,
@@ -683,6 +700,10 @@ def _run_ai_metadata_tools(
     blocked_requests: list[dict[str, Any]] = []
     caveats: list[str] = []
     seen_requests: set[tuple[str, str]] = set()
+    planned_request_count = 0
+    deduped_request_count = 0
+    failed_tool_call_count = 0
+    budget_exhausted = False
 
     try:
         registry = _build_internal_registry(db_profile_id)
@@ -700,6 +721,10 @@ def _run_ai_metadata_tools(
             caveats=[AI_METADATA_ANALYSIS_SKIPPED],
             blocked_requests=[],
             component_invocations=[],
+            planned_request_count=0,
+            failed_tool_call_count=0,
+            deduped_request_count=0,
+            budget_exhausted=False,
         )
 
     for round_index in range(1, 3):
@@ -752,6 +777,7 @@ def _run_ai_metadata_tools(
                 "toolRequestCount": len(plan.tool_requests),
             }
         )
+        planned_request_count += len(plan.tool_requests)
         executable_this_round = 0
         for marker in plan.review_markers:
             marker_payload = marker.model_dump(by_alias=True, mode="json")
@@ -763,10 +789,12 @@ def _run_ai_metadata_tools(
         for request in plan.tool_requests:
             if len(tool_results) >= 5:
                 caveats.append("AI_TOOL_CALL_BUDGET_EXHAUSTED")
+                budget_exhausted = True
                 break
             decision = policy.decide(tool_name=request.tool_name, arguments=request.arguments)
             request_key = (decision.tool_name, stable_json_hash(decision.arguments))
             if request_key in seen_requests:
+                deduped_request_count += 1
                 continue
             seen_requests.add(request_key)
             if not decision.allowed:
@@ -802,6 +830,7 @@ def _run_ai_metadata_tools(
                     {"arguments": decision.arguments},
                 )
             except MetadataToolError as exc:
+                failed_tool_call_count += 1
                 review_markers.append(
                     _review_marker(
                         AI_METADATA_ANALYSIS_REVIEW_REQUIRED,
@@ -864,6 +893,10 @@ def _run_ai_metadata_tools(
         caveats=caveats,
         blocked_requests=blocked_requests,
         component_invocations=component_invocations,
+        planned_request_count=planned_request_count,
+        failed_tool_call_count=failed_tool_call_count,
+        deduped_request_count=deduped_request_count,
+        budget_exhausted=budget_exhausted,
     )
 
 
@@ -876,16 +909,30 @@ def _tool_run_result(
     caveats: list[str],
     blocked_requests: list[dict[str, Any]],
     component_invocations: list[dict[str, Any]],
+    planned_request_count: int | None = None,
+    failed_tool_call_count: int | None = None,
+    deduped_request_count: int | None = None,
+    budget_exhausted: bool | None = None,
 ) -> MetadataToolRunResult:
+    evidence = {
+        "status": status,
+        "toolCallCount": len(tool_results),
+        "toolResults": tool_results,
+        "blockedRequests": blocked_requests,
+        "reviewMarkers": _dedupe_markers(review_markers),
+        "caveats": _dedupe_strings(caveats),
+    }
+    evidence = attach_planner_metrics_to_ai_tool_evidence(
+        evidence,
+        deterministic_facts=deterministic_facts,
+        component_invocations=component_invocations,
+        planned_request_count=planned_request_count,
+        failed_tool_call_count=failed_tool_call_count,
+        deduped_request_count=deduped_request_count,
+        budget_exhausted=budget_exhausted,
+    )
     return MetadataToolRunResult(
-        evidence={
-            "status": status,
-            "toolCallCount": len(tool_results),
-            "toolResults": tool_results,
-            "blockedRequests": blocked_requests,
-            "reviewMarkers": _dedupe_markers(review_markers),
-            "caveats": _dedupe_strings(caveats),
-        },
+        evidence=evidence,
         deterministic_facts=tuple(deterministic_facts),
         component_invocations=tuple(component_invocations),
         review_markers=tuple(_dedupe_markers(review_markers)),

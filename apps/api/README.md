@@ -249,7 +249,9 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
   analyze API 내부 orchestration 에서만 실행될 수 있다.
 - 응답은 sanitized `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id,
   `metadata.profile.<hash>` profile fact id, `objectInsights`, `objectProfiles`, `insightGroups`,
-  `dependencyGraph`, `dtoReadiness`, `reviewMarkers`, caveats 로 제한한다. v1 은 DB migration,
+  `dependencyGraph`, `dtoReadiness`, `reviewMarkers`, caveats 로 제한한다. `aiToolEvidence.plannerMetrics`
+  는 planned/executed/blocked/failed/deduped call count, evidence utilization, claim support rate 만
+  담는 sanitized effectiveness summary 다. v1 은 DB migration,
   persisted artifact, workflow state transition 을 추가하지 않는다.
 
 ## Metadata tool invocation

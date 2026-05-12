@@ -187,6 +187,7 @@ assert(Array.isArray(metadataAnalysis.objectProfiles), "Metadata analysis must i
 assert(Array.isArray(metadataAnalysis.insightGroups), "Metadata analysis must include insightGroups");
 assert(metadataAnalysis.dependencyGraph?.nodes, "Metadata analysis must include dependencyGraph");
 assert(Array.isArray(metadataAnalysis.dtoReadiness), "Metadata analysis must include dtoReadiness");
+assert(metadataAnalysis.aiToolEvidence?.plannerMetrics, "Metadata analysis must include planner metrics");
 assert(metadataAnalysis.summary.length > 0, "Metadata analysis summary is empty");
 assert(registry.versions.length > 0, "Registry versions response is empty");
 

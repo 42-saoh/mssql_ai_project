@@ -1293,6 +1293,110 @@ components:
           type: array
           items:
             type: string
+    PlannerMetrics:
+      type: object
+      description: Sanitized bounded planner effectiveness summary. Contains counts and ratios only.
+      additionalProperties: false
+      required:
+        - status
+        - plannedRequestCount
+        - executedToolCallCount
+        - blockedRequestCount
+        - failedToolCallCount
+        - dedupedRequestCount
+        - budgetExhausted
+        - evidenceFactCount
+        - citedEvidenceFactCount
+        - evidenceUtilization
+        - claimCount
+        - supportedClaimCount
+        - claimSupportRate
+        - claimAnalysisAvailable
+        - validFactPrefixes
+      properties:
+        status:
+          type: string
+          enum:
+            - SUCCEEDED
+            - REVIEW_REQUIRED
+            - SKIPPED
+            - PENDING_CLAIM_ANALYSIS
+            - NO_TOOL_REQUESTED
+            - NO_TOOL_EVIDENCE
+        plannedRequestCount:
+          type: integer
+          minimum: 0
+        executedToolCallCount:
+          type: integer
+          minimum: 0
+        blockedRequestCount:
+          type: integer
+          minimum: 0
+        failedToolCallCount:
+          type: integer
+          minimum: 0
+        dedupedRequestCount:
+          type: integer
+          minimum: 0
+        budgetExhausted:
+          type: boolean
+        evidenceFactCount:
+          type: integer
+          minimum: 0
+        citedEvidenceFactCount:
+          type: integer
+          minimum: 0
+        evidenceUtilization:
+          type: number
+          minimum: 0
+          maximum: 1
+        claimCount:
+          type: integer
+          minimum: 0
+        supportedClaimCount:
+          type: integer
+          minimum: 0
+        claimSupportRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        claimAnalysisAvailable:
+          type: boolean
+        validFactPrefixes:
+          type: array
+          items:
+            type: string
+    AiToolEvidenceSummary:
+      type: object
+      description: Sanitized internal-only AI MCP planner/tool evidence digest.
+      additionalProperties: true
+      properties:
+        status:
+          type: string
+        toolCallCount:
+          type: integer
+          minimum: 0
+        toolResults:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        blockedRequests:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reviewMarkers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        caveats:
+          type: array
+          items:
+            type: string
+        plannerMetrics:
+          $ref: "#/components/schemas/PlannerMetrics"
     MetadataAnalysisResponse:
       type: object
       required:
@@ -1364,8 +1468,7 @@ components:
           items:
             $ref: "#/components/schemas/MetadataDtoReadiness"
         aiToolEvidence:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/AiToolEvidenceSummary"
         deterministicFacts:
           type: array
           items:

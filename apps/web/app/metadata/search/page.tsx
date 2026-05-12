@@ -282,10 +282,8 @@ export default async function MetadataSearchPage({
 }
 
 function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalysisResponse }>) {
-  const toolEvidence = analysis.aiToolEvidence as {
-    toolCallCount?: number;
-    status?: string;
-  };
+  const toolEvidence = analysis.aiToolEvidence;
+  const plannerMetrics = toolEvidence.plannerMetrics;
 
   return (
     <section className="panel">
@@ -314,6 +312,14 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
           <dd>{toolEvidence.status ?? "SKIPPED"}</dd>
         </div>
         <div>
+          <dt>Evidence use</dt>
+          <dd>{formatRatio(plannerMetrics?.evidenceUtilization)}</dd>
+        </div>
+        <div>
+          <dt>Claim support</dt>
+          <dd>{formatRatio(plannerMetrics?.claimSupportRate)}</dd>
+        </div>
+        <div>
           <dt>Objects</dt>
           <dd>{analysis.objectProfiles.length}</dd>
         </div>
@@ -322,6 +328,18 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
           <dd>{analysis.dependencyGraph.edges.length}</dd>
         </div>
       </dl>
+
+      {plannerMetrics ? (
+        <div className="callout">
+          <strong>Planner effectiveness</strong>
+          <p>
+            {plannerMetrics.status ?? "PENDING"} · {plannerMetrics.plannedRequestCount ?? 0} planned ·{" "}
+            {plannerMetrics.executedToolCallCount ?? 0} executed ·{" "}
+            {plannerMetrics.blockedRequestCount ?? 0} blocked ·{" "}
+            {plannerMetrics.failedToolCallCount ?? 0} failed
+          </p>
+        </div>
+      ) : null}
 
       <p>{analysis.summary}</p>
 
@@ -453,4 +471,11 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
       ) : null}
     </section>
   );
+}
+
+function formatRatio(value: number | undefined): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return `${Math.round(value * 100)}%`;
 }

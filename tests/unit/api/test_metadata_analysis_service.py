@@ -207,6 +207,8 @@ def test_metadata_analysis_uses_internal_mcp_tool_and_sanitized_fact_ids(
         )
     ]
     assert response["aiToolEvidence"]["toolCallCount"] == 1
+    assert response["aiToolEvidence"]["plannerMetrics"]["executedToolCallCount"] == 1
+    assert response["aiToolEvidence"]["plannerMetrics"]["claimAnalysisAvailable"] is True
     assert response["deterministicFacts"]
     assert any(
         str(fact["id"]).startswith("mcp.get_table_schema.")
@@ -333,6 +335,11 @@ def test_metadata_analysis_builds_object_depth_from_planned_table_tools(
     } <= categories
     assert response["dependencyGraph"]["edges"]
     assert response["dtoReadiness"][0]["fieldCount"] == 2
+    metrics = response["aiToolEvidence"]["plannerMetrics"]
+    assert metrics["plannedRequestCount"] == 5
+    assert metrics["executedToolCallCount"] == 5
+    assert metrics["evidenceFactCount"] >= 5
+    assert metrics["evidenceUtilization"] > 0
     allowed_prefixes = ("mcp.", "metadata.profile.", "metadata.search.")
     serialized_refs = [
         ref
@@ -394,6 +401,8 @@ def test_metadata_analysis_blocks_adversarial_planner_without_leaking_arguments(
         "AI_TOOL_FORBIDDEN_ARGUMENT",
         "AI_TOOL_FREEFORM_SQL_BLOCKED",
     }
+    assert response["aiToolEvidence"]["plannerMetrics"]["blockedRequestCount"] == 1
+    assert response["aiToolEvidence"]["plannerMetrics"]["status"] == "REVIEW_REQUIRED"
     assert any(
         marker["code"] == "AI_METADATA_ANALYSIS_REVIEW_REQUIRED"
         for marker in response["reviewMarkers"]

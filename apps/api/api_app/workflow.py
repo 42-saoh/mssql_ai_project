@@ -19,6 +19,7 @@ from ai_agent_runtime import (
     AgentRunPayload,
     ModelGateway,
     ModelGatewayError,
+    attach_planner_metrics_to_ai_tool_evidence,
     build_model_gateway_from_env,
     build_semantic_analysis_run,
 )
@@ -164,17 +165,22 @@ class WorkflowService:
             static_analysis=static_analysis,
         )
         metadata = orchestration.metadata
-        self.repository.save_metadata_collection(
-            job_id=job_id,
-            status=metadata.status,
-            payload=sanitized_metadata_payload(metadata.as_dict()),
-        )
         agent_run = self._run_llm_semantic_analysis(
             job_id,
             request_record=request,
             metadata=metadata,
             static_analysis=static_analysis,
             ai_tool_component_invocations=orchestration.component_invocations,
+        )
+        metadata = metadata_with_planner_metrics(
+            metadata,
+            agent_run=agent_run,
+            component_invocations=orchestration.component_invocations,
+        )
+        self.repository.save_metadata_collection(
+            job_id=job_id,
+            status=metadata.status,
+            payload=sanitized_metadata_payload(metadata.as_dict()),
         )
         self.repository.transition_job(
             job_id,
@@ -662,6 +668,23 @@ def sanitized_metadata_payload(payload: dict[str, object]) -> dict[str, object]:
     return sanitized
 
 
+def metadata_with_planner_metrics(
+    metadata: MetadataCollectionResult,
+    *,
+    agent_run: AgentRunRecord | None,
+    component_invocations: tuple[dict[str, object], ...],
+) -> MetadataCollectionResult:
+    if not isinstance(metadata.ai_tool_evidence, dict):
+        return metadata
+    evidence = attach_planner_metrics_to_ai_tool_evidence(
+        metadata.ai_tool_evidence,
+        deterministic_facts=metadata.deterministic_facts,
+        component_invocations=component_invocations,
+        structured_output=agent_run.structured_output if agent_run else None,
+    )
+    return dataclass_replace(metadata, ai_tool_evidence=evidence)
+
+
 def metadata_detail_lines(metadata: MetadataCollectionResult) -> list[str]:
     if not metadata.table_schemas:
         return ["- REVIEW_REQUIRED: table schema metadata was not available."]
@@ -798,6 +821,7 @@ def ai_tool_evidence_for_generation_payload(value: object) -> dict[str, object]:
         "blockedRequests": _safe_dict_list(value.get("blockedRequests")),
         "reviewMarkers": _safe_dict_list(value.get("reviewMarkers")),
         "caveats": [str(item) for item in value.get("caveats", []) if str(item)],
+        "plannerMetrics": _safe_dict(value.get("plannerMetrics")),
     }
 
 

@@ -57,7 +57,7 @@
   action calls `POST /api/v1/metadata/analyze` explicitly.
 - The analysis panel renders response-only `summary`, `objectInsights`, `objectProfiles`,
   `insightGroups`, `dependencyGraph`, `dtoReadiness`, deterministic fact count, sanitized
-  tool-call count, review markers, and caveats.
+  tool-call count, planner effectiveness metrics, review markers, and caveats.
 - The Web client does not expose MCP input schemas, raw definition text, row data, procedure
   execution, DDL/DML controls, or raw provider traces.
 

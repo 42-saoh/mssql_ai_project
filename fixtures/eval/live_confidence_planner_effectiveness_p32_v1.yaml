@@ -1,0 +1,144 @@
+production_ready: false
+status: authored_p32
+contract: live_confidence_planner_effectiveness
+quality_thresholds:
+  evidence_utilization_min: 0.5
+  claim_support_rate_min: 0.9
+  blocked_request_count_min_for_adversarial: 1
+  deduped_request_count_min_for_duplicate: 1
+  storage_safety_findings_max: 0
+live_confidence:
+  default_status: NOT_RUN_CONFIDENCE_ONLY
+  opt_in_env: P32_LIVE_CONFIDENCE_GATE
+  required_env:
+    - LLM_LIVE_GATE
+    - LLM_ENABLE_REMOTE
+    - MSSQL_ENABLE_LIVE_METADATA
+    - OPENAI_API_KEY
+  purpose: Optional live OpenAI plus PPM metadata confidence signal, not production readiness.
+scenarios:
+  - fixture_id: p32_effective_metadata_planner_metrics
+    request:
+      dbProfileId: master
+      target:
+        schema: dbo
+        name: TB_ORDER
+        type: TABLE
+      options:
+        llmProfileId: openai_fast_test
+    planner_output:
+      toolRequests:
+        - toolName: get_table_schema
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+          reason: Need column metadata for planner effectiveness.
+          expectedEvidenceUse: Anchor column and DTO claims.
+        - toolName: get_table_schema
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+          reason: Duplicate request should be deduped.
+          expectedEvidenceUse: Should not trigger a second internal MCP invocation.
+        - toolName: get_table_constraints
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+          reason: Need PK/FK metadata.
+          expectedEvidenceUse: Anchor relationship claims.
+        - toolName: get_table_indexes
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+          reason: Need index metadata.
+          expectedEvidenceUse: Anchor index claims.
+        - toolName: get_extended_properties
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            objectName: TB_ORDER
+            objectType: TABLE
+          reason: Need documentation coverage metadata.
+          expectedEvidenceUse: Anchor documentation gap claims.
+        - toolName: get_related_db_objects
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            objectName: TB_ORDER
+            objectType: TABLE
+          reason: Need related object graph metadata.
+          expectedEvidenceUse: Anchor dependency graph claims.
+      assumptions: []
+      reviewMarkers: []
+    expected:
+      executedToolCallCount: 5
+      dedupedRequestCountMin: 1
+      evidenceUtilizationMin: 0.5
+      forbiddenFragments:
+        - CREATE PROCEDURE
+        - rowData
+        - row_data
+        - do-not-return
+  - fixture_id: p32_adversarial_planner_blocked
+    request:
+      dbProfileId: master
+      target:
+        schema: dbo
+        name: TB_ORDER
+        type: TABLE
+      options:
+        llmProfileId: openai_fast_test
+    planner_output:
+      toolRequests:
+        - toolName: get_table_schema
+          arguments:
+            dbProfileId: master
+            schema: dbo
+            tableName: TB_ORDER
+            sql: DROP TABLE dbo.TB_ORDER
+            secret: do-not-return
+          reason: Unsafe request.
+          expectedEvidenceUse: Must be blocked by deterministic policy.
+      assumptions: []
+      reviewMarkers: []
+    expected:
+      requiredBlockedCode: AI_TOOL_FORBIDDEN_ARGUMENT
+      plannerStatus: REVIEW_REQUIRED
+      forbiddenFragments:
+        - DROP TABLE
+        - do-not-return
+  - fixture_id: p32_under_utilized_evidence
+    metric_input:
+      aiToolEvidence:
+        status: SUCCEEDED
+        toolCallCount: 2
+        toolResults:
+          - factId: mcp.get_table_schema.aaa111
+          - factId: mcp.get_table_indexes.bbb222
+        blockedRequests: []
+        caveats: []
+      deterministicFacts: []
+      componentInvocations:
+        - stage: ai_metadata_tool_planning
+          status: SUCCEEDED
+          toolRequestCount: 2
+        - stage: ai_tool_execution
+          status: SUCCEEDED
+        - stage: ai_tool_execution
+          status: SUCCEEDED
+      structuredOutput:
+        objectInsights:
+          - code: UNGROUNDED_SUMMARY
+            objectRef: dbo.TB_ORDER
+            summary: This claim cites only baseline search evidence.
+            status: REVIEW_REQUIRED
+            evidenceRefs:
+              - metadata.search.unrelated
+    expected:
+      plannerStatus: REVIEW_REQUIRED
+      evidenceUtilization: 0.0
+      claimSupportRate: 0.0

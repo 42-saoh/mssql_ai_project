@@ -213,6 +213,10 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
         "reviewMarkers",
         "componentInvocations",
     } <= response_properties
+    assert schemas["AiToolEvidenceSummary"]["properties"]["plannerMetrics"] == {
+        "$ref": "#/components/schemas/PlannerMetrics"
+    }
+    assert "claimSupportRate" in schemas["PlannerMetrics"]["properties"]
     forbidden_response_fields = {
         "rowData",
         "row_data",
