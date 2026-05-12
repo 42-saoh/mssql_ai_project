@@ -7,7 +7,7 @@
 
 - `/` - 최근 jobs, PPM metadata search, draft artifact 목록 요약
 - `/requests/new` - API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect
-- `/metadata/search` - read-only metadata identity/evidence search
+- `/metadata/search` - read-only metadata identity/evidence search and explicit metadata analyze action
 - `/metadata/dependencies` - safe dependency closure/reference diagnostics
 - `/jobs/[jobId]` - 실제 job 상태와 draft artifact 목록
 - `/artifacts/[artifactId]` - artifact preview 와 latest validation 표시
@@ -51,11 +51,21 @@
   evidence refs, closure nodes/edges/unresolved references, candidates, and
   selected resolution.
 
+## Metadata analysis behavior
+
+- `/metadata/search` keeps deterministic search as the default page load. The `Analyze metadata`
+  action calls `POST /api/v1/metadata/analyze` explicitly.
+- The analysis panel renders response-only `summary`, `objectInsights`, deterministic fact count,
+  sanitized tool-call count, review markers, and caveats.
+- The Web client does not expose MCP input schemas, raw definition text, row data, procedure
+  execution, DDL/DML controls, or raw provider traces.
+
 ## P22 behavior
 
 - `/requests/new` 는 P26 high-quality hybrid 기본값으로 LLM semantic analysis option 을 API
   `SPAnalysisOptions` 로 전송한다. 기본 선택은 semantic analysis profile, LLM analysis enabled,
-  transient SP definition input allowed 이며 fast/test profile 은 수동 선택지로만 남긴다.
+  bounded AI metadata tool orchestration enabled, transient SP definition input allowed 이며
+  fast/test profile 은 수동 선택지로만 남긴다.
 - `/jobs/[jobId]` 는 `GET /api/v1/jobs/{jobId}/agent-runs` 로 sanitized LLM trace summary 를 읽어
   model, prompt/schema version, input/output hash, token usage, latency, status 를 표시한다.
 - `/artifacts/[artifactId]` 는 artifact 의 job id 가 있을 때 같은 sanitized trace summary 를 표시한다.

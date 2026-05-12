@@ -4,7 +4,7 @@ import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
-import type { MetadataSearchObjectType } from "@/lib/api/types";
+import type { MetadataAnalysisResponse, MetadataSearchObjectType } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +60,7 @@ export default async function MetadataSearchPage({
   const query = firstParam(params.query)?.trim() || "P";
   const objectTypes = selectedObjectTypes(params);
   const limit = Number(firstParam(params.limit) ?? "10");
+  const shouldAnalyze = firstParam(params.analyze) === "1";
   const [profileResult, searchResult] = await Promise.allSettled([
     api.listMetadataProfiles(),
     api.searchMetadataObjects({
@@ -90,6 +91,25 @@ export default async function MetadataSearchPage({
 
   const profileResponse = profileResult.value;
   const response = searchResult.value;
+  let analysis: MetadataAnalysisResponse | null = null;
+  let analysisError: unknown = null;
+  if (shouldAnalyze) {
+    try {
+      analysis = await api.analyzeMetadata({
+        dbProfileId,
+        query,
+        objectTypes,
+        options: {
+          useLlmAnalysis: true,
+          useAiToolOrchestration: true,
+          llmProfileId: "openai_sp_semantic_analysis",
+          maxTargets: Math.min(Math.max(limit, 1), 5),
+        },
+      });
+    } catch (error) {
+      analysisError = error;
+    }
+  }
 
   return (
     <div className="stack">
@@ -152,6 +172,9 @@ export default async function MetadataSearchPage({
 
           <div className="form-actions">
             <button type="submit">Search metadata</button>
+            <button type="submit" name="analyze" value="1">
+              Analyze metadata
+            </button>
             <Link className="secondary-action" href="/requests/new">
               Use in request
             </Link>
@@ -242,6 +265,99 @@ export default async function MetadataSearchPage({
           })}
         </div>
       </section>
+
+      {analysisError ? (
+        <section className="panel">
+          <DependencyBlocker
+            title="Metadata analysis is unavailable"
+            message={formatPortalApiError(analysisError, "Metadata analysis could not run.")}
+            code={portalApiErrorCode(analysisError, "AI_METADATA_ANALYSIS_BLOCKED")}
+          />
+        </section>
+      ) : null}
+
+      {analysis ? <MetadataAnalysisPanel analysis={analysis} /> : null}
     </div>
+  );
+}
+
+function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalysisResponse }>) {
+  const toolEvidence = analysis.aiToolEvidence as {
+    toolCallCount?: number;
+    status?: string;
+  };
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">AI-MCP metadata analysis</p>
+          <h2>{analysis.sourceDatabase}.{analysis.query ?? analysis.target?.name ?? "target"}</h2>
+        </div>
+        <StatusPill
+          value={analysis.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+          label={analysis.reviewRequired ? "Review required" : "Evidence linked"}
+        />
+      </div>
+
+      <dl className="metric-grid">
+        <div>
+          <dt>Facts</dt>
+          <dd>{analysis.deterministicFacts.length}</dd>
+        </div>
+        <div>
+          <dt>Tools</dt>
+          <dd>{toolEvidence.toolCallCount ?? 0}</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd>{toolEvidence.status ?? "SKIPPED"}</dd>
+        </div>
+      </dl>
+
+      <p>{analysis.summary}</p>
+
+      {analysis.objectInsights.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.objectInsights.map((insight) => (
+            <article className="metadata-result-row" key={`${insight.code}-${insight.objectRef}`}>
+              <div>
+                <p className="eyebrow">{insight.status}</p>
+                <h3>{insight.code}</h3>
+                <p>{insight.summary}</p>
+              </div>
+              <div className="metadata-result-detail">
+                <code>{insight.objectRef}</code>
+                {insight.evidenceRefs.map((ref) => (
+                  <code key={`${insight.code}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.reviewMarkers.length > 0 ? (
+        <div className="blocker-list">
+          {analysis.reviewMarkers.map((marker) => (
+            <article className="blocker-row" key={marker.code}>
+              <strong>{marker.code}</strong>
+              <span>{marker.message}</span>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.caveats.length > 0 ? (
+        <div className="callout">
+          <strong>Caveats</strong>
+          <ul>
+            {analysis.caveats.map((caveat) => (
+              <li key={caveat}>{caveat}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
   );
 }

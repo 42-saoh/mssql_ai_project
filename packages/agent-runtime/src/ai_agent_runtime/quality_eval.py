@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -9,6 +8,7 @@ from ai_agent_runtime.models import (
     LlmSemanticAnalysisOutput,
     stable_json_hash,
 )
+from ai_agent_runtime.storage_safety import storage_safety_findings
 
 P23_SUITE_ID = "p23_llm_sp_analysis_quality"
 LLM_INFERENCE_EVIDENCE_TYPE = "LLM_INFERENCE"
@@ -30,18 +30,6 @@ _KEY_FIELDS = {
     "conversionGuidance": "code",
     "migrationGuideInsights": "section",
 }
-_FORBIDDEN_STORAGE_KEYS = frozenset(
-    {
-        "raw_prompt",
-        "raw_sp_definition",
-        "raw_openai_response_text",
-        "row_data",
-        "secrets",
-    }
-)
-_FORBIDDEN_TEXT_MARKERS = ("CREATE OR ALTER PROCEDURE",)
-
-
 def evaluate_p23_semantic_quality(
     *,
     scenario: Mapping[str, Any],
@@ -68,7 +56,7 @@ def evaluate_p23_semantic_quality(
         1 for result in validator_results if result["status"] != "REVIEW_REQUIRED"
     )
 
-    storage_findings = _storage_safety_findings(
+    storage_findings = storage_safety_findings(
         payloads=(run.to_storage_dict(), *additional_storage_payloads),
         procedure_definition=str(
             scenario.get("transient_model_input", {}).get("procedure_definition", "")
@@ -112,7 +100,7 @@ def evaluate_p23_semantic_quality(
         },
     }
 
-    report_findings = _storage_safety_findings(
+    report_findings = storage_safety_findings(
         payloads=(base_report,),
         procedure_definition=str(
             scenario.get("transient_model_input", {}).get("procedure_definition", "")
@@ -236,38 +224,6 @@ def _validator_results(
         }
         for claim in unsupported_claims
     ]
-
-
-def _storage_safety_findings(
-    *,
-    payloads: Sequence[Mapping[str, Any]],
-    procedure_definition: str,
-) -> list[dict[str, str]]:
-    findings: list[dict[str, str]] = []
-    for payload in payloads:
-        findings.extend(
-            {"code": "FORBIDDEN_STORAGE_FIELD_PRESENT"}
-            for key in _iter_mapping_keys(payload)
-            if key in _FORBIDDEN_STORAGE_KEYS
-        )
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-        if procedure_definition and procedure_definition in serialized:
-            findings.append({"code": "PROCEDURE_TEXT_PRESENT"})
-        if any(marker in serialized for marker in _FORBIDDEN_TEXT_MARKERS):
-            findings.append({"code": "PROCEDURE_TEXT_MARKER_PRESENT"})
-    return findings
-
-
-def _iter_mapping_keys(value: Any) -> Sequence[str]:
-    keys: list[str] = []
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            keys.append(str(key))
-            keys.extend(_iter_mapping_keys(item))
-    elif isinstance(value, Sequence) and not isinstance(value, str | bytes):
-        for item in value:
-            keys.extend(_iter_mapping_keys(item))
-    return keys
 
 
 def _evidence_refs(item: Mapping[str, Any]) -> list[str]:

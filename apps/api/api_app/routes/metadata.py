@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
+from api_app.dependencies import get_metadata_analysis_service
 from api_app.errors import api_http_exception
+from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.metadata_service import (
     DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
     MetadataSearchDependencyError,
@@ -12,11 +14,13 @@ from api_app.metadata_service import (
     search_metadata_objects,
 )
 from api_app.schemas import (
+    MetadataAnalysisRequest,
+    MetadataAnalysisResponse,
     MetadataSearchResponse,
     MetadataToolInvokeRequest,
     MetadataToolInvokeResponse,
 )
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Depends, Path, Query
 from mssql_mcp_app.errors import MetadataToolError
 
 router = APIRouter(prefix="/api/v1/metadata", tags=["metadata"])
@@ -81,6 +85,33 @@ def search_metadata(
             object_types=tuple(objectTypes or DEFAULT_METADATA_SEARCH_OBJECT_TYPES),
             limit=limit,
         )
+    except MetadataSearchDependencyError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=exc.detail,
+            code=exc.code,
+        ) from exc
+    except MetadataToolError as exc:
+        raise api_http_exception(
+            status_code=exc.http_status,
+            detail=exc.message,
+            code=exc.code,
+        ) from exc
+    except ValueError as exc:
+        raise api_http_exception(
+            status_code=422,
+            detail=str(exc),
+            code="VALIDATION_ERROR",
+        ) from exc
+
+
+@router.post("/analyze", response_model=MetadataAnalysisResponse)
+def analyze_metadata(
+    request: MetadataAnalysisRequest,
+    service: Annotated[MetadataAnalysisService, Depends(get_metadata_analysis_service)],
+) -> MetadataAnalysisResponse:
+    try:
+        return service.analyze(request)
     except MetadataSearchDependencyError as exc:
         raise api_http_exception(
             status_code=exc.status_code,

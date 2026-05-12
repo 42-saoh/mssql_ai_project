@@ -14,11 +14,15 @@ from ai_agent_runtime.models import (
     SEMANTIC_MODEL_PROFILE_ID,
     SEMANTIC_MODEL_REGISTRY_REF,
     AgentRunStatus,
+    AiToolPlanningOutput,
     LlmSemanticAnalysisOutput,
+    MetadataAnalysisOutput,
     ModelInvocationRecord,
     ModelProfile,
     RenderedPrompt,
     fast_test_model_registry_ref,
+    metadata_analysis_output_schema,
+    metadata_tool_planning_output_schema,
     semantic_output_schema,
     stable_json_hash,
 )
@@ -37,6 +41,22 @@ class ModelGatewayError(RuntimeError):
 
 class ModelGateway(Protocol):
     def invoke_semantic_analysis(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        ...
+
+    def plan_metadata_tools(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        ...
+
+    def analyze_metadata(
         self,
         *,
         prompt: RenderedPrompt,
@@ -98,10 +118,23 @@ def remote_provider_from_env() -> str:
 class FakeModelGateway:
     provider = "fake-openai-compatible"
 
-    def __init__(self, output_by_target_ref: Mapping[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        output_by_target_ref: Mapping[str, Any] | None = None,
+        tool_plan_by_target_ref: Mapping[str, Any] | None = None,
+        metadata_analysis_by_target_ref: Mapping[str, Any] | None = None,
+    ) -> None:
         self._output_by_target_ref = {
             target_ref: LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
             for target_ref, output in (output_by_target_ref or {}).items()
+        }
+        self._tool_plan_by_target_ref = {
+            target_ref: AiToolPlanningOutput.model_validate(output).to_storage_dict()
+            for target_ref, output in (tool_plan_by_target_ref or {}).items()
+        }
+        self._metadata_analysis_by_target_ref = {
+            target_ref: MetadataAnalysisOutput.model_validate(output).to_storage_dict()
+            for target_ref, output in (metadata_analysis_by_target_ref or {}).items()
         }
 
     def invoke_semantic_analysis(
@@ -131,6 +164,69 @@ class FakeModelGateway:
             token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
             latency_ms=0,
             provider_request_id="fake-response",
+        )
+
+    def plan_metadata_tools(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        target_ref = str(prompt.metadata.get("targetRef") or "")
+        output = AiToolPlanningOutput.model_validate(
+            self._tool_plan_by_target_ref.get(target_ref)
+            or {"toolRequests": [], "assumptions": [], "reviewMarkers": []}
+        )
+        structured_output = output.to_storage_dict()
+        return ModelInvocationRecord(
+            provider=self.provider,
+            model=profile.model,
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort=profile.reasoning_effort,
+            prompt_version=prompt.prompt_version,
+            output_schema_version=prompt.output_schema_version,
+            input_hash=prompt.input_hash,
+            prompt_hash=prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=0,
+            provider_request_id="fake-tool-plan",
+        )
+
+    def analyze_metadata(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        target_ref = str(prompt.metadata.get("targetRef") or "")
+        output = MetadataAnalysisOutput.model_validate(
+            self._metadata_analysis_by_target_ref.get(target_ref)
+            or _default_fake_metadata_analysis_output(
+                allowed_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+                target_ref=target_ref,
+            )
+        )
+        structured_output = output.to_storage_dict()
+        return ModelInvocationRecord(
+            provider=self.provider,
+            model=profile.model,
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort=profile.reasoning_effort,
+            prompt_version=prompt.prompt_version,
+            output_schema_version=prompt.output_schema_version,
+            input_hash=prompt.input_hash,
+            prompt_hash=prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=0,
+            provider_request_id="fake-metadata-analysis",
         )
 
 
@@ -204,6 +300,44 @@ def _default_fake_semantic_output() -> dict[str, Any]:
     }
 
 
+def _default_fake_metadata_analysis_output(
+    *,
+    allowed_refs: Any,
+    target_ref: str,
+) -> dict[str, Any]:
+    refs = [str(ref) for ref in allowed_refs if str(ref).strip()]
+    evidence_refs = refs[:1] or ["metadata.analysis.no_fact"]
+    return {
+        "summary": (
+            "Draft metadata analysis generated by the fake model gateway from "
+            "sanitized deterministic MCP evidence."
+        ),
+        "objectInsights": [
+            {
+                "code": "METADATA_EVIDENCE_SUMMARY",
+                "objectRef": target_ref or "metadata.analysis",
+                "summary": (
+                    "Review read-only metadata evidence before relying on inferred structure."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": evidence_refs,
+            }
+        ],
+        "reviewMarkers": [
+            {
+                "code": "LLM_METADATA_ANALYSIS_REVIEW_REQUIRED",
+                "message": "Metadata LLM inference remains a review-required aid.",
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": evidence_refs,
+            }
+        ],
+        "assumptions": [
+            "Fake gateway was used; no external OpenAI API request was sent.",
+            "Unsafe source text, sample records, and secret-like values are excluded.",
+        ],
+    }
+
+
 class OpenAIModelGateway:
     provider = REMOTE_PROVIDER_OPENAI
 
@@ -221,6 +355,61 @@ class OpenAIModelGateway:
         *,
         prompt: RenderedPrompt,
         profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        return self._invoke_structured_output(
+            prompt=prompt,
+            profile=profile,
+            schema_name="llm_semantic_analysis",
+            schema=semantic_output_schema(
+                allowed_evidence_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+            ),
+            parser=LlmSemanticAnalysisOutput.model_validate_json,
+            invalid_code="OPENAI_STRUCTURED_OUTPUT_INVALID",
+        )
+
+    def plan_metadata_tools(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        return self._invoke_structured_output(
+            prompt=prompt,
+            profile=profile,
+            schema_name="metadata_tool_plan",
+            schema=metadata_tool_planning_output_schema(
+                tool_names=prompt.metadata.get("toolNames") or (),
+            ),
+            parser=AiToolPlanningOutput.model_validate_json,
+            invalid_code="OPENAI_TOOL_PLAN_INVALID",
+        )
+
+    def analyze_metadata(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        return self._invoke_structured_output(
+            prompt=prompt,
+            profile=profile,
+            schema_name="metadata_analysis",
+            schema=metadata_analysis_output_schema(
+                allowed_evidence_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+            ),
+            parser=MetadataAnalysisOutput.model_validate_json,
+            invalid_code="OPENAI_METADATA_ANALYSIS_INVALID",
+        )
+
+    def _invoke_structured_output(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+        schema_name: str,
+        schema: dict[str, Any],
+        parser,
+        invalid_code: str,
     ) -> ModelInvocationRecord:
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not api_key:
@@ -241,7 +430,12 @@ class OpenAIModelGateway:
             payload = _pgpt_payload(prompt=prompt, profile=profile)
         else:
             responses_url = _openai_responses_url()
-            payload = _openai_payload(prompt=prompt, profile=profile)
+            payload = _openai_payload(
+                prompt=prompt,
+                profile=profile,
+                schema_name=schema_name,
+                schema=schema,
+            )
 
         started = time.monotonic()
         try:
@@ -252,7 +446,7 @@ class OpenAIModelGateway:
             )
             response.raise_for_status()
             response_payload, output_text = _response_payload_and_output_text(response)
-            output = LlmSemanticAnalysisOutput.model_validate_json(output_text)
+            output = parser(output_text)
         except httpx.HTTPStatusError as exc:
             raise ModelGatewayError(
                 "OpenAI Responses API returned an error.",
@@ -271,7 +465,7 @@ class OpenAIModelGateway:
         except (json.JSONDecodeError, ValueError) as exc:
             raise ModelGatewayError(
                 "OpenAI response did not match the required structured output schema.",
-                code="OPENAI_STRUCTURED_OUTPUT_INVALID",
+                code=invalid_code,
             ) from exc
 
         structured_output = output.to_storage_dict()
@@ -365,7 +559,16 @@ def _pgpt_responses_url() -> str:
     return f"{base_url}/v1/responses"
 
 
-def _openai_payload(*, prompt: RenderedPrompt, profile: ModelProfile) -> dict[str, Any]:
+def _openai_payload(
+    *,
+    prompt: RenderedPrompt,
+    profile: ModelProfile,
+    schema_name: str | None = None,
+    schema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    response_schema = schema or semantic_output_schema(
+        allowed_evidence_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+    )
     payload: dict[str, Any] = {
         "model": profile.model,
         "input": [
@@ -378,11 +581,9 @@ def _openai_payload(*, prompt: RenderedPrompt, profile: ModelProfile) -> dict[st
         "text": {
             "format": {
                 "type": "json_schema",
-                "name": "llm_semantic_analysis",
+                "name": schema_name or "llm_semantic_analysis",
                 "strict": True,
-                "schema": semantic_output_schema(
-                    allowed_evidence_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
-                ),
+                "schema": response_schema,
             }
         },
     }

@@ -785,6 +785,51 @@ def test_metadata_search_validation_and_dependency_error_shapes(client: TestClie
     assert set(missing_profile.json()) == {"detail", "code"}
 
 
+def test_metadata_analysis_route_supports_query_and_target_modes(
+    client: TestClient,
+) -> None:
+    query_response = client.post(
+        "/api/v1/metadata/analyze",
+        json={
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "options": {"llmProfileId": "openai_fast_test", "maxTargets": 2},
+        },
+    )
+    target_response = client.post(
+        "/api/v1/metadata/analyze",
+        json={
+            "dbProfileId": "master",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": True},
+        },
+    )
+
+    assert query_response.status_code == 200
+    query_payload = query_response.json()
+    assert query_payload["mode"] == "QUERY"
+    assert query_payload["targets"]
+    assert query_payload["deterministicFacts"]
+    assert query_payload["modelInvocation"]["outputSchemaVersion"] == (
+        "schema:mssql_metadata_analysis@0.1.0"
+    )
+    assert query_payload["aiToolEvidence"]["status"] in {"SUCCEEDED", "REVIEW_REQUIRED"}
+
+    assert target_response.status_code == 200
+    target_payload = target_response.json()
+    assert target_payload["mode"] == "TARGET"
+    assert target_payload["modelInvocation"] is None
+    assert any(
+        marker["code"] == "AI_METADATA_ANALYSIS_SKIPPED"
+        for marker in target_payload["reviewMarkers"]
+    )
+
+    serialized = f"{query_response.text} {target_response.text}".lower()
+    forbidden_fields = ("rowdata", "row_data", "definition", "sqltext", "ddl", "dml")
+    assert not any(field in serialized for field in forbidden_fields)
+
+
 def test_unknown_resources_return_not_found(client: TestClient) -> None:
     job = client.get("/api/v1/jobs/job_missing")
     artifact = client.get("/api/v1/artifacts/art_missing")

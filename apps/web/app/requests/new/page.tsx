@@ -38,6 +38,7 @@ async function submitRequest(formData: FormData) {
         | "openai_sp_semantic_analysis"
         | "openai_fast_test",
       allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
+      useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
     },
   });
   redirect(`/jobs/${response.jobId}`);

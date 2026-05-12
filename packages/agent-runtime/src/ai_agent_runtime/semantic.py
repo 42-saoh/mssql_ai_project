@@ -16,6 +16,10 @@ from ai_agent_runtime.models import (
     text_hash,
 )
 from ai_agent_runtime.prompts import render_semantic_analysis_prompt
+from ai_agent_runtime.storage_safety import (
+    sanitize_value_for_storage,
+    storage_safety_findings,
+)
 
 AGENT_TYPE = "LLM_SEMANTIC_ANALYST"
 TRACE_EVIDENCE_REFS = frozenset(
@@ -178,7 +182,12 @@ def _build_single_semantic_analysis_run(
         _repair_evidence_refs(combined_output, allowed_evidence_refs=allowed_evidence_refs),
         required_review_markers=required_review_markers,
     )
-    output = LlmSemanticAnalysisOutput.model_validate(repaired_output)
+    storage_safe_output = _sanitize_output_for_storage(
+        repaired_output,
+        procedure_definition=task.procedure_definition or "",
+        allowed_evidence_refs=allowed_evidence_refs,
+    )
+    output = LlmSemanticAnalysisOutput.model_validate(storage_safe_output)
     invocation = _aggregate_invocations(
         invocations=invocations,
         structured_output=output.to_storage_dict(),
@@ -275,15 +284,13 @@ def _allowed_evidence_refs(
     fact_ids = _get_path(static_analysis, ("fact_ids",))
     if isinstance(fact_ids, Sequence) and not isinstance(fact_ids, str | bytes):
         deterministic_refs.extend(str(ref) for ref in fact_ids if str(ref).strip())
-    if deterministic_refs:
-        return _dedupe(
-            ref for ref in deterministic_refs if ref and ref not in TRACE_EVIDENCE_REFS
-        )
 
     refs: list[str] = []
+    refs.extend(deterministic_refs)
     for ref in _metadata_evidence_refs(metadata):
         refs.append(ref)
-    refs.extend(_static_pattern_refs(static_analysis))
+    if not deterministic_refs:
+        refs.extend(_static_pattern_refs(static_analysis))
 
     definition = metadata.get("procedureDefinition")
     if isinstance(definition, Mapping) and definition.get("definitionHash"):
@@ -521,6 +528,63 @@ def _inject_required_review_markers(
                 )
             repaired["reviewMarkers"].append(marker_payload)
     return repaired
+
+
+def _sanitize_output_for_storage(
+    output: Mapping[str, Any],
+    *,
+    procedure_definition: str,
+    allowed_evidence_refs: Sequence[str],
+) -> dict[str, Any]:
+    normalized = LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
+    findings = storage_safety_findings(
+        payloads=(normalized,),
+        procedure_definition=procedure_definition,
+    )
+    if not findings:
+        return normalized
+
+    sanitized = LlmSemanticAnalysisOutput.model_validate(
+        sanitize_value_for_storage(
+            normalized,
+            procedure_definition=procedure_definition,
+        )
+    ).to_storage_dict()
+    _append_storage_safety_marker(
+        sanitized,
+        allowed_evidence_refs=allowed_evidence_refs,
+    )
+    return sanitized
+
+
+def _append_storage_safety_marker(
+    output: dict[str, Any],
+    *,
+    allowed_evidence_refs: Sequence[str],
+) -> None:
+    marker_code = "LLM_OUTPUT_STORAGE_SANITIZED"
+    evidence_refs = _fallback_evidence_refs(
+        {"code": marker_code, "message": "storage sanitized"},
+        allowed_evidence_refs,
+    )
+    marker = {
+        "code": marker_code,
+        "message": (
+            "Unsafe SQL, provider trace, row-data, or secret-like content was removed "
+            "from LLM output before storage."
+        ),
+        "status": "REVIEW_REQUIRED",
+        "evidenceRefs": evidence_refs,
+    }
+    for existing in output["reviewMarkers"]:
+        if existing.get("code") == marker_code:
+            existing["status"] = "REVIEW_REQUIRED"
+            existing["evidenceRefs"] = _dedupe(
+                [*_evidence_refs(existing), *evidence_refs]
+            )
+            existing["message"] = marker["message"]
+            return
+    output["reviewMarkers"].append(marker)
 
 
 def _aggregate_invocations(

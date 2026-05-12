@@ -1,6 +1,7 @@
 import { readPortalApiError } from "./errors.ts";
 import type { PortalApi } from "./portal-api.ts";
 import type {
+  MetadataAnalysisRequest,
   MetadataSearchRequest,
   MetadataToolInvokeRequest,
   MetadataToolName,
@@ -137,6 +138,13 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       }
 
       return readJson(fetcher, baseUrl, `/api/v1/metadata/search?${params.toString()}`);
+    },
+
+    analyzeMetadata(request: MetadataAnalysisRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/analyze", {
+        method: "POST",
+        json: request,
+      });
     },
 
     listRegistryVersions() {

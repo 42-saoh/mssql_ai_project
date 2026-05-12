@@ -180,17 +180,21 @@ Remote LLM execution defaults to official OpenAI. Set `LLM_REMOTE_PROVIDER=pgpt`
 `POST /api/v1/requests/sp-analysis` 는 P26 기준 high-quality hybrid LLM semantic analysis 를 기본값으로 사용한다.
 
 - `useLlmAnalysis`: 기본 `true`; deterministic metadata/static analysis 이후 LLM semantic enrichment 실행
+- `useAiToolOrchestration`: 기본 `true`; `useLlmAnalysis=false` 이면 자동 비활성화되며, LLM planner 가
+  필요한 read-only MCP metadata tool 을 제안하고 workflow 가 내부 registry/policy gate 로만 실행
 - `llmProfileId`: 기본 `openai_sp_semantic_analysis`; `openai_fast_test` 는 수동/평가 선택지
 - `allowSpDefinitionToModel`: 기본 `true`; SP definition 원문은 transient model input 으로만 허용
 
 기본 실행은 `FakeModelGateway` 를 사용하므로 외부 OpenAI API 를 호출하지 않는다. Remote 실행은
 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 준비된 경우에만 가능하다.
 semantic analysis 기본 모델은 `gpt-5.5` 이며 optional live confidence testing 에서는 `OPENAI_MODEL_ANALYSIS` 로 바꿀 수 있다. fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 수동 평가 실행 모델을 바꿀 수 있다.
-내부 runtime 은 요청 target 을 SP task 로 감싼 뒤 deterministic evidence digest, business rule extraction, conversion readiness, migration guide insights, evidence critic, optional repair staged calls 를 수행한다. 단일 API 요청 shape 는 그대로이며, batch API 는 추가하지 않는다. 여러 SP task 실행 경로에서는 `LLM_SP_CONCURRENCY` 기본값 `2` 로 fan-out 을 제한한다.
+내부 runtime 은 요청 target 을 SP task 로 감싼 뒤 bounded metadata tool planning, deterministic evidence digest, business rule extraction, conversion readiness, migration guide insights, evidence critic, optional repair staged calls 를 수행한다. 단일 API 요청 shape 는 그대로이며, batch API 는 추가하지 않는다. 여러 SP task 실행 경로에서는 `LLM_SP_CONCURRENCY` 기본값 `2` 로 fan-out 을 제한한다.
 
 `GET /api/v1/jobs/{jobId}/agent-runs` 는 sanitized trace summary 만 반환한다. 응답에는
 schema-valid structured output, provider/model/profile, prompt/schema version, input/prompt/output
 hash, token usage, latency, status, optional `componentInvocations` 가 포함된다. raw prompt, raw SP definition, raw OpenAI response text 는 저장하거나 반환하지 않는다.
+AI-selected metadata tool component 는 toolName 과 sanitized argument/output hash 중심으로만 저장하며,
+raw arguments, raw definition text, row data, secret-like fields 는 저장하지 않는다.
 
 Platform DB 를 사용할 경우 `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql` 을 운영자가
 수동 적용해야 한다. API 는 해당 DDL 을 자동 실행하지 않는다.
@@ -231,6 +235,20 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
   `PPM_MANIFEST_TEMPLATE_ONLY` blocker 와 빈 결과를 반환한다.
 - required MCP inventory/search capability 가 없으면 `METADATA_SEARCH_MCP_TOOL_MISSING`,
   PPM 접근 실패나 live metadata unavailable 은 해당 MCP blocker code 를 PLF fallback 없이 반환한다.
+
+## Metadata analysis
+
+- `POST /api/v1/metadata/analyze` 는 response-only bounded AI-MCP metadata analysis endpoint 다.
+  요청은 `dbProfileId` 와 `query` 또는 단일 `target` 중 하나를 받으며, `options.useLlmAnalysis=true`,
+  `options.useAiToolOrchestration=true`, `options.maxTargets=3` 을 기본값으로 사용한다.
+- 기존 `GET /api/v1/metadata/search` 는 LLM 호출 없이 deterministic search 로 유지한다. Analyze API 는
+  baseline identity/evidence 를 만든 뒤 LLM planner 가 필요한 active/read-only MCP tool 을 strict JSON
+  plan 으로 제안하게 하고, 실제 실행은 내부 registry/policy gate 로만 수행한다.
+- public `/metadata/tools/{toolName}/invoke` allowlist 는 확장하지 않는다. `get_table_schema` 같은 tool 은
+  analyze API 내부 orchestration 에서만 실행될 수 있다.
+- 응답은 sanitized `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id,
+  `objectInsights`, `reviewMarkers`, caveats 로 제한한다. v1 은 DB migration, persisted artifact,
+  workflow state transition 을 추가하지 않는다.
 
 ## Metadata tool invocation
 

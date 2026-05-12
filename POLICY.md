@@ -67,6 +67,14 @@
   provider response id, raw SQL snippet 같은 trace 값은 claim evidence 로 사용할 수 없다.
 - Dynamic SQL, cross-database, unsupported dependency/table/function/procedure claim 은 LLM 출력에
   marker 가 없더라도 deterministic guard 가 `REVIEW_REQUIRED` 로 보강해야 한다.
+- AI metadata tool orchestration 은 bounded planner 방식만 허용한다. LLM 은 tool request plan 을
+  strict schema 로 제안할 수 있지만 실제 MCP 실행은 workflow 의 allowlisted active/read-only catalog,
+  profile 고정, call budget, structured argument guard, sanitized output storage 를 통과해야 한다.
+  public metadata invoke API allowlist 는 이 기능 때문에 확장하지 않는다.
+- Metadata analysis API 의 AI-MCP orchestration 도 같은 경계를 따른다. `POST /api/v1/metadata/analyze`
+  는 response-only 분석이며, 기존 search endpoint 를 LLM 호출 경로로 바꾸지 않는다. 분석 응답에는
+  sanitized evidence digest 와 deterministic fact id 만 포함하고 raw definition, row data, free-form
+  SQL, procedure execution, DDL/DML, secrets, raw prompt/provider response text 는 포함하지 않는다.
 
 ## 생성 결과 정책
 

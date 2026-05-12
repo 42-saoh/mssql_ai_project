@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 
 import yaml
-
 from ai_agent_domain.models import (
     REQUESTED_OUTPUT_ARTIFACT_TYPES,
     ArtifactStatus,
@@ -13,7 +12,6 @@ from ai_agent_domain.models import (
     RequestedOutputType,
     WorkflowStepType,
 )
-
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -46,13 +44,21 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "/api/v1/jobs/{jobId}" in data["paths"]
     assert "/api/v1/artifacts/{artifactId}/validation/latest" in data["paths"]
     assert "SPAnalysisRequest" in data["components"]["schemas"]
+    assert (
+        data["components"]["schemas"]["SPAnalysisOptions"]["properties"][
+            "useAiToolOrchestration"
+        ]["default"]
+        is True
+    )
     assert "Artifact" in data["components"]["schemas"]
     assert "ValidationReport" in data["components"]["schemas"]
     assert "RequestedOutputType" in data["components"]["schemas"]
     assert "WorkflowStepType" in data["components"]["schemas"]
     assert "/api/v1/metadata/search" in data["paths"]
+    assert "/api/v1/metadata/analyze" in data["paths"]
     assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
+    assert "MetadataAnalysisResponse" in data["components"]["schemas"]
     assert "MetadataToolInvokeResponse" in data["components"]["schemas"]
 
 
@@ -172,6 +178,48 @@ def test_openapi_metadata_tool_invocation_contract_matches_p28_surface() -> None
     assert forbidden_response_fields.isdisjoint(
         set(schemas["MetadataToolInvokeResponse"]["properties"])
     )
+
+
+def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    operation = openapi["paths"]["/api/v1/metadata/analyze"]["post"]
+    schemas = openapi["components"]["schemas"]
+
+    assert operation["operationId"] == "analyzeMetadata"
+    assert operation["tags"] == ["metadata"]
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisRequest"
+    }
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisResponse"
+    }
+    options = schemas["MetadataAnalysisOptions"]["properties"]
+    assert options["useLlmAnalysis"]["default"] is True
+    assert options["useAiToolOrchestration"]["default"] is True
+    assert options["maxTargets"]["maximum"] == 5
+    response_properties = set(schemas["MetadataAnalysisResponse"]["properties"])
+    assert {
+        "aiToolEvidence",
+        "deterministicFacts",
+        "objectInsights",
+        "reviewMarkers",
+        "componentInvocations",
+    } <= response_properties
+    forbidden_response_fields = {
+        "rowData",
+        "row_data",
+        "definition",
+        "sqlText",
+        "ddl",
+        "dml",
+        "execute",
+        "rawStorage",
+    }
+    assert forbidden_response_fields.isdisjoint(response_properties)
 
 
 def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:

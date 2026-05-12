@@ -76,12 +76,14 @@ flowchart LR
 - 단계 실행 순서
 - 재시도/중단/재개
 - registry version binding
+- baseline metadata 수집 후 bounded AI tool planner 를 실행해 active/read-only MCP tool 후보 중
+  필요한 추가 metadata evidence 를 내부 registry 로만 수집
 
 ### Agent Runtime
 
 - Remote model provider mode defaults to official OpenAI. `LLM_REMOTE_PROVIDER=pgpt` uses the private P-GPT `/v1/responses` contract with a minimal `model`, `instructions`, and message-array `input` request while retaining JSON/SSE response parsing.
 - 프롬프트 조합
-- tool call orchestration
+- bounded metadata tool planning
 - evidence binding
 - LLM 사용이 필요한 부분의 제한적 생성
 - OpenAI Responses API 는 `ModelGateway` adapter 뒤에서만 호출
@@ -92,6 +94,8 @@ flowchart LR
   prompt/input/output hash 같은 trace ref 를 claim evidence 로 저장하지 않도록 repair 한다.
 - raw SP definition 은 명시 옵션이 켜진 실행 중 입력으로만 사용하고 플랫폼 DB,
   artifact, audit log, API 응답에는 저장하지 않음
+- metadata tool planning output 은 strict JSON schema 를 사용하며 실제 MCP 실행은 API workflow 의
+  deterministic policy gate 가 수행한다.
 
 ### Analysis Engine
 - SP parser
@@ -237,7 +241,14 @@ packages/templates
 - `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. P26 기준 API/Web 기본값은 high-quality hybrid 분석이며 semantic analysis profile `gpt-5.5`, transient SP definition input, guide/conversion insight schema 를 사용한다. fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. 기본 테스트는 remote API 를 호출하지 않는다.
 - P23/P26 LLM-assisted SP analysis quality eval 은 simple/medium/complex synthetic fixtures 를 `FakeModelGateway` 로 fixture-first scoring 한다. API/Web live 기본 profile 은 `openai_sp_semantic_analysis` / `gpt-5.5` 이고, `openai_fast_test` 는 기본 `gpt-5-nano` 에서 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. Optional live OpenAI quality gate 는 confidence signal 이며 production readiness 기준이 아니다. Live 품질 gate 실패는 P24 guide generation failure 가 아니라 P23/P26 semantic-analysis confidence failure 로 해석한다.
 - P24 SP migration guide quality eval 은 sanitized simple/medium/complex fixtures 를 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` draft artifact type 으로 렌더링하고 `evaluate_p24_migration_guide_quality` 로 점수화한다. 새 persisted artifact type, API/Web/DB schema 변경, live DB access 는 없으며 Java/MyBatis 는 `draft_only_readiness_notes` 경계에 남긴다.
-- Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후 LLM semantic analysis 를 기본 실행한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
+- Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후 bounded AI tool orchestration 과 LLM semantic analysis 를 기본 실행한다. `useAiToolOrchestration=true` 이 기본값이며 `useLlmAnalysis=false` 이면 자동 비활성화된다. AI planner 는 active/read-only MCP catalog 전체를 후보로 보지만, 실행은 내부 registry 와 deterministic policy gate 로만 수행하고 public invoke API allowlist 는 확장하지 않는다. 수집 결과는 sanitized `aiToolEvidence` 와 `mcp.<toolName>.<hash>` deterministic fact id 로 semantic prompt 에 전달된다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
+- Metadata analysis 는 `POST /api/v1/metadata/analyze` 별도 response-only API 로 제공한다. 기존
+  `GET /api/v1/metadata/search` 는 deterministic identity/evidence search 로 유지하고,
+  analyze API 안에서만 bounded AI tool planner 를 기본 실행한다. 이 경로도 active/read-only MCP
+  catalog 전체를 후보로 보되 내부 registry 로만 실행하며, public invoke API allowlist 는 계속
+  `get_dependency_closure`, `resolve_dependency_reference` 두 개로 제한한다. 결과는 sanitized
+  `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id, metadata insights,
+  review markers 를 API 응답으로만 반환하고 DB migration 또는 persisted artifact 를 추가하지 않는다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
 - P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되어 있으나 P25 기본 product path 는 approval UI 를 노출하지 않는다. Live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
 - P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.

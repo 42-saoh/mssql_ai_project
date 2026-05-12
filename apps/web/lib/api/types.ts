@@ -97,6 +97,7 @@ export interface SPAnalysisOptions {
   useLlmAnalysis?: boolean;
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   allowSpDefinitionToModel?: boolean;
+  useAiToolOrchestration?: boolean;
 }
 
 export interface SubmitRequestResponse {
@@ -133,6 +134,7 @@ export interface ModelInvocationSummary {
   status: "SUCCEEDED" | "FAILED" | "SKIPPED";
   tokenUsage?: Record<string, number>;
   latencyMs?: number | null;
+  componentInvocations?: Record<string, unknown>[];
 }
 
 export interface AgentRunSummary {
@@ -263,6 +265,60 @@ export interface MetadataSearchResponse {
   caveats: string[];
   reviewRequired: boolean;
   blockers: MetadataSearchBlocker[];
+}
+
+export interface MetadataAnalysisOptions {
+  useLlmAnalysis?: boolean;
+  useAiToolOrchestration?: boolean;
+  llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
+  maxTargets?: number;
+}
+
+export interface MetadataAnalysisRequest {
+  dbProfileId: string;
+  query?: string;
+  target?: MetadataObjectIdentity;
+  objectTypes?: MetadataSearchObjectType[];
+  options?: MetadataAnalysisOptions;
+}
+
+export interface MetadataAnalysisInsight {
+  code: string;
+  objectRef: string;
+  summary: string;
+  status: "INFERRED_DESCRIPTION" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export interface MetadataAnalysisReviewMarker {
+  code: string;
+  message: string;
+  status: "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export interface MetadataAnalysisResponse {
+  dbProfileId: string;
+  mode: "QUERY" | "TARGET";
+  query?: string;
+  target?: MetadataObjectIdentity;
+  objectTypes: MetadataSearchObjectType[];
+  sourceProfile: string;
+  sourceDatabase: string;
+  snapshotId?: string;
+  collectedAt?: string;
+  targets: MetadataSearchResult[];
+  summary: string;
+  objectInsights: MetadataAnalysisInsight[];
+  aiToolEvidence: Record<string, unknown>;
+  deterministicFacts: Record<string, unknown>[];
+  reviewMarkers: MetadataAnalysisReviewMarker[];
+  assumptions: string[];
+  caveats: string[];
+  reviewRequired: boolean;
+  blockers: MetadataSearchBlocker[];
+  modelInvocation?: ModelInvocationSummary | null;
+  componentInvocations: Record<string, unknown>[];
 }
 
 export interface RegistryVersion {

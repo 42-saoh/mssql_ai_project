@@ -175,6 +175,9 @@
 - semantic analysis profile 기본값은 `gpt-5.5` 이며 `OPENAI_MODEL_ANALYSIS` 로 live confidence 모델을 바꿀 수 있음. fast/test profile 은 수동 평가 선택지로 남고 기본값은 `gpt-5-nano` 다.
 - remote 실행은 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` gate 를 요구
 - raw prompt, raw SP definition, raw OpenAI response text 는 DB/API/artifact/test output 에 저장하지 않음
+- `useAiToolOrchestration=true` 가 기본값이며 `useLlmAnalysis=false` 이면 자동 비활성화됨
+- metadata tool planning 은 strict `schema:mssql_metadata_tool_plan@0.1.0` 출력만 허용하고,
+  실제 MCP 실행은 workflow deterministic policy gate 와 내부 registry 로만 수행함
 - structured output 은 `schema:llm_semantic_analysis@0.3.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
@@ -207,6 +210,8 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - dynamic SQL, cross-DB, unsupported dependency/table/function/procedure claim 의 필수 `REVIEW_REQUIRED` marker 는 deterministic guard 가 보강한다
 - `LLM_INFERENCE` evidence 와 unsupported dependency/table/function claim 의 `REVIEW_REQUIRED` 처리 기준을 둔다
 - scoring runner 는 semantic recall, evidence discipline, overclaim control, storage safety 를 검증하며 raw prompt/SP/provider response text 를 저장하지 않는다
+- storage safety 는 adversarial raw SQL/provider-trace echo payload 를 실패로 판정하며, runtime 은 저장 전 sanitizer 와 `LLM_OUTPUT_STORAGE_SANITIZED` review marker 로 이를 차단한다
+- bounded AI tool orchestration 결과는 sanitized `aiToolEvidence` 와 `mcp.<toolName>.<hash>` deterministic fact id 로만 semantic prompt 에 전달한다
 - raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 fixture trace/API/Web 산출물에 저장하지 않는다
 - optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
 
@@ -266,7 +271,30 @@ response storage, and `production_ready: false`.
 make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
 ```
 
-### 12. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
+### 12. P30 Metadata AI-MCP Analysis Gate
+
+대상:
+- `POST /api/v1/metadata/analyze`
+- `fixtures/eval/metadata_ai_mcp_analysis_p30_v1.yaml`
+- `tests/eval/test_p30_metadata_ai_mcp_analysis.py`
+
+필수 체크:
+- 기존 `GET /api/v1/metadata/search` 는 deterministic search 로 유지하고 LLM 호출을 기본 포함하지 않는다
+- analyze API 는 `query` 또는 단일 `target` 중 하나만 받아 response-only 분석을 수행한다
+- `useLlmAnalysis=true`, `useAiToolOrchestration=true`, `maxTargets=3` 이 analyze API 기본값이다
+- LLM planner 는 active/read-only MCP catalog 를 후보로 보지만 실행은 내부 registry/policy gate 로만 수행한다
+- public metadata invoke API allowlist 는 `get_dependency_closure`, `resolve_dependency_reference` 로 유지한다
+- response 는 sanitized `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id,
+  metadata insights, review markers 만 반환하고 raw SQL/definition, row data, procedure execution,
+  DDL/DML, secret, raw prompt/provider response text 를 반환하지 않는다
+- adversarial planner 가 write/free-form SQL/secret-like argument 를 요청하면 workflow failure 가 아니라
+  `AI_METADATA_ANALYSIS_REVIEW_REQUIRED` marker 와 blocked request digest 로 남긴다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- optional live OpenAI/PPM confidence 는 별도 승인 환경에서만 판정하고, 기본 gate 는 fixture-first 로 유지한다
+
+### 13. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
 
 P27 은 dependency evidence 계약을 fixture-first MCP 구현과 명시적 hard-live gate 로 강화한다.
 목표는 AI-heavy semantic analysis 와 P24 guide renderer 에 raw SQL 이 아닌 구조화된
@@ -296,6 +324,9 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
   Web diagnostic UI 는 이 route 를 수동 진단용으로 사용하고, runtime workflow 는 PROCEDURE
   target 에 대해 `get_dependency_closure` evidence digest 만 자동 병합한다. persisted artifact
   type 변경, DB schema 변경, default live gate 요구는 계속 포함하지 않는다
+- bounded AI tool orchestration 은 public invoke API 를 넓히지 않고, 내부 workflow 에서만 active/read-only
+  catalog 전체를 후보로 사용한다. free-form SQL/write-like/profile-switch/row-data/secret-like
+  요청은 blocked request 와 `AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED` marker 로 남겨야 한다.
 - P29B 기준 DB migration, 새 persisted artifact type, workflow state transition 은 deferred 로
   확정한다. dependency evidence 는 기존 metadata collection payload 의 sanitized
   `dependencyEvidence` digest 와 기존 draft artifact evidence refs/rendered section 으로만
@@ -309,7 +340,7 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
 - 실패/blocker: P27 tool 이 inactive/writable/handler 없는 상태가 되거나, 자유 SQL/row data/procedure execution/DDL/DML/raw definition storage/PLF fallback 을 허용하거나, 불확실 dependency 를 deterministic fact 로 승격하거나, `P27_HARD_LIVE_GATE=1` 상태에서 missing prerequisites 를 skip 하는 경우다.
 
 ```bash
-make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
+make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
 P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
 

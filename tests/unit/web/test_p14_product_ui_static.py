@@ -42,6 +42,7 @@ def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     source = _web_source().lower()
 
     assert "/api/v1/metadata/search" in source
+    assert "/api/v1/metadata/analyze" in source
     assert "/api/v1/metadata/tools" in source
     assert "/metadata/dependencies" in source
     assert "/api/v1/artifacts/" in source
@@ -72,6 +73,7 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert "resolve_dependency_reference" in page
     assert "api.listMetadataTools()" in page
     assert "api.invokeMetadataTool" in page
+    assert "api.analyzeMetadata" in _web_source()
     assert "inputSchema" not in page
     assert "input schema" not in page.lower()
     assert "listMetadataTools" in portal_api
@@ -102,8 +104,10 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
 
     assert "api.createSPAnalysisRequest" in request_page
     assert "useLlmAnalysis" in request_page
+    assert "useAiToolOrchestration" in request_page
     assert "allowSpDefinitionToModel" in request_page
     assert 'name="useLlmAnalysis" defaultChecked' in source
+    assert 'name="useAiToolOrchestration" defaultChecked' in source
     assert 'name="allowSpDefinitionToModel" defaultChecked' in source
     assert 'defaultValue="openai_sp_semantic_analysis"' in source
     assert "semantic analysis - gpt-5.5" in source

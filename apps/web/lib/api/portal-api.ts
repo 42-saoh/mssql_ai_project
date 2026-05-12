@@ -3,6 +3,8 @@ import type {
   Artifact,
   ArtifactSummary,
   Job,
+  MetadataAnalysisRequest,
+  MetadataAnalysisResponse,
   MetadataProfile,
   MetadataSearchRequest,
   MetadataSearchResponse,
@@ -35,5 +37,6 @@ export interface PortalApi {
     request: MetadataToolInvokeRequest,
   ): Promise<MetadataToolInvokeResponse>;
   searchMetadataObjects(request: MetadataSearchRequest): Promise<MetadataSearchResponse>;
+  analyzeMetadata(request: MetadataAnalysisRequest): Promise<MetadataAnalysisResponse>;
   listRegistryVersions(): Promise<{ versions: RegistryVersion[] }>;
 }

@@ -12,8 +12,8 @@ import api_app.metadata_service as metadata_service
 from api_app.live_gate import P21_LIVE_PPM_REQUIRED
 from api_app.metadata_service import (
     METADATA_BLOCKER_MESSAGES,
-    MetadataSearchDependencyError,
     PPM_MANIFEST_TEMPLATE_ONLY,
+    MetadataSearchDependencyError,
     load_profiles_for_metadata_request,
     p21_live_portal_enabled,
 )
@@ -41,6 +41,8 @@ class MetadataCollectionResult:
     procedure_parameters: dict[str, Any] | None = None
     procedure_dependencies: dict[str, Any] | None = None
     dependency_evidence: dict[str, Any] | None = None
+    ai_tool_evidence: dict[str, Any] | None = None
+    deterministic_facts: tuple[dict[str, Any], ...] = ()
     table_schemas: tuple[dict[str, Any], ...] = ()
     status: str = "COLLECTED"
     notes: tuple[str, ...] = ()
@@ -71,6 +73,8 @@ class MetadataCollectionResult:
             "procedureParameters": self.procedure_parameters,
             "procedureDependencies": self.procedure_dependencies,
             "dependencyEvidence": self.dependency_evidence,
+            "aiToolEvidence": self.ai_tool_evidence,
+            "deterministicFacts": list(self.deterministic_facts),
             "tableSchemas": list(self.table_schemas),
             "status": self.status,
             "notes": list(self.notes),

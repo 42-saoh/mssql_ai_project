@@ -157,6 +157,10 @@ export function RequestForm({
             Run high-quality LLM semantic analysis
           </label>
           <label>
+            <input type="checkbox" name="useAiToolOrchestration" defaultChecked />
+            Use bounded AI metadata tools
+          </label>
+          <label>
             <input type="checkbox" name="allowSpDefinitionToModel" defaultChecked />
             Allow transient SP definition in model input
           </label>

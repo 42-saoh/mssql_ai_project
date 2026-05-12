@@ -88,6 +88,7 @@ paths:
                   options:
                     includeModernizationHints: true
                     includeEvidenceRefs: true
+                    useAiToolOrchestration: true
       responses:
         "202":
           description: Request accepted and workflow job created.
@@ -425,6 +426,44 @@ paths:
           $ref: "#/components/responses/DependencyBlocked"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/analyze:
+    post:
+      tags: [metadata]
+      summary: Analyze read-only MSSQL metadata with bounded AI-MCP orchestration.
+      operationId: analyzeMetadata
+      description: |
+        Runs response-only metadata analysis. The API first builds deterministic metadata
+        identity context from a query or target, then allows the LLM to plan bounded
+        active/read-only MCP metadata tool calls. Tool execution stays internal to the API
+        registry boundary; the public metadata tool invocation allowlist is not expanded.
+        Responses contain sanitized evidence digests, deterministic fact ids, LLM insights,
+        review markers, and caveats. They never include row data, raw SQL definition text,
+        procedure execution output, DDL/DML controls, secrets, or raw provider traces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataAnalysisRequest"
+      responses:
+        "200":
+          description: Response-only metadata analysis with sanitized AI-MCP evidence.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataAnalysisResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/registry/versions:
     get:
       tags: [registry]
@@ -550,6 +589,9 @@ components:
             - openai_sp_semantic_analysis
             - openai_fast_test
         allowSpDefinitionToModel:
+          type: boolean
+          default: true
+        useAiToolOrchestration:
           type: boolean
           default: true
     SubmitRequestResponse:
@@ -1043,6 +1085,164 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetadataSearchBlocker"
+    MetadataAnalysisOptions:
+      type: object
+      properties:
+        useLlmAnalysis:
+          type: boolean
+          default: true
+        useAiToolOrchestration:
+          type: boolean
+          default: true
+        llmProfileId:
+          type: string
+          default: openai_sp_semantic_analysis
+          enum:
+            - openai_sp_semantic_analysis
+            - openai_fast_test
+        maxTargets:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 3
+    MetadataAnalysisRequest:
+      type: object
+      required: [dbProfileId]
+      description: Provide exactly one of query or target.
+      properties:
+        dbProfileId:
+          type: string
+        query:
+          type: string
+          minLength: 1
+        target:
+          $ref: "#/components/schemas/MetadataObjectIdentity"
+        objectTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchObjectType"
+          default: [PROCEDURE, TABLE, VIEW, FUNCTION]
+        options:
+          $ref: "#/components/schemas/MetadataAnalysisOptions"
+    MetadataAnalysisInsight:
+      type: object
+      required: [code, objectRef, summary, status, evidenceRefs]
+      properties:
+        code:
+          type: string
+        objectRef:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+          enum: [INFERRED_DESCRIPTION, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+    MetadataAnalysisReviewMarker:
+      type: object
+      required: [code, message, status, evidenceRefs]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+          enum: [REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+    MetadataAnalysisResponse:
+      type: object
+      required:
+        - dbProfileId
+        - mode
+        - objectTypes
+        - sourceProfile
+        - sourceDatabase
+        - targets
+        - summary
+        - objectInsights
+        - aiToolEvidence
+        - deterministicFacts
+        - reviewMarkers
+        - assumptions
+        - caveats
+        - reviewRequired
+        - blockers
+        - componentInvocations
+      properties:
+        dbProfileId:
+          type: string
+        mode:
+          type: string
+          enum: [QUERY, TARGET]
+        query:
+          type: string
+        target:
+          $ref: "#/components/schemas/MetadataObjectIdentity"
+        objectTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchObjectType"
+        sourceProfile:
+          type: string
+        sourceDatabase:
+          type: string
+        snapshotId:
+          type: string
+        collectedAt:
+          type: string
+          format: date-time
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchResult"
+        summary:
+          type: string
+        objectInsights:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataAnalysisInsight"
+        aiToolEvidence:
+          type: object
+          additionalProperties: true
+        deterministicFacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reviewMarkers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataAnalysisReviewMarker"
+        assumptions:
+          type: array
+          items:
+            type: string
+        caveats:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchBlocker"
+        modelInvocation:
+          oneOf:
+            - $ref: "#/components/schemas/ModelInvocationSummary"
+            - type: "null"
+        componentInvocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
     RegistryVersion:
       type: object
       required: [registryType, version]

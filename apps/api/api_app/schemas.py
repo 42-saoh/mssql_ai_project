@@ -10,7 +10,7 @@ from ai_agent_domain import (
     RequestedOutputType,
     WorkflowStepType,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ApiModel(BaseModel):
@@ -44,6 +44,10 @@ class SPAnalysisOptions(ApiModel):
     allow_sp_definition_to_model: bool = Field(
         default=True,
         alias="allowSpDefinitionToModel",
+    )
+    use_ai_tool_orchestration: bool = Field(
+        default=True,
+        alias="useAiToolOrchestration",
     )
 
 
@@ -240,6 +244,97 @@ class MetadataSearchResponse(ApiModel):
     caveats: list[str] = Field(default_factory=list)
     review_required: bool = Field(default=False, alias="reviewRequired")
     blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
+
+
+class MetadataAnalysisOptions(ApiModel):
+    use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
+    use_ai_tool_orchestration: bool = Field(
+        default=True,
+        alias="useAiToolOrchestration",
+    )
+    llm_profile_id: Literal[
+        "openai_sp_semantic_analysis",
+        "openai_fast_test",
+    ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
+    max_targets: int = Field(default=3, ge=1, le=5, alias="maxTargets")
+
+
+class MetadataAnalysisRequest(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId", min_length=1)
+    query: str | None = Field(default=None, min_length=1)
+    target: MetadataObjectIdentity | None = None
+    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
+        default_factory=list,
+        alias="objectTypes",
+    )
+    options: MetadataAnalysisOptions = Field(default_factory=MetadataAnalysisOptions)
+
+    @model_validator(mode="after")
+    def validate_query_or_target(self) -> MetadataAnalysisRequest:
+        has_query = bool((self.query or "").strip())
+        has_target = self.target is not None
+        if has_query == has_target:
+            raise ValueError(
+                "metadata analysis request must provide exactly one of query or target."
+            )
+        return self
+
+
+class MetadataAnalysisInsight(ApiModel):
+    code: str
+    object_ref: str = Field(alias="objectRef")
+    summary: str
+    status: Literal["INFERRED_DESCRIPTION", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataAnalysisReviewMarker(ApiModel):
+    code: str
+    message: str
+    status: Literal["REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataAnalysisResponse(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId")
+    mode: Literal["QUERY", "TARGET"]
+    query: str | None = None
+    target: MetadataObjectIdentity | None = None
+    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
+        default_factory=list,
+        alias="objectTypes",
+    )
+    source_profile: str = Field(alias="sourceProfile")
+    source_database: str = Field(alias="sourceDatabase")
+    snapshot_id: str | None = Field(default=None, alias="snapshotId")
+    collected_at: str | None = Field(default=None, alias="collectedAt")
+    targets: list[MetadataSearchResult] = Field(default_factory=list)
+    summary: str
+    object_insights: list[MetadataAnalysisInsight] = Field(
+        default_factory=list,
+        alias="objectInsights",
+    )
+    ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
+    deterministic_facts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="deterministicFacts",
+    )
+    review_markers: list[MetadataAnalysisReviewMarker] = Field(
+        default_factory=list,
+        alias="reviewMarkers",
+    )
+    assumptions: list[str] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
+    model_invocation: ModelInvocationSummary | None = Field(
+        default=None,
+        alias="modelInvocation",
+    )
+    component_invocations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="componentInvocations",
+    )
 
 
 class RegistryVersion(ApiModel):

@@ -151,6 +151,17 @@ const metadataSearch = await api.searchMetadataObjects({
   objectTypes: ["PROCEDURE", "TABLE"],
   limit: 5,
 });
+const metadataAnalysis = await api.analyzeMetadata({
+  dbProfileId: "master",
+  query: "order",
+  objectTypes: ["PROCEDURE", "TABLE"],
+  options: {
+    useLlmAnalysis: true,
+    useAiToolOrchestration: true,
+    llmProfileId: "openai_fast_test",
+    maxTargets: 3,
+  },
+});
 const registry = await api.listRegistryVersions();
 
 assert(submitted.status === "VALIDATION_COMPLETE", `Unexpected submit status: ${submitted.status}`);
@@ -170,6 +181,9 @@ assert(dependencyResolution.toolName === "resolve_dependency_reference", "Depend
 assert(dependencyResolution.data.selectedResolution?.name === "TB_ORDER", "Dependency resolver did not select the confirmed table");
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
 assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
+assert(metadataAnalysis.sourceProfile === "master", `Unexpected analysis source profile: ${metadataAnalysis.sourceProfile}`);
+assert(metadataAnalysis.deterministicFacts.length > 0, "Metadata analysis must include deterministic facts");
+assert(metadataAnalysis.summary.length > 0, "Metadata analysis summary is empty");
 assert(registry.versions.length > 0, "Registry versions response is empty");
 
 assertNoPublishedState(listed.artifacts, artifact);
@@ -188,6 +202,7 @@ for (const [label, payload] of Object.entries({
   dependencyClosure,
   dependencyResolution,
   metadataSearch,
+  metadataAnalysis,
   registry,
 })) {
   assertNoForbiddenPayload(payload, label);
@@ -228,6 +243,9 @@ assertObserved("POST /api/v1/metadata/tools/resolve_dependency_reference/invoke"
 );
 assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
   method === "GET" && path.startsWith("/api/v1/metadata/search?"),
+);
+assertObserved("POST /api/v1/metadata/analyze", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/analyze",
 );
 assertObserved("GET /api/v1/registry/versions", ({ method, path }) =>
   method === "GET" && path === "/api/v1/registry/versions",

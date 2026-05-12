@@ -247,6 +247,44 @@ def test_p23c_quality_report_is_reproducible_and_sanitized(monkeypatch: Any) -> 
         assert "raw_openai_response_text" not in serialized
 
 
+def test_p23c_quality_runner_fails_adversarial_raw_sql_echo_payload(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    fixture = _fixture()
+    scenario = _scenario("p23_simple_read_only_lookup")
+    procedure_definition = scenario["transient_model_input"]["procedure_definition"]
+    run = _build_run(scenario, _fixture_gateway(fixture))
+
+    report = evaluate_p23_semantic_quality(
+        scenario=scenario,
+        run=run,
+        thresholds=fixture["quality_thresholds"],
+        additional_storage_payloads=(
+            {
+                "structuredOutput": {
+                    "businessRules": [
+                        {
+                            "category": "ADVERSARIAL_SQL_ECHO",
+                            "summary": procedure_definition,
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["fact_p23_simple_lookup"],
+                        }
+                    ]
+                }
+            },
+        ),
+    )
+    serialized = json.dumps(report, ensure_ascii=False, sort_keys=True)
+
+    assert report["status"] == "FAILED"
+    assert report["storageSafety"]["findingCount"] >= 1
+    assert {
+        "PROCEDURE_TEXT_PRESENT",
+        "PROCEDURE_TEXT_MARKER_PRESENT",
+    }.intersection(report["storageSafety"]["findingCodes"])
+    assert procedure_definition not in serialized
+    assert "CREATE OR ALTER PROCEDURE" not in serialized
+
+
 def _fixture() -> dict[str, Any]:
     return yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
 

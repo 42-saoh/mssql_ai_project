@@ -10,8 +10,16 @@ from ai_agent_runtime import (
     build_semantic_analysis_runs,
 )
 from ai_agent_runtime.gateway import model_profile_from_env
-from ai_agent_runtime.models import semantic_output_schema
-from ai_agent_runtime.prompts import render_semantic_analysis_prompt
+from ai_agent_runtime.models import (
+    metadata_analysis_output_schema,
+    metadata_tool_planning_output_schema,
+    semantic_output_schema,
+)
+from ai_agent_runtime.prompts import (
+    render_metadata_analysis_prompt,
+    render_metadata_tool_planning_prompt,
+    render_semantic_analysis_prompt,
+)
 from ai_agent_runtime.quality_eval import evaluate_p23_semantic_quality
 
 
@@ -144,6 +152,143 @@ def test_semantic_output_schema_can_constrain_fact_id_evidence_refs() -> None:
     ]["items"]
 
     assert evidence_items["enum"] == ["fact_customer", "fact_status"]
+
+
+def test_metadata_tool_planner_prompt_and_schema_are_strict() -> None:
+    prompt = render_metadata_tool_planning_prompt(
+        target_ref="dbo.usp_Demo",
+        metadata={
+            "procedureDefinition": {
+                "definition": "CREATE PROCEDURE dbo.usp_Demo AS SELECT 1",
+                "definitionHash": "abc",
+            }
+        },
+        static_analysis=None,
+        tool_capabilities=[
+            {
+                "name": "get_table_schema",
+                "description": "Return columns and data types for a table.",
+                "inputSchema": {"type": "object"},
+            }
+        ],
+    )
+    schema = metadata_tool_planning_output_schema(tool_names=["get_table_schema"])
+
+    assert '"definition":' not in prompt.user_prompt
+    assert "CREATE PROCEDURE dbo.usp_Demo" not in prompt.user_prompt
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["toolRequests"]["items"]["additionalProperties"] is False
+    assert (
+        schema["properties"]["toolRequests"]["items"]["properties"]["toolName"]["enum"]
+        == ["get_table_schema"]
+    )
+
+
+def test_fake_gateway_can_return_metadata_tool_plan(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    prompt = render_metadata_tool_planning_prompt(
+        target_ref="dbo.usp_Demo",
+        metadata={},
+        static_analysis=None,
+        tool_capabilities=[
+            {
+                "name": "get_table_schema",
+                "description": "Return columns and data types for a table.",
+                "inputSchema": {"type": "object"},
+            }
+        ],
+    )
+    result = FakeModelGateway(
+        tool_plan_by_target_ref={
+            "dbo.usp_Demo": {
+                "toolRequests": [
+                    {
+                        "toolName": "get_table_schema",
+                        "arguments": {
+                            "dbProfileId": "master",
+                            "schema": "dbo",
+                            "tableName": "TB_ORDER",
+                        },
+                        "reason": "Need column metadata.",
+                        "expectedEvidenceUse": "Anchor DTO shape claims.",
+                    }
+                ],
+                "assumptions": [],
+                "reviewMarkers": [],
+            }
+        }
+    ).plan_metadata_tools(prompt=prompt, profile=model_profile_from_env("openai_fast_test"))
+
+    assert result.structured_output["toolRequests"][0]["toolName"] == "get_table_schema"
+    assert result.output_schema_version == "schema:mssql_metadata_tool_plan@0.1.0"
+
+
+def test_metadata_analysis_prompt_and_schema_are_strict() -> None:
+    prompt = render_metadata_analysis_prompt(
+        target_ref="dbo.TB_ORDER",
+        metadata={
+            "deterministicFacts": [
+                {
+                    "id": "mcp.get_table_schema.abc123",
+                    "summary": "Table schema metadata.",
+                }
+            ],
+            "aiToolEvidence": {
+                "toolResults": [
+                    {
+                        "data": {
+                            "definition": "CREATE VIEW dbo.vw_leak AS SELECT 1",
+                            "rowData": [{"id": 1}],
+                            "columns": [{"name": "ORDER_ID"}],
+                        }
+                    }
+                ]
+            },
+        },
+        allowed_evidence_refs=["mcp.get_table_schema.abc123"],
+    )
+    schema = metadata_analysis_output_schema(
+        allowed_evidence_refs=["mcp.get_table_schema.abc123"],
+    )
+
+    assert "CREATE VIEW" not in prompt.user_prompt
+    assert "rowData" not in prompt.user_prompt
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == [
+        "summary",
+        "objectInsights",
+        "reviewMarkers",
+        "assumptions",
+    ]
+    evidence_items = schema["properties"]["objectInsights"]["items"]["properties"][
+        "evidenceRefs"
+    ]["items"]
+    assert evidence_items["enum"] == ["mcp.get_table_schema.abc123"]
+
+
+def test_fake_gateway_can_return_metadata_analysis(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    prompt = render_metadata_analysis_prompt(
+        target_ref="dbo.TB_ORDER",
+        metadata={
+            "deterministicFacts": [
+                {
+                    "id": "mcp.get_table_schema.abc123",
+                    "summary": "Table schema metadata.",
+                }
+            ]
+        },
+        allowed_evidence_refs=["mcp.get_table_schema.abc123"],
+    )
+    result = FakeModelGateway().analyze_metadata(
+        prompt=prompt,
+        profile=model_profile_from_env("openai_fast_test"),
+    )
+
+    assert result.output_schema_version == "schema:mssql_metadata_analysis@0.1.0"
+    assert result.structured_output["objectInsights"][0]["evidenceRefs"] == [
+        "mcp.get_table_schema.abc123"
+    ]
 
 
 def test_semantic_run_payload_excludes_raw_prompt_and_sql_from_storage(monkeypatch: Any) -> None:
@@ -311,6 +456,61 @@ def test_semantic_tasks_can_run_as_independent_sp_units(monkeypatch: Any) -> Non
     )
 
     assert [run.target_ref for run in runs] == ["dbo.usp_First", "dbo.usp_Second"]
+
+
+def test_staged_semantic_run_sanitizes_raw_sql_echo_before_storage(monkeypatch: Any) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    procedure_definition = "CREATE PROCEDURE dbo.usp_Demo AS SELECT * FROM dbo.SecretOrders"
+
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.usp_Demo",
+        metadata={"deterministicFacts": [{"id": "fact_demo"}]},
+        static_analysis={"fact_ids": ["fact_demo"]},
+        procedure_definition=procedure_definition,
+        model_gateway=FakeModelGateway(
+            output_by_target_ref={
+                "dbo.usp_Demo": {
+                    "businessRules": [
+                        {
+                            "category": "DEMO_RULE",
+                            "summary": procedure_definition,
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["fact_demo"],
+                        }
+                    ],
+                    "modernizationPoints": [],
+                    "riskFlags": [
+                        {
+                            "code": "RAW_PROVIDER_ECHO",
+                            "severity": "WARNING",
+                            "summary": "raw_openai_response_text: provider echoed SQL",
+                            "status": "REVIEW_REQUIRED",
+                            "evidenceRefs": ["fact_demo"],
+                        }
+                    ],
+                    "reviewMarkers": [],
+                    "conversionGuidance": [],
+                    "migrationGuideInsights": [],
+                    "assumptions": ["password=supersecret"],
+                }
+            }
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    stored = payload.to_storage_dict()
+    serialized = str(stored)
+    markers = {
+        marker["code"]: marker
+        for marker in stored["structuredOutput"]["reviewMarkers"]
+    }
+    assert "CREATE PROCEDURE" not in serialized
+    assert "SecretOrders" not in serialized
+    assert "raw_openai_response_text" not in serialized
+    assert "supersecret" not in serialized
+    assert "LLM_OUTPUT_STORAGE_SANITIZED" in markers
+    assert markers["LLM_OUTPUT_STORAGE_SANITIZED"]["status"] == "REVIEW_REQUIRED"
+    assert markers["LLM_OUTPUT_STORAGE_SANITIZED"]["evidenceRefs"] == ["fact_demo"]
 
 
 def test_p23_quality_report_flags_unsafe_payload_without_leaking_raw_field_name() -> None:
