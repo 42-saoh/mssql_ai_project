@@ -58,8 +58,12 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
     env_text = (ROOT / ".env.example").read_text(encoding="utf-8")
 
     for name in (
+        "LLM_REMOTE_PROVIDER=openai",
+        "OPENAI_RESPONSES_URL=",
         "OPENAI_MODEL_ANALYSIS=gpt-5.5",
         "OPENAI_MODEL_FAST_TEST=gpt-5-nano",
+        "PGPT_MODEL_ANALYSIS=gpt-4o",
+        "PGPT_MODEL_FAST_TEST=gpt-4o-mini",
         "LLM_ENABLE_REMOTE=0",
         "LLM_ALLOW_SP_TEXT=0",
         "LLM_LIVE_GATE=0",
@@ -73,6 +77,8 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
 def test_p22_registry_route_exposes_model_prompt_and_schema_bindings(monkeypatch) -> None:
     from api_app.routes.registry import active_registry_bindings
 
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
+    monkeypatch.delenv("PGPT_MODEL_FAST_TEST", raising=False)
     monkeypatch.setenv("OPENAI_MODEL_FAST_TEST", "gpt-5.4-mini")
     versions = {binding.version for binding in active_registry_bindings()}
 

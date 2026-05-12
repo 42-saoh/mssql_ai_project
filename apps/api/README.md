@@ -166,6 +166,8 @@ PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 
 ## P22 OpenAI LLM agent runtime
 
+Remote LLM execution defaults to official OpenAI. Set `LLM_REMOTE_PROVIDER=pgpt` to use the private P-GPT `/v1/responses` contract; configure `OPENAI_BASE_URL=http://<host>/gpgpta01-gpt` or exact `OPENAI_RESPONSES_URL`, plus optional `PGPT_MODEL_ANALYSIS` / `PGPT_MODEL_FAST_TEST`.
+
 `POST /api/v1/requests/sp-analysis` 는 P26 기준 high-quality hybrid LLM semantic analysis 를 기본값으로 사용한다.
 
 - `useLlmAnalysis`: 기본 `true`; deterministic metadata/static analysis 이후 LLM semantic enrichment 실행

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from ai_agent_runtime import (
     FakeModelGateway,
     SemanticAnalysisTask,
@@ -10,8 +11,15 @@ from ai_agent_runtime import (
 )
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import semantic_output_schema
-from ai_agent_runtime.quality_eval import evaluate_p23_semantic_quality
 from ai_agent_runtime.prompts import render_semantic_analysis_prompt
+from ai_agent_runtime.quality_eval import evaluate_p23_semantic_quality
+
+
+@pytest.fixture(autouse=True)
+def _default_openai_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
+    monkeypatch.delenv("PGPT_MODEL_ANALYSIS", raising=False)
+    monkeypatch.delenv("PGPT_MODEL_FAST_TEST", raising=False)
 
 
 def test_prompt_renderer_hashes_inputs_and_sanitizes_metadata_copy() -> None:

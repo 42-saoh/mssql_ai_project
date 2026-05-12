@@ -78,6 +78,8 @@ flowchart LR
 - registry version binding
 
 ### Agent Runtime
+
+- Remote model provider mode defaults to official OpenAI. `LLM_REMOTE_PROVIDER=pgpt` uses the private P-GPT `/v1/responses` contract with a minimal `model`, `instructions`, and message-array `input` request while retaining JSON/SSE response parsing.
 - 프롬프트 조합
 - tool call orchestration
 - evidence binding

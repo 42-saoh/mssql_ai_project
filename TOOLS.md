@@ -111,11 +111,16 @@
 
 ### OpenAI / LLM runtime
 
+- remote provider: `LLM_REMOTE_PROVIDER=openai` (default) keeps the official OpenAI Responses request shape. `LLM_REMOTE_PROVIDER=pgpt` uses the private P-GPT Responses-compatible contract.
+- P-GPT endpoint: set `OPENAI_BASE_URL=http://<host>/gpgpta01-gpt` to call `/v1/responses`, or set `OPENAI_RESPONSES_URL` to an exact endpoint override.
+- P-GPT models: `PGPT_MODEL_ANALYSIS=gpt-4o`, `PGPT_MODEL_FAST_TEST=gpt-4o-mini`. These defaults are used only when `LLM_REMOTE_PROVIDER=pgpt`.
+
 - 기본 semantic analysis model: `OPENAI_MODEL_ANALYSIS=gpt-5.5`
 - fast/test model: 기본 `gpt-5-nano`; manual fast/test 실행에서는 `OPENAI_MODEL_FAST_TEST` 로 `openai_fast_test` profile 의 모델을 override 할 수 있음
 - SP task fan-out concurrency: 기본 `LLM_SP_CONCURRENCY=2`
 - 기본 adapter: `FakeModelGateway`
 - remote adapter: `OpenAIModelGateway`
+- provider payloads: official OpenAI sends `text.format.json_schema` and optional `reasoning`; P-GPT sends the minimal Postman-verified `model`, `instructions`, and message-array `input` body without `stream`, `max_output_tokens`, `text.format`, or `reasoning`.
 - 구현 package: `packages/agent-runtime/src/ai_agent_runtime`
 - transport: 기존 `httpx` dependency 로 Responses API `/v1/responses` 를 호출한다.
 - SDK 의존성 `openai` 는 아직 추가하지 않았다. 새 dependency/lock 갱신은 별도 승인 대상이다.

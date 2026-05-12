@@ -64,7 +64,7 @@ def test_p23_openai_quality_live_gate() -> None:
         assert "raw_prompt" not in serialized_report
         assert "raw_sp_definition" not in serialized_report
         assert "raw_openai_response_text" not in serialized_report
-        assert run.model_invocation.provider == "openai"
+        assert run.model_invocation.provider == _expected_remote_provider()
         assert run.model_invocation.model == expected_model
         if report["status"] != "PASSED":
             failures.append(_sanitized_failure(scenario, report))
@@ -78,6 +78,13 @@ def test_p23_openai_quality_live_gate() -> None:
 
 def _fixture() -> dict[str, Any]:
     return yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
+
+
+def _expected_remote_provider() -> str:
+    provider = os.getenv("LLM_REMOTE_PROVIDER", "openai").strip().lower()
+    if provider in {"pgpt", "p-gpt", "private-gpt"}:
+        return "pgpt"
+    return "openai"
 
 
 def _sanitized_failure(scenario: dict[str, Any], report: dict[str, Any]) -> str:
