@@ -1141,6 +1141,143 @@ components:
           type: array
           items:
             type: string
+    MetadataObjectProfile:
+      type: object
+      required:
+        - objectRef
+        - objectType
+        - columnCount
+        - primaryKeyCount
+        - foreignKeyCount
+        - indexCount
+        - constraintCount
+        - descriptionCoverage
+        - reviewRequired
+        - evidenceRefs
+        - sourceFactIds
+      properties:
+        objectRef:
+          type: string
+        objectType:
+          type: string
+        columnCount:
+          type: integer
+          minimum: 0
+        primaryKeyCount:
+          type: integer
+          minimum: 0
+        foreignKeyCount:
+          type: integer
+          minimum: 0
+        indexCount:
+          type: integer
+          minimum: 0
+        constraintCount:
+          type: integer
+          minimum: 0
+        descriptionCoverage:
+          type: number
+          minimum: 0
+          maximum: 1
+        reviewRequired:
+          type: boolean
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        sourceFactIds:
+          type: array
+          items:
+            type: string
+    MetadataInsightGroup:
+      type: object
+      required: [category, insights]
+      properties:
+        category:
+          type: string
+          enum:
+            - COLUMN_RISK
+            - RELATIONSHIP
+            - INDEX
+            - CONSTRAINT
+            - DOCUMENTATION_GAP
+            - DTO_READINESS
+            - DEPENDENCY
+        insights:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataAnalysisInsight"
+    MetadataDependencyGraphNode:
+      type: object
+      required: [id, objectRef, objectType, status, evidenceRefs]
+      properties:
+        id:
+          type: string
+        objectRef:
+          type: string
+        objectType:
+          type: string
+        status:
+          type: string
+          enum: [CONFIRMED, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+    MetadataDependencyGraphEdge:
+      type: object
+      required: [from, to, relationshipType, status, evidenceRefs]
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        relationshipType:
+          type: string
+        status:
+          type: string
+          enum: [CONFIRMED, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+    MetadataDependencyGraph:
+      type: object
+      required: [nodes, edges, unresolved]
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDependencyGraphNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDependencyGraphEdge"
+        unresolved:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    MetadataDtoReadiness:
+      type: object
+      required: [objectRef, status, fieldCount, reviewReasons, evidenceRefs]
+      properties:
+        objectRef:
+          type: string
+        status:
+          type: string
+          enum: [READY, PARTIAL, REVIEW_REQUIRED]
+        fieldCount:
+          type: integer
+          minimum: 0
+        reviewReasons:
+          type: array
+          items:
+            type: string
+        evidenceRefs:
+          type: array
+          items:
+            type: string
     MetadataAnalysisReviewMarker:
       type: object
       required: [code, message, status, evidenceRefs]
@@ -1167,6 +1304,10 @@ components:
         - targets
         - summary
         - objectInsights
+        - objectProfiles
+        - insightGroups
+        - dependencyGraph
+        - dtoReadiness
         - aiToolEvidence
         - deterministicFacts
         - reviewMarkers
@@ -1208,6 +1349,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetadataAnalysisInsight"
+        objectProfiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataObjectProfile"
+        insightGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataInsightGroup"
+        dependencyGraph:
+          $ref: "#/components/schemas/MetadataDependencyGraph"
+        dtoReadiness:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDtoReadiness"
         aiToolEvidence:
           type: object
           additionalProperties: true

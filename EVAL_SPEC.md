@@ -294,7 +294,28 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 - `make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
 - optional live OpenAI/PPM confidence 는 별도 승인 환경에서만 판정하고, 기본 gate 는 fixture-first 로 유지한다
 
-### 13. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
+### 13. P31 Metadata Object Insight Depth Gate
+
+대상:
+- `POST /api/v1/metadata/analyze`
+- `fixtures/eval/metadata_object_insight_depth_p31_v1.yaml`
+- `tests/eval/test_p31_metadata_object_insight_depth.py`
+
+필수 체크:
+- analyze API 는 response-only 로 유지하고 DB migration, persisted artifact, workflow state transition 을 추가하지 않는다
+- TABLE 대상은 schema/constraints/indexes/extended properties/related objects evidence 로 `objectProfiles`, `insightGroups`, `dependencyGraph`, `dtoReadiness` 를 반환한다
+- PROCEDURE/VIEW/FUNCTION 대상은 dependency/docs/related-object 중심으로 확장 가능하되 raw definition text 는 prompt/response/trace 에 남기지 않는다
+- object profile 과 graph 요약은 `metadata.profile.<hash>` deterministic fact id 로 승격되고, LLM insight/dto claim 은 `mcp.*`, `metadata.profile.*`, `metadata.search.*` fact id 만 evidence 로 사용할 수 있다
+- public metadata invoke API allowlist 는 계속 `get_dependency_closure`, `resolve_dependency_reference` 로 제한한다
+- adversarial planner 가 write/free-form SQL/secret-like argument 를 요청하면 workflow failure 가 아니라 blocked request digest 와 review marker 로 남긴다
+- raw SQL/definition, row data, procedure execution, DDL/DML, secret, raw prompt/provider response text 를 반환하지 않는다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- `make test-web-smoke` 통과
+- optional live OpenAI/PPM confidence 는 별도 승인 환경에서만 판정하고, 기본 gate 는 fixture-first 로 유지한다
+
+### 14. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
 
 P27 은 dependency evidence 계약을 fixture-first MCP 구현과 명시적 hard-live gate 로 강화한다.
 목표는 AI-heavy semantic analysis 와 P24 guide renderer 에 raw SQL 이 아닌 구조화된

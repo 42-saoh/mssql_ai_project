@@ -57,25 +57,32 @@ def _repair_metadata_analysis_output(
         return output
     repaired = dict(output)
     marker_added = False
-    for field in ("objectInsights", "reviewMarkers"):
+    for field in ("objectInsights", "dtoReadiness", "reviewMarkers"):
         items = []
         for item in repaired.get(field, []) or []:
             if not isinstance(item, dict):
                 continue
-            repaired_item = dict(item)
-            evidence_refs = [
-                str(ref)
-                for ref in repaired_item.get("evidenceRefs", [])
-                if str(ref) in allowed
-            ]
-            if not evidence_refs:
-                evidence_refs = [allowed[0]]
-                marker_added = True
-            repaired_item["evidenceRefs"] = evidence_refs
+            repaired_item, repaired_refs = _repair_item_refs(item, allowed)
+            marker_added = marker_added or repaired_refs
             if field == "reviewMarkers":
                 repaired_item["status"] = LlmEvidenceStatus.REVIEW_REQUIRED.value
             items.append(repaired_item)
         repaired[field] = items
+    groups = []
+    for group in repaired.get("insightGroups", []) or []:
+        if not isinstance(group, dict):
+            continue
+        repaired_group = dict(group)
+        insights = []
+        for insight in repaired_group.get("insights", []) or []:
+            if not isinstance(insight, dict):
+                continue
+            repaired_insight, repaired_refs = _repair_item_refs(insight, allowed)
+            marker_added = marker_added or repaired_refs
+            insights.append(repaired_insight)
+        repaired_group["insights"] = insights
+        groups.append(repaired_group)
+    repaired["insightGroups"] = groups
     if marker_added:
         markers = list(repaired.get("reviewMarkers", []) or [])
         markers.append(
@@ -92,8 +99,27 @@ def _repair_metadata_analysis_output(
     return repaired
 
 
+def _repair_item_refs(
+    item: dict[str, Any],
+    allowed: Sequence[str],
+) -> tuple[dict[str, Any], bool]:
+    repaired_item = dict(item)
+    evidence_refs = [
+        str(ref)
+        for ref in repaired_item.get("evidenceRefs", [])
+        if str(ref) in allowed
+    ]
+    repaired = False
+    if not evidence_refs:
+        evidence_refs = [allowed[0]]
+        repaired = True
+    repaired_item["evidenceRefs"] = evidence_refs
+    return repaired_item, repaired
+
+
 def _summary(output: MetadataAnalysisOutput) -> str:
     return (
         f"{len(output.object_insights)} metadata insights, "
+        f"{len(output.insight_groups)} insight groups, "
         f"{len(output.review_markers)} review markers"
     )

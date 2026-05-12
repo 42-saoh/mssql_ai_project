@@ -114,6 +114,10 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "openai_fast_test" in source
     assert "api.listJobAgentRuns" in source
     assert "redirect(`/jobs/${response.jobId}`)" in request_page
+    assert "objectProfiles" in source
+    assert "insightGroups" in source
+    assert "dependencyGraph" in source
+    assert "dtoReadiness" in source
     assert "api.getLatestValidation(artifactId)" in artifact_page
     assert artifact_page.count("api.validateArtifact(artifactId)") == 1
     assert artifact_page.index("async function runValidation") < artifact_page.index(

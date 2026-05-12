@@ -323,6 +323,32 @@ def _default_fake_metadata_analysis_output(
                 "evidenceRefs": evidence_refs,
             }
         ],
+        "insightGroups": [
+            {
+                "category": "DTO_READINESS",
+                "insights": [
+                    {
+                        "code": "DRAFT_DTO_READINESS_REVIEW",
+                        "objectRef": target_ref or "metadata.analysis",
+                        "summary": (
+                            "DTO readiness remains draft-only until deterministic metadata "
+                            "profiles and review markers are checked."
+                        ),
+                        "status": "REVIEW_REQUIRED",
+                        "evidenceRefs": evidence_refs,
+                    }
+                ],
+            }
+        ],
+        "dtoReadiness": [
+            {
+                "objectRef": target_ref or "metadata.analysis",
+                "status": "REVIEW_REQUIRED",
+                "fieldCount": 0,
+                "reviewReasons": ["Fake gateway cannot confirm DTO shape beyond evidence refs."],
+                "evidenceRefs": evidence_refs,
+            }
+        ],
         "reviewMarkers": [
             {
                 "code": "LLM_METADATA_ANALYSIS_REVIEW_REQUIRED",

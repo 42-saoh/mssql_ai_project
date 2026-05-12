@@ -811,6 +811,10 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
     assert query_payload["mode"] == "QUERY"
     assert query_payload["targets"]
     assert query_payload["deterministicFacts"]
+    assert "objectProfiles" in query_payload
+    assert "insightGroups" in query_payload
+    assert "dependencyGraph" in query_payload
+    assert "dtoReadiness" in query_payload
     assert query_payload["modelInvocation"]["outputSchemaVersion"] == (
         "schema:mssql_metadata_analysis@0.1.0"
     )

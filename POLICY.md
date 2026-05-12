@@ -73,8 +73,9 @@
   public metadata invoke API allowlist 는 이 기능 때문에 확장하지 않는다.
 - Metadata analysis API 의 AI-MCP orchestration 도 같은 경계를 따른다. `POST /api/v1/metadata/analyze`
   는 response-only 분석이며, 기존 search endpoint 를 LLM 호출 경로로 바꾸지 않는다. 분석 응답에는
-  sanitized evidence digest 와 deterministic fact id 만 포함하고 raw definition, row data, free-form
-  SQL, procedure execution, DDL/DML, secrets, raw prompt/provider response text 는 포함하지 않는다.
+  sanitized evidence digest, deterministic fact id, object profile/graph/dto readiness 요약만 포함하고
+  raw definition, row data, free-form SQL, procedure execution, DDL/DML, secrets,
+  raw prompt/provider response text 는 포함하지 않는다.
 
 ## 생성 결과 정책
 

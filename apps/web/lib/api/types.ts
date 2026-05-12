@@ -290,6 +290,64 @@ export interface MetadataAnalysisInsight {
   evidenceRefs: string[];
 }
 
+export type MetadataInsightCategory =
+  | "COLUMN_RISK"
+  | "RELATIONSHIP"
+  | "INDEX"
+  | "CONSTRAINT"
+  | "DOCUMENTATION_GAP"
+  | "DTO_READINESS"
+  | "DEPENDENCY";
+
+export interface MetadataObjectProfile {
+  objectRef: string;
+  objectType: string;
+  columnCount: number;
+  primaryKeyCount: number;
+  foreignKeyCount: number;
+  indexCount: number;
+  constraintCount: number;
+  descriptionCoverage: number;
+  reviewRequired: boolean;
+  evidenceRefs: string[];
+  sourceFactIds: string[];
+}
+
+export interface MetadataInsightGroup {
+  category: MetadataInsightCategory;
+  insights: MetadataAnalysisInsight[];
+}
+
+export interface MetadataDependencyGraphNode {
+  id: string;
+  objectRef: string;
+  objectType: string;
+  status: "CONFIRMED" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export interface MetadataDependencyGraphEdge {
+  from: string;
+  to: string;
+  relationshipType: string;
+  status: "CONFIRMED" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+}
+
+export interface MetadataDependencyGraph {
+  nodes: MetadataDependencyGraphNode[];
+  edges: MetadataDependencyGraphEdge[];
+  unresolved: Record<string, unknown>[];
+}
+
+export interface MetadataDtoReadiness {
+  objectRef: string;
+  status: "READY" | "PARTIAL" | "REVIEW_REQUIRED";
+  fieldCount: number;
+  reviewReasons: string[];
+  evidenceRefs: string[];
+}
+
 export interface MetadataAnalysisReviewMarker {
   code: string;
   message: string;
@@ -310,6 +368,10 @@ export interface MetadataAnalysisResponse {
   targets: MetadataSearchResult[];
   summary: string;
   objectInsights: MetadataAnalysisInsight[];
+  objectProfiles: MetadataObjectProfile[];
+  insightGroups: MetadataInsightGroup[];
+  dependencyGraph: MetadataDependencyGraph;
+  dtoReadiness: MetadataDtoReadiness[];
   aiToolEvidence: Record<string, unknown>;
   deterministicFacts: Record<string, unknown>[];
   reviewMarkers: MetadataAnalysisReviewMarker[];

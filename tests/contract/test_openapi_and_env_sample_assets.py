@@ -206,6 +206,10 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
         "aiToolEvidence",
         "deterministicFacts",
         "objectInsights",
+        "objectProfiles",
+        "insightGroups",
+        "dependencyGraph",
+        "dtoReadiness",
         "reviewMarkers",
         "componentInvocations",
     } <= response_properties

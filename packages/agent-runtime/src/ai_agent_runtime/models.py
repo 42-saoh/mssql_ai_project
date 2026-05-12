@@ -137,11 +137,40 @@ class MetadataAnalysisInsight(StrictModel):
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
 
 
+class MetadataAnalysisInsightGroup(StrictModel):
+    category: Literal[
+        "COLUMN_RISK",
+        "RELATIONSHIP",
+        "INDEX",
+        "CONSTRAINT",
+        "DOCUMENTATION_GAP",
+        "DTO_READINESS",
+        "DEPENDENCY",
+    ]
+    insights: list[MetadataAnalysisInsight] = Field(default_factory=list)
+
+
+class MetadataAnalysisDtoReadiness(StrictModel):
+    object_ref: str = Field(alias="objectRef")
+    status: Literal["READY", "PARTIAL", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    field_count: int = Field(default=0, alias="fieldCount")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
 class MetadataAnalysisOutput(StrictModel):
     summary: str
     object_insights: list[MetadataAnalysisInsight] = Field(
         default_factory=list,
         alias="objectInsights",
+    )
+    insight_groups: list[MetadataAnalysisInsightGroup] = Field(
+        default_factory=list,
+        alias="insightGroups",
+    )
+    dto_readiness: list[MetadataAnalysisDtoReadiness] = Field(
+        default_factory=list,
+        alias="dtoReadiness",
     )
     review_markers: list[LlmReviewMarker] = Field(default_factory=list, alias="reviewMarkers")
     assumptions: list[str] = Field(default_factory=list)
@@ -446,22 +475,76 @@ def metadata_analysis_output_schema(
         "type": "string",
         "enum": [LlmEvidenceStatus.REVIEW_REQUIRED.value],
     }
+    insight_item_schema = {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string"},
+            "objectRef": {"type": "string"},
+            "summary": {"type": "string"},
+            "status": evidence_status,
+            "evidenceRefs": evidence_ref_array,
+        },
+        "required": ["code", "objectRef", "summary", "status", "evidenceRefs"],
+        "additionalProperties": False,
+    }
     return {
         "type": "object",
         "properties": {
             "summary": {"type": "string"},
             "objectInsights": {
                 "type": "array",
+                "items": insight_item_schema,
+            },
+            "insightGroups": {
+                "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "code": {"type": "string"},
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "COLUMN_RISK",
+                                "RELATIONSHIP",
+                                "INDEX",
+                                "CONSTRAINT",
+                                "DOCUMENTATION_GAP",
+                                "DTO_READINESS",
+                                "DEPENDENCY",
+                            ],
+                        },
+                        "insights": {
+                            "type": "array",
+                            "items": insight_item_schema,
+                        },
+                    },
+                    "required": ["category", "insights"],
+                    "additionalProperties": False,
+                },
+            },
+            "dtoReadiness": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
                         "objectRef": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "status": evidence_status,
+                        "status": {
+                            "type": "string",
+                            "enum": ["READY", "PARTIAL", "REVIEW_REQUIRED"],
+                        },
+                        "fieldCount": {"type": "integer", "minimum": 0},
+                        "reviewReasons": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
                         "evidenceRefs": evidence_ref_array,
                     },
-                    "required": ["code", "objectRef", "summary", "status", "evidenceRefs"],
+                    "required": [
+                        "objectRef",
+                        "status",
+                        "fieldCount",
+                        "reviewReasons",
+                        "evidenceRefs",
+                    ],
                     "additionalProperties": False,
                 },
             },
@@ -484,6 +567,13 @@ def metadata_analysis_output_schema(
                 "items": {"type": "string"},
             },
         },
-        "required": ["summary", "objectInsights", "reviewMarkers", "assumptions"],
+        "required": [
+            "summary",
+            "objectInsights",
+            "insightGroups",
+            "dtoReadiness",
+            "reviewMarkers",
+            "assumptions",
+        ],
         "additionalProperties": False,
     }

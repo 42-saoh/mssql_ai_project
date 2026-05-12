@@ -257,6 +257,8 @@ def test_metadata_analysis_prompt_and_schema_are_strict() -> None:
     assert schema["required"] == [
         "summary",
         "objectInsights",
+        "insightGroups",
+        "dtoReadiness",
         "reviewMarkers",
         "assumptions",
     ]
@@ -287,6 +289,10 @@ def test_fake_gateway_can_return_metadata_analysis(monkeypatch: Any) -> None:
 
     assert result.output_schema_version == "schema:mssql_metadata_analysis@0.1.0"
     assert result.structured_output["objectInsights"][0]["evidenceRefs"] == [
+        "mcp.get_table_schema.abc123"
+    ]
+    assert result.structured_output["insightGroups"][0]["category"] == "DTO_READINESS"
+    assert result.structured_output["dtoReadiness"][0]["evidenceRefs"] == [
         "mcp.get_table_schema.abc123"
     ]
 

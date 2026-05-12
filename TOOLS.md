@@ -90,7 +90,8 @@
     내부 registry 로 실행한다.
   - `POST /api/v1/metadata/analyze` 도 같은 bounded planner 경계를 사용한다. 기존
     `GET /api/v1/metadata/search` 는 deterministic search 로 유지하고, analyze API 응답에만
-    sanitized `aiToolEvidence`, `deterministicFacts`, metadata insights, review markers 를 반환한다.
+    sanitized `aiToolEvidence`, `deterministicFacts`, object profiles, category insight groups,
+    dependency graph, DTO readiness, metadata insights, review markers 를 반환한다.
 
 ### 선택 MCP
 - `openaiDeveloperDocs`

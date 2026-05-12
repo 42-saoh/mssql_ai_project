@@ -183,6 +183,10 @@ assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source pr
 assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
 assert(metadataAnalysis.sourceProfile === "master", `Unexpected analysis source profile: ${metadataAnalysis.sourceProfile}`);
 assert(metadataAnalysis.deterministicFacts.length > 0, "Metadata analysis must include deterministic facts");
+assert(Array.isArray(metadataAnalysis.objectProfiles), "Metadata analysis must include objectProfiles");
+assert(Array.isArray(metadataAnalysis.insightGroups), "Metadata analysis must include insightGroups");
+assert(metadataAnalysis.dependencyGraph?.nodes, "Metadata analysis must include dependencyGraph");
+assert(Array.isArray(metadataAnalysis.dtoReadiness), "Metadata analysis must include dtoReadiness");
 assert(metadataAnalysis.summary.length > 0, "Metadata analysis summary is empty");
 assert(registry.versions.length > 0, "Registry versions response is empty");
 

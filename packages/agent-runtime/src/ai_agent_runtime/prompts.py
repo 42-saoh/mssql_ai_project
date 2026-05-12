@@ -35,8 +35,10 @@ AI agent platform. Return only schema-valid JSON. Every insight must use evidenc
 exactly from evidenceRefContract.allowedFactIds. Do not invent tables, columns, procedures,
 views, functions, dependencies, or constraints. Never use prompt hashes, input hashes, output
 hashes, raw SQL snippets, row data, or provider trace ids as claim evidence. Mark uncertain
-conclusions as REVIEW_REQUIRED. Never request or imply row data access, procedure execution,
-DDL/DML, deployment, secrets, credentials, or profile switching."""
+conclusions as REVIEW_REQUIRED. Group object insights by column risk, relationship, index,
+constraint, documentation gap, DTO readiness, and dependency categories when supported.
+Never request or imply row data access, procedure execution, DDL/DML, deployment, secrets,
+credentials, or profile switching."""
 
 
 def render_semantic_analysis_prompt(
@@ -141,8 +143,13 @@ def render_metadata_tool_planning_prompt(
         },
         "task": (
             "Select additional metadata tool calls that can produce deterministic evidence "
-            "for the later semantic analysis. Return no toolRequests when existing evidence "
-            "is sufficient."
+            "for the later semantic analysis. For TABLE targets or table search results, "
+            "prefer get_table_schema, get_table_constraints, get_table_indexes, "
+            "get_extended_properties, and get_related_db_objects when those facts are "
+            "missing. For PROCEDURE, VIEW, or FUNCTION targets, prefer dependency closure, "
+            "related objects, extended properties, and definition-metadata tools, knowing "
+            "raw definition text will be removed. Return no toolRequests when existing "
+            "evidence is sufficient."
         ),
         "round": round_index,
     }
@@ -185,8 +192,11 @@ def render_metadata_analysis_prompt(
         "metadata": _metadata_without_raw_definition(metadata),
         "stage": stage,
         "task": (
-            "Summarize metadata structure, noteworthy dependencies, schema or conversion "
-            "readiness hints, and review-required caveats using only deterministic fact ids."
+            "Summarize metadata structure, object profile depth, column risk, relationships, "
+            "indexes, constraints, documentation gaps, dependency graph implications, and "
+            "draft-only DTO readiness using only deterministic fact ids. Populate "
+            "insightGroups and dtoReadiness. Do not invent FK, PK, index, constraint, "
+            "column, dependency, or DTO claims."
         ),
         "evidenceRefContract": {
             "allowedFactIds": allowed_refs,
@@ -199,9 +209,10 @@ def render_metadata_analysis_prompt(
                 "static.analysis",
             ],
             "rule": (
-                "Each objectInsights and reviewMarkers evidenceRefs array must contain "
-                "one or more ids copied exactly from allowedFactIds. If no allowed fact "
-                "supports a claim, omit that claim or put uncertainty in assumptions."
+                "Each objectInsights, insightGroups.insights, dtoReadiness, and "
+                "reviewMarkers evidenceRefs array must contain one or more ids copied "
+                "exactly from allowedFactIds. If no allowed fact supports a claim, omit "
+                "that claim or put uncertainty in assumptions."
             ),
         },
     }

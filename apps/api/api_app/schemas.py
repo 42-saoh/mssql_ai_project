@@ -288,6 +288,66 @@ class MetadataAnalysisInsight(ApiModel):
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
 
 
+MetadataInsightCategory = Literal[
+    "COLUMN_RISK",
+    "RELATIONSHIP",
+    "INDEX",
+    "CONSTRAINT",
+    "DOCUMENTATION_GAP",
+    "DTO_READINESS",
+    "DEPENDENCY",
+]
+
+
+class MetadataObjectProfile(ApiModel):
+    object_ref: str = Field(alias="objectRef")
+    object_type: str = Field(alias="objectType")
+    column_count: int = Field(default=0, alias="columnCount")
+    primary_key_count: int = Field(default=0, alias="primaryKeyCount")
+    foreign_key_count: int = Field(default=0, alias="foreignKeyCount")
+    index_count: int = Field(default=0, alias="indexCount")
+    constraint_count: int = Field(default=0, alias="constraintCount")
+    description_coverage: float = Field(default=0.0, ge=0.0, le=1.0, alias="descriptionCoverage")
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    source_fact_ids: list[str] = Field(default_factory=list, alias="sourceFactIds")
+
+
+class MetadataInsightGroup(ApiModel):
+    category: MetadataInsightCategory
+    insights: list[MetadataAnalysisInsight] = Field(default_factory=list)
+
+
+class MetadataDependencyGraphNode(ApiModel):
+    id: str
+    object_ref: str = Field(alias="objectRef")
+    object_type: str = Field(alias="objectType")
+    status: Literal["CONFIRMED", "REVIEW_REQUIRED"] = "CONFIRMED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataDependencyGraphEdge(ApiModel):
+    from_object_ref: str = Field(alias="from")
+    to_object_ref: str = Field(alias="to")
+    relationship_type: str = Field(alias="relationshipType")
+    status: Literal["CONFIRMED", "REVIEW_REQUIRED"] = "CONFIRMED"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataDependencyGraph(ApiModel):
+    nodes: list[MetadataDependencyGraphNode] = Field(default_factory=list)
+    edges: list[MetadataDependencyGraphEdge] = Field(default_factory=list)
+    unresolved: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MetadataDtoReadiness(ApiModel):
+    object_ref: str = Field(alias="objectRef")
+    status: Literal["READY", "PARTIAL", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
+    field_count: int = Field(default=0, alias="fieldCount")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
 class MetadataAnalysisReviewMarker(ApiModel):
     code: str
     message: str
@@ -313,6 +373,22 @@ class MetadataAnalysisResponse(ApiModel):
     object_insights: list[MetadataAnalysisInsight] = Field(
         default_factory=list,
         alias="objectInsights",
+    )
+    object_profiles: list[MetadataObjectProfile] = Field(
+        default_factory=list,
+        alias="objectProfiles",
+    )
+    insight_groups: list[MetadataInsightGroup] = Field(
+        default_factory=list,
+        alias="insightGroups",
+    )
+    dependency_graph: MetadataDependencyGraph = Field(
+        default_factory=MetadataDependencyGraph,
+        alias="dependencyGraph",
+    )
+    dto_readiness: list[MetadataDtoReadiness] = Field(
+        default_factory=list,
+        alias="dtoReadiness",
     )
     ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
     deterministic_facts: list[dict[str, Any]] = Field(

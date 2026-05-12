@@ -30,6 +30,7 @@
 - `GET /api/v1/metadata/tools`
 - `POST /api/v1/metadata/tools/{toolName}/invoke`
 - `GET /api/v1/metadata/search`
+- `POST /api/v1/metadata/analyze`
 - `GET /api/v1/registry/versions`
 
 `GET /api/v1/metadata/tools` returns a safe read-only catalog summary. P27
@@ -247,8 +248,9 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
 - public `/metadata/tools/{toolName}/invoke` allowlist 는 확장하지 않는다. `get_table_schema` 같은 tool 은
   analyze API 내부 orchestration 에서만 실행될 수 있다.
 - 응답은 sanitized `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id,
-  `objectInsights`, `reviewMarkers`, caveats 로 제한한다. v1 은 DB migration, persisted artifact,
-  workflow state transition 을 추가하지 않는다.
+  `metadata.profile.<hash>` profile fact id, `objectInsights`, `objectProfiles`, `insightGroups`,
+  `dependencyGraph`, `dtoReadiness`, `reviewMarkers`, caveats 로 제한한다. v1 은 DB migration,
+  persisted artifact, workflow state transition 을 추가하지 않는다.
 
 ## Metadata tool invocation
 

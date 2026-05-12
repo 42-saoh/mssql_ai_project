@@ -248,7 +248,8 @@ packages/templates
   catalog 전체를 후보로 보되 내부 registry 로만 실행하며, public invoke API allowlist 는 계속
   `get_dependency_closure`, `resolve_dependency_reference` 두 개로 제한한다. 결과는 sanitized
   `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id, metadata insights,
-  review markers 를 API 응답으로만 반환하고 DB migration 또는 persisted artifact 를 추가하지 않는다.
+  object profiles, category insight groups, dependency graph, DTO readiness, review markers 를
+  API 응답으로만 반환하고 DB migration 또는 persisted artifact 를 추가하지 않는다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
 - P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되어 있으나 P25 기본 product path 는 approval UI 를 노출하지 않는다. Live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
 - P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.

@@ -313,9 +313,102 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
           <dt>Status</dt>
           <dd>{toolEvidence.status ?? "SKIPPED"}</dd>
         </div>
+        <div>
+          <dt>Objects</dt>
+          <dd>{analysis.objectProfiles.length}</dd>
+        </div>
+        <div>
+          <dt>Edges</dt>
+          <dd>{analysis.dependencyGraph.edges.length}</dd>
+        </div>
       </dl>
 
       <p>{analysis.summary}</p>
+
+      {analysis.objectProfiles.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.objectProfiles.map((profile) => (
+            <article className="metadata-result-row" key={profile.objectRef}>
+              <div>
+                <p className="eyebrow">{profile.objectType}</p>
+                <h3>{profile.objectRef}</h3>
+                <p>
+                  {profile.columnCount} columns · {profile.primaryKeyCount} PK ·{" "}
+                  {profile.foreignKeyCount} FK · {profile.indexCount} indexes
+                </p>
+              </div>
+              <div className="metadata-result-detail">
+                <StatusPill
+                  value={profile.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+                  label={`${Math.round(profile.descriptionCoverage * 100)}% docs`}
+                />
+                {profile.sourceFactIds.slice(0, 3).map((ref) => (
+                  <code key={`${profile.objectRef}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.dependencyGraph.nodes.length > 0 ? (
+        <div className="callout">
+          <strong>Dependency graph</strong>
+          <p>
+            {analysis.dependencyGraph.nodes.length} nodes ·{" "}
+            {analysis.dependencyGraph.edges.length} edges ·{" "}
+            {analysis.dependencyGraph.unresolved.length} unresolved
+          </p>
+        </div>
+      ) : null}
+
+      {analysis.dtoReadiness.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.dtoReadiness.map((item) => (
+            <article className="metadata-result-row" key={`dto-${item.objectRef}`}>
+              <div>
+                <p className="eyebrow">DTO {item.status}</p>
+                <h3>{item.objectRef}</h3>
+                <p>{item.fieldCount} candidate fields</p>
+              </div>
+              <div className="metadata-result-detail">
+                {item.reviewReasons.slice(0, 3).map((reason) => (
+                  <small key={`${item.objectRef}-${reason}`}>{reason}</small>
+                ))}
+                {item.evidenceRefs.slice(0, 2).map((ref) => (
+                  <code key={`dto-${item.objectRef}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.insightGroups.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.insightGroups.map((group) => (
+            <article className="metadata-result-row" key={group.category}>
+              <div>
+                <p className="eyebrow">{group.category}</p>
+                <h3>{group.insights.length} insights</h3>
+                {group.insights.slice(0, 3).map((insight) => (
+                  <p key={`${group.category}-${insight.code}`}>
+                    <strong>{insight.code}</strong> · {insight.summary}
+                  </p>
+                ))}
+              </div>
+              <div className="metadata-result-detail">
+                {group.insights
+                  .flatMap((insight) => insight.evidenceRefs)
+                  .slice(0, 4)
+                  .map((ref) => (
+                    <code key={`${group.category}-${ref}`}>{ref}</code>
+                  ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
 
       {analysis.objectInsights.length > 0 ? (
         <div className="metadata-result-list">
