@@ -38,6 +38,7 @@ def test_p34_fixture_declares_knowledge_assetization_contract() -> None:
 def test_p34_sp_workflow_materializes_sanitized_knowledge_assets_and_export(monkeypatch) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     request = SPAnalysisRequest.model_validate(
@@ -57,6 +58,7 @@ def test_p34_sp_workflow_materializes_sanitized_knowledge_assets_and_export(monk
     )
 
     _request, job = service.submit_sp_analysis(request)
+    assert job.status.value == "VALIDATION_COMPLETE", f"{job.error_code}: {job.error_message}"
     assets = repository.list_job_knowledge_assets(job.job_id)
 
     assert assets is not None
@@ -77,6 +79,9 @@ def test_p34_sp_workflow_materializes_sanitized_knowledge_assets_and_export(monk
     assert facts
     assert any(fact.fact_id.startswith(("mcp.", "canonical.")) for fact in facts)
     assert edges
+    fact_ids = {fact.fact_id for fact in facts}
+    assert all(edge.from_fact_id in fact_ids for edge in edges)
+    assert all(edge.to_fact_id in fact_ids for edge in edges)
 
     export = export_knowledge(
         repository=repository,

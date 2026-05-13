@@ -398,11 +398,17 @@ sanitized versioned knowledge asset, fact graph, export 로 승격한다. v5 DDL
   `metadata.profile.*` refs 를 조회 가능해야 한다
 - 동일 logical asset key 에서 같은 `contentHash` 는 version 을 재사용하고, content 변경 시에만
   새 version 을 만든다
+- 같은 logical asset/contentHash 를 여러 job 이 재사용해도 `KNOWLEDGE_ASSET_JOB_LINKS` 기반으로
+  각 job 의 `knowledge-assets` 조회 결과가 유지된다
+- fact graph edge 의 `fromFactId`/`toFactId` 는 같은 asset version 의 실제 fact id 를 참조하며,
+  edge endpoint 를 확인할 수 없으면 `REVIEW_REQUIRED` endpoint fact 로 남긴다
+- `POST /api/v1/knowledge/exports` 의 `versionIds` 는 비어 있거나 `assetIds` 와 같은 길이여야 하며,
+  불일치 시 `KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID` 를 반환한다
 - JSONL export 는 fact one-line-per-record, GRAPH_JSON export 는 nodes/edges/contentHash 를 포함한다
-- raw SP definition, SQL text, row data, secret, raw prompt/provider response text 는 storage, API,
-  export, Web summary 에 남지 않는다
-- Platform DB adapter 는 v5 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고, API 가 DDL 을
-  자동 적용하지 않는다
+- raw SP definition, SQL text, row data, secret, raw prompt/provider response text 와 raw-derived
+  redaction hash/length 는 storage, API, export, Web summary 에 남지 않는다
+- Platform DB adapter 는 v5 필수 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고,
+  Metadata Analyze API 는 503 JSON error 로 반환하며, API 가 DDL 을 자동 적용하지 않는다
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과

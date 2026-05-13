@@ -131,7 +131,9 @@ flowchart LR
 ### Knowledge Asset Service
 - SP analysis, dependency evidence, metadata profile, DTO readiness, canonical analysis 를 sanitized versioned knowledge asset 으로 저장
 - 동일 logical asset key 에서 `contentHash` 가 같으면 current version 을 재사용하고, 바뀔 때만 새 version 생성
+- job-to-asset linkage 는 별도 내부 link 로 추적해 동일 version 을 재사용해도 각 job 의 knowledge asset 조회가 유지됨
 - `mcp.*`, `metadata.profile.*`, `canonical.*` fact id 와 제한된 edge type 으로 fact graph 구성
+- fact graph edge 는 같은 asset version 안의 실제 fact id 만 참조하며, unresolved endpoint 는 `REVIEW_REQUIRED` fact 로 보존
 - JSONL / GRAPH_JSON export 제공
 - raw SP definition, SQL text, row data, secret, raw prompt/provider trace 는 저장/응답/export 에 포함하지 않음
 
@@ -294,6 +296,7 @@ packages/templates
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
 - Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
 - Knowledge asset DDL 초안: `db/schema/ai_agent_platform_schema_v5_knowledge_assets.sql`
+- v5 knowledge DDL 은 `KNOWLEDGE_ASSET_JOB_LINKS` 와 fact-edge FK 를 포함하는 manual-apply 초안이며, adapter 는 필수 v5 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패한다.
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - P27 dependency evidence tooling contract: `spec/eval/p27_dependency_evidence_tooling_contract.yaml`

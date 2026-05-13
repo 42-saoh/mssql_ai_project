@@ -49,6 +49,7 @@ class MemoryWorkflowRepository:
         self.knowledge_assets: dict[str, KnowledgeAssetRecord] = {}
         self.knowledge_versions: dict[str, KnowledgeAssetVersionRecord] = {}
         self.knowledge_exports: dict[str, KnowledgeExportRecord] = {}
+        self.knowledge_job_links: set[tuple[str, str, str]] = set()
         self.audit_events: list[AuditEventRecord] = []
         self.auth_actors: dict[str, Actor] = {}
 
@@ -534,6 +535,7 @@ class MemoryWorkflowRepository:
             version = self.knowledge_versions[asset.current_version_id]
             if job_id and not asset.source_job_id:
                 asset.source_job_id = job_id
+            self._link_knowledge_asset_to_job(job_id, asset.asset_id, version.version_id)
             return version
 
         version_no = asset.current_version_no + 1
@@ -583,8 +585,9 @@ class MemoryWorkflowRepository:
         asset.current_version_no = version_no
         asset.content_hash = content_hash
         asset.updated_at = utc_now()
-        if job_id:
+        if job_id and not asset.source_job_id:
             asset.source_job_id = job_id
+        self._link_knowledge_asset_to_job(job_id, asset.asset_id, version_id)
         self.record_audit_event(
             action="KNOWLEDGE_ASSET_VERSIONED",
             target_type="KNOWLEDGE_ASSET",
@@ -603,11 +606,30 @@ class MemoryWorkflowRepository:
     def list_job_knowledge_assets(self, job_id: str) -> list[KnowledgeAssetRecord] | None:
         if job_id not in self.jobs:
             return None
-        return [
-            replace(asset)
-            for asset in self.knowledge_assets.values()
-            if asset.source_job_id == job_id
-        ]
+        latest_linked_versions: dict[str, KnowledgeAssetVersionRecord] = {}
+        for linked_job_id, asset_id, version_id in self.knowledge_job_links:
+            if linked_job_id != job_id:
+                continue
+            version = self.knowledge_versions.get(version_id)
+            if version is None:
+                continue
+            existing = latest_linked_versions.get(asset_id)
+            if existing is None or version.version_no > existing.version_no:
+                latest_linked_versions[asset_id] = version
+        assets: list[KnowledgeAssetRecord] = []
+        for asset_id, version in latest_linked_versions.items():
+            asset = self.knowledge_assets.get(asset_id)
+            if asset is None:
+                continue
+            assets.append(
+                replace(
+                    asset,
+                    current_version_id=version.version_id,
+                    current_version_no=version.version_no,
+                    content_hash=version.content_hash,
+                )
+            )
+        return sorted(assets, key=lambda asset: (asset.updated_at, asset.asset_id), reverse=True)
 
     def get_knowledge_asset(self, asset_id: str) -> KnowledgeAssetRecord | None:
         asset = self.knowledge_assets.get(asset_id)
@@ -680,6 +702,16 @@ class MemoryWorkflowRepository:
             },
         )
         return record
+
+    def _link_knowledge_asset_to_job(
+        self,
+        job_id: str | None,
+        asset_id: str,
+        version_id: str,
+    ) -> None:
+        if not job_id:
+            return
+        self.knowledge_job_links.add((job_id, asset_id, version_id))
 
 
 def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:

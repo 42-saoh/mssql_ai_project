@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from api_app.knowledge_service import (
     export_knowledge,
     persist_sp_workflow_knowledge,
     sanitize_knowledge_payload,
 )
 from api_app.metadata_gateway import MetadataCollectionResult
-from api_app.repositories import AgentRunRecord
+from api_app.repositories import AgentRunRecord, KnowledgePersistenceError
 from api_app.schemas import KnowledgeExportRequest
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
@@ -134,6 +135,8 @@ def test_knowledge_sanitizer_removes_raw_sql_row_data_and_secret_fields() -> Non
     assert markers
     assert "CREATE PROCEDURE" not in serialized
     assert "secret-value" not in serialized
+    assert "contentHash" not in serialized
+    assert "length" not in serialized
     assert "metadata profile" in serialized
 
 
@@ -179,6 +182,9 @@ def test_sp_workflow_knowledge_persists_versions_reuses_hash_and_exports_graph()
     assert facts is not None
     assert any(fact.fact_id.startswith("mcp.") for fact in facts[0])
     assert any(edge.edge_type == "READS" for edge in facts[1])
+    fact_ids = {fact.fact_id for fact in facts[0]}
+    assert all(edge.from_fact_id in fact_ids for edge in facts[1])
+    assert all(edge.to_fact_id in fact_ids for edge in facts[1])
 
     graph_export = export_knowledge(
         repository=repository,
@@ -198,6 +204,59 @@ def test_sp_workflow_knowledge_persists_versions_reuses_hash_and_exports_graph()
     assert "mcp.get_table_schema.abc123" in serialized
     assert "CREATE PROCEDURE" not in serialized
     assert "hidden" not in serialized
+
+
+def test_same_content_version_reuse_still_links_each_job() -> None:
+    repository = MemoryWorkflowRepository()
+    request1, job1 = _request_and_job(repository)
+    request2, job2 = _request_and_job(repository)
+    metadata = _metadata()
+    agent_run1 = _agent_run(job1.job_id)
+    agent_run2 = _agent_run(job2.job_id)
+    static_analysis = {"patterns": {"dynamicSql": False}, "dependencies": ["dbo.TB_ORDER"]}
+
+    persist_sp_workflow_knowledge(
+        repository=repository,
+        job_id=job1.job_id,
+        request_record=request1,
+        metadata=metadata,
+        static_analysis=static_analysis,
+        agent_run=agent_run1,
+    )
+    persist_sp_workflow_knowledge(
+        repository=repository,
+        job_id=job2.job_id,
+        request_record=request2,
+        metadata=metadata,
+        static_analysis=static_analysis,
+        agent_run=agent_run2,
+    )
+
+    job1_assets = repository.list_job_knowledge_assets(job1.job_id)
+    job2_assets = repository.list_job_knowledge_assets(job2.job_id)
+
+    assert job1_assets is not None
+    assert job2_assets is not None
+    assert {asset.asset_kind for asset in job1_assets} == {
+        "SP_ANALYSIS",
+        "DEPENDENCY_EVIDENCE",
+        "METADATA_PROFILE",
+        "DTO_READINESS",
+        "CANONICAL_ANALYSIS",
+    }
+    assert {asset.asset_kind for asset in job2_assets} == {
+        "SP_ANALYSIS",
+        "DEPENDENCY_EVIDENCE",
+        "METADATA_PROFILE",
+        "DTO_READINESS",
+        "CANONICAL_ANALYSIS",
+    }
+    job1_sp = next(asset for asset in job1_assets if asset.asset_kind == "SP_ANALYSIS")
+    job2_sp = next(asset for asset in job2_assets if asset.asset_kind == "SP_ANALYSIS")
+    assert job1_sp.asset_id == job2_sp.asset_id
+    assert job1_sp.current_version_id == job2_sp.current_version_id
+    assert job1_sp.current_version_no == job2_sp.current_version_no == 1
+    assert job2_sp.source_job_id == job1.job_id
 
 
 def test_changed_content_creates_new_knowledge_version() -> None:
@@ -226,3 +285,24 @@ def test_changed_content_creates_new_knowledge_version() -> None:
     assert assets is not None
     sp_asset = next(asset for asset in assets if asset.asset_kind == "SP_ANALYSIS")
     assert sp_asset.current_version_no == 2
+
+
+def test_export_rejects_mismatched_asset_and_version_selection() -> None:
+    repository = MemoryWorkflowRepository()
+
+    with pytest.raises(KnowledgePersistenceError) as exc_info:
+        export_knowledge(
+            repository=repository,
+            request=KnowledgeExportRequest.model_validate(
+                {
+                    "assetIds": ["know_1"],
+                    "versionIds": ["knowv_1", "knowv_2"],
+                    "format": "JSONL",
+                }
+            ),
+        )
+
+    assert exc_info.value.code == (
+        "KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID"
+    )
+    assert exc_info.value.status_code == 422

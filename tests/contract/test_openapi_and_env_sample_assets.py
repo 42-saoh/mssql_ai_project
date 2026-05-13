@@ -308,6 +308,9 @@ def test_openapi_knowledge_assetization_contract_matches_p34_surface() -> None:
         "JSONL",
         "GRAPH_JSON",
     ]
+    assert "one-to-one" in schemas["KnowledgeExportRequest"]["properties"]["versionIds"][
+        "description"
+    ]
     assert set(schemas["KnowledgeEdge"]["properties"]["edgeType"]["enum"]) == {
         "DEPENDS_ON",
         "DERIVED_FROM",
@@ -318,6 +321,39 @@ def test_openapi_knowledge_assetization_contract_matches_p34_surface() -> None:
         "FK_TO",
         "DTO_FIELD_OF",
     }
+
+
+def test_v5_knowledge_asset_schema_has_job_links_and_fact_edge_integrity() -> None:
+    ddl_text = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v5_knowledge_assets.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "CREATE TABLE dbo.KNOWLEDGE_ASSET_JOB_LINKS" in ddl_text
+    assert "JOB_REF_ID NVARCHAR(80) NOT NULL" in ddl_text
+    assert "PK_KNOWLEDGE_ASSET_JOB_LINKS" in ddl_text
+    assert "FK_KNOWLEDGE_ASSET_JOB_LINKS_ASSET" in ddl_text
+    assert "FK_KNOWLEDGE_ASSET_JOB_LINKS_VERSION" in ddl_text
+    assert "FK_KNOWLEDGE_FACT_EDGES_FROM_FACT" in ddl_text
+    assert "FK_KNOWLEDGE_FACT_EDGES_TO_FACT" in ddl_text
+    assert "REFERENCES dbo.KNOWLEDGE_FACTS(ASST_VER_ID, FACT_ID)" in ddl_text
+    assert "IX_KNOWLEDGE_ASSET_JOB_LINKS_JOB" in ddl_text
+
+
+def test_platform_repository_checks_all_v5_knowledge_tables() -> None:
+    source = (ROOT / "apps" / "api" / "api_app" / "platform_db.py").read_text(
+        encoding="utf-8"
+    )
+
+    for table_name in (
+        "KNOWLEDGE_ASSETS",
+        "KNOWLEDGE_ASSET_VERSIONS",
+        "KNOWLEDGE_FACTS",
+        "KNOWLEDGE_FACT_EDGES",
+        "KNOWLEDGE_ASSET_JOB_LINKS",
+        "KNOWLEDGE_EXPORTS",
+    ):
+        assert table_name in source
+    assert "KNOWLEDGE_SCHEMA_REQUIRED" in source
 
 
 def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:

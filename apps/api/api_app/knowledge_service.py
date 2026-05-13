@@ -49,6 +49,7 @@ KNOWLEDGE_EDGE_TYPES = {
 KNOWLEDGE_STORAGE_SANITIZED = "KNOWLEDGE_STORAGE_SANITIZED"
 KNOWLEDGE_PERSISTENCE_SKIPPED = "KNOWLEDGE_PERSISTENCE_SKIPPED"
 KNOWLEDGE_EXPORT_UNSUPPORTED_FORMAT = "KNOWLEDGE_EXPORT_UNSUPPORTED_FORMAT"
+KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID = "KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID"
 
 _SECRET_KEY_RE = re.compile(
     r"(password|passwd|pwd|secret|token|api[_-]?key|credential|connection[_-]?string)",
@@ -542,12 +543,10 @@ def sanitize_knowledge_payload(value: Any) -> tuple[Any, list[str]]:
 
 
 def _redacted_value(value: Any) -> dict[str, Any]:
-    text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
     return {
         "redacted": True,
         "reason": "unsafe knowledge field removed",
-        "length": len(text),
-        "contentHash": stable_json_hash({"redacted": text}),
+        "code": KNOWLEDGE_STORAGE_SANITIZED,
     }
 
 
@@ -607,6 +606,7 @@ def _facts_from_dependency_evidence(
     target: dict[str, str],
     dependency_evidence: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    nodes = _dict_items(dependency_evidence.get("nodes"))
     facts = [
         _fact(
             fact_id=_canonical_fact_id("dependency_summary", dependency_evidence.get("summary", {})),
@@ -618,8 +618,12 @@ def _facts_from_dependency_evidence(
             payload=dict(dependency_evidence.get("summary") or {}),
         )
     ]
-    for node in _dict_items(dependency_evidence.get("nodes")):
+    known_refs: set[str] = set()
+    for node in nodes:
         object_ref = _node_ref(node) or _target_ref(target)
+        known_refs.add(object_ref)
+        if node.get("id"):
+            known_refs.add(str(node.get("id")))
         facts.append(
             _fact(
                 fact_id=_canonical_fact_id("dependency_node", node),
@@ -631,18 +635,38 @@ def _facts_from_dependency_evidence(
                 payload=node,
             )
         )
+    for edge in _dict_items(dependency_evidence.get("edges")):
+        for endpoint_key in ("from", "to"):
+            endpoint = _edge_endpoint_ref(edge.get(endpoint_key))
+            if endpoint in known_refs:
+                continue
+            known_refs.add(endpoint)
+            facts.append(
+                _fact(
+                    fact_id=_dependency_endpoint_fact_id(endpoint),
+                    fact_type="DEPENDENCY_ENDPOINT",
+                    object_ref=endpoint,
+                    summary=f"Dependency endpoint {endpoint} requires review.",
+                    status="REVIEW_REQUIRED",
+                    evidence_refs=_fact_refs(edge),
+                    payload={"objectRef": endpoint, "source": "dependencyEdge"},
+                )
+            )
     return facts
 
 
 def _edges_from_dependency_evidence(dependency_evidence: dict[str, Any]) -> list[dict[str, Any]]:
     edges: list[dict[str, Any]] = []
+    node_fact_ids = _dependency_node_fact_id_by_ref(dependency_evidence)
     for edge in _dict_items(dependency_evidence.get("edges")):
         edge_type = _dependency_edge_type(str(edge.get("dependencyType") or "DEPENDS_ON"))
+        from_ref = _edge_endpoint_ref(edge.get("from"))
+        to_ref = _edge_endpoint_ref(edge.get("to"))
         edges.append(
             {
                 "edgeId": _canonical_fact_id("dependency_edge", edge),
-                "fromFactId": str(edge.get("from") or ""),
-                "toFactId": str(edge.get("to") or ""),
+                "fromFactId": node_fact_ids.get(from_ref) or _dependency_endpoint_fact_id(from_ref),
+                "toFactId": node_fact_ids.get(to_ref) or _dependency_endpoint_fact_id(to_ref),
                 "edgeType": edge_type,
                 "evidenceRefs": _fact_refs(edge),
                 "payload": edge,
@@ -763,7 +787,9 @@ def _facts_from_profiles(profiles) -> list[dict[str, Any]]:
 
 def _facts_from_dependency_graph(graph: dict[str, Any]) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
-    for node in _dict_items(graph.get("nodes")):
+    nodes = _dict_items(graph.get("nodes"))
+    known_refs = {str(node.get("objectRef") or "") for node in nodes}
+    for node in nodes:
         facts.append(
             _fact(
                 fact_id=_canonical_fact_id("graph_node", node),
@@ -775,17 +801,37 @@ def _facts_from_dependency_graph(graph: dict[str, Any]) -> list[dict[str, Any]]:
                 payload=node,
             )
         )
+    for edge in _dict_items(graph.get("edges")):
+        for endpoint_key in ("from", "to"):
+            endpoint = _edge_endpoint_ref(edge.get(endpoint_key))
+            if endpoint in known_refs:
+                continue
+            known_refs.add(endpoint)
+            facts.append(
+                _fact(
+                    fact_id=_graph_endpoint_fact_id(endpoint),
+                    fact_type="DEPENDENCY_ENDPOINT",
+                    object_ref=endpoint,
+                    summary=f"Dependency graph endpoint {endpoint} requires review.",
+                    status="REVIEW_REQUIRED",
+                    evidence_refs=[str(ref) for ref in edge.get("evidenceRefs", [])],
+                    payload={"objectRef": endpoint, "source": "dependencyGraphEdge"},
+                )
+            )
     return facts
 
 
 def _edges_from_dependency_graph(graph: dict[str, Any]) -> list[dict[str, Any]]:
     edges: list[dict[str, Any]] = []
+    node_fact_ids = _graph_node_fact_id_by_ref(graph)
     for edge in _dict_items(graph.get("edges")):
+        from_ref = _edge_endpoint_ref(edge.get("from"))
+        to_ref = _edge_endpoint_ref(edge.get("to"))
         edges.append(
             {
                 "edgeId": _canonical_fact_id("graph_edge", edge),
-                "fromFactId": _canonical_fact_id("graph_node_ref", edge.get("from")),
-                "toFactId": _canonical_fact_id("graph_node_ref", edge.get("to")),
+                "fromFactId": node_fact_ids.get(from_ref) or _graph_endpoint_fact_id(from_ref),
+                "toFactId": node_fact_ids.get(to_ref) or _graph_endpoint_fact_id(to_ref),
                 "edgeType": _dependency_edge_type(str(edge.get("relationshipType") or "")),
                 "evidenceRefs": [str(ref) for ref in edge.get("evidenceRefs", [])],
                 "payload": edge,
@@ -880,6 +926,12 @@ def _selected_versions(
     asset_ids: list[str],
     version_ids: list[str],
 ) -> list[tuple[KnowledgeAssetRecord, Any]]:
+    if version_ids and len(version_ids) != len(asset_ids):
+        raise KnowledgePersistenceError(
+            "versionIds must be empty or have the same length as assetIds.",
+            code=KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID,
+            status_code=422,
+        )
     selected: list[tuple[KnowledgeAssetRecord, Any]] = []
     version_by_asset = dict(zip(asset_ids, version_ids, strict=False))
     for asset_id in asset_ids:
@@ -981,6 +1033,40 @@ def _fact(
 
 def _canonical_fact_id(kind: str, payload: Any) -> str:
     return f"canonical.{kind}.{stable_json_hash(payload)[:12]}"
+
+
+def _dependency_node_fact_id_by_ref(dependency_evidence: dict[str, Any]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for node in _dict_items(dependency_evidence.get("nodes")):
+        fact_id = _canonical_fact_id("dependency_node", node)
+        object_ref = _node_ref(node)
+        if object_ref:
+            mapping[object_ref] = fact_id
+        node_id = str(node.get("id") or "")
+        if node_id:
+            mapping[node_id] = fact_id
+    return mapping
+
+
+def _dependency_endpoint_fact_id(object_ref: str) -> str:
+    return _canonical_fact_id("dependency_endpoint_review", {"objectRef": object_ref})
+
+
+def _graph_node_fact_id_by_ref(graph: dict[str, Any]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for node in _dict_items(graph.get("nodes")):
+        object_ref = str(node.get("objectRef") or "")
+        if object_ref:
+            mapping[object_ref] = _canonical_fact_id("graph_node", node)
+    return mapping
+
+
+def _graph_endpoint_fact_id(object_ref: str) -> str:
+    return _canonical_fact_id("graph_endpoint_review", {"objectRef": object_ref})
+
+
+def _edge_endpoint_ref(value: Any) -> str:
+    return str(value or "").strip() or "UNKNOWN_ENDPOINT"
 
 
 def _target_ref(target: dict[str, str]) -> str:

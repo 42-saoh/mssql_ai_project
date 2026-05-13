@@ -139,6 +139,12 @@ def analyze_metadata(
             detail=exc.message,
             code=exc.code,
         ) from exc
+    except KnowledgePersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc
     except ValueError as exc:
         raise api_http_exception(
             status_code=422,

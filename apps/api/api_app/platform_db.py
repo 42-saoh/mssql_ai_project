@@ -981,6 +981,7 @@ class MssqlPlatformRepository:
                 asset.current_version_id,
             )
             if existing is not None:
+                self._link_knowledge_asset_to_job(job_id, asset.asset_id, existing.version_id)
                 return existing
         version_no = asset.current_version_no + 1
         version_id = prefixed_id("knowv")
@@ -1081,12 +1082,13 @@ class MssqlPlatformRepository:
             SET CUR_VER_ID = %s,
                 CUR_VER_NO = %s,
                 CNTNT_HASH_SHA256_VAL = %s,
-                SRC_JOB_ID = COALESCE(%s, SRC_JOB_ID),
+                SRC_JOB_ID = COALESCE(SRC_JOB_ID, %s),
                 UPD_DTM = SYSUTCDATETIME()
             WHERE ASST_ID = %s
             """,
             (version_id, version_no, content_hash, job_id, asset.asset_id),
         )
+        self._link_knowledge_asset_to_job(job_id, asset.asset_id, version_id)
         source_job = self.get_job(job_id) if job_id else None
         self.record_audit_event(
             action="KNOWLEDGE_ASSET_VERSIONED",
@@ -1122,9 +1124,35 @@ class MssqlPlatformRepository:
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
-            FROM dbo.KNOWLEDGE_ASSETS
-            WHERE SRC_JOB_ID = %s
-            ORDER BY UPD_DTM DESC, ASST_ID DESC
+            FROM (
+                SELECT
+                    a.ASST_ID,
+                    a.ASST_KIND_CD,
+                    a.DB_PRFL_REF_TXT,
+                    a.TRGT_TP_CD,
+                    a.TRGT_SCHM_NM,
+                    a.TRGT_OBJ_NM,
+                    a.LOGICAL_KEY_TXT,
+                    v.ASST_VER_ID AS CUR_VER_ID,
+                    v.VER_SEQ_NO AS CUR_VER_NO,
+                    v.CNTNT_HASH_SHA256_VAL,
+                    a.SRC_JOB_ID,
+                    a.CRE_DTM,
+                    a.UPD_DTM,
+                    jl.CRE_DTM AS LINK_DTM,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY a.ASST_ID
+                        ORDER BY v.VER_SEQ_NO DESC, jl.CRE_DTM DESC
+                    ) AS RN
+                FROM dbo.KNOWLEDGE_ASSET_JOB_LINKS jl
+                JOIN dbo.KNOWLEDGE_ASSETS a ON a.ASST_ID = jl.ASST_ID
+                JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
+                  ON v.ASST_ID = jl.ASST_ID
+                 AND v.ASST_VER_ID = jl.ASST_VER_ID
+                WHERE jl.JOB_REF_ID = %s
+            ) linked
+            WHERE RN = 1
+            ORDER BY LINK_DTM DESC, ASST_ID DESC
             """,
             (job_id,),
         )
@@ -1453,21 +1481,66 @@ class MssqlPlatformRepository:
         )
 
     def _require_knowledge_schema(self) -> None:
-        row = self._query_one(
+        required_tables = {
+            "KNOWLEDGE_ASSETS",
+            "KNOWLEDGE_ASSET_VERSIONS",
+            "KNOWLEDGE_FACTS",
+            "KNOWLEDGE_FACT_EDGES",
+            "KNOWLEDGE_ASSET_JOB_LINKS",
+            "KNOWLEDGE_EXPORTS",
+        }
+        rows = self._query_all(
             """
-            SELECT 1
+            SELECT TABLE_NAME
             FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'KNOWLEDGE_ASSETS'
+              AND TABLE_NAME IN (
+                'KNOWLEDGE_ASSETS',
+                'KNOWLEDGE_ASSET_VERSIONS',
+                'KNOWLEDGE_FACTS',
+                'KNOWLEDGE_FACT_EDGES',
+                'KNOWLEDGE_ASSET_JOB_LINKS',
+                'KNOWLEDGE_EXPORTS'
+              )
             """,
             (),
         )
-        if row is None:
+        found_tables = {str(row[0]) for row in rows}
+        missing_tables = sorted(required_tables - found_tables)
+        if missing_tables:
             raise KnowledgePersistenceError(
-                "Knowledge assetization requires v5 platform schema tables.",
+                (
+                    "Knowledge assetization requires v5 platform schema tables: "
+                    + ", ".join(missing_tables)
+                ),
                 code="KNOWLEDGE_SCHEMA_REQUIRED",
                 status_code=503,
             )
+
+    def _link_knowledge_asset_to_job(
+        self,
+        job_id: str | None,
+        asset_id: str,
+        version_id: str,
+    ) -> None:
+        if not job_id:
+            return
+        self._execute(
+            """
+            IF NOT EXISTS (
+                SELECT 1
+                FROM dbo.KNOWLEDGE_ASSET_JOB_LINKS
+                WHERE JOB_REF_ID = %s AND ASST_ID = %s AND ASST_VER_ID = %s
+            )
+            BEGIN
+                INSERT INTO dbo.KNOWLEDGE_ASSET_JOB_LINKS(
+                    JOB_REF_ID, ASST_ID, ASST_VER_ID, LINK_TP_CD, CRE_DTM
+                )
+                VALUES (%s, %s, %s, 'SOURCE', SYSUTCDATETIME())
+            END
+            """,
+            (job_id, asset_id, version_id, job_id, asset_id, version_id),
+        )
 
     def _knowledge_asset_by_logical_key(
         self,
