@@ -20,6 +20,7 @@ from mssql_mcp_app.catalog import load_tool_catalog
 from mssql_mcp_app.errors import MetadataToolError
 
 from api_app.ai_tool_orchestrator import (
+    AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK,
     REVIEW_STATUS,
     SKIPPED_STATUS,
     SUCCEEDED_STATUS,
@@ -29,6 +30,7 @@ from api_app.ai_tool_orchestrator import (
     _dedupe_markers,
     _dedupe_strings,
     _deterministic_fact,
+    _fallback_tool_plan,
     _review_marker,
     _safe_dict,
     _safe_dict_list,
@@ -36,6 +38,7 @@ from api_app.ai_tool_orchestrator import (
     _tool_capabilities,
     _tool_content_hash,
     _tool_component,
+    deterministic_fallback_tool_requests,
     effective_ai_tool_budget,
 )
 from api_app.knowledge_service import persist_metadata_analysis_knowledge
@@ -793,33 +796,76 @@ def _run_ai_metadata_tools(
             invocation = planner(prompt=prompt, profile=profile)
             plan = AiToolPlanningOutput.model_validate(invocation.structured_output)
         except (ModelGatewayError, ValueError) as exc:
-            review_markers.append(
-                _review_marker(
-                    AI_METADATA_ANALYSIS_SKIPPED,
-                    (
-                        "Metadata tool planning failed; analysis continued with baseline "
-                        f"metadata. code={getattr(exc, 'code', exc.__class__.__name__)}"
-                    ),
-                    evidence_refs=_fallback_fact_refs(
-                        [*metadata.get("deterministicFacts", []), *deterministic_facts]
-                    ),
-                )
+            fallback_requests = deterministic_fallback_tool_requests(
+                db_profile_id=db_profile_id,
+                target=_analysis_target(metadata),
+                tool_names=policy.tool_names,
+                max_tool_calls=max_tool_calls - len(tool_results),
             )
-            caveats.append(AI_METADATA_ANALYSIS_SKIPPED)
-            break
-        component_invocations.append(
-            {
-                "stage": "ai_metadata_tool_planning",
-                "toolName": "metadata_tool_planner",
-                "status": invocation.status.value,
-                "inputHash": invocation.input_hash,
-                "promptHash": invocation.prompt_hash,
-                "outputHash": invocation.output_hash,
-                "latencyMs": invocation.latency_ms,
-                "evidenceCount": 0,
-                "toolRequestCount": len(plan.tool_requests),
-            }
-        )
+            component_invocations.append(
+                {
+                    "stage": "ai_metadata_tool_planning",
+                    "toolName": "metadata_tool_planner",
+                    "status": REVIEW_STATUS,
+                    "latencyMs": 0,
+                    "evidenceCount": 0,
+                    "toolRequestCount": len(fallback_requests),
+                    "errorCode": getattr(exc, "code", exc.__class__.__name__),
+                }
+            )
+            if not fallback_requests:
+                review_markers.append(
+                    _review_marker(
+                        AI_METADATA_ANALYSIS_SKIPPED,
+                        (
+                            "Metadata tool planning failed; analysis continued with baseline "
+                            f"metadata. code={getattr(exc, 'code', exc.__class__.__name__)}"
+                        ),
+                        evidence_refs=_fallback_fact_refs(
+                            [*metadata.get("deterministicFacts", []), *deterministic_facts]
+                        ),
+                    )
+                )
+                caveats.append(AI_METADATA_ANALYSIS_SKIPPED)
+                break
+            plan = _fallback_tool_plan(
+                fallback_requests,
+                evidence_refs=_fallback_fact_refs(
+                    [*metadata.get("deterministicFacts", []), *deterministic_facts]
+                ),
+                detail_code=getattr(exc, "code", exc.__class__.__name__),
+            )
+            caveats.append(AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK)
+        else:
+            component_invocations.append(
+                {
+                    "stage": "ai_metadata_tool_planning",
+                    "toolName": "metadata_tool_planner",
+                    "status": invocation.status.value,
+                    "inputHash": invocation.input_hash,
+                    "promptHash": invocation.prompt_hash,
+                    "outputHash": invocation.output_hash,
+                    "latencyMs": invocation.latency_ms,
+                    "evidenceCount": 0,
+                    "toolRequestCount": len(plan.tool_requests),
+                }
+            )
+            if not plan.tool_requests and not tool_results:
+                fallback_requests = deterministic_fallback_tool_requests(
+                    db_profile_id=db_profile_id,
+                    target=_analysis_target(metadata),
+                    tool_names=policy.tool_names,
+                    max_tool_calls=max_tool_calls - len(tool_results),
+                )
+                if fallback_requests:
+                    plan = _fallback_tool_plan(
+                        fallback_requests,
+                        evidence_refs=_fallback_fact_refs(
+                            [*metadata.get("deterministicFacts", []), *deterministic_facts]
+                        ),
+                        detail_code="EMPTY_TOOL_PLAN",
+                    )
+                    caveats.append(AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK)
         planned_request_count += len(plan.tool_requests)
         executable_this_round = 0
         cache_hit_this_round = False
@@ -974,6 +1020,18 @@ def _run_ai_metadata_tools(
         deduped_request_count=deduped_request_count,
         budget_exhausted=budget_exhausted,
     )
+
+
+def _analysis_target(metadata: dict[str, Any]) -> dict[str, Any] | None:
+    target = metadata.get("target")
+    if isinstance(target, dict):
+        return target
+    targets = metadata.get("targets")
+    if isinstance(targets, list) and targets and isinstance(targets[0], dict):
+        identity = targets[0].get("objectIdentity")
+        if isinstance(identity, dict):
+            return identity
+    return None
 
 
 def _tool_run_result(

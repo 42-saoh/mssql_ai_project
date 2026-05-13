@@ -37,7 +37,9 @@ def auth_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[AuthHarness]:
         def get_signing_key_from_jwt(self, _token: str):
             return jwt.PyJWK.from_dict(public_jwk)
 
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
     monkeypatch.setenv("AUTH_RBAC_ENFORCEMENT", "1")
     monkeypatch.setenv("OIDC_ISSUER", ISSUER)
     monkeypatch.setenv("OIDC_AUDIENCE", AUDIENCE)
@@ -178,6 +180,65 @@ def test_approval_rejects_reviewer_spoofing(
     assert "verified actor" in approval.json()["detail"]
 
 
+def test_knowledge_review_requires_reviewer_role_and_prevents_spoofing(
+    auth_client: AuthHarness,
+) -> None:
+    asset = _create_knowledge_asset_version(auth_client.client)
+    user_headers = _auth_header(auth_client.token_for("subject-user"))
+    reviewer_headers = _auth_header(auth_client.token_for("subject-reviewer"))
+
+    denied = auth_client.client.post(
+        (
+            "/api/v1/knowledge/assets/"
+            f"{asset['assetId']}/versions/{asset['currentVersionId']}/review"
+        ),
+        headers=user_headers,
+        json={
+            "status": "REVIEWED",
+            "reasonCode": "USER_CANNOT_REVIEW",
+            "reviewer": "user@example.com",
+        },
+    )
+    reviewed = auth_client.client.post(
+        (
+            "/api/v1/knowledge/assets/"
+            f"{asset['assetId']}/versions/{asset['currentVersionId']}/review"
+        ),
+        headers=reviewer_headers,
+        json={
+            "status": "REVIEWED",
+            "reasonCode": "VERIFIED_REVIEWER",
+            "reviewer": "reviewer@example.com",
+            "comment": "reviewed sanitized knowledge",
+        },
+    )
+    spoofed = auth_client.client.post(
+        (
+            "/api/v1/knowledge/assets/"
+            f"{asset['assetId']}/versions/{asset['currentVersionId']}/review"
+        ),
+        headers=reviewer_headers,
+        json={
+            "status": "ARCHIVED",
+            "reasonCode": "SPOOF_REJECTED",
+            "reviewer": "other-reviewer@example.com",
+        },
+    )
+
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "FORBIDDEN"
+    assert reviewed.status_code == 200
+    assert reviewed.json()["reviewer"] == "reviewer@example.com"
+    assert spoofed.status_code == 403
+    assert spoofed.json()["code"] == "FORBIDDEN"
+    review_audit = [
+        event
+        for event in auth_client.repository.audit_events
+        if event.action == "KNOWLEDGE_ASSET_REVIEW_RECORDED"
+    ][-1]
+    assert review_audit.actor == "reviewer@example.com"
+
+
 def _create_artifact(client: TestClient) -> str:
     submit = client.post(
         "/api/v1/requests/sp-analysis",
@@ -189,13 +250,51 @@ def _create_artifact(client: TestClient) -> str:
                 "name": "usp_OrderRequest_Select",
             },
             "outputs": ["SP_ANALYSIS_DOCUMENT"],
-            "options": {"includeEvidenceRefs": True},
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": False,
+                "useAiToolOrchestration": False,
+            },
         },
     )
     assert submit.status_code == 202
+    if submit.json()["status"] == "FAILED":
+        job = client.get(f"/api/v1/jobs/{submit.json()['jobId']}")
+        assert submit.json()["status"] != "FAILED", job.json()
     listed = client.get(f"/api/v1/jobs/{submit.json()['jobId']}/artifacts")
     assert listed.status_code == 200
     return listed.json()["artifacts"][0]["artifactId"]
+
+
+def _create_knowledge_asset_version(client: TestClient) -> dict:
+    submit = client.post(
+        "/api/v1/requests/sp-analysis",
+        json={
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_OrderRequest_Select",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": False,
+                "useAiToolOrchestration": False,
+            },
+        },
+    )
+    assert submit.status_code == 202
+    if submit.json()["status"] == "FAILED":
+        job = client.get(f"/api/v1/jobs/{submit.json()['jobId']}")
+        assert submit.json()["status"] != "FAILED", job.json()
+    listed = client.get(f"/api/v1/jobs/{submit.json()['jobId']}/knowledge-assets")
+    assert listed.status_code == 200
+    return next(
+        asset
+        for asset in listed.json()["knowledgeAssets"]
+        if asset["assetKind"] == "SP_ANALYSIS"
+    )
 
 
 def _auth_header(token: str) -> dict[str, str]:

@@ -34,8 +34,11 @@ from api_app.repositories import (
     KnowledgeAssetVersionRecord,
     KnowledgeEdgeRecord,
     KnowledgeExportRecord,
+    KnowledgeFactSearchRecord,
     KnowledgeFactRecord,
     KnowledgePersistenceError,
+    KnowledgeReviewRecord,
+    KNOWLEDGE_REVIEW_TARGET_STATUSES,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkflowRepository,
@@ -981,6 +984,7 @@ class MssqlPlatformRepository:
                 asset.current_version_id,
             )
             if existing is not None:
+                self._link_knowledge_asset_to_job(job_id, asset.asset_id, existing.version_id)
                 return existing
         version_no = asset.current_version_no + 1
         version_id = prefixed_id("knowv")
@@ -988,9 +992,9 @@ class MssqlPlatformRepository:
             """
             INSERT INTO dbo.KNOWLEDGE_ASSET_VERSIONS(
                 ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
-                PAYLD_JSON, SRC_JOB_ID, CRE_DTM
+                PAYLD_JSON, SRC_JOB_ID, LIFECYCLE_STAT_CD, LIFECYCLE_NOTE_JSON, CRE_DTM
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, 'DRAFT', '{}', %s)
             """,
             (
                 version_id,
@@ -1081,12 +1085,13 @@ class MssqlPlatformRepository:
             SET CUR_VER_ID = %s,
                 CUR_VER_NO = %s,
                 CNTNT_HASH_SHA256_VAL = %s,
-                SRC_JOB_ID = COALESCE(%s, SRC_JOB_ID),
+                SRC_JOB_ID = COALESCE(SRC_JOB_ID, %s),
                 UPD_DTM = SYSUTCDATETIME()
             WHERE ASST_ID = %s
             """,
             (version_id, version_no, content_hash, job_id, asset.asset_id),
         )
+        self._link_knowledge_asset_to_job(job_id, asset.asset_id, version_id)
         source_job = self.get_job(job_id) if job_id else None
         self.record_audit_event(
             action="KNOWLEDGE_ASSET_VERSIONED",
@@ -1121,12 +1126,98 @@ class MssqlPlatformRepository:
             """
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
-                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
-            FROM dbo.KNOWLEDGE_ASSETS
-            WHERE SRC_JOB_ID = %s
-            ORDER BY UPD_DTM DESC, ASST_ID DESC
+                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM,
+                   LIFECYCLE_STAT_CD, LIFECYCLE_RSN_CD, REVIEWER_REF_TXT,
+                   REVIEW_DTM, ARCHV_DTM
+            FROM (
+                SELECT
+                    a.ASST_ID,
+                    a.ASST_KIND_CD,
+                    a.DB_PRFL_REF_TXT,
+                    a.TRGT_TP_CD,
+                    a.TRGT_SCHM_NM,
+                    a.TRGT_OBJ_NM,
+                    a.LOGICAL_KEY_TXT,
+                    v.ASST_VER_ID AS CUR_VER_ID,
+                    v.VER_SEQ_NO AS CUR_VER_NO,
+                    v.CNTNT_HASH_SHA256_VAL,
+                    v.LIFECYCLE_STAT_CD,
+                    v.LIFECYCLE_RSN_CD,
+                    v.REVIEWER_REF_TXT,
+                    v.REVIEW_DTM,
+                    v.ARCHV_DTM,
+                    a.SRC_JOB_ID,
+                    a.CRE_DTM,
+                    a.UPD_DTM,
+                    jl.CRE_DTM AS LINK_DTM,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY a.ASST_ID
+                        ORDER BY v.VER_SEQ_NO DESC, jl.CRE_DTM DESC
+                    ) AS RN
+                FROM dbo.KNOWLEDGE_ASSET_JOB_LINKS jl
+                JOIN dbo.KNOWLEDGE_ASSETS a ON a.ASST_ID = jl.ASST_ID
+                JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
+                  ON v.ASST_ID = jl.ASST_ID
+                 AND v.ASST_VER_ID = jl.ASST_VER_ID
+                WHERE jl.JOB_REF_ID = %s
+            ) linked
+            WHERE RN = 1
+            ORDER BY LINK_DTM DESC, ASST_ID DESC
             """,
             (job_id,),
+        )
+        return [knowledge_asset_from_row(row) for row in rows]
+
+    def list_knowledge_assets(
+        self,
+        *,
+        asset_kind: str | None = None,
+        db_profile_id: str | None = None,
+        target_type: str | None = None,
+        target_schema: str | None = None,
+        target_name: str | None = None,
+        lifecycle_status: str | None = None,
+        limit: int = 50,
+    ) -> list[KnowledgeAssetRecord]:
+        self._require_knowledge_schema()
+        conditions: list[str] = []
+        params: list[Any] = []
+        if asset_kind:
+            conditions.append("a.ASST_KIND_CD = %s")
+            params.append(asset_kind)
+        if db_profile_id:
+            conditions.append("a.DB_PRFL_REF_TXT = %s")
+            params.append(db_profile_id)
+        if target_type:
+            conditions.append("a.TRGT_TP_CD = %s")
+            params.append(target_type)
+        if target_schema:
+            conditions.append("a.TRGT_SCHM_NM = %s")
+            params.append(target_schema)
+        if target_name:
+            conditions.append("a.TRGT_OBJ_NM = %s")
+            params.append(target_name)
+        if lifecycle_status:
+            conditions.append("v.LIFECYCLE_STAT_CD = %s")
+            params.append(lifecycle_status)
+        else:
+            conditions.append("COALESCE(v.LIFECYCLE_STAT_CD, 'DRAFT') <> 'ARCHIVED'")
+        where = " AND ".join(conditions) if conditions else "1 = 1"
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({max(1, min(int(limit), 200))})
+                   a.ASST_ID, a.ASST_KIND_CD, a.DB_PRFL_REF_TXT, a.TRGT_TP_CD,
+                   a.TRGT_SCHM_NM, a.TRGT_OBJ_NM, a.LOGICAL_KEY_TXT, a.CUR_VER_ID,
+                   a.CUR_VER_NO, a.CNTNT_HASH_SHA256_VAL, a.SRC_JOB_ID, a.CRE_DTM, a.UPD_DTM,
+                   v.LIFECYCLE_STAT_CD, v.LIFECYCLE_RSN_CD, v.REVIEWER_REF_TXT,
+                   v.REVIEW_DTM, v.ARCHV_DTM
+            FROM dbo.KNOWLEDGE_ASSETS a
+            LEFT JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
+              ON v.ASST_VER_ID = a.CUR_VER_ID
+            WHERE {where}
+            ORDER BY a.UPD_DTM DESC, a.ASST_ID DESC
+            """,
+            tuple(params),
         )
         return [knowledge_asset_from_row(row) for row in rows]
 
@@ -1136,9 +1227,34 @@ class MssqlPlatformRepository:
             """
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
-                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
-            FROM dbo.KNOWLEDGE_ASSETS
-            WHERE ASST_ID = %s
+                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM,
+                   LIFECYCLE_STAT_CD, LIFECYCLE_RSN_CD, REVIEWER_REF_TXT,
+                   REVIEW_DTM, ARCHV_DTM
+            FROM (
+                SELECT
+                    a.ASST_ID,
+                    a.ASST_KIND_CD,
+                    a.DB_PRFL_REF_TXT,
+                    a.TRGT_TP_CD,
+                    a.TRGT_SCHM_NM,
+                    a.TRGT_OBJ_NM,
+                    a.LOGICAL_KEY_TXT,
+                    a.CUR_VER_ID,
+                    a.CUR_VER_NO,
+                    a.CNTNT_HASH_SHA256_VAL,
+                    a.SRC_JOB_ID,
+                    a.CRE_DTM,
+                    a.UPD_DTM,
+                    v.LIFECYCLE_STAT_CD,
+                    v.LIFECYCLE_RSN_CD,
+                    v.REVIEWER_REF_TXT,
+                    v.REVIEW_DTM,
+                    v.ARCHV_DTM
+                FROM dbo.KNOWLEDGE_ASSETS a
+                LEFT JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
+                  ON v.ASST_VER_ID = a.CUR_VER_ID
+                WHERE a.ASST_ID = %s
+            ) current_asset
             """,
             (asset_id,),
         )
@@ -1154,7 +1270,9 @@ class MssqlPlatformRepository:
         rows = self._query_all(
             """
             SELECT ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
-                   PAYLD_JSON, SRC_JOB_ID, CRE_DTM
+                   PAYLD_JSON, SRC_JOB_ID, CRE_DTM, LIFECYCLE_STAT_CD,
+                   LIFECYCLE_RSN_CD, LIFECYCLE_NOTE_JSON, REVIEWER_REF_TXT,
+                   REVIEW_DTM, ARCHV_DTM
             FROM dbo.KNOWLEDGE_ASSET_VERSIONS
             WHERE ASST_ID = %s
             ORDER BY VER_SEQ_NO DESC
@@ -1172,7 +1290,9 @@ class MssqlPlatformRepository:
         row = self._query_one(
             """
             SELECT ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
-                   PAYLD_JSON, SRC_JOB_ID, CRE_DTM
+                   PAYLD_JSON, SRC_JOB_ID, CRE_DTM, LIFECYCLE_STAT_CD,
+                   LIFECYCLE_RSN_CD, LIFECYCLE_NOTE_JSON, REVIEWER_REF_TXT,
+                   REVIEW_DTM, ARCHV_DTM
             FROM dbo.KNOWLEDGE_ASSET_VERSIONS
             WHERE ASST_ID = %s AND ASST_VER_ID = %s
             """,
@@ -1192,6 +1312,197 @@ class MssqlPlatformRepository:
             self._knowledge_facts(asset_id, version_id),
             self._knowledge_edges(asset_id, version_id),
         )
+
+    def search_knowledge_facts(
+        self,
+        *,
+        object_ref: str | None = None,
+        fact_type: str | None = None,
+        status: str | None = None,
+        asset_kind: str | None = None,
+        target_name: str | None = None,
+        lifecycle_status: str | None = None,
+        limit: int = 50,
+    ) -> list[KnowledgeFactSearchRecord]:
+        self._require_knowledge_schema()
+        conditions: list[str] = []
+        params: list[Any] = []
+        if object_ref:
+            conditions.append("f.OBJ_REF_TXT LIKE %s")
+            params.append(f"%{object_ref}%")
+        if fact_type:
+            conditions.append("f.FACT_TP_CD = %s")
+            params.append(fact_type)
+        if status:
+            conditions.append("f.STAT_CD = %s")
+            params.append(status)
+        if asset_kind:
+            conditions.append("a.ASST_KIND_CD = %s")
+            params.append(asset_kind)
+        if target_name:
+            conditions.append("a.TRGT_OBJ_NM = %s")
+            params.append(target_name)
+        if lifecycle_status:
+            conditions.append("v.LIFECYCLE_STAT_CD = %s")
+            params.append(lifecycle_status)
+        else:
+            conditions.append("v.LIFECYCLE_STAT_CD <> 'ARCHIVED'")
+        where = " AND ".join(conditions) if conditions else "1 = 1"
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({max(1, min(int(limit), 200))})
+                   a.ASST_ID, a.ASST_KIND_CD, v.ASST_VER_ID, v.LIFECYCLE_STAT_CD,
+                   f.FACT_ID, f.ASST_VER_ID, f.ASST_ID, f.FACT_TP_CD, f.OBJ_REF_TXT,
+                   f.SMRY_TXT, f.STAT_CD, f.EVDC_REFS_JSON, f.PAYLD_JSON,
+                   f.CNTNT_HASH_SHA256_VAL, f.CRE_DTM
+            FROM dbo.KNOWLEDGE_FACTS f
+            JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
+              ON v.ASST_VER_ID = f.ASST_VER_ID
+            JOIN dbo.KNOWLEDGE_ASSETS a
+              ON a.ASST_ID = f.ASST_ID
+            WHERE {where}
+            ORDER BY f.CRE_DTM DESC, f.FACT_ID
+            """,
+            tuple(params),
+        )
+        return [
+            KnowledgeFactSearchRecord(
+                asset_id=str(row[0]),
+                asset_kind=str(row[1]),
+                version_id=str(row[2]),
+                lifecycle_status=str(row[3] or "DRAFT"),
+                fact=KnowledgeFactRecord(
+                    fact_id=str(row[4]),
+                    version_id=str(row[5]),
+                    asset_id=str(row[6]),
+                    fact_type=str(row[7] or ""),
+                    object_ref=str(row[8] or ""),
+                    summary=str(row[9] or ""),
+                    status=str(row[10] or "REVIEW_REQUIRED"),
+                    evidence_refs=[str(item) for item in parse_json(row[11], [])],
+                    payload=dict(parse_json(row[12], {})),
+                    content_hash=str(row[13] or ""),
+                    created_at=as_datetime(row[14]),
+                ),
+            )
+            for row in rows
+        ]
+
+    def review_knowledge_asset_version(
+        self,
+        *,
+        asset_id: str,
+        version_id: str,
+        status: str,
+        reason_code: str,
+        note: dict[str, Any],
+        reviewer: str,
+        actor: str = "api-system",
+    ) -> KnowledgeReviewRecord | None:
+        self._require_knowledge_schema()
+        version = self.get_knowledge_asset_version(asset_id, version_id)
+        if version is None:
+            return None
+        if version.lifecycle_status == "ARCHIVED" or status not in KNOWLEDGE_REVIEW_TARGET_STATUSES:
+            raise KnowledgePersistenceError(
+                "Knowledge asset lifecycle transition is not allowed.",
+                code="KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID",
+                status_code=409,
+            )
+        now = utc_now()
+        review = KnowledgeReviewRecord(
+            review_id=prefixed_id("krvw"),
+            asset_id=asset_id,
+            version_id=version_id,
+            from_status=version.lifecycle_status,
+            to_status=status,
+            reason_code=reason_code,
+            note=dict(note),
+            reviewer=reviewer,
+            created_at=now,
+        )
+        archived_at = now if status == "ARCHIVED" else None
+        self._execute(
+            """
+            UPDATE dbo.KNOWLEDGE_ASSET_VERSIONS
+            SET LIFECYCLE_STAT_CD = %s,
+                LIFECYCLE_RSN_CD = %s,
+                LIFECYCLE_NOTE_JSON = %s,
+                REVIEWER_REF_TXT = %s,
+                REVIEW_DTM = %s,
+                ARCHV_DTM = %s
+            WHERE ASST_ID = %s AND ASST_VER_ID = %s
+            """,
+            (
+                status,
+                reason_code,
+                json_text(note),
+                reviewer,
+                now,
+                archived_at,
+                asset_id,
+                version_id,
+            ),
+        )
+        self._execute(
+            """
+            INSERT INTO dbo.KNOWLEDGE_ASSET_REVIEWS(
+                RVW_ID, ASST_ID, ASST_VER_ID, FROM_STAT_CD, TO_STAT_CD,
+                RSN_CD, NOTE_JSON, REVIEWER_REF_TXT, CRE_DTM
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                review.review_id,
+                asset_id,
+                version_id,
+                review.from_status,
+                status,
+                reason_code,
+                json_text(note),
+                reviewer,
+                now,
+            ),
+        )
+        self.record_audit_event(
+            action="KNOWLEDGE_ASSET_REVIEW_RECORDED",
+            target_type="KNOWLEDGE_ASSET_VERSION",
+            target_ref_id=version_id,
+            payload={
+                "assetId": asset_id,
+                "fromStatus": review.from_status,
+                "toStatus": status,
+                "reasonCode": reason_code,
+            },
+            actor=actor,
+        )
+        return review
+
+    def list_knowledge_reviews(
+        self,
+        asset_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> list[KnowledgeReviewRecord] | None:
+        self._require_knowledge_schema()
+        if self.get_knowledge_asset(asset_id) is None:
+            return None
+        conditions = ["ASST_ID = %s"]
+        params: list[Any] = [asset_id]
+        if version_id:
+            conditions.append("ASST_VER_ID = %s")
+            params.append(version_id)
+        rows = self._query_all(
+            f"""
+            SELECT RVW_ID, ASST_ID, ASST_VER_ID, FROM_STAT_CD, TO_STAT_CD,
+                   RSN_CD, NOTE_JSON, REVIEWER_REF_TXT, CRE_DTM
+            FROM dbo.KNOWLEDGE_ASSET_REVIEWS
+            WHERE {' AND '.join(conditions)}
+            ORDER BY CRE_DTM DESC, RVW_ID DESC
+            """,
+            tuple(params),
+        )
+        return [knowledge_review_from_row(row) for row in rows]
 
     def save_knowledge_export(
         self,
@@ -1453,21 +1764,154 @@ class MssqlPlatformRepository:
         )
 
     def _require_knowledge_schema(self) -> None:
-        row = self._query_one(
+        required_tables = {
+            "KNOWLEDGE_ASSETS",
+            "KNOWLEDGE_ASSET_VERSIONS",
+            "KNOWLEDGE_FACTS",
+            "KNOWLEDGE_FACT_EDGES",
+            "KNOWLEDGE_ASSET_JOB_LINKS",
+            "KNOWLEDGE_ASSET_REVIEWS",
+            "KNOWLEDGE_EXPORTS",
+        }
+        rows = self._query_all(
             """
-            SELECT 1
+            SELECT TABLE_NAME
             FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'KNOWLEDGE_ASSETS'
+              AND TABLE_NAME IN (
+                'KNOWLEDGE_ASSETS',
+                'KNOWLEDGE_ASSET_VERSIONS',
+                'KNOWLEDGE_FACTS',
+                'KNOWLEDGE_FACT_EDGES',
+                'KNOWLEDGE_ASSET_JOB_LINKS',
+                'KNOWLEDGE_ASSET_REVIEWS',
+                'KNOWLEDGE_EXPORTS'
+              )
             """,
             (),
         )
-        if row is None:
+        found_tables = {str(row[0]) for row in rows}
+        missing_items = [f"table:{table}" for table in sorted(required_tables - found_tables)]
+        required_columns_by_table = {
+            "KNOWLEDGE_ASSET_VERSIONS": {
+                "LIFECYCLE_STAT_CD",
+                "LIFECYCLE_RSN_CD",
+                "LIFECYCLE_NOTE_JSON",
+                "REVIEWER_REF_TXT",
+                "REVIEW_DTM",
+                "ARCHV_DTM",
+            },
+            "KNOWLEDGE_ASSET_REVIEWS": {
+                "RVW_ID",
+                "ASST_ID",
+                "ASST_VER_ID",
+                "FROM_STAT_CD",
+                "TO_STAT_CD",
+                "RSN_CD",
+                "NOTE_JSON",
+                "REVIEWER_REF_TXT",
+                "CRE_DTM",
+            },
+        }
+        column_rows = self._query_all(
+            """
+            SELECT TABLE_NAME, COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME IN ('KNOWLEDGE_ASSET_VERSIONS', 'KNOWLEDGE_ASSET_REVIEWS')
+              AND COLUMN_NAME IN (
+                'RVW_ID',
+                'ASST_ID',
+                'ASST_VER_ID',
+                'FROM_STAT_CD',
+                'TO_STAT_CD',
+                'RSN_CD',
+                'NOTE_JSON',
+                'CRE_DTM',
+                'LIFECYCLE_STAT_CD',
+                'LIFECYCLE_RSN_CD',
+                'LIFECYCLE_NOTE_JSON',
+                'REVIEWER_REF_TXT',
+                'REVIEW_DTM',
+                'ARCHV_DTM'
+              )
+            """,
+            (),
+        )
+        found_columns = {(str(row[0]), str(row[1])) for row in column_rows}
+        for table_name, required_columns in sorted(required_columns_by_table.items()):
+            missing_items.extend(
+                f"column:{table_name}.{column}"
+                for column in sorted(
+                    column
+                    for column in required_columns
+                    if (table_name, column) not in found_columns
+                )
+            )
+        required_indexes_by_table = {
+            "KNOWLEDGE_ASSET_VERSIONS": {"IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE"},
+            "KNOWLEDGE_ASSET_REVIEWS": {"IX_KNOWLEDGE_ASSET_REVIEWS_VERSION"},
+            "KNOWLEDGE_FACTS": {"IX_KNOWLEDGE_FACTS_SEARCH"},
+        }
+        index_rows = self._query_all(
+            """
+            SELECT o.name, i.name
+            FROM sys.indexes i
+            JOIN sys.objects o ON o.object_id = i.object_id
+            JOIN sys.schemas s ON s.schema_id = o.schema_id
+            WHERE s.name = 'dbo'
+              AND i.name IN (
+                'IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE',
+                'IX_KNOWLEDGE_ASSET_REVIEWS_VERSION',
+                'IX_KNOWLEDGE_FACTS_SEARCH'
+              )
+            """,
+            (),
+        )
+        found_indexes = {(str(row[0]), str(row[1])) for row in index_rows}
+        for table_name, required_indexes in sorted(required_indexes_by_table.items()):
+            missing_items.extend(
+                f"index:{table_name}.{index_name}"
+                for index_name in sorted(
+                    index_name
+                    for index_name in required_indexes
+                    if (table_name, index_name) not in found_indexes
+                )
+            )
+        if missing_items:
             raise KnowledgePersistenceError(
-                "Knowledge assetization requires v5 platform schema tables.",
+                (
+                    "Knowledge assetization requires v5 platform schema objects: "
+                    + ", ".join(missing_items)
+                ),
                 code="KNOWLEDGE_SCHEMA_REQUIRED",
                 status_code=503,
             )
+
+    def _link_knowledge_asset_to_job(
+        self,
+        job_id: str | None,
+        asset_id: str,
+        version_id: str,
+    ) -> None:
+        if not job_id:
+            return
+        self._execute(
+            """
+            IF NOT EXISTS (
+                SELECT 1
+                FROM dbo.KNOWLEDGE_ASSET_JOB_LINKS
+                WHERE JOB_REF_ID = %s AND ASST_ID = %s AND ASST_VER_ID = %s
+            )
+            BEGIN
+                INSERT INTO dbo.KNOWLEDGE_ASSET_JOB_LINKS(
+                    JOB_REF_ID, ASST_ID, ASST_VER_ID, LINK_TP_CD, CRE_DTM
+                )
+                VALUES (%s, %s, %s, 'SOURCE', SYSUTCDATETIME())
+            END
+            """,
+            (job_id, asset_id, version_id, job_id, asset_id, version_id),
+        )
 
     def _knowledge_asset_by_logical_key(
         self,
@@ -1503,6 +1947,12 @@ class MssqlPlatformRepository:
             edges=self._knowledge_edges(asset_id, version_id),
             source_job_id=str(row[5]) if row[5] else None,
             created_at=as_datetime(row[6]),
+            lifecycle_status=str(row[7] or "DRAFT") if len(row) > 7 else "DRAFT",
+            review_reason_code=str(row[8]) if len(row) > 8 and row[8] else None,
+            review_note=dict(parse_json(row[9], {})) if len(row) > 9 else {},
+            reviewer=str(row[10]) if len(row) > 10 and row[10] else None,
+            reviewed_at=as_datetime(row[11]) if len(row) > 11 and row[11] else None,
+            archived_at=as_datetime(row[12]) if len(row) > 12 and row[12] else None,
         )
 
     def _knowledge_facts(
@@ -1741,6 +2191,25 @@ def knowledge_asset_from_row(row: tuple[Any, ...]) -> KnowledgeAssetRecord:
         source_job_id=str(row[10]) if row[10] else None,
         created_at=as_datetime(row[11]),
         updated_at=as_datetime(row[12]),
+        lifecycle_status=str(row[13] or "DRAFT") if len(row) > 13 else "DRAFT",
+        review_reason_code=str(row[14]) if len(row) > 14 and row[14] else None,
+        reviewer=str(row[15]) if len(row) > 15 and row[15] else None,
+        reviewed_at=as_datetime(row[16]) if len(row) > 16 and row[16] else None,
+        archived_at=as_datetime(row[17]) if len(row) > 17 and row[17] else None,
+    )
+
+
+def knowledge_review_from_row(row: tuple[Any, ...]) -> KnowledgeReviewRecord:
+    return KnowledgeReviewRecord(
+        review_id=str(row[0]),
+        asset_id=str(row[1]),
+        version_id=str(row[2]),
+        from_status=str(row[3] or "DRAFT"),
+        to_status=str(row[4] or "REVIEW_REQUIRED"),
+        reason_code=str(row[5] or ""),
+        note=dict(parse_json(row[6], {})),
+        reviewer=str(row[7] or ""),
+        created_at=as_datetime(row[8]),
     )
 
 

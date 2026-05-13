@@ -138,7 +138,9 @@ def test_p23b_trace_expectations_exclude_raw_payload_fields() -> None:
 def test_p23b_default_runtime_path_uses_fake_gateway_and_sanitized_storage(
     monkeypatch: Any,
 ) -> None:
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
     monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    monkeypatch.delenv("PGPT_MODEL_FAST_TEST", raising=False)
 
     for scenario in _scenarios(_fixture()):
         run = build_semantic_analysis_run(
@@ -283,6 +285,41 @@ def test_p23c_quality_runner_fails_adversarial_raw_sql_echo_payload(monkeypatch:
     }.intersection(report["storageSafety"]["findingCodes"])
     assert procedure_definition not in serialized
     assert "CREATE OR ALTER PROCEDURE" not in serialized
+
+
+def test_p23_pgpt_deterministic_safety_net_restores_recall_without_raw_storage(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
+    fixture = _fixture()
+    sparse_gateway = FakeModelGateway(
+        output_by_target_ref={
+            scenario["target_ref"]: {
+                "businessRules": [],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            for scenario in _scenarios(fixture)
+        }
+    )
+
+    for scenario in _scenarios(fixture):
+        run = _build_run(scenario, sparse_gateway)
+        report = evaluate_p23_semantic_quality(
+            scenario=scenario,
+            run=run,
+            thresholds=fixture["quality_thresholds"],
+        )
+        serialized = json.dumps(run.to_storage_dict(), ensure_ascii=False, sort_keys=True)
+
+        assert report["status"] == "PASSED", _metric_message(scenario, "status", report)
+        assert scenario["transient_model_input"]["procedure_definition"] not in serialized
+        assert "CREATE OR ALTER PROCEDURE" not in serialized
+        assert "DETERMINISTIC_SAFETY_NET" in serialized
 
 
 def _fixture() -> dict[str, Any]:

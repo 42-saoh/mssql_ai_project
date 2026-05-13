@@ -7,9 +7,15 @@ from typing import Any
 import pytest
 from ai_agent_domain import ArtifactType
 from ai_agent_runtime.gateway import model_profile_from_env
-from api_app.dependencies import get_repository, get_workflow_service, reset_application_state
+from api_app.dependencies import (
+    get_metadata_analysis_service,
+    get_repository,
+    get_workflow_service,
+    reset_application_state,
+)
 from api_app.main import app
-from api_app.repositories import ValidationReportRecord
+from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.repositories import KnowledgePersistenceError, ValidationReportRecord
 from api_app.workflow import WorkflowService
 from fastapi.testclient import TestClient
 
@@ -24,6 +30,36 @@ class CountingValidationRepository(MemoryWorkflowRepository):
     def save_validation_report(self, **kwargs: Any) -> ValidationReportRecord:
         self.validation_write_count += 1
         return super().save_validation_report(**kwargs)
+
+
+class KnowledgeSchemaRequiredRepository(MemoryWorkflowRepository):
+    def upsert_knowledge_asset(self, **_kwargs: Any):
+        raise KnowledgePersistenceError(
+            "Knowledge assetization requires v5 platform schema tables.",
+            code="KNOWLEDGE_SCHEMA_REQUIRED",
+            status_code=503,
+        )
+
+    def list_knowledge_assets(self, **_kwargs: Any):
+        raise KnowledgePersistenceError(
+            "Knowledge assetization requires v5 platform schema objects.",
+            code="KNOWLEDGE_SCHEMA_REQUIRED",
+            status_code=503,
+        )
+
+    def search_knowledge_facts(self, **_kwargs: Any):
+        raise KnowledgePersistenceError(
+            "Knowledge assetization requires v5 platform schema objects.",
+            code="KNOWLEDGE_SCHEMA_REQUIRED",
+            status_code=503,
+        )
+
+    def review_knowledge_asset_version(self, **_kwargs: Any):
+        raise KnowledgePersistenceError(
+            "Knowledge assetization requires v5 platform schema objects.",
+            code="KNOWLEDGE_SCHEMA_REQUIRED",
+            status_code=503,
+        )
 
 
 @pytest.fixture
@@ -131,6 +167,51 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
         "DTO_READINESS",
         "CANONICAL_ANALYSIS",
     }
+    sp_knowledge = next(
+        asset
+        for asset in knowledge_payload["knowledgeAssets"]
+        if asset["assetKind"] == "SP_ANALYSIS"
+    )
+    assert sp_knowledge["lifecycleStatus"] == "DRAFT"
+
+    asset_search = client.get(
+        "/api/v1/knowledge/assets",
+        params={"assetKind": "SP_ANALYSIS", "targetName": "usp_OrderRequest_Select"},
+    )
+    empty_fact_search = client.get("/api/v1/knowledge/facts/search")
+    fact_search = client.get(
+        "/api/v1/knowledge/facts/search",
+        params={"objectRef": "usp_OrderRequest_Select"},
+    )
+    review = client.post(
+        (
+            "/api/v1/knowledge/assets/"
+            f"{sp_knowledge['assetId']}/versions/{sp_knowledge['currentVersionId']}/review"
+        ),
+        json={
+            "status": "REVIEWED",
+            "reasonCode": "ROUTE_FIXTURE_REVIEW",
+            "reviewer": "reviewer@example.com",
+            "comment": "reviewed sanitized fixture knowledge",
+        },
+    )
+    reviews = client.get(
+        f"/api/v1/knowledge/assets/{sp_knowledge['assetId']}/reviews",
+        params={"versionId": sp_knowledge["currentVersionId"]},
+    )
+
+    assert asset_search.status_code == 200
+    assert sp_knowledge["assetId"] in {
+        asset["assetId"] for asset in asset_search.json()["assets"]
+    }
+    assert empty_fact_search.status_code == 422
+    assert empty_fact_search.json()["code"] == "KNOWLEDGE_SEARCH_FILTER_REQUIRED"
+    assert fact_search.status_code == 200
+    assert fact_search.json()["facts"]
+    assert review.status_code == 200
+    assert review.json()["toStatus"] == "REVIEWED"
+    assert reviews.status_code == 200
+    assert reviews.json()["reviews"][0]["reasonCode"] == "ROUTE_FIXTURE_REVIEW"
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
@@ -877,6 +958,99 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
     serialized = f"{query_response.text} {target_response.text}".lower()
     forbidden_fields = ("rowdata", "row_data", "definition", "sqltext", "ddl", "dml")
     assert not any(field in serialized for field in forbidden_fields)
+
+
+def test_metadata_analysis_maps_knowledge_schema_required_to_dependency_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    repository = KnowledgeSchemaRequiredRepository()
+    service = WorkflowService(repository)
+    metadata_service = MetadataAnalysisService()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    app.dependency_overrides[get_metadata_analysis_service] = lambda: metadata_service
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/metadata/analyze",
+            json={
+                "dbProfileId": "master",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+
+
+def test_sp_workflow_preserves_knowledge_schema_required_failure_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    repository = KnowledgeSchemaRequiredRepository()
+    service = WorkflowService(repository)
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/requests/sp-analysis",
+            json=_sp_analysis_payload(),
+        )
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["status"] == "FAILED"
+    job = repository.get_job(payload["jobId"])
+    assert job is not None
+    assert job.error_code == "KNOWLEDGE_SCHEMA_REQUIRED"
+
+
+def test_knowledge_lifecycle_routes_map_schema_required_to_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    repository = KnowledgeSchemaRequiredRepository()
+    service = WorkflowService(repository)
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        client = TestClient(app)
+        assets = client.get("/api/v1/knowledge/assets")
+        facts = client.get("/api/v1/knowledge/facts/search", params={"objectRef": "dbo"})
+        review = client.post(
+            "/api/v1/knowledge/assets/know_1/versions/knowv_1/review",
+            json={
+                "status": "REVIEWED",
+                "reasonCode": "SCHEMA_REQUIRED",
+                "reviewer": "reviewer@example.com",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert assets.status_code == 503
+    assert assets.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert facts.status_code == 503
+    assert facts.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert review.status_code == 503
+    assert review.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
 
 
 def test_unknown_resources_return_not_found(client: TestClient) -> None:

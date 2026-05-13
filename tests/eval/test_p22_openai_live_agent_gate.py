@@ -57,7 +57,13 @@ def test_p22_openai_live_agent_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     _request_record, job = service.submit_sp_analysis(_request())
     runs = repository.list_agent_runs(job.job_id)
     if not runs or runs[0].status != "SUCCEEDED":
-        pytest.fail(json.dumps([run.__dict__ for run in runs or []], ensure_ascii=False))
+        pytest.fail(
+            json.dumps(
+                [run.__dict__ for run in runs or []],
+                ensure_ascii=False,
+                default=str,
+            )
+        )
     assert runs[0].model_invocation["provider"] == _expected_remote_provider()
     assert "CREATE PROCEDURE" not in str(runs[0].model_invocation)
 

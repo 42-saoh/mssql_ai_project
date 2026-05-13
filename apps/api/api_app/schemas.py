@@ -403,6 +403,16 @@ class KnowledgeAssetSummary(ApiModel):
     current_version_no: int = Field(default=0, alias="currentVersionNo")
     content_hash: str | None = Field(default=None, alias="contentHash")
     source_job_id: str | None = Field(default=None, alias="sourceJobId")
+    lifecycle_status: Literal[
+        "DRAFT",
+        "REVIEW_REQUIRED",
+        "REVIEWED",
+        "ARCHIVED",
+    ] = Field(default="DRAFT", alias="lifecycleStatus")
+    review_reason_code: str | None = Field(default=None, alias="reviewReasonCode")
+    reviewer: str | None = None
+    reviewed_at: datetime | None = Field(default=None, alias="reviewedAt")
+    archived_at: datetime | None = Field(default=None, alias="archivedAt")
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
 
@@ -453,6 +463,16 @@ class KnowledgeAssetVersion(ApiModel):
     fact_count: int = Field(default=0, alias="factCount")
     edge_count: int = Field(default=0, alias="edgeCount")
     source_job_id: str | None = Field(default=None, alias="sourceJobId")
+    lifecycle_status: Literal[
+        "DRAFT",
+        "REVIEW_REQUIRED",
+        "REVIEWED",
+        "ARCHIVED",
+    ] = Field(default="DRAFT", alias="lifecycleStatus")
+    review_reason_code: str | None = Field(default=None, alias="reviewReasonCode")
+    reviewer: str | None = None
+    reviewed_at: datetime | None = Field(default=None, alias="reviewedAt")
+    archived_at: datetime | None = Field(default=None, alias="archivedAt")
     created_at: datetime | None = Field(default=None, alias="createdAt")
 
 
@@ -461,6 +481,38 @@ class KnowledgeFactGraph(ApiModel):
     version_id: str = Field(alias="versionId")
     facts: list[KnowledgeFact] = Field(default_factory=list)
     edges: list[KnowledgeEdge] = Field(default_factory=list)
+
+
+class KnowledgeReviewRequest(ApiModel):
+    status: Literal["REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"]
+    reason_code: str = Field(alias="reasonCode", min_length=1, max_length=80)
+    reviewer: str = Field(min_length=1, max_length=200)
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class KnowledgeReview(ApiModel):
+    review_id: str = Field(alias="reviewId")
+    asset_id: str = Field(alias="assetId")
+    version_id: str = Field(alias="versionId")
+    from_status: str = Field(alias="fromStatus")
+    to_status: str = Field(alias="toStatus")
+    reason_code: str = Field(alias="reasonCode")
+    note: dict[str, Any] = Field(default_factory=dict)
+    reviewer: str
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+
+class KnowledgeFactSearchResult(ApiModel):
+    asset_id: str = Field(alias="assetId")
+    asset_kind: str = Field(alias="assetKind")
+    version_id: str = Field(alias="versionId")
+    lifecycle_status: Literal[
+        "DRAFT",
+        "REVIEW_REQUIRED",
+        "REVIEWED",
+        "ARCHIVED",
+    ] = Field(alias="lifecycleStatus")
+    fact: KnowledgeFact
 
 
 class KnowledgeExportRequest(ApiModel):

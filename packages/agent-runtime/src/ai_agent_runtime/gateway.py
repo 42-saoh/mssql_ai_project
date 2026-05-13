@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 import httpx
@@ -472,7 +472,12 @@ class OpenAIModelGateway:
             )
             response.raise_for_status()
             response_payload, output_text = _response_payload_and_output_text(response)
-            output = parser(output_text)
+            output, normalizer_components = _parse_structured_output(
+                output_text=output_text,
+                parser=parser,
+                schema_name=schema_name,
+                allowed_tool_names=prompt.metadata.get("toolNames") or (),
+            )
         except httpx.HTTPStatusError as exc:
             raise ModelGatewayError(
                 "OpenAI Responses API returned an error.",
@@ -514,6 +519,7 @@ class OpenAIModelGateway:
                 response_payload.get("id") or response.headers.get("x-request-id") or ""
             )
             or None,
+            component_invocations=tuple(normalizer_components),
         )
 
     def _post_with_retry(
@@ -683,6 +689,501 @@ def _sse_output_text(text: str) -> str:
     if completed_payload is not None:
         return _response_output_text(completed_payload)
     raise ValueError("No output text found in event-stream response.")
+
+
+def _parse_structured_output(
+    *,
+    output_text: str,
+    parser,
+    schema_name: str,
+    allowed_tool_names: Sequence[str] = (),
+) -> tuple[Any, list[dict[str, Any]]]:
+    try:
+        return parser(output_text), []
+    except (json.JSONDecodeError, ValueError) as exc:
+        if schema_name == "metadata_tool_plan":
+            repaired, removed_paths = _metadata_tool_plan_without_schema_drift(
+                output_text,
+                allowed_tool_names=allowed_tool_names,
+            )
+            if not removed_paths:
+                raise exc
+            return (
+                AiToolPlanningOutput.model_validate(repaired),
+                [
+                    {
+                        "component": "structured_output_normalizer",
+                        "status": "SUCCEEDED",
+                        "action": "normalized_metadata_tool_plan",
+                        "removedFieldPaths": removed_paths,
+                    }
+                ],
+            )
+        if schema_name != "llm_semantic_analysis":
+            raise
+        repaired, removed_paths = _semantic_output_without_extra_fields(output_text)
+        if not removed_paths:
+            raise exc
+        return (
+            LlmSemanticAnalysisOutput.model_validate(repaired),
+            [
+                {
+                    "component": "structured_output_normalizer",
+                    "status": "SUCCEEDED",
+                    "action": "removed_schema_extra_fields",
+                    "removedFieldPaths": removed_paths,
+                }
+            ],
+        )
+
+
+def _semantic_output_without_extra_fields(output_text: str) -> tuple[dict[str, Any], list[str]]:
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return {}, []
+    if not isinstance(payload, dict):
+        return {}, []
+
+    removed_paths: list[str] = []
+    root_keys = {
+        "businessRules",
+        "business_rules",
+        "modernizationPoints",
+        "modernization_points",
+        "riskFlags",
+        "risk_flags",
+        "reviewMarkers",
+        "review_markers",
+        "conversionGuidance",
+        "conversion_guidance",
+        "migrationGuideInsights",
+        "migration_guide_insights",
+        "assumptions",
+    }
+    item_keys = {
+        "businessRules": {"category", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "business_rules": {"category", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "modernizationPoints": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "modernization_points": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "riskFlags": {"code", "severity", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "risk_flags": {"code", "severity", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "reviewMarkers": {"code", "message", "status", "evidenceRefs", "evidence_refs"},
+        "review_markers": {"code", "message", "status", "evidenceRefs", "evidence_refs"},
+        "conversionGuidance": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "conversion_guidance": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "migrationGuideInsights": {"section", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "migration_guide_insights": {
+            "section",
+            "summary",
+            "status",
+            "evidenceRefs",
+            "evidence_refs",
+        },
+    }
+    required_item_keys = {
+        "businessRules": {"category", "summary"},
+        "business_rules": {"category", "summary"},
+        "modernizationPoints": {"code", "summary"},
+        "modernization_points": {"code", "summary"},
+        "riskFlags": {"code", "severity", "summary"},
+        "risk_flags": {"code", "severity", "summary"},
+        "reviewMarkers": {"code", "message"},
+        "review_markers": {"code", "message"},
+        "conversionGuidance": {"code", "summary"},
+        "conversion_guidance": {"code", "summary"},
+        "migrationGuideInsights": {"section", "summary"},
+        "migration_guide_insights": {"section", "summary"},
+    }
+
+    repaired: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key not in root_keys:
+            removed_paths.append(f"$.{key}")
+            continue
+        if key == "assumptions" and isinstance(value, list):
+            repaired[key] = [
+                _assumption_without_provider_text(
+                    item,
+                    path=f"$.assumptions[{index}]",
+                    removed_paths=removed_paths,
+                )
+                for index, item in enumerate(value)
+            ]
+            continue
+        if key in item_keys:
+            repaired[key] = _claim_items_without_schema_drift(
+                _claim_value_list(
+                    value,
+                    path=f"$.{key}",
+                    removed_paths=removed_paths,
+                ),
+                field_name=key,
+                allowed_keys=item_keys[key],
+                required_keys=required_item_keys[key],
+                path=f"$.{key}",
+                removed_paths=removed_paths,
+            )
+            continue
+        repaired[key] = value
+    return repaired, sorted(removed_paths)
+
+
+def _metadata_tool_plan_without_schema_drift(
+    output_text: str,
+    *,
+    allowed_tool_names: Sequence[str],
+) -> tuple[dict[str, Any], list[str]]:
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return {}, []
+    if not isinstance(payload, dict):
+        return {}, []
+
+    removed_paths: list[str] = []
+    allowed_roots = {
+        "toolRequests",
+        "tool_requests",
+        "tools",
+        "requests",
+        "assumptions",
+        "reviewMarkers",
+        "review_markers",
+    }
+    repaired: dict[str, Any] = {
+        "toolRequests": [],
+        "assumptions": [],
+        "reviewMarkers": [],
+    }
+    tool_request_key, tool_request_value = _first_present(
+        payload,
+        ("toolRequests", "tool_requests", "tools", "requests"),
+    )
+    if tool_request_key and tool_request_key != "toolRequests":
+        removed_paths.append(f"$.{tool_request_key}")
+    repaired["toolRequests"] = _tool_request_items_without_schema_drift(
+        _claim_value_list(
+            tool_request_value if tool_request_key else [],
+            path=f"$.{tool_request_key or 'toolRequests'}",
+            removed_paths=removed_paths,
+        ),
+        allowed_tool_names=allowed_tool_names,
+        path=f"$.{tool_request_key or 'toolRequests'}",
+        removed_paths=removed_paths,
+    )
+
+    assumptions = payload.get("assumptions", [])
+    if isinstance(assumptions, list):
+        repaired["assumptions"] = [
+            _assumption_without_provider_text(
+                item,
+                path=f"$.assumptions[{index}]",
+                removed_paths=removed_paths,
+            )
+            for index, item in enumerate(assumptions)
+        ]
+    elif assumptions:
+        removed_paths.append("$.assumptions")
+
+    marker_key, marker_value = _first_present(payload, ("reviewMarkers", "review_markers"))
+    if marker_key and marker_key != "reviewMarkers":
+        removed_paths.append(f"$.{marker_key}")
+    repaired["reviewMarkers"] = _claim_items_without_schema_drift(
+        _claim_value_list(
+            marker_value if marker_key else [],
+            path=f"$.{marker_key or 'reviewMarkers'}",
+            removed_paths=removed_paths,
+        ),
+        field_name="reviewMarkers",
+        allowed_keys={"code", "message", "status", "evidenceRefs", "evidence_refs"},
+        required_keys={"code", "message"},
+        path=f"$.{marker_key or 'reviewMarkers'}",
+        removed_paths=removed_paths,
+    )
+
+    for key in payload:
+        if key not in allowed_roots:
+            removed_paths.append(f"$.{key}")
+    return repaired, sorted(set(removed_paths))
+
+
+def _first_present(payload: Mapping[str, Any], keys: Sequence[str]) -> tuple[str | None, Any]:
+    for key in keys:
+        if key in payload:
+            return key, payload[key]
+    return None, None
+
+
+def _tool_request_items_without_schema_drift(
+    value: list[Any],
+    *,
+    allowed_tool_names: Sequence[str],
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    allowed = {str(name) for name in allowed_tool_names if str(name).strip()}
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(value):
+        item_path = f"{path}[{index}]"
+        if not isinstance(raw_item, dict):
+            removed_paths.append(item_path)
+            continue
+        tool_name = _first_string(
+            raw_item,
+            ("toolName", "tool_name", "tool", "name"),
+        )
+        if not tool_name or (allowed and tool_name not in allowed):
+            removed_paths.append(f"{item_path}.toolName")
+            continue
+        arguments = _first_mapping(
+            raw_item,
+            ("arguments", "args", "parameters"),
+        )
+        reason = _first_string(raw_item, ("reason", "rationale", "why")) or (
+            "Planner returned a normalized read-only metadata request."
+        )
+        expected = _first_string(
+            raw_item,
+            ("expectedEvidenceUse", "expected_evidence_use", "evidenceUse", "evidence_use"),
+        ) or "Use sanitized metadata evidence for later REVIEW_REQUIRED claims."
+        repaired_items.append(
+            {
+                "toolName": tool_name,
+                "arguments": dict(arguments),
+                "reason": reason,
+                "expectedEvidenceUse": expected,
+            }
+        )
+        canonical_aliases = {
+            "toolName",
+            "tool_name",
+            "tool",
+            "name",
+            "arguments",
+            "args",
+            "parameters",
+            "reason",
+            "rationale",
+            "why",
+            "expectedEvidenceUse",
+            "expected_evidence_use",
+            "evidenceUse",
+            "evidence_use",
+        }
+        for key in raw_item:
+            if key not in canonical_aliases:
+                removed_paths.append(f"{item_path}.{key}")
+            elif key not in {"toolName", "arguments", "reason", "expectedEvidenceUse"}:
+                removed_paths.append(f"{item_path}.{key}")
+    return repaired_items
+
+
+def _first_string(payload: Mapping[str, Any], keys: Sequence[str]) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _first_mapping(payload: Mapping[str, Any], keys: Sequence[str]) -> Mapping[str, Any]:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            return value
+    return {}
+
+
+def _assumption_without_provider_text(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> str:
+    if isinstance(value, str):
+        return value
+    removed_paths.append(path)
+    return "Provider returned a structured assumption object; text was not stored."
+
+
+def _claim_items_without_schema_drift(
+    value: list[Any],
+    *,
+    field_name: str,
+    allowed_keys: set[str],
+    required_keys: set[str],
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(value):
+        item = _claim_item_without_schema_drift(
+            raw_item,
+            field_name=field_name,
+            allowed_keys=allowed_keys,
+            required_keys=required_keys,
+            path=f"{path}[{index}]",
+            removed_paths=removed_paths,
+        )
+        if item is not None:
+            repaired_items.append(item)
+    return repaired_items
+
+
+def _claim_value_list(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    removed_paths.append(path)
+    if isinstance(value, dict):
+        for nested_value in value.values():
+            if isinstance(nested_value, list):
+                return nested_value
+        return [value]
+    return []
+
+
+def _claim_item_without_schema_drift(
+    value: Any,
+    *,
+    field_name: str,
+    allowed_keys: set[str],
+    required_keys: set[str],
+    path: str,
+    removed_paths: list[str],
+) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        removed_paths.append(path)
+        return None
+    normalized = _normalized_claim_item(value, field_name=field_name, path=path)
+    _normalize_claim_status(
+        normalized,
+        field_name=field_name,
+        path=path,
+        removed_paths=removed_paths,
+    )
+    _normalize_risk_severity(normalized, path=path, removed_paths=removed_paths)
+    if not required_keys <= set(normalized):
+        removed_paths.append(path)
+        return None
+    repaired: dict[str, Any] = {}
+    for key, nested_value in normalized.items():
+        if key not in allowed_keys:
+            removed_paths.append(f"{path}.{key}")
+            continue
+        repaired[key] = nested_value
+    return repaired
+
+
+def _normalize_claim_status(
+    value: dict[str, Any],
+    *,
+    field_name: str,
+    path: str,
+    removed_paths: list[str],
+) -> None:
+    status = value.get("status")
+    if status in {"INFERRED_DESCRIPTION", "REVIEW_REQUIRED"}:
+        return
+    if status is not None:
+        removed_paths.append(f"{path}.status")
+    if field_name in {"businessRules", "business_rules"}:
+        value["status"] = "INFERRED_DESCRIPTION"
+    else:
+        value["status"] = "REVIEW_REQUIRED"
+
+
+def _normalize_risk_severity(
+    value: dict[str, Any],
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> None:
+    severity = value.get("severity")
+    if severity is None or severity in {"INFO", "WARNING", "ERROR", "BLOCKER"}:
+        return
+    removed_paths.append(f"{path}.severity")
+    value["severity"] = "WARNING"
+
+
+def _normalized_claim_item(
+    value: dict[str, Any],
+    *,
+    field_name: str,
+    path: str,
+) -> dict[str, Any]:
+    normalized = dict(value)
+    summary = _provider_text_value(
+        normalized,
+        ("summary", "text", "description", "rule", "item", "guidance", "insight", "message"),
+    )
+    if field_name in {"businessRules", "business_rules"}:
+        normalized.setdefault("category", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("summary", summary)
+    elif field_name in {"riskFlags", "risk_flags"}:
+        normalized.setdefault("code", _provider_code_value(normalized, path=path))
+        normalized.setdefault("severity", "WARNING")
+        if summary:
+            normalized.setdefault("summary", summary)
+    elif field_name in {"reviewMarkers", "review_markers"}:
+        normalized.setdefault("code", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("message", summary)
+    elif field_name in {"migrationGuideInsights", "migration_guide_insights"}:
+        normalized.setdefault("section", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("summary", summary)
+    else:
+        normalized.setdefault("code", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("summary", summary)
+    return normalized
+
+
+def _provider_code_value(value: dict[str, Any], *, path: str) -> str:
+    for key in ("code", "category", "section", "type", "name"):
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    normalized_path = (
+        path.replace("$.", "")
+        .replace("[", "_")
+        .replace("]", "")
+        .replace(".", "_")
+        .upper()
+    )
+    return f"NORMALIZED_PROVIDER_{normalized_path}"
+
+
+def _provider_text_value(value: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        candidate = value.get(key)
+        text = _first_text(candidate)
+        if text:
+            return text
+    return None
+
+
+def _first_text(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, dict):
+        return _provider_text_value(
+            value,
+            ("summary", "text", "description", "rule", "item", "guidance", "insight", "message"),
+        )
+    if isinstance(value, list):
+        for item in value:
+            text = _first_text(item)
+            if text:
+                return text
+    return None
 
 
 def _usage(payload: dict[str, Any]) -> dict[str, int]:

@@ -274,7 +274,7 @@ def test_openapi_sp_batch_contract_matches_p33_scale_surface() -> None:
     assert "BATCH_TARGET_LIMIT_EXCEEDED" in rejected_codes
 
 
-def test_openapi_knowledge_assetization_contract_matches_p34_surface() -> None:
+def test_openapi_knowledge_assetization_contract_matches_p35_surface() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
             encoding="utf-8"
@@ -292,6 +292,18 @@ def test_openapi_knowledge_assetization_contract_matches_p34_surface() -> None:
     assert paths["/api/v1/knowledge/exports"]["post"]["operationId"] == (
         "createKnowledgeExport"
     )
+    assert paths["/api/v1/knowledge/assets"]["get"]["operationId"] == (
+        "listKnowledgeAssets"
+    )
+    assert paths["/api/v1/knowledge/facts/search"]["get"]["operationId"] == (
+        "searchKnowledgeFacts"
+    )
+    assert paths["/api/v1/knowledge/assets/{assetId}/versions/{versionId}/review"][
+        "post"
+    ]["operationId"] == "reviewKnowledgeAssetVersion"
+    assert paths["/api/v1/knowledge/assets/{assetId}/reviews"]["get"]["operationId"] == (
+        "listKnowledgeAssetReviews"
+    )
     assert schemas["SPAnalysisOptions"]["properties"]["persistKnowledge"]["default"] is True
     assert schemas["MetadataAnalysisResponse"]["properties"]["knowledgeAssets"] == {
         "type": "array",
@@ -308,6 +320,18 @@ def test_openapi_knowledge_assetization_contract_matches_p34_surface() -> None:
         "JSONL",
         "GRAPH_JSON",
     ]
+    assert schemas["KnowledgeLifecycleStatus"]["enum"] == [
+        "DRAFT",
+        "REVIEW_REQUIRED",
+        "REVIEWED",
+        "ARCHIVED",
+    ]
+    assert "lifecycleStatus" in schemas["KnowledgeAssetSummary"]["properties"]
+    assert "KnowledgeReviewRequest" in schemas
+    assert "KnowledgeFactSearchResult" in schemas
+    assert "one-to-one" in schemas["KnowledgeExportRequest"]["properties"]["versionIds"][
+        "description"
+    ]
     assert set(schemas["KnowledgeEdge"]["properties"]["edgeType"]["enum"]) == {
         "DEPENDS_ON",
         "DERIVED_FROM",
@@ -318,6 +342,57 @@ def test_openapi_knowledge_assetization_contract_matches_p34_surface() -> None:
         "FK_TO",
         "DTO_FIELD_OF",
     }
+
+
+def test_v5_knowledge_asset_schema_has_job_links_and_fact_edge_integrity() -> None:
+    ddl_text = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v5_knowledge_assets.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "CREATE TABLE dbo.KNOWLEDGE_ASSET_JOB_LINKS" in ddl_text
+    assert "JOB_REF_ID NVARCHAR(80) NOT NULL" in ddl_text
+    assert "PK_KNOWLEDGE_ASSET_JOB_LINKS" in ddl_text
+    assert "FK_KNOWLEDGE_ASSET_JOB_LINKS_ASSET" in ddl_text
+    assert "FK_KNOWLEDGE_ASSET_JOB_LINKS_VERSION" in ddl_text
+    assert "FK_KNOWLEDGE_FACT_EDGES_FROM_FACT" in ddl_text
+    assert "FK_KNOWLEDGE_FACT_EDGES_TO_FACT" in ddl_text
+    assert "REFERENCES dbo.KNOWLEDGE_FACTS(ASST_VER_ID, FACT_ID)" in ddl_text
+    assert "IX_KNOWLEDGE_ASSET_JOB_LINKS_JOB" in ddl_text
+    assert "LIFECYCLE_STAT_CD NVARCHAR(30) NOT NULL DEFAULT 'DRAFT'" in ddl_text
+    assert "CREATE TABLE dbo.KNOWLEDGE_ASSET_REVIEWS" in ddl_text
+    assert "CHK_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE" in ddl_text
+    assert "CHK_KNOWLEDGE_ASSET_REVIEWS_TO_STATUS" in ddl_text
+    assert "IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE" in ddl_text
+    assert "IX_KNOWLEDGE_ASSET_REVIEWS_VERSION" in ddl_text
+    assert "IX_KNOWLEDGE_FACTS_SEARCH" in ddl_text
+
+
+def test_platform_repository_checks_all_v5_knowledge_tables() -> None:
+    source = (ROOT / "apps" / "api" / "api_app" / "platform_db.py").read_text(
+        encoding="utf-8"
+    )
+
+    for table_name in (
+        "KNOWLEDGE_ASSETS",
+        "KNOWLEDGE_ASSET_VERSIONS",
+        "KNOWLEDGE_FACTS",
+        "KNOWLEDGE_FACT_EDGES",
+        "KNOWLEDGE_ASSET_JOB_LINKS",
+        "KNOWLEDGE_ASSET_REVIEWS",
+        "KNOWLEDGE_EXPORTS",
+    ):
+        assert table_name in source
+    for schema_object in (
+        "LIFECYCLE_STAT_CD",
+        "FROM_STAT_CD",
+        "TO_STAT_CD",
+        "NOTE_JSON",
+        "IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE",
+        "IX_KNOWLEDGE_ASSET_REVIEWS_VERSION",
+        "IX_KNOWLEDGE_FACTS_SEARCH",
+    ):
+        assert schema_object in source
+    assert "KNOWLEDGE_SCHEMA_REQUIRED" in source
 
 
 def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:

@@ -47,6 +47,36 @@ def test_prompt_renderer_hashes_inputs_and_sanitizes_metadata_copy() -> None:
     assert len(prompt.prompt_hash) == 64
     assert "CREATE PROCEDURE dbo.usp_Demo" in prompt.user_prompt
     assert '"definitionHash": "abc"' in prompt.user_prompt
+    assert "businessRules, modernizationPoints" in prompt.system_prompt
+    assert "CONFIRMED, SUPPORTED, DONE, OK" in prompt.system_prompt
+    assert '"qualityHints":' in prompt.user_prompt
+
+
+def test_semantic_prompt_includes_quality_hints_for_fact_coverage() -> None:
+    prompt = render_semantic_analysis_prompt(
+        target_ref="dbo.usp_Demo",
+        metadata={
+            "deterministicFacts": [
+                {
+                    "id": "fact_read",
+                    "fact_type": "TABLE_READ",
+                    "summary": "Read-only lookup fact.",
+                },
+                {
+                    "id": "fact_dynamic",
+                    "fact_type": "DYNAMIC_SQL",
+                    "summary": "Dynamic SQL creates uncertain result shape.",
+                },
+            ]
+        },
+        static_analysis=None,
+        procedure_definition=None,
+        allowed_evidence_refs=["fact_read", "fact_dynamic"],
+    )
+
+    assert '"coverageKey": "readOnlyLookup"' in prompt.user_prompt
+    assert '"coverageKey": "dynamicSqlCrossDb"' in prompt.user_prompt
+    assert "fixture-specific" in prompt.user_prompt
 
 
 def test_fake_gateway_returns_schema_valid_sanitized_invocation(monkeypatch: Any) -> None:
@@ -176,6 +206,11 @@ def test_metadata_tool_planner_prompt_and_schema_are_strict() -> None:
 
     assert '"definition":' not in prompt.user_prompt
     assert "CREATE PROCEDURE dbo.usp_Demo" not in prompt.user_prompt
+    assert "toolRequests items must contain toolName, arguments, reason" in prompt.user_prompt
+    assert "Return no toolRequests only when existing evidence is already sufficient" in (
+        prompt.system_prompt
+    )
+    assert "get_table_schema" in prompt.user_prompt
     assert schema["additionalProperties"] is False
     assert schema["properties"]["toolRequests"]["items"]["additionalProperties"] is False
     assert (

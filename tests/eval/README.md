@@ -126,6 +126,21 @@ make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/eval
 `production_ready: false` 를 유지한다. Platform DB v5 DDL 은 수동 적용 대상이고 API/test 가
 자동 적용하지 않는다.
 
+## P35 knowledge live confidence
+
+P35 live confidence is disabled by default. Enable `P35_KNOWLEDGE_LIVE_GATE=1` only in an
+approved environment with live OpenAI, read-only PPM metadata, PLF `PLATFORM_DB_*`, and v5 DDL
+already applied manually. The gate writes normal PLF workflow/knowledge/export/audit/review
+records and records one real non-terminal `REVIEWED` event, but PPM remains metadata-only and
+read-only.
+
+```bash
+P35_KNOWLEDGE_LIVE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p35_knowledge_live_confidence_gate.py"
+```
+
+Passing this gate is confidence evidence only. It is not production readiness, publish approval,
+deployment approval, or automatic conversion approval evidence.
+
 ## P27 dependency evidence tooling
 
 P27 은 MCP dependency evidence 계약을 fixture-first hardening 상태로 유지한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active/read-only/structured-input MCP tools 로 catalog 에 존재하며 fixture/live repository handler 를 가진다. P28 기준 기존 API `/api/v1/metadata/tools` summary 는 `invokable` 상태를 노출하고, 전용 invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. P29 기준 Web `/metadata/dependencies` diagnostic UI 와 workflow `get_dependency_closure` evidence wiring 이 fixture-first 로 활성화되어 있으며, persisted artifact type 과 DB schema 변경은 여전히 포함하지 않는다.
@@ -140,5 +155,16 @@ make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_r
 Chakra/legacy proxy 경로에서 `python-tds` 기본 negotiation 이 차단되면 로컬 host-run에 한해 `MSSQL_METADATA_TDS_VERSION=7.0` 을 함께 지정한다.
 
 ```bash
-P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
+
+## P-GPT structured output drift notes
+
+P23/P32 live confidence keeps strict schemas and existing thresholds. P-GPT provider drift is
+handled strict-first: semantic output and metadata tool plans validate before any normalizer runs,
+then only safe aliases/status/severity/extra fields are normalized with path/code metadata. P23
+can add `DETERMINISTIC_SAFETY_NET_*` draft/reviewable claims from allowed deterministic fact ids.
+P32 can use deterministic read-only fallback tool requests for invalid/empty planner output, but
+the requests still pass through the existing policy, budget, dedupe, and sanitizer path. These are
+confidence evidence only and never production readiness, publish approval, or automatic conversion
+approval evidence.

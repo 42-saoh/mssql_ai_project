@@ -4,7 +4,7 @@ import json
 
 import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
-from ai_agent_runtime.gateway import model_profile_from_env
+from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from api_app.lifecycle import WorkflowStateError
 from api_app.schemas import SPAnalysisRequest
@@ -217,6 +217,36 @@ def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
         for artifact in repository.artifacts.values()
         for ref in artifact.evidence_refs
     )
+    assert any(event.action == "AGENT_RUN_RECORDED" for event in repository.audit_events)
+
+
+def test_submit_with_llm_records_failed_agent_run_when_gateway_fails() -> None:
+    class FailingGateway:
+        provider = "pgpt"
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            raise ModelGatewayError(
+                "OpenAI response did not match the required structured output schema.",
+                code="OPENAI_STRUCTURED_OUTPUT_INVALID",
+            )
+
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository, model_gateway=FailingGateway())
+
+    _request_record, job = service.submit_sp_analysis(_llm_request())
+
+    assert job.status == JobStatus.FAILED
+    runs = repository.list_agent_runs(job.job_id)
+    assert runs is not None
+    assert len(runs) == 1
+    run = runs[0]
+    assert run.status == AgentRunStatus.FAILED.value
+    assert run.model_invocation["provider"] == "pgpt"
+    assert run.model_invocation["status"] == AgentRunStatus.FAILED.value
+    assert run.model_invocation["componentInvocations"][0]["errorCode"] == (
+        "OPENAI_STRUCTURED_OUTPUT_INVALID"
+    )
+    assert "raw_openai_response_text" not in str(run.model_invocation)
     assert any(event.action == "AGENT_RUN_RECORDED" for event in repository.audit_events)
 
 

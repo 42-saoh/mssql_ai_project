@@ -179,6 +179,7 @@
 - metadata tool planning 은 strict `schema:mssql_metadata_tool_plan@0.1.0` 출력만 허용하고,
   실제 MCP 실행은 workflow deterministic policy gate 와 내부 registry 로만 수행함
 - structured output 은 `schema:llm_semantic_analysis@0.3.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
+- P-GPT 등 remote provider drift 는 strict validation 을 먼저 시도한 뒤, schema/OpenAPI 를 넓히지 않고 extra field/alias/status/severity 만 결정론적으로 정규화한다. 저장되는 normalizer metadata 는 path/code 수준이며 raw provider response, prompt, SQL/SP text 는 저장하지 않는다.
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
 통과 기준:
@@ -202,6 +203,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - P23 은 P22 runtime 이후의 평가 확장으로 분리한다
 - P23A 는 계약/프롬프트 자산을 만들고, P23B 는 synthetic simple/medium/complex fixture 와 fake-gateway 검증을 추가한다
 - P23C 는 P23B fixture 를 `FakeModelGateway` 로 반복 실행하고 quality score 를 계산한다
+- P-GPT live confidence 경로는 prompt quality hints 와 deterministic safety net 을 사용해 read-only lookup, transaction/DML, dynamic SQL/cross-DB, uncertain result-shape coverage 를 보강한다. Safety net claims 는 `DETERMINISTIC_SAFETY_NET_*` prefix 와 allowed deterministic fact id 만 사용하며 draft/reviewable confidence evidence 로만 취급한다.
 - simple/medium/complex stored procedure scenario matrix 와 authored fixture 를 유지한다
 - P26 live confidence 는 기본적으로 `openai_sp_semantic_analysis` / `OPENAI_MODEL_ANALYSIS` 를 사용한다. fast/test profile 은 수동 평가 선택지로 남고 기본값은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 바꿀 수 있다.
 - LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 로 제한한다
@@ -336,11 +338,12 @@ P32 는 bounded AI-MCP planner 가 실제로 유용한 metadata evidence 를 수
 - under-utilized planner evidence 는 `REVIEW_REQUIRED` metrics/status 로 잡힌다
 - raw SQL/definition, row data, procedure execution, DDL/DML, secret, raw prompt/provider response text 를 반환하지 않는다
 - `P32_LIVE_CONFIDENCE_GATE=1` 일 때만 remote LLM 과 live PPM metadata 를 결합한다. Env/profile/prerequisite 누락은 gate enabled 상태에서 blocker failure 이며, 기본 실행은 `NOT_RUN_CONFIDENCE_ONLY` 다
+- P-GPT planner output 은 strict-first 로 검증하고 safe aliases (`tools`, `args`, `rationale`, `evidenceUse`) 만 canonical `toolRequests`, `arguments`, `reason`, `expectedEvidenceUse` 로 정규화한다. Invalid/empty planner output 에서는 TABLE 과 PROCEDURE/VIEW/FUNCTION 대상별 deterministic read-only fallback request 를 만들되 기존 `AgentToolPolicy`, budget, dedupe, sanitizer 를 반드시 통과해야 한다.
 - live confidence 성공은 production readiness 가 아니라 confidence signal 이며 `production_ready: false` 를 유지한다
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/unit/agent_runtime/test_planner_effectiveness.py tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p32_live_confidence_planner_effectiveness.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
-- 선택 live: `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"`
+- 선택 live: `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"`
 
 ### 15. P33 Performance / Scale Fixture-First Gate
 
@@ -398,15 +401,65 @@ sanitized versioned knowledge asset, fact graph, export 로 승격한다. v5 DDL
   `metadata.profile.*` refs 를 조회 가능해야 한다
 - 동일 logical asset key 에서 같은 `contentHash` 는 version 을 재사용하고, content 변경 시에만
   새 version 을 만든다
+- 같은 logical asset/contentHash 를 여러 job 이 재사용해도 `KNOWLEDGE_ASSET_JOB_LINKS` 기반으로
+  각 job 의 `knowledge-assets` 조회 결과가 유지된다
+- fact graph edge 의 `fromFactId`/`toFactId` 는 같은 asset version 의 실제 fact id 를 참조하며,
+  edge endpoint 를 확인할 수 없으면 `REVIEW_REQUIRED` endpoint fact 로 남긴다
+- `POST /api/v1/knowledge/exports` 의 `versionIds` 는 비어 있거나 `assetIds` 와 같은 길이여야 하며,
+  불일치 시 `KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID` 를 반환한다
 - JSONL export 는 fact one-line-per-record, GRAPH_JSON export 는 nodes/edges/contentHash 를 포함한다
-- raw SP definition, SQL text, row data, secret, raw prompt/provider response text 는 storage, API,
-  export, Web summary 에 남지 않는다
-- Platform DB adapter 는 v5 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고, API 가 DDL 을
-  자동 적용하지 않는다
+- raw SP definition, SQL text, row data, secret, raw prompt/provider response text 와 raw-derived
+  redaction hash/length 는 storage, API, export, Web summary 에 남지 않는다
+- Platform DB adapter 는 v5 필수 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고,
+  Metadata Analyze API 는 503 JSON error 로 반환하며, API 가 DDL 을 자동 적용하지 않는다
+- P35 extends this same v5 manual-apply draft with lifecycle readiness: `KNOWLEDGE_ASSET_VERSIONS`
+  carries `DRAFT`, `REVIEW_REQUIRED`, `REVIEWED`, `ARCHIVED` state, and
+  `KNOWLEDGE_ASSET_REVIEWS` stores append-only review events.
+- New content versions start `DRAFT`; same `contentHash` reuse preserves lifecycle; changed
+  content creates a new `DRAFT` version even when the previous version was `REVIEWED`.
+- Review API transitions only to `REVIEW_REQUIRED`, `REVIEWED`, or `ARCHIVED`; `ARCHIVED` is
+  terminal and returns `KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID` on re-review.
+- Asset search and fact search default to excluding `ARCHIVED`; explicit
+  `lifecycleStatus=ARCHIVED` includes archived versions. Fact search without a meaningful filter
+  returns `KNOWLEDGE_SEARCH_FILTER_REQUIRED`.
+- Review writes require `REVIEWER`/`ADMIN` when RBAC is enabled, reject reviewer spoofing, sanitize
+  comments without raw SQL/SP text, row data, secret, hash, length, or snippet storage, and emit
+  `KNOWLEDGE_ASSET_REVIEW_RECORDED`.
+- `REVIEWED` remains draft/reviewable organizational knowledge and is not production-ready,
+  publish approval, deployment approval, or automatic conversion approval evidence.
 
 통과 기준:
-- `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/integration/api/test_api_auth_rbac.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과
 - `make test-web-smoke` 통과
+
+### 16B. P35 Knowledge Live Confidence Gate
+
+P35 live confidence is explicit and disabled by default. `P35_KNOWLEDGE_LIVE_GATE=1`
+combines live OpenAI, read-only `ppm`/`PPM` metadata, and live PLF knowledge persistence after
+operators manually apply v5 DDL. Missing env, missing `ppm -> PPM` profile mapping, or missing v5
+knowledge schema objects are blocker failures, not skips.
+
+Required checks:
+- Disabled mode must not initialize PLF, PPM, or OpenAI access.
+- Live mode submits one bounded PPM SP workflow with `persistKnowledge=true`, validates OpenAI
+  semantic analysis used the configured remote provider, and verifies job-linked knowledge assets
+  for `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`, and
+  `CANONICAL_ANALYSIS`.
+- Fact graph edges must reference persisted fact ids in the same version; asset/fact search and
+  GRAPH_JSON export must return sanitized knowledge without raw SQL/SP text, row data, secrets,
+  raw prompt, or raw provider response text.
+- The gate records one real non-terminal `REVIEWED` event with reason
+  `P35_LIVE_CONFIDENCE_REVIEW`. It must not archive real PPM knowledge; archived terminal behavior
+  remains fixture/unit coverage.
+- If `AUTH_RBAC_ENFORCEMENT=1`, live review requires `OIDC_REVIEWER_BEARER_TOKEN` and the token
+  must resolve to a PLF `REVIEWER` or `ADMIN`; otherwise fixture/local reviewer mode is used.
+- Passing this gate is confidence evidence only. It does not make knowledge production-ready,
+  authorize publish/deploy, or approve automatic conversion.
+
+Run:
+```bash
+P35_KNOWLEDGE_LIVE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p35_knowledge_live_confidence_gate.py"
+```
 
 ### 17. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
 
@@ -455,7 +508,7 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
 
 ```bash
 make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
-P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
 
 ## 초기 fixture 세트

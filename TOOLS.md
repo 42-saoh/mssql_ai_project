@@ -125,13 +125,28 @@
   Responses API 입력으로 보낼 수 있다.
 - Knowledge assetization 은 기본 `KNOWLEDGE_ASSETIZATION_ENABLED=1` 이며, SP workflow 와
   metadata analyze 의 `persistKnowledge=true` 기본값으로 sanitized versioned knowledge asset 을
-  축적한다. rollout 중 꺼야 하면 env 를 `0` 으로 두고 skip marker 를 확인한다.
+  축적한다. rollout 중 꺼야 하면 env 를 `0` 으로 두고 skip marker 를 확인한다. v5 schema 는
+  manual-apply only 이며, 필수 table 누락은 `KNOWLEDGE_SCHEMA_REQUIRED` 로 반환된다.
+- P35 knowledge lifecycle/search/review uses the same v5 manual-apply DDL. Readiness checks
+  require lifecycle columns, `KNOWLEDGE_ASSET_REVIEWS`, and critical search/review indexes in
+  addition to the P34 tables. Missing objects return `KNOWLEDGE_SCHEMA_REQUIRED`; Codex/API do
+  not auto-apply DDL. `REVIEWED` remains draft/reviewable knowledge, not production-ready or
+  automatic conversion approval evidence.
+- `P35_KNOWLEDGE_LIVE_GATE=1` is an explicit confidence-only live gate for recent P34/P35
+  knowledge behavior. It requires live OpenAI, read-only `ppm`/`PPM` metadata, and a manually
+  prepared PLF v5 schema. It writes normal PLF workflow/knowledge/export/audit/review records and
+  records one non-terminal `REVIEWED` event on a real PPM knowledge version, but never reads row
+  data, executes procedures, applies DDL, or treats `REVIEWED` as production approval.
+  For external PLF/PPM targets that complete TCP open but need a longer TDS handshake, run live
+  confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
+  `PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20`.
 
 ### OpenAI / LLM runtime
 
 - remote provider: `LLM_REMOTE_PROVIDER=openai` (default) keeps the official OpenAI Responses request shape. `LLM_REMOTE_PROVIDER=pgpt` uses the private P-GPT Responses-compatible contract.
 - P-GPT endpoint: set `OPENAI_BASE_URL=http://<host>/gpgpta01-gpt` to call `/v1/responses`, or set `OPENAI_RESPONSES_URL` to an exact endpoint override.
 - P-GPT models: `PGPT_MODEL_ANALYSIS=gpt-4o`, `PGPT_MODEL_FAST_TEST=gpt-4o-mini`. These defaults are used only when `LLM_REMOTE_PROVIDER=pgpt`.
+- P-GPT structured-output drift is handled strict-first: semantic output and metadata tool plans are validated before any normalizer runs. The fallback normalizers only remove unsupported fields, normalize safe aliases/status/severity, and record sanitized path/code metadata; raw prompt/provider/SP text is not stored and schemas/OpenAPI stay strict.
 
 - 기본 semantic analysis model: `OPENAI_MODEL_ANALYSIS=gpt-5.5`
 - fast/test model: 기본 `gpt-5-nano`; manual fast/test 실행에서는 `OPENAI_MODEL_FAST_TEST` 로 `openai_fast_test` profile 의 모델을 override 할 수 있음
@@ -169,6 +184,10 @@ Windows 에서 Makefile 의 POSIX shell 구문을 안정적으로 실행하려�
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"
 ```
 
+선행 `NAME=value` 인자는 Git Bash 내부에서 환경 변수로 전달된다. 예를 들어
+`powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 P35_KNOWLEDGE_LIVE_GATE=1 make test ...`
+형태로 optional live gate 를 켤 수 있다.
+
 이 helper 는 `C:\Program Files\Git\bin\bash.exe` 를 우선 사용하고, `%LOCALAPPDATA%\Microsoft\WinGet\Packages` 아래의 `ezwinports.make` 와 `pnpm.pnpm` 실제 설치 경로를 Git Bash `PATH` 앞에 추가한다.
 
 ## 권장 초기 기술 스택
@@ -197,16 +216,17 @@ powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTE
 - `make test-web-smoke` 는 현재 web 자동 테스트 공백을 보완하는 컨테이너 기반 build smoke 다.
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 은 fixture-first request → job → artifact → validation complete happy path 와 eval fixture 정합성을 검증한다.
 - `LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p22_openai_live_agent_gate.py"` 는 선택적 OpenAI live gate 다. 기본 테스트는 fake gateway 로 수행한다.
-- `make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/unit/agent_runtime tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 는 P23/P26 fixture-first LLM quality scoring runner 를 검증한다. 기본 실행은 `FakeModelGateway` 로 수행하며 네트워크를 사용하지 않는다. API/Web live 기본 profile 은 `openai_sp_semantic_analysis` / `gpt-5.5` 이고, optional high-quality live confidence 에서는 `OPENAI_MODEL_ANALYSIS` 로 모델을 바꿀 수 있다. `openai_fast_test` 는 `OPENAI_MODEL_FAST_TEST` 로 바꿀 수 있는 수동 fast/test 선택지다.
+- `make test PYTEST_ARGS="tests/eval/test_p23_llm_sp_analysis_quality.py tests/unit/agent_runtime tests/contract/test_p23_llm_eval_contract_prompt_assets.py"` 는 P23/P26 fixture-first LLM quality scoring runner 를 검증한다. 기본 실행은 `FakeModelGateway` 로 수행하며 네트워크를 사용하지 않는다. API/Web live 기본 profile 은 `openai_sp_semantic_analysis` / `gpt-5.5` 이고, optional high-quality live confidence 에서는 `OPENAI_MODEL_ANALYSIS` 로 모델을 바꿀 수 있다. `openai_fast_test` 는 `OPENAI_MODEL_FAST_TEST` 로 바꿀 수 있는 수동 fast/test 선택지다. `LLM_REMOTE_PROVIDER=pgpt` 에서는 deterministic safety net 이 allowed fact id 만 사용해 `DETERMINISTIC_SAFETY_NET_*` draft/reviewable claims 를 보강한다.
 - `LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="tests/eval/test_p23_openai_quality_live_gate.py"` 는 선택적 P23/P26 OpenAI high-quality semantic confidence gate 다. 기본 profile 은 `openai_sp_semantic_analysis` / `OPENAI_MODEL_ANALYSIS` 이며, 실패는 production readiness blocker 로 해석하지 않고 `production_ready: false` 를 유지한다.
 - `make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/contract/test_p24_sp_migration_guide_contract_prompt_assets.py"` 는 P24 fixture-first SP migration guide renderer/evaluator gate 를 검증한다. 기존 `SP_ANALYSIS_DOC` / `DEPENDENCY_REPORT` artifact type 을 재사용하고, `openai_fast_test` / 기본 `gpt-5-nano` 기준을 유지하며 live OpenAI 또는 live PPM 접근을 기본 필수로 만들지 않는다.
 - `make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_metadata_gateway.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_workflow_service.py tests/unit/api/test_route_surface.py tests/unit/web/test_p14_product_ui_static.py tests/integration/api/test_api_workflow_routes.py tests/e2e/test_fixture_workflow_happy_path.py tests/contract/test_openapi_and_env_sample_assets.py"` 는 P27/P28/P29/P29B dependency evidence tooling fixture-first 구현, catalog 계약, prompt/manifest 자산, API tool summary/safe invocation route, Web diagnostic UI, workflow closure evidence wiring, bounded AI tool orchestration, deferred storage/workflow boundary 를 검증한다. 새 dependency closure/resolver tool 과 AI-selected metadata tool execution 은 active/read-only/structured-input MCP tool 경계를 사용하며, raw SQL, row data, procedure execution, DDL/DML, raw definition storage, PPM-to-PLF fallback 을 허용하지 않는다. P29B 는 DB migration, persisted artifact type, workflow state transition 을 추가하지 않고 기존 sanitized `dependencyEvidence` digest 와 draft artifact evidence refs 를 유지한다.
 - `make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 는 metadata analyze API 응답 표면, bounded internal MCP execution, sanitized fact ids, adversarial planner blocking, Web analyze action 을 검증한다. P34 이후 기본 실행은 별도 knowledge asset 저장도 수행한다.
 - `make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/eval/test_p32_live_confidence_planner_effectiveness.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 는 metadata object depth 와 planner effectiveness fixture-first gate 를 함께 검증한다. `aiToolEvidence.plannerMetrics` 는 sanitized counts/ratios 만 포함하며 live confidence 는 기본 실행에서 `NOT_RUN_CONFIDENCE_ONLY` 로 남는다.
-- `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"` 는 선택적 P32 live confidence gate 다. `OPENAI_API_KEY` 와 read-only PPM metadata profile 이 필요하며, 실패는 production readiness blocker 가 아니라 confidence evidence 부족으로 해석한다.
+- `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"` 는 선택적 P32 live confidence gate 다. `OPENAI_API_KEY` 와 read-only PPM metadata profile 이 필요하며, 실패는 production readiness blocker 가 아니라 confidence evidence 부족으로 해석한다. Planner output 이 invalid/empty 인 경우 TABLE 은 schema/constraints/indexes/extended-properties/related-objects, PROCEDURE/VIEW/FUNCTION 은 dependency-closure/extended-properties/related-objects read-only fallback 을 기존 policy/budget/dedupe/sanitizer 경로로 실행한다.
 - `make test PYTEST_ARGS="tests/unit/api/test_metadata_tool_cache.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_batch_sp_analysis.py tests/integration/api/test_api_workflow_routes.py tests/eval/test_p33_performance_scale.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 는 P33 performance/scale fixture-first gate 다. Metadata MCP tool result cache, stable `contentHash`/fact id, planner cache hit/miss metrics, bounded SP batch endpoint, live PPM round reduction, workflow/MCP backpressure error codes, no raw leakage 를 검증한다.
-- `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 는 P34 knowledge assetization fixture-first gate 다. v5 DDL contract, version reuse, fact graph/export, SP/metadata knowledge assets, no raw leakage 를 검증한다.
-- `P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"` 는 명시적 P27 hard-live gate 다. `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 closure/resolver evidence 를 검증하며, gate 가 켜진 뒤 PPM profile/env 누락 또는 접근 실패는 skip 이 아니라 blocker failure 다.
+- `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/integration/api/test_api_auth_rbac.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 는 P35 knowledge lifecycle/search/review gate 다. v5 DDL lifecycle/review contract, job-link version reuse, fact edge integrity, lifecycle search default archive exclusion, review RBAC/spoofing guards, schema-required error surface, export selection validation, SP/metadata knowledge assets, no raw leakage 를 검증한다.
+- `P21_LIVE_PORTAL_GATE=1 P27_HARD_LIVE_GATE=1 P32_LIVE_CONFIDENCE_GATE=1 P35_KNOWLEDGE_LIVE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py tests/eval/test_p22_openai_live_agent_gate.py tests/eval/test_p23_openai_quality_live_gate.py tests/eval/test_p27_dependency_evidence_hard_live_gate.py tests/eval/test_p32_live_confidence_planner_effectiveness.py tests/eval/test_p35_knowledge_live_confidence_gate.py"` runs the controlled live confidence suite. It requires `OPENAI_API_KEY`, PLF `PLATFORM_DB_*`, read-only PPM metadata env, and manually applied v5 DDL. Success remains confidence evidence only.
+- `P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"` 는 명시적 P27 hard-live gate 다. `selected_objects.yaml` 의 PPM simple/medium/complex procedure 를 대상으로 closure/resolver evidence 를 검증하며, gate 가 켜진 뒤 PPM profile/env 누락 또는 접근 실패는 skip 이 아니라 blocker failure 다.
 - `scripts/install_web_workspace.sh` 는 docker/test 에서 `/pnpm/store` volume 을 pnpm store 로 사용해 worktree 안에 `.pnpm-store` 를 만들지 않는다.
 - 새 테스트 스위트를 추가할 때는 가능하면 도커 실행 경로를 함께 제공한다.
 - 외부 DB 연결이 필요한 경우 환경변수로 주입하되, 테스트 명령이 DB lifecycle 을 대신 관리하지는 않는다.
