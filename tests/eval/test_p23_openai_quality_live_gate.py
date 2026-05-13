@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 import yaml
 from ai_agent_runtime import (
+    ModelGatewayError,
     SemanticAnalysisTask,
     build_model_gateway_from_env,
     build_semantic_analysis_runs,
@@ -36,22 +37,30 @@ def test_p23_openai_quality_live_gate() -> None:
     expected_model = model_profile_from_env(profile_id).model
     failures: list[str] = []
     scenarios = list(fixture["scenarios"])
-    runs = build_semantic_analysis_runs(
-        tasks=[
-            SemanticAnalysisTask(
-                target_ref=scenario["target_ref"],
-                metadata={
-                    "dbContext": scenario["db_context"],
-                    "deterministicFacts": scenario["deterministic_facts"],
-                },
-                static_analysis=scenario["transient_model_input"]["static_analysis"],
-                procedure_definition=scenario["transient_model_input"]["procedure_definition"],
-            )
-            for scenario in scenarios
-        ],
-        model_gateway=gateway,
-        profile_id=profile_id,
-    )
+    try:
+        runs = build_semantic_analysis_runs(
+            tasks=[
+                SemanticAnalysisTask(
+                    target_ref=scenario["target_ref"],
+                    metadata={
+                        "dbContext": scenario["db_context"],
+                        "deterministicFacts": scenario["deterministic_facts"],
+                    },
+                    static_analysis=scenario["transient_model_input"]["static_analysis"],
+                    procedure_definition=scenario["transient_model_input"][
+                        "procedure_definition"
+                    ],
+                )
+                for scenario in scenarios
+            ],
+            model_gateway=gateway,
+            profile_id=profile_id,
+        )
+    except ModelGatewayError as exc:
+        pytest.fail(
+            "P23 live model gateway failed before quality scoring; "
+            f"production_ready remains false: {exc.code}"
+        )
     for scenario, run in zip(scenarios, runs, strict=True):
         report = evaluate_p23_semantic_quality(
             scenario=scenario,

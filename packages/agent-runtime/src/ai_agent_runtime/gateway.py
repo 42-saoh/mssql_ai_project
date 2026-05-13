@@ -472,7 +472,11 @@ class OpenAIModelGateway:
             )
             response.raise_for_status()
             response_payload, output_text = _response_payload_and_output_text(response)
-            output = parser(output_text)
+            output, normalizer_components = _parse_structured_output(
+                output_text=output_text,
+                parser=parser,
+                schema_name=schema_name,
+            )
         except httpx.HTTPStatusError as exc:
             raise ModelGatewayError(
                 "OpenAI Responses API returned an error.",
@@ -514,6 +518,7 @@ class OpenAIModelGateway:
                 response_payload.get("id") or response.headers.get("x-request-id") or ""
             )
             or None,
+            component_invocations=tuple(normalizer_components),
         )
 
     def _post_with_retry(
@@ -683,6 +688,316 @@ def _sse_output_text(text: str) -> str:
     if completed_payload is not None:
         return _response_output_text(completed_payload)
     raise ValueError("No output text found in event-stream response.")
+
+
+def _parse_structured_output(
+    *,
+    output_text: str,
+    parser,
+    schema_name: str,
+) -> tuple[Any, list[dict[str, Any]]]:
+    try:
+        return parser(output_text), []
+    except (json.JSONDecodeError, ValueError) as exc:
+        if schema_name != "llm_semantic_analysis":
+            raise
+        repaired, removed_paths = _semantic_output_without_extra_fields(output_text)
+        if not removed_paths:
+            raise exc
+        return (
+            LlmSemanticAnalysisOutput.model_validate(repaired),
+            [
+                {
+                    "component": "structured_output_normalizer",
+                    "status": "SUCCEEDED",
+                    "action": "removed_schema_extra_fields",
+                    "removedFieldPaths": removed_paths,
+                }
+            ],
+        )
+
+
+def _semantic_output_without_extra_fields(output_text: str) -> tuple[dict[str, Any], list[str]]:
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return {}, []
+    if not isinstance(payload, dict):
+        return {}, []
+
+    removed_paths: list[str] = []
+    root_keys = {
+        "businessRules",
+        "business_rules",
+        "modernizationPoints",
+        "modernization_points",
+        "riskFlags",
+        "risk_flags",
+        "reviewMarkers",
+        "review_markers",
+        "conversionGuidance",
+        "conversion_guidance",
+        "migrationGuideInsights",
+        "migration_guide_insights",
+        "assumptions",
+    }
+    item_keys = {
+        "businessRules": {"category", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "business_rules": {"category", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "modernizationPoints": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "modernization_points": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "riskFlags": {"code", "severity", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "risk_flags": {"code", "severity", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "reviewMarkers": {"code", "message", "status", "evidenceRefs", "evidence_refs"},
+        "review_markers": {"code", "message", "status", "evidenceRefs", "evidence_refs"},
+        "conversionGuidance": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "conversion_guidance": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "migrationGuideInsights": {"section", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "migration_guide_insights": {
+            "section",
+            "summary",
+            "status",
+            "evidenceRefs",
+            "evidence_refs",
+        },
+    }
+    required_item_keys = {
+        "businessRules": {"category", "summary"},
+        "business_rules": {"category", "summary"},
+        "modernizationPoints": {"code", "summary"},
+        "modernization_points": {"code", "summary"},
+        "riskFlags": {"code", "severity", "summary"},
+        "risk_flags": {"code", "severity", "summary"},
+        "reviewMarkers": {"code", "message"},
+        "review_markers": {"code", "message"},
+        "conversionGuidance": {"code", "summary"},
+        "conversion_guidance": {"code", "summary"},
+        "migrationGuideInsights": {"section", "summary"},
+        "migration_guide_insights": {"section", "summary"},
+    }
+
+    repaired: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key not in root_keys:
+            removed_paths.append(f"$.{key}")
+            continue
+        if key == "assumptions" and isinstance(value, list):
+            repaired[key] = [
+                _assumption_without_provider_text(
+                    item,
+                    path=f"$.assumptions[{index}]",
+                    removed_paths=removed_paths,
+                )
+                for index, item in enumerate(value)
+            ]
+            continue
+        if key in item_keys:
+            repaired[key] = _claim_items_without_schema_drift(
+                _claim_value_list(
+                    value,
+                    path=f"$.{key}",
+                    removed_paths=removed_paths,
+                ),
+                field_name=key,
+                allowed_keys=item_keys[key],
+                required_keys=required_item_keys[key],
+                path=f"$.{key}",
+                removed_paths=removed_paths,
+            )
+            continue
+        repaired[key] = value
+    return repaired, sorted(removed_paths)
+
+
+def _assumption_without_provider_text(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> str:
+    if isinstance(value, str):
+        return value
+    removed_paths.append(path)
+    return "Provider returned a structured assumption object; text was not stored."
+
+
+def _claim_items_without_schema_drift(
+    value: list[Any],
+    *,
+    field_name: str,
+    allowed_keys: set[str],
+    required_keys: set[str],
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(value):
+        item = _claim_item_without_schema_drift(
+            raw_item,
+            field_name=field_name,
+            allowed_keys=allowed_keys,
+            required_keys=required_keys,
+            path=f"{path}[{index}]",
+            removed_paths=removed_paths,
+        )
+        if item is not None:
+            repaired_items.append(item)
+    return repaired_items
+
+
+def _claim_value_list(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    removed_paths.append(path)
+    if isinstance(value, dict):
+        for nested_value in value.values():
+            if isinstance(nested_value, list):
+                return nested_value
+        return [value]
+    return []
+
+
+def _claim_item_without_schema_drift(
+    value: Any,
+    *,
+    field_name: str,
+    allowed_keys: set[str],
+    required_keys: set[str],
+    path: str,
+    removed_paths: list[str],
+) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        removed_paths.append(path)
+        return None
+    normalized = _normalized_claim_item(value, field_name=field_name, path=path)
+    _normalize_claim_status(
+        normalized,
+        field_name=field_name,
+        path=path,
+        removed_paths=removed_paths,
+    )
+    _normalize_risk_severity(normalized, path=path, removed_paths=removed_paths)
+    if not required_keys <= set(normalized):
+        removed_paths.append(path)
+        return None
+    repaired: dict[str, Any] = {}
+    for key, nested_value in normalized.items():
+        if key not in allowed_keys:
+            removed_paths.append(f"{path}.{key}")
+            continue
+        repaired[key] = nested_value
+    return repaired
+
+
+def _normalize_claim_status(
+    value: dict[str, Any],
+    *,
+    field_name: str,
+    path: str,
+    removed_paths: list[str],
+) -> None:
+    status = value.get("status")
+    if status in {"INFERRED_DESCRIPTION", "REVIEW_REQUIRED"}:
+        return
+    if status is not None:
+        removed_paths.append(f"{path}.status")
+    if field_name in {"businessRules", "business_rules"}:
+        value["status"] = "INFERRED_DESCRIPTION"
+    else:
+        value["status"] = "REVIEW_REQUIRED"
+
+
+def _normalize_risk_severity(
+    value: dict[str, Any],
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> None:
+    severity = value.get("severity")
+    if severity is None or severity in {"INFO", "WARNING", "ERROR", "BLOCKER"}:
+        return
+    removed_paths.append(f"{path}.severity")
+    value["severity"] = "WARNING"
+
+
+def _normalized_claim_item(
+    value: dict[str, Any],
+    *,
+    field_name: str,
+    path: str,
+) -> dict[str, Any]:
+    normalized = dict(value)
+    summary = _provider_text_value(
+        normalized,
+        ("summary", "text", "description", "rule", "item", "guidance", "insight", "message"),
+    )
+    if field_name in {"businessRules", "business_rules"}:
+        normalized.setdefault("category", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("summary", summary)
+    elif field_name in {"riskFlags", "risk_flags"}:
+        normalized.setdefault("code", _provider_code_value(normalized, path=path))
+        normalized.setdefault("severity", "WARNING")
+        if summary:
+            normalized.setdefault("summary", summary)
+    elif field_name in {"reviewMarkers", "review_markers"}:
+        normalized.setdefault("code", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("message", summary)
+    elif field_name in {"migrationGuideInsights", "migration_guide_insights"}:
+        normalized.setdefault("section", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("summary", summary)
+    else:
+        normalized.setdefault("code", _provider_code_value(normalized, path=path))
+        if summary:
+            normalized.setdefault("summary", summary)
+    return normalized
+
+
+def _provider_code_value(value: dict[str, Any], *, path: str) -> str:
+    for key in ("code", "category", "section", "type", "name"):
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    normalized_path = (
+        path.replace("$.", "")
+        .replace("[", "_")
+        .replace("]", "")
+        .replace(".", "_")
+        .upper()
+    )
+    return f"NORMALIZED_PROVIDER_{normalized_path}"
+
+
+def _provider_text_value(value: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        candidate = value.get(key)
+        text = _first_text(candidate)
+        if text:
+            return text
+    return None
+
+
+def _first_text(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, dict):
+        return _provider_text_value(
+            value,
+            ("summary", "text", "description", "rule", "item", "guidance", "insight", "message"),
+        )
+    if isinstance(value, list):
+        for item in value:
+            text = _first_text(item)
+            if text:
+                return text
+    return None
 
 
 def _usage(payload: dict[str, Any]) -> dict[str, int]:

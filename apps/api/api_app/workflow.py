@@ -19,9 +19,18 @@ from ai_agent_runtime import (
     AgentRunPayload,
     ModelGateway,
     ModelGatewayError,
+    ModelInvocationRecord,
     attach_planner_metrics_to_ai_tool_evidence,
     build_model_gateway_from_env,
     build_semantic_analysis_run,
+)
+from ai_agent_runtime.gateway import model_profile_from_env
+from ai_agent_runtime.models import (
+    AgentRunStatus,
+    OUTPUT_SCHEMA_VERSION,
+    PROMPT_VERSION,
+    stable_json_hash,
+    text_hash,
 )
 from ai_agent_validation import (
     ValidationCheck,
@@ -417,7 +426,13 @@ class WorkflowService:
                 model_gateway=self.model_gateway,
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
             )
-        except ModelGatewayError:
+        except ModelGatewayError as exc:
+            self._record_failed_llm_agent_run(
+                job_id=job_id,
+                target_ref=object_ref,
+                profile_id=str(request_record.options.get("llmProfileId") or ""),
+                error_code=exc.code,
+            )
             raise
         if ai_tool_component_invocations or (
             metadata.ai_tool_evidence
@@ -436,6 +451,74 @@ class WorkflowService:
             summary=run_payload.summary,
             structured_output=run_payload.structured_output,
             model_invocation=run_payload.model_invocation.to_storage_dict(),
+        )
+
+    def _record_failed_llm_agent_run(
+        self,
+        *,
+        job_id: str,
+        target_ref: str,
+        profile_id: str,
+        error_code: str,
+    ) -> None:
+        profile = model_profile_from_env(profile_id)
+        structured_output = {
+            "businessRules": [],
+            "modernizationPoints": [],
+            "riskFlags": [],
+            "reviewMarkers": [
+                {
+                    "code": "LLM_SEMANTIC_ANALYSIS_FAILED",
+                    "message": f"LLM semantic analysis failed with safe code {error_code}.",
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": [],
+                }
+            ],
+            "conversionGuidance": [],
+            "migrationGuideInsights": [],
+            "assumptions": [
+                "Remote model output was not used because semantic analysis failed.",
+            ],
+        }
+        failure_input = {
+            "targetRef": target_ref,
+            "modelProfileId": profile.profile_id,
+            "errorCode": error_code,
+        }
+        invocation = ModelInvocationRecord(
+            provider=str(getattr(self.model_gateway, "provider", "openai")),
+            model=profile.model,
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort=profile.reasoning_effort,
+            prompt_version=PROMPT_VERSION,
+            output_schema_version=OUTPUT_SCHEMA_VERSION,
+            input_hash=stable_json_hash(failure_input),
+            prompt_hash=text_hash(f"{PROMPT_VERSION}:{target_ref}:{error_code}"),
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.FAILED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=None,
+            provider_request_id=None,
+            error_code=error_code,
+            error_message=None,
+            component_invocations=(
+                {
+                    "stage": "semantic_analysis",
+                    "status": "FAILED",
+                    "errorCode": error_code,
+                },
+            ),
+        )
+        self.repository.save_agent_run(
+            job_id=job_id,
+            agent_type="LLM_SEMANTIC_ANALYST",
+            status=AgentRunStatus.FAILED.value,
+            target_ref=target_ref,
+            summary=f"LLM semantic analysis failed with safe code {error_code}.",
+            structured_output=structured_output,
+            model_invocation=invocation.to_storage_dict(),
         )
 
     def _store_rendered_artifact(

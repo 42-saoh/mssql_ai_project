@@ -31,6 +31,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | P32 planner effectiveness | fixture-first plus optional live confidence | `aiToolEvidence.plannerMetrics` records sanitized planned/executed/blocked/failed/deduped counts, evidence utilization, and claim support rate. `tests/eval/test_p32_live_confidence_planner_effectiveness.py` is fixture-first by default; `P32_LIVE_CONFIDENCE_GATE=1` adds remote LLM plus live PPM metadata confidence only and does not imply `production_ready: true`. |
 | P33 performance/scale | fixture-first process-local | Metadata MCP tool success responses are cached in a TTL/LRU process-local cache, tool evidence includes stable `contentHash`, planner metrics include cache hit/miss counts, and `POST /api/v1/requests/sp-analysis/batch` creates normal per-target jobs with duplicate/limit rejection. Workflow/MCP backpressure uses `WORKFLOW_BACKPRESSURE` and `MCP_BACKPRESSURE`; no DB migration, queue infra, row data, DDL/DML, or public MCP allowlist expansion is added. |
 | P34/P35 knowledge assetization | fixture-first versioned knowledge | SP workflow and Metadata Analyze default `persistKnowledge=true` materialize sanitized `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`, and `CANONICAL_ANALYSIS` assets where applicable. v5 DDL is manual-apply only and now includes job-link rows, fact-edge FK integrity, lifecycle columns, `KNOWLEDGE_ASSET_REVIEWS`, and search/review indexes. Same `contentHash` reuses the current version while preserving lifecycle and each job's asset lookup. APIs expose summaries, asset/fact search, version facts, append-only review history, review transition, JSONL/GRAPH_JSON export, and `KNOWLEDGE_SCHEMA_REQUIRED` when v5 tables/columns/indexes are missing. `REVIEWED` remains draft/reviewable curation only, not production-ready or automatic conversion approval evidence. No raw SP definition, SQL text, row data, secrets, raw prompt/provider trace, raw-derived redaction hash/length/snippet, or production-ready claim is introduced. |
+| P35 knowledge live confidence | explicit optional live | `P35_KNOWLEDGE_LIVE_GATE=1` runs one bounded live PPM SP workflow with OpenAI semantic analysis and live PLF v5 knowledge persistence, then verifies job-linked assets, fact-edge integrity, search, GRAPH_JSON export, and one real non-terminal `REVIEWED` curation event. PPM remains metadata-only/read-only; PLF receives normal test workflow/knowledge/export/audit/review writes. Success is confidence evidence only and does not imply production readiness or conversion approval. |
 | P27 dependency evidence tooling | fixture-first hardened | `spec/eval/p27_dependency_evidence_tooling_contract.yaml` and the MCP catalog define active read-only dependency closure/resolution tools plus optional dependency resolution evidence fields. P28 safe API invocation, P29 Web diagnostics, and workflow closure evidence wiring are fixture-first enabled; persisted artifact type and DB schema changes remain deferred. Ambiguous/dynamic/unresolved/cross-server/caller-dependent references stay `REVIEW_REQUIRED`. Explicit hard-live evidence runs only with `P27_HARD_LIVE_GATE=1`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
@@ -133,7 +134,7 @@ For P32 planner effectiveness and optional live confidence, run:
 
 ```bash
 make test PYTEST_ARGS="tests/unit/agent_runtime/test_planner_effectiveness.py tests/eval/test_p32_live_confidence_planner_effectiveness.py"
-P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"
+P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"
 ```
 
 The first command is fixture-first and does not call live OpenAI/PPM. The second command requires `OPENAI_API_KEY` and read-only `ppm` metadata access; success is confidence evidence only and does not change production readiness.
@@ -154,6 +155,17 @@ make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit
 
 This verifies sanitized versioned knowledge assets, job-link version reuse, lifecycle transitions, default archived exclusion, asset/fact search, review RBAC/spoofing guards, fact graph/export integrity, export version selection, `KNOWLEDGE_SCHEMA_REQUIRED` error handling, manual v5 schema boundary, and no raw leakage. Knowledge assets are draft/reviewable organizational knowledge and do not imply production readiness.
 
+For P35 live confidence over the recent knowledge features, run:
+
+```bash
+P35_KNOWLEDGE_LIVE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p35_knowledge_live_confidence_gate.py"
+```
+
+This requires `OPENAI_API_KEY`, PLF `PLATFORM_DB_*`, read-only PPM metadata env, `ppm -> PPM`
+profile mapping, and manually applied v5 DDL. The gate writes PLF workflow/knowledge/export/audit
+and review records, but it does not read row data, execute procedures, apply DDL, archive real PPM
+knowledge, or treat `REVIEWED` as production approval.
+
 P24 status interpretation:
 
 - `PASSED`: the fixture-first renderer/evaluator meets every threshold, keeps `productionReady: false`, preserves `REVIEW_REQUIRED` for unsupported or low-evidence claims, and has no storage safety findings or PPM-to-PLF fallback.
@@ -169,7 +181,7 @@ make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_r
 For explicit P27 hard-live validation, run:
 
 ```bash
-P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
 
 P27 status interpretation:

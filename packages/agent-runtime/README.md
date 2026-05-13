@@ -11,6 +11,7 @@ OpenAI LLM agent runtime slice for P22.
 - P-GPT resolves `OPENAI_RESPONSES_URL` first, otherwise it appends `/v1/responses` to `OPENAI_BASE_URL` unless that base already ends in `/v1`.
 - SP definition text may be sent as transient model input only when `LLM_ALLOW_SP_TEXT=1` and the request option `allowSpDefinitionToModel=true`.
 - Raw prompt text, raw SP definition text, and raw provider response text are not returned in storage payloads. Stored structured output is also sanitized before persistence if a model echoes procedure text, raw trace markers, row-data markers, or secret-like assignments.
+- Remote semantic output is strict-validated first. If a provider returns schema-drifted JSON, the runtime deterministically removes unsupported fields, normalizes safe text aliases such as `text` to the canonical summary fields, and records only sanitized normalizer metadata without raw provider text.
 - `ModelGateway.plan_metadata_tools` provides the bounded tool-planning call. It returns strict JSON tool requests only; the API workflow executes allowed MCP tools and stores only sanitized tool evidence summaries.
 - `ModelGateway.analyze_metadata` provides response-only metadata analysis for `POST /api/v1/metadata/analyze`. It uses strict JSON structured output constrained to deterministic fact ids and does not store raw prompt, raw definition, row data, or provider response text.
 - Semantic analysis now runs through per-SP tasks. Multiple SP tasks can fan out with `LLM_SP_CONCURRENCY` (default `2`), while the public single-SP API stays unchanged.

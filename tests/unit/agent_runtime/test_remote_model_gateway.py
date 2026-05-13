@@ -165,6 +165,73 @@ def test_pgpt_sse_output_text_delta_parses_structured_json(monkeypatch: Any) -> 
     assert result.token_usage == {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
 
 
+def test_remote_semantic_output_extra_fields_are_pruned_before_storage(
+    monkeypatch: Any,
+) -> None:
+    output = {
+        **SEMANTIC_OUTPUT,
+        "target": {"schema": "dbo", "name": "usp_Demo"},
+        "deterministicEvidenceSummary": {"factCount": 1},
+        "reviewFlags": [{"code": "MODEL_SIDE_EXTRA"}],
+        "assumptions": [{"item": "Do not store this provider-side assumption text."}],
+        "conversionGuidance": {
+            "summary": [{"text": "Provider guidance text.", "status": "CONFIRMED"}]
+        },
+        "riskFlags": [{"evidenceRefs": ["fact_demo"]}],
+        "businessRules": [
+            {
+                **SEMANTIC_OUTPUT["businessRules"][0],
+                "rawSnippet": "SELECT * FROM dbo.SecretTable",
+                "status": "CONFIRMED",
+            }
+        ],
+    }
+    _capture_post(monkeypatch, _json_response(output=output))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.test/v1")
+
+    result = OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+        prompt=_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    assert "target" not in result.structured_output
+    assert "deterministicEvidenceSummary" not in result.structured_output
+    assert "reviewFlags" not in result.structured_output
+    assert "rawSnippet" not in result.structured_output["businessRules"][0]
+    assert result.structured_output["businessRules"][0]["status"] == "INFERRED_DESCRIPTION"
+    assert result.structured_output["conversionGuidance"][0]["status"] == "REVIEW_REQUIRED"
+    assert result.structured_output["conversionGuidance"][0]["summary"] == (
+        "Provider guidance text."
+    )
+    assert result.structured_output["conversionGuidance"][0]["code"].startswith(
+        "NORMALIZED_PROVIDER_CONVERSIONGUIDANCE"
+    )
+    assert result.structured_output["riskFlags"] == []
+    assert result.structured_output["assumptions"] == [
+        "Provider returned a structured assumption object; text was not stored."
+    ]
+    assert result.component_invocations == (
+        {
+            "component": "structured_output_normalizer",
+            "status": "SUCCEEDED",
+            "action": "removed_schema_extra_fields",
+            "removedFieldPaths": [
+                "$.assumptions[0]",
+                "$.businessRules[0].rawSnippet",
+                "$.businessRules[0].status",
+                "$.conversionGuidance",
+                "$.conversionGuidance[0].status",
+                "$.conversionGuidance[0].text",
+                "$.deterministicEvidenceSummary",
+                "$.reviewFlags",
+                "$.riskFlags[0]",
+                "$.target",
+            ],
+        },
+    )
+
+
 def test_pgpt_model_profile_defaults(monkeypatch: Any) -> None:
     monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
     monkeypatch.setenv("OPENAI_MODEL_ANALYSIS", "gpt-5.5")
@@ -193,12 +260,12 @@ def _prompt() -> RenderedPrompt:
     )
 
 
-def _json_response() -> httpx.Response:
+def _json_response(*, output: dict[str, Any] | None = None) -> httpx.Response:
     return httpx.Response(
         200,
         json={
             "id": "resp_test",
-            "output_text": json.dumps(SEMANTIC_OUTPUT),
+            "output_text": json.dumps(output or SEMANTIC_OUTPUT),
             "usage": {"input_tokens": 12, "output_tokens": 34, "total_tokens": 46},
         },
         request=httpx.Request("POST", "https://api.openai.test/v1/responses"),

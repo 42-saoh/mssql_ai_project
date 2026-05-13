@@ -597,21 +597,24 @@ def _aggregate_invocations(
         raise ValueError("At least one model invocation is required.")
     _first_stage, first = invocations[0]
     component_invocations = tuple(
-        {
-            "stage": stage,
-            "provider": invocation.provider,
-            "model": invocation.model,
-            "modelProfileId": invocation.model_profile_id,
-            "reasoningEffort": invocation.reasoning_effort,
-            "promptVersion": invocation.prompt_version,
-            "outputSchemaVersion": invocation.output_schema_version,
-            "inputHash": invocation.input_hash,
-            "promptHash": invocation.prompt_hash,
-            "outputHash": invocation.output_hash,
-            "status": invocation.status.value,
-            "tokenUsage": dict(invocation.token_usage),
-            "latencyMs": invocation.latency_ms,
-        }
+        _component_invocation_summary(
+            {
+                "stage": stage,
+                "provider": invocation.provider,
+                "model": invocation.model,
+                "modelProfileId": invocation.model_profile_id,
+                "reasoningEffort": invocation.reasoning_effort,
+                "promptVersion": invocation.prompt_version,
+                "outputSchemaVersion": invocation.output_schema_version,
+                "inputHash": invocation.input_hash,
+                "promptHash": invocation.prompt_hash,
+                "outputHash": invocation.output_hash,
+                "status": invocation.status.value,
+                "tokenUsage": dict(invocation.token_usage),
+                "latencyMs": invocation.latency_ms,
+            },
+            nested=invocation.component_invocations,
+        )
         for stage, invocation in invocations
     )
     token_usage = {
@@ -658,6 +661,17 @@ def _aggregate_invocations(
         provider_request_id=None,
         component_invocations=component_invocations,
     )
+
+
+def _component_invocation_summary(
+    payload: dict[str, Any],
+    *,
+    nested: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    summary = dict(payload)
+    if nested:
+        summary["componentInvocations"] = [dict(item) for item in nested]
+    return summary
 
 
 def _fallback_evidence_refs(

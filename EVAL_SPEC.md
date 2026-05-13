@@ -340,7 +340,7 @@ P32 는 bounded AI-MCP planner 가 실제로 유용한 metadata evidence 를 수
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/unit/agent_runtime/test_planner_effectiveness.py tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p32_live_confidence_planner_effectiveness.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
-- 선택 live: `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"`
+- 선택 live: `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"`
 
 ### 15. P33 Performance / Scale Fixture-First Gate
 
@@ -429,6 +429,35 @@ sanitized versioned knowledge asset, fact graph, export 로 승격한다. v5 DDL
 - `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/integration/api/test_api_auth_rbac.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과
 - `make test-web-smoke` 통과
 
+### 16B. P35 Knowledge Live Confidence Gate
+
+P35 live confidence is explicit and disabled by default. `P35_KNOWLEDGE_LIVE_GATE=1`
+combines live OpenAI, read-only `ppm`/`PPM` metadata, and live PLF knowledge persistence after
+operators manually apply v5 DDL. Missing env, missing `ppm -> PPM` profile mapping, or missing v5
+knowledge schema objects are blocker failures, not skips.
+
+Required checks:
+- Disabled mode must not initialize PLF, PPM, or OpenAI access.
+- Live mode submits one bounded PPM SP workflow with `persistKnowledge=true`, validates OpenAI
+  semantic analysis used the configured remote provider, and verifies job-linked knowledge assets
+  for `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`, and
+  `CANONICAL_ANALYSIS`.
+- Fact graph edges must reference persisted fact ids in the same version; asset/fact search and
+  GRAPH_JSON export must return sanitized knowledge without raw SQL/SP text, row data, secrets,
+  raw prompt, or raw provider response text.
+- The gate records one real non-terminal `REVIEWED` event with reason
+  `P35_LIVE_CONFIDENCE_REVIEW`. It must not archive real PPM knowledge; archived terminal behavior
+  remains fixture/unit coverage.
+- If `AUTH_RBAC_ENFORCEMENT=1`, live review requires `OIDC_REVIEWER_BEARER_TOKEN` and the token
+  must resolve to a PLF `REVIEWER` or `ADMIN`; otherwise fixture/local reviewer mode is used.
+- Passing this gate is confidence evidence only. It does not make knowledge production-ready,
+  authorize publish/deploy, or approve automatic conversion.
+
+Run:
+```bash
+P35_KNOWLEDGE_LIVE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p35_knowledge_live_confidence_gate.py"
+```
+
 ### 17. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
 
 P27 은 dependency evidence 계약을 fixture-first MCP 구현과 명시적 hard-live gate 로 강화한다.
@@ -476,7 +505,7 @@ dependency evidence digest 를 공급할 수 있도록 deterministic metadata �
 
 ```bash
 make test PYTEST_ARGS="tests/unit/test_mcp_catalog.py tests/unit/mcp/test_tool_registry.py tests/contract/mcp/test_tool_invocation_contract.py tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py tests/unit/api/test_metadata_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_route_surface.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py"
-P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
+P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
 
 ## 초기 fixture 세트

@@ -66,6 +66,12 @@ function Quote-BashArg {
     return "'" + ($Value -replace "'", "'\''") + "'"
 }
 
+function Test-EnvAssignmentArg {
+    param([string]$Value)
+
+    return $Value -match "^[A-Za-z_][A-Za-z0-9_]*=.*$"
+}
+
 $gitBash = Find-FirstExistingPath @(
     $env:GIT_BASH,
     "C:\Program Files\Git\bin\bash.exe",
@@ -89,7 +95,30 @@ if ($pnpmPath) {
 }
 
 $pathPrefix = ($pathEntries | Where-Object { $_ }) -join ":"
-$quotedArgs = ($CommandArgs | ForEach-Object { Quote-BashArg $_ }) -join " "
+$leadingEnvAssignments = New-Object System.Collections.Generic.List[string]
+$remainingArgs = New-Object System.Collections.Generic.List[string]
+$seenCommandArg = $false
+
+foreach ($arg in $CommandArgs) {
+    if (-not $seenCommandArg -and (Test-EnvAssignmentArg $arg)) {
+        $leadingEnvAssignments.Add($arg)
+        continue
+    }
+
+    $seenCommandArg = $true
+    $remainingArgs.Add($arg)
+}
+
+if ($leadingEnvAssignments.Count -gt 0 -and $remainingArgs.Count -eq 0) {
+    Write-Error "Environment assignments require a command to run."
+}
+
+if ($leadingEnvAssignments.Count -gt 0) {
+    $allArgs = @($leadingEnvAssignments.ToArray()) + @($remainingArgs.ToArray())
+    $quotedArgs = "env " + (($allArgs | ForEach-Object { Quote-BashArg $_ }) -join " ")
+} else {
+    $quotedArgs = ($CommandArgs | ForEach-Object { Quote-BashArg $_ }) -join " "
+}
 
 if ($pathPrefix) {
     $bashCommand = "export PATH=$(Quote-BashArg $pathPrefix):`$PATH; $quotedArgs"
