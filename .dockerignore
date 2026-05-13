@@ -10,3 +10,7 @@ __pycache__
 *.pyo
 *.pyd
 .DS_Store
+.codex-docker-localappdata
+buildx
+.token_seed
+.token_seed.lock

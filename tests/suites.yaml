@@ -1,0 +1,20 @@
+suites:
+  core:
+    - tests/unit
+    - tests/contract
+    - tests/integration
+    - tests/e2e
+  quality:
+    - tests/eval
+  web:
+    - tests/unit/web
+    - tests/e2e/test_web_http_adapter_smoke.py
+  live-confidence:
+    - tests/eval/test_p15_eval_ops_gate.py
+    - tests/eval/test_p20_auth_rbac_live_gate.py
+    - tests/eval/test_p21_live_portal_no_mock_gate.py
+    - tests/eval/test_p22_openai_live_agent_gate.py
+    - tests/eval/test_p23_openai_quality_live_gate.py
+    - tests/eval/test_p27_dependency_evidence_hard_live_gate.py
+    - tests/eval/test_p32_live_confidence_planner_effectiveness.py
+    - tests/eval/test_p35_knowledge_live_confidence_gate.py

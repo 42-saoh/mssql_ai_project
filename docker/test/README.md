@@ -30,8 +30,12 @@
 - `make docker-project-name` — 현재 worktree 에 대응하는 compose project name 확인
 - `make dev-ports` — 현재 worktree 에 대응하는 APP/MCP/WEB 포트 확인
 - `make test-build` — 현재 worktree 용 테스트 러너 이미지 빌드
-- `make test` — 현재 worktree 용 python 테스트 실행
-- `make test-web-smoke` — 현재 worktree 용 web smoke 실행
+- `make test-core` — unit/contract/integration/e2e fixture baseline 실행
+- `make test-quality` — eval/quality fixture gate 실행
+- `make test-web` — web static/http smoke 와 build smoke 실행
+- `make test` — 현재 worktree 용 저수준 python 테스트 실행
+- `make test-live-confidence` — 승인된 live 환경에서만 confidence suite 실행
+- `make test-web-smoke` — web build smoke 만 단독 실행
 - `make test-shell` — python 테스트 러너 쉘 진입
 - `make test-web-shell` — web 테스트 러너 쉘 진입
 - `make test-down` — 현재 worktree compose 리소스 정리
@@ -61,9 +65,11 @@
 - `.env` 의 `MSSQL_METADATA_DEFAULT_PROFILE_ID` 값은 registry 파일의 정적 default 보다 우선한다.
 - platform DB profile id: `plf`
 
-live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1` 로 켠 뒤 테스트 컨테이너 또는 로컬 `run-mcp` 프로세스에서 readiness endpoint 를 확인한다. live tool query execution 은 아직 optional adapter boundary 이며, 기본 테스트/e2e/eval 은 fixture-first 로 유지한다.
+`make test-core`, `make test-quality`, `make test-web` 는 명령 레벨에서 live/remote flag 를 0 으로 고정한다. `.env` 에 live 값이 남아 있어도 이 세 gate 는 PLF/PPM/OpenAI/P-GPT 를 호출하지 않는다.
 
-P15 hard-live gate 는 명시 실행할 때만 live PPM 을 호출한다. 기본 `make test` 와 `make test PYTEST_ARGS="tests/e2e tests/eval"` 은 fixture-first 재현성을 유지한다. hard-live gate 를 통과시키려면 `.env` 또는 승인된 환경변수에 아래 조건을 충족해야 한다.
+live metadata smoke 가 필요하면 `.env` 에서 `MSSQL_ENABLE_LIVE_METADATA=1` 로 켠 뒤 테스트 컨테이너 또는 로컬 `run-mcp` 프로세스에서 readiness endpoint 를 확인한다. live tool query execution 은 optional adapter boundary 이며, 기본 consolidated gates 는 fixture-first 로 유지한다.
+
+P15/P21/P27/P32/P35 live confidence gate 는 명시 실행할 때만 live PPM/PLF/LLM 을 호출한다. `make test-live-confidence` 를 통과시키려면 `.env` 또는 승인된 환경변수에 필요한 gate 별 조건을 충족해야 한다.
 
 - `P15_HARD_LIVE_GATE=1`
 - `MSSQL_ENABLE_LIVE_METADATA=1`
@@ -84,10 +90,8 @@ worktree 포트 전략은 계속 `make dev-ports` 를 기준으로 한다. P15 e
 ```bash
 cp .env.example .env
 make test-build
-make test
-make test PYTEST_ARGS="tests/e2e tests/eval"
-P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
-P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
-P21_LIVE_PORTAL_GATE=1 make test PYTEST_ARGS="tests/eval/test_p21_live_portal_no_mock_gate.py"
-make test-web-smoke
+make test-core
+make test-quality
+make test-web
+P21_LIVE_PORTAL_GATE=1 P27_HARD_LIVE_GATE=1 P32_LIVE_CONFIDENCE_GATE=1 P35_KNOWLEDGE_LIVE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 make test-live-confidence
 ```
