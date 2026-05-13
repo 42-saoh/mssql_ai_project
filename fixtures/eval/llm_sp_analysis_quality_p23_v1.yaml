@@ -18,8 +18,8 @@ model_profiles:
     default_model: gpt-5-nano
     override_env: OPENAI_MODEL_FAST_TEST
 prompt_contract:
-  prompt_ref: prompt:sp_semantic_analysis@0.3.0
-  schema_ref: schema:llm_semantic_analysis@0.3.0
+  prompt_ref: prompt:sp_semantic_analysis@0.4.0
+  schema_ref: schema:llm_semantic_analysis@0.4.0
   staged_runtime:
     sp_fan_out: true
     default_sp_concurrency_env: LLM_SP_CONCURRENCY

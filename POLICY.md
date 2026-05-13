@@ -77,6 +77,13 @@
   digest, deterministic fact id, object profile/graph/dto readiness 요약만 포함하고 raw definition,
   row data, free-form SQL, procedure execution, DDL/DML, secrets, raw prompt/provider response text 는
   포함하지 않는다.
+- AI platform context tool orchestration 은 bounded planner 방식만 허용한다. LLM 은
+  `spec/agent-tools/platform_ai_tool_catalog.yaml` 의 internal/read-only tool request plan 을 제안할 수
+  있지만 실제 실행은 current job/db profile/target scope gate 와 내부 platform registry 가 수행한다.
+  public invoke API 는 만들지 않는다. 반환/저장 가능한 값은 sanitized `platformToolEvidence`,
+  `platform.<toolName>.<hash>` fact, component summary 로 제한하며 artifact full content, raw SQL/SP
+  definition, row data, procedure execution, DDL/DML, approval/review write, export creation, secrets,
+  raw prompt/provider response text 는 금지한다.
 - Knowledge assetization 은 조직 지식 축적 경로이지만 draft/reviewable knowledge 로만 해석한다.
   `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`,
   `CANONICAL_ANALYSIS` asset 과 JSONL/GRAPH_JSON export 는 sanitized facts/edges 만 포함해야 하며,

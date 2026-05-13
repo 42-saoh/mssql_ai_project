@@ -54,9 +54,9 @@
 
 - 대상 객체: synthetic stored procedure migration guide fixtures only
 - 기존 계약:
-  - `p24_sp_migration_guide_quality@0.1.0`
-  - `prompt:sp_migration_guide_generation@0.1.0`
-  - `schema:sp_migration_guide_quality_report@0.1.0`
+  - `p24_sp_migration_guide_quality@0.2.0`
+  - `prompt:sp_migration_guide_generation@0.2.0`
+  - `schema:sp_migration_guide_quality_report@0.2.0`
   - `template:sp_migration_guide@0.1.0`
 - 참고 파일:
   - user-provided `MIGRATION_GUIDE.md` as quality/structure reference only

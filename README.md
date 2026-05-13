@@ -1,7 +1,7 @@
 # MSSQL Analysis Agent Platform Starter
 
-MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생성, 검증/승인 흐름을 위한 중앙 Agent 플랫폼 starter 저장소다.
-현재 코드는 병렬 구현 트랙이 병합된 초기 통합 상태이며, 기본 검증은 fixture/stub 기반으로 동작한다. P07 이후 productization wave 는 `ops/codex-parallel` 의 P08A~P16 prompt pack 기준으로 이어간다.
+MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생성, 검증 흐름을 위한 중앙 Agent 플랫폼 저장소다.
+현재 active 검증 표면은 fixture-first baseline, quality gate, web smoke, explicit live confidence gate 로 통합되어 있다. Pxx 산출물은 `ops/codex-parallel` 과 `docs/test-gate-history.md` 에 이력 증거로 보존한다.
 
 ## 포함 항목
 
@@ -67,9 +67,12 @@ MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생�
 
 ## 빠른 시작
 
-1. `.env.example` 를 복사해 `.env` 를 만든다.
+1. `.env.example` 또는 환경별 템플릿을 참고해 `.env` 를 만든다.
+   - Mac local Docker + OpenAI: `config/env/mac-docker-openai.env.example`
+   - Windows sandbox + P-GPT: `config/env/windows-sandbox-pgpt.env.example`
    - `MSSQL_METADATA_DEFAULT_PROFILE_ID=master`
    - `PLATFORM_DB_NAME=PLF`
+   - `ppm` profile 은 항상 `PPM` 을 가리키며 PPM 실패 시 PLF 로 대체하지 않는다.
    - password/token 값은 비워 두고 로컬 비밀 저장소나 `.env` 에서만 채운다.
 2. Python/Web 의존성을 lockfile 기준으로 준비한다.
    - `make setup`
@@ -83,8 +86,9 @@ MSSQL Stored Procedure 분석, 문서화, Java/MyBatis 전환 코드 초안 생�
 5. 테스트 러너 이미지를 준비한다.
    - `make test-build`
 6. 기본 검증을 수행한다.
-   - `make test`
-   - `make test-web-smoke`
+   - `make test-core`
+   - `make test-quality`
+   - `make test-web`
    - `make check`
 
 Host Python must be Python 3.14. The executable name is host-specific: macOS/Linux commonly use `python3.14`, while this Windows workspace uses `.env` `PYTHON=python`.
@@ -101,8 +105,11 @@ On Windows, prefer `scripts/win_git_bash.ps1` for `make` and `pnpm` commands bec
 ## Docker 기반 검증
 
 - 기본 테스트 진입점은 `docker/test/` 아래의 도커 테스트 러너다.
-- `make test` 는 파이썬 테스트를 도커 컨테이너 안에서 실행한다.
-- `make test-web-smoke` 는 현재 단계에서 web 자동 테스트 대신 컨테이너 기반 build smoke 를 수행한다.
+- `make test` 는 파이썬 테스트를 도커 컨테이너 안에서 실행하는 저수준 진입점이다.
+- `make test-core` 는 unit/contract/integration/e2e fixture baseline 을 실행한다.
+- `make test-quality` 는 eval/quality fixture gate 를 실행한다.
+- `make test-web` 는 web static/http smoke 와 build smoke 를 실행한다.
+- `make test-live-confidence` 는 승인된 live 환경에서만 실행하는 confidence suite 다.
 - UI 수동/반자동 smoke 가 필요하면 Playwright MCP 와 `browser-automation-smoke` skill 을 사용한다.
-- P06 통합 검증 최소 경로는 `make test PYTEST_ARGS="tests/e2e tests/eval"` 이다.
-- Windows 에서는 같은 검증을 `powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/e2e tests/eval"` 형태로 실행한다.
+- `make test-core`, `make test-quality`, `make test-web` 는 live/remote flag 를 명령 레벨에서 끄므로 `.env` 에 live 값이 있어도 외부 DB/LLM 을 호출하지 않는다.
+- Windows 에서는 같은 검증을 `powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-core` 형태로 실행한다.

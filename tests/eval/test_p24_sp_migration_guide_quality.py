@@ -107,6 +107,11 @@ def test_p24b_dependency_inventory_and_dml_matrix_cover_contract_operations() ->
     required_summary_fields = set(
         contract["dependency_inventory_requirements"]["required_summaries"]
     )
+    needs_verification_fields = set(
+        contract["dependency_inventory_requirements"][
+            "needs_verification_required_summaries"
+        ]
+    )
     required_object_kinds = set(
         contract["dependency_inventory_requirements"]["object_kinds"]
     )
@@ -132,10 +137,53 @@ def test_p24b_dependency_inventory_and_dml_matrix_cover_contract_operations() ->
         for item in scenario["dependency_inventory"]:
             assert required_summary_fields <= set(item)
             assert item["evidence_refs"], (scenario["fixture_id"], item["object_ref"])
+            if item["status"] == "REVIEW_REQUIRED":
+                assert needs_verification_fields <= set(item) or {
+                    "join_or_where_summary",
+                    "value_or_state_patterns",
+                } <= set(item)
         scores = _score_scenario(scenario, contract)
         assert scores["dmlMatrixCoverage"] >= contract["quality_thresholds"][
             "dml_matrix_coverage_min"
         ]
+
+
+def test_p24b_manual_metadata_appendix_and_complexity_metrics_are_covered() -> None:
+    fixture = _fixture()
+    contract = _contract()
+    required_queries = set(
+        contract["manual_metadata_extraction_appendix"]["required_queries"]
+    )
+    required_metrics = set(contract["complexity_metric_requirements"]["required_metrics"])
+    rendered_metric_names = set()
+
+    for scenario in _scenarios(fixture):
+        appendix = scenario["metadata_extraction_appendix"]
+        query_ids = {query["id"] for query in appendix["queries"]}
+        assert required_queries <= query_ids
+        assert "row data" in appendix["policy"]
+        assert "raw definitions" in appendix["policy"]
+        assert "CREATE PROCEDURE" not in str(appendix)
+        for item in scenario.get("table_dml_matrix", []):
+            assert set(item) >= {
+                "target_ref",
+                "select",
+                "insert",
+                "update",
+                "delete",
+                "merge",
+                "keys_join_where_summary",
+                "important_columns_or_patterns",
+                "evidence_refs",
+            }
+        rendered_metric_names.update(
+            metric["metric"]
+            for metric in scenario["phase_risk_metrics"].get("complexity_metrics", [])
+        )
+
+    assert {"LOC", "DYNAMIC_SQL_SIGNAL", "TRANSACTION_SIGNAL", "CROSS_DB_REFERENCE"} <= (
+        rendered_metric_names & required_metrics
+    )
 
 
 def test_p24b_branch_call_flow_and_evidence_scores_meet_thresholds() -> None:

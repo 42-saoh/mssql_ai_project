@@ -1,4 +1,4 @@
-contract_id: p24_sp_migration_guide_quality@0.1.0
+contract_id: p24_sp_migration_guide_quality@0.2.0
 phase: P24
 title: SP migration guide quality contract
 status: contract_ready
@@ -6,8 +6,8 @@ production_ready: false
 depends_on:
   - P23 LLM SP Analysis Quality Eval
   - P12 Java/MyBatis Generation Factory
-  - prompt:sp_migration_guide_generation@0.1.0
-  - schema:sp_migration_guide_quality_report@0.1.0
+  - prompt:sp_migration_guide_generation@0.2.0
+  - schema:sp_migration_guide_quality_report@0.2.0
   - template:sp_migration_guide@0.1.0
 objective:
   Define the quality contract and prompt pack for generating an evidence-backed
@@ -79,25 +79,66 @@ scope:
       title: Migration strategy and Java/MyBatis draft readiness
     - id: appendix_mappings
       title: Parameter and code mapping appendix
+    - id: metadata_extraction_appendix
+      title: Manual metadata extraction appendix
     - id: evidence_assumptions_review
       title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
 dependency_inventory_requirements:
+  status_tables:
+    - Confirmed
+    - Needs verification
   object_kinds:
     - table
     - function
     - procedure
     - cross_database_reference
     - dynamic_sql
+    - temp_table
+    - table_variable
   operation_fields:
     - SELECT
     - INSERT
     - UPDATE
     - DELETE
+    - MERGE
   required_summaries:
     - key_columns
     - join_or_where_summary
     - value_or_state_patterns
     - evidence_refs
+  needs_verification_required_summaries:
+    - why_uncertain
+    - what_to_extract_next
+manual_metadata_extraction_appendix:
+  required: true
+  execution_policy: reviewer_manual_metadata_only
+  forbidden:
+    - row_data_select
+    - procedure_execution
+    - business_db_ddl_or_dml
+    - raw_definition_output
+  required_queries:
+    - definition_hash_length
+    - parameters
+    - static_dependencies
+    - referenced_entities
+    - dynamic_sql_indicators
+    - temp_table_review
+complexity_metric_requirements:
+  required_metrics:
+    - LOC
+    - BEGIN_END_BLOCK
+    - IF
+    - ELSE
+    - WHILE
+    - CASE
+    - GOTO
+    - RETURN
+    - CURSOR_SIGNAL
+    - TRY_CATCH_BLOCK
+    - TRANSACTION_SIGNAL
+    - DYNAMIC_SQL_SIGNAL
+    - CROSS_DB_REFERENCE
 validator_obligation:
   unsupported_dependency_claims: REVIEW_REQUIRED
   unsupported_table_claims: REVIEW_REQUIRED

@@ -211,7 +211,14 @@ def _llm_semantic_lines(payload: dict) -> list[str]:
     for guidance in payload.get("conversionGuidance", []) or []:
         lines.append(f"- Conversion guidance ({guidance.get('code')}): {guidance.get('summary')}")
     for insight in payload.get("migrationGuideInsights", []) or []:
-        lines.append(f"- Guide insight ({insight.get('section')}): {insight.get('summary')}")
+        suffix = (
+            f" whatToExtractNext={insight.get('whatToExtractNext')}"
+            if insight.get("whatToExtractNext")
+            else ""
+        )
+        lines.append(
+            f"- Guide insight ({insight.get('section')}): {insight.get('summary')}{suffix}"
+        )
     for marker in payload.get("reviewMarkers", []) or []:
         lines.append(f"- Review marker ({marker.get('code')}): {marker.get('message')}")
     return lines

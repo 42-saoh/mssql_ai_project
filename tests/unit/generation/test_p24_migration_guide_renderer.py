@@ -49,6 +49,7 @@ def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None
                     "summary": "Keep migration output as draft-only readiness notes.",
                     "status": "REVIEW_REQUIRED",
                     "evidenceRefs": ["ev_p24_simple_proc"],
+                    "whatToExtractNext": "Confirm metadata-only appendix results.",
                 }
             ],
         },
@@ -58,6 +59,7 @@ def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None
     assert "llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`" in artifact.content
     assert "llmConversionGuidance: DTO_FIELD_MAPPING" in artifact.content
     assert "llmMigrationGuideInsight: migration_strategy" in artifact.content
+    assert "whatToExtractNext=Confirm metadata-only appendix results." in artifact.content
     assert "generated_source_application: `not_performed`" in artifact.content
 
 
@@ -72,6 +74,22 @@ def test_p24_dependency_report_includes_dml_call_flow_and_readiness_note() -> No
     assert "PPM.dbo.P24_ShipmentDecisionAudit" in artifact.content
     assert "TRANSACTIONAL_DML_REVIEW_REQUIRED" in artifact.content
     assert "generated_source_application: `not_performed`" not in artifact.content
+
+
+def test_p24_renderer_emits_confirmed_needs_verification_metrics_and_manual_queries() -> None:
+    scenario = _scenario("p24_complex_dynamic_cross_db_extract")
+    artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, _context_from_scenario(scenario))
+
+    assert "### Confirmed" in artifact.content
+    assert "### Needs verification" in artifact.content
+    assert "What to extract next" in artifact.content
+    assert "| Table | SELECT | INSERT | UPDATE | DELETE | MERGE |" in artifact.content
+    assert "DYNAMIC_SQL_SIGNAL" in artifact.content
+    assert "CROSS_DB_REFERENCE" in artifact.content
+    assert "## metadata_extraction_appendix" in artifact.content
+    assert "definition_hash_length" in artifact.content
+    assert "sys.dm_sql_referenced_entities" in artifact.content
+    assert "CREATE PROCEDURE" not in artifact.content
 
 
 def test_p24_quality_report_contract_is_exact_and_sanitized() -> None:

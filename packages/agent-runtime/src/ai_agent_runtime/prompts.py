@@ -7,6 +7,8 @@ from ai_agent_runtime.models import (
     METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION,
     METADATA_ANALYSIS_PROMPT_VERSION,
     OUTPUT_SCHEMA_VERSION,
+    PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
+    PLATFORM_TOOL_PLANNER_PROMPT_VERSION,
     PROMPT_VERSION,
     TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
     TOOL_PLANNER_PROMPT_VERSION,
@@ -20,6 +22,10 @@ Return only schema-valid JSON. Treat deterministic metadata and static analysis 
 Every claim must use evidenceRefs copied exactly from evidenceRefContract.allowedFactIds.
 Always return these top-level arrays even when empty: businessRules, modernizationPoints,
 riskFlags, reviewMarkers, conversionGuidance, migrationGuideInsights, and assumptions.
+For migrationGuideInsights, use section keys from the migration guide contract and, when useful,
+populate guideElement, targetRef, riskArea, and whatToExtractNext. Use whatToExtractNext for
+uncertain dependencies, dynamic SQL, cross-database references, result-shape gaps, and any
+Needs verification guide row.
 Never use prompt hashes, input hashes, output hashes, raw SQL snippets, row data, or provider
 trace ids as claim evidence. Do not invent dependencies, tables, functions, or procedures.
 Allowed claim statuses are only INFERRED_DESCRIPTION and REVIEW_REQUIRED. Never use
@@ -36,6 +42,17 @@ smallest number of tool calls and use structured arguments only. Use the exact o
 names toolRequests, toolName, arguments, reason, expectedEvidenceUse, assumptions, and
 reviewMarkers; do not use aliases such as tools, requests, tool, args, parameters, rationale,
 or evidenceUse. Return no toolRequests only when existing evidence is already sufficient."""
+
+PLATFORM_TOOL_PLANNER_SYSTEM_PROMPT = """You plan bounded platform context tool use for an
+AI agent workflow. Return only schema-valid JSON. Choose only tools from toolCapabilities.
+Request read-only platform evidence that will improve the later semantic analysis. Never
+request artifact full content, raw SQL, raw stored procedure definitions, row data, procedure
+execution, DDL/DML, deployment, approval/review writes, export creation, secrets, credentials,
+raw prompts, or provider responses. Stay within the supplied job, db profile, and target scope.
+Prefer the smallest number of tool calls and use structured arguments only. Use the exact
+output field names toolRequests, toolName, arguments, reason, expectedEvidenceUse,
+assumptions, and reviewMarkers; do not use aliases such as tools, requests, tool, args,
+parameters, rationale, or evidenceUse."""
 
 METADATA_ANALYSIS_SYSTEM_PROMPT = """You analyze read-only MSSQL metadata evidence for an
 AI agent platform. Return only schema-valid JSON. Every insight must use evidenceRefs copied
@@ -187,6 +204,75 @@ def render_metadata_tool_planning_prompt(
     )
 
 
+def render_platform_tool_planning_prompt(
+    *,
+    target_ref: str,
+    metadata: dict[str, Any],
+    static_analysis: dict[str, Any] | None,
+    tool_capabilities: list[dict[str, Any]],
+    job_context: dict[str, Any],
+    previous_tool_evidence: list[dict[str, Any]] | None = None,
+    max_tool_calls: int = 3,
+) -> RenderedPrompt:
+    input_payload = {
+        "targetRef": target_ref,
+        "jobContext": job_context,
+        "metadata": _metadata_without_raw_definition(metadata),
+        "staticAnalysis": static_analysis,
+        "toolCapabilities": tool_capabilities,
+        "previousToolEvidence": list(previous_tool_evidence or []),
+        "policy": {
+            "maxToolCalls": max_tool_calls,
+            "allowedScope": "internal active read-only platform context tools only",
+            "forbidden": [
+                "artifact full content",
+                "raw SQL",
+                "raw stored procedure definitions",
+                "row data",
+                "procedure execution",
+                "DDL/DML",
+                "deployment",
+                "approval or review writes",
+                "export creation",
+                "secrets or credentials",
+                "raw prompts or provider responses",
+                "job, db profile, or target switching",
+            ],
+        },
+        "task": (
+            "Select platform context tool calls that can produce sanitized evidence for "
+            "later semantic analysis. Prefer knowledge facts/assets for the current target "
+            "when available, validation summaries for current-job artifacts when relevant, "
+            "agent-run summaries for current-job trace context, and registry versions for "
+            "reproducibility evidence. Use exact JSON field names only: toolRequests items "
+            "must contain toolName, arguments, reason, and expectedEvidenceUse."
+        ),
+        "round": 1,
+    }
+    user_prompt = json.dumps(input_payload, ensure_ascii=False, sort_keys=True, default=str)
+    prompt_hash = text_hash(f"{PLATFORM_TOOL_PLANNER_SYSTEM_PROMPT}\n{user_prompt}")
+    tool_names = [
+        str(tool.get("name"))
+        for tool in tool_capabilities
+        if isinstance(tool, dict) and tool.get("name")
+    ]
+    return RenderedPrompt(
+        prompt_version=PLATFORM_TOOL_PLANNER_PROMPT_VERSION,
+        output_schema_version=PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
+        system_prompt=PLATFORM_TOOL_PLANNER_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        input_hash=stable_json_hash(input_payload),
+        prompt_hash=prompt_hash,
+        metadata={
+            "targetRef": target_ref,
+            "stage": "platform_tool_planning",
+            "toolNames": sorted(set(tool_names)),
+            "maxToolCalls": max_tool_calls,
+            "round": 1,
+        },
+    )
+
+
 def render_metadata_analysis_prompt(
     *,
     target_ref: str,
@@ -306,8 +392,11 @@ def _stage_task(stage: str) -> str:
         return (
             "Focus on migration guide quality. Populate migrationGuideInsights with "
             "section-level insights for overview, dependency inventory, DML matrix, "
-            "call flow, risk metrics, and migration strategy. Use stable guide section "
-            "keys rather than prose-only headings."
+            "call flow, risk metrics, metadata extraction appendix, and migration "
+            "strategy. Distinguish Confirmed from Needs verification in summaries. "
+            "Use stable guide section keys rather than prose-only headings, and fill "
+            "whatToExtractNext for uncertain dynamic SQL, cross-database, ambiguous, "
+            "or unresolved dependency observations."
         )
     if stage == "evidence_critic":
         return (
@@ -438,6 +527,8 @@ def _fact_catalog(
             summary = f"Static analysis detected {ref.removeprefix('static.pattern.')}."
         elif ref.startswith("mcp."):
             summary = "MSSQL MCP tool evidence gathered by bounded AI orchestration."
+        elif ref.startswith("platform."):
+            summary = "Platform context tool evidence gathered by bounded AI orchestration."
         elif ref.startswith("metadata."):
             summary = "MSSQL metadata evidence."
         catalog.append({"id": ref, "type": "DETERMINISTIC_EVIDENCE", "summary": summary})

@@ -48,7 +48,7 @@ P24 migration guide 품질을 검증할 synthetic simple/medium/complex fixture 
 
 ## 구현 범위
 
-- Synthetic guide fixture 는 section taxonomy, dependency inventory, DML matrix, call flow, phase/risk metrics, appendix, evidence refs 를 포함한다.
+- Synthetic guide fixture 는 section taxonomy, Confirmed/Needs verification dependency inventory, table-level DML matrix, call flow, phase/risk metrics, manual metadata extraction appendix, evidence refs 를 포함한다.
 - Guide expected output 은 raw SP text 없이 sanitized facts 와 review markers 만 사용한다.
 - Unsupported dependency/table/function/cross-DB claims 는 모두 `REVIEW_REQUIRED` 기대값을 둔다.
 - Fixture 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 품질 확장을 검증하며 새 persisted artifact type 을 요구하지 않는다.

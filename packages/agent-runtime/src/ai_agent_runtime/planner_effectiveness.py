@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-VALID_TOOL_FACT_PREFIXES = ("mcp.", "metadata.profile.")
+VALID_TOOL_FACT_PREFIXES = ("mcp.", "metadata.profile.", "platform.")
 _SEMANTIC_CLAIM_FIELDS = (
     "businessRules",
     "modernizationPoints",
@@ -13,7 +13,11 @@ _SEMANTIC_CLAIM_FIELDS = (
     "migrationGuideInsights",
 )
 _METADATA_CLAIM_FIELDS = ("objectInsights", "dtoReadiness", "reviewMarkers")
-_PLANNING_STAGES = {"ai_tool_planning", "ai_metadata_tool_planning"}
+_PLANNING_STAGES = {
+    "ai_tool_planning",
+    "ai_metadata_tool_planning",
+    "platform_tool_planning",
+}
 
 
 def attach_planner_metrics_to_ai_tool_evidence(
@@ -91,7 +95,8 @@ def build_planner_metrics(
         sum(
             1
             for component in components
-            if str(component.get("stage") or "") == "ai_tool_execution"
+            if str(component.get("stage") or "")
+            in {"ai_tool_execution", "platform_tool_execution"}
             and str(component.get("cacheStatus") or "").upper() == "HIT"
         ),
     )
@@ -100,7 +105,8 @@ def build_planner_metrics(
         sum(
             1
             for component in components
-            if str(component.get("stage") or "") == "ai_tool_execution"
+            if str(component.get("stage") or "")
+            in {"ai_tool_execution", "platform_tool_execution"}
             and str(component.get("cacheStatus") or "").upper() == "MISS"
         ),
     )
@@ -242,7 +248,8 @@ def _failed_tool_call_count(
     review_required_executions = sum(
         1
         for component in component_invocations
-        if str(component.get("stage") or "") == "ai_tool_execution"
+        if str(component.get("stage") or "")
+        in {"ai_tool_execution", "platform_tool_execution"}
         and str(component.get("status") or "") == "REVIEW_REQUIRED"
     )
     return max(review_required_executions - blocked_count, 0)

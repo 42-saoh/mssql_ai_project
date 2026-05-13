@@ -171,6 +171,9 @@ def test_semantic_output_schema_is_strict_for_responses_api() -> None:
         "evidenceRefs",
     ]
     assert business_rule_schema["properties"]["evidenceRefs"]["minItems"] == 1
+    guide_schema = schema["properties"]["migrationGuideInsights"]["items"]
+    assert guide_schema["properties"]["whatToExtractNext"]["type"] == ["string", "null"]
+    assert "whatToExtractNext" not in guide_schema["required"]
 
 
 def test_semantic_output_schema_can_constrain_fact_id_evidence_refs() -> None:

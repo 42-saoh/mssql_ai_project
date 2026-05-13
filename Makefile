@@ -28,8 +28,9 @@ PYTHON_LOCK_FILE ?= requirements/lock/py314-dev.txt
 PYTHON_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_python_locked.sh
 WEB_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_web_workspace.sh
 ALLOW_UNLOCKED_PNPM_INSTALL ?= $(if $(ALLOW_UNLOCKED_PNPM_INSTALL_FROM_ENV_FILE),$(ALLOW_UNLOCKED_PNPM_INSTALL_FROM_ENV_FILE),0)
+FIXTURE_TEST_FLAGS = P15_HARD_LIVE_GATE=0 P21_LIVE_PORTAL_GATE=0 P27_HARD_LIVE_GATE=0 P32_LIVE_CONFIDENCE_GATE=0 P35_KNOWLEDGE_LIVE_GATE=0 AUTH_RBAC_LIVE_GATE=0 LLM_LIVE_GATE=0 LLM_ENABLE_REMOTE=0 LLM_ALLOW_SP_TEXT=0 MSSQL_ENABLE_LIVE_METADATA=0
 
-.PHONY: setup fmt lint test check run-api run-mcp run-web eval test-build test-web-smoke docker-project-name test-shell test-web-shell test-down test-reset dev-ports
+.PHONY: setup fmt lint test test-fixture test-core test-quality test-web test-live-confidence check run-api run-mcp run-web eval test-build test-web-smoke docker-project-name test-shell test-web-shell test-down test-reset dev-ports
 
 COMPOSE_ENV_FILE ?= $(if $(wildcard $(ENV_FILE)),--env-file "$(ENV_FILE)",)
 LOAD_ENV = set -a; if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; set +a
@@ -54,7 +55,23 @@ dev-ports:
 test:
 	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" run --rm python-test sh -lc "env PYTHON=python PYTHON_LOCK_FILE=$(PYTHON_LOCK_FILE) sh scripts/install_python_locked.sh && python $(PYTEST_SELECTION_RUNNER) $(PYTEST_ARGS)"
 
-check: fmt lint test
+test-fixture:
+	$(DOCKER_TEST_ENV) $(FIXTURE_TEST_FLAGS) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" run --rm python-test sh -lc "env $(FIXTURE_TEST_FLAGS) PYTHON=python PYTHON_LOCK_FILE=$(PYTHON_LOCK_FILE) sh scripts/install_python_locked.sh && env $(FIXTURE_TEST_FLAGS) python $(PYTEST_SELECTION_RUNNER) $(PYTEST_ARGS)"
+
+test-core:
+	$(MAKE) test-fixture PYTEST_ARGS="@core"
+
+test-quality:
+	$(MAKE) test-fixture PYTEST_ARGS="@quality"
+
+test-web:
+	$(MAKE) test-fixture PYTEST_ARGS="@web"
+	$(DOCKER_TEST_ENV) $(FIXTURE_TEST_FLAGS) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" run --rm web-test sh -lc "env $(FIXTURE_TEST_FLAGS) PNPM=pnpm ALLOW_UNLOCKED_PNPM_INSTALL=$(ALLOW_UNLOCKED_PNPM_INSTALL) sh scripts/install_web_workspace.sh && env $(FIXTURE_TEST_FLAGS) pnpm --dir apps/web test"
+
+test-live-confidence:
+	$(MAKE) test PYTEST_ARGS="@live-confidence"
+
+check: fmt lint test-core test-quality
 
 run-api:
 	@$(LOAD_ENV); PYTHONPATH="$(LOCAL_PYTHONPATH)$${PYTHONPATH:+:$$PYTHONPATH}" $(UVICORN) api_app.main:app --app-dir apps/api --reload --port $(APP_PORT)
@@ -66,7 +83,7 @@ run-web:
 	@$(LOAD_ENV); cd apps/web && PORT=$(WEB_PORT) $(PNPM) exec next dev --port $(WEB_PORT)
 
 eval:
-	$(MAKE) test PYTEST_ARGS="tests/contract tests/e2e tests/eval"
+	$(MAKE) test-quality
 
 test-build:
 	$(DOCKER_TEST_ENV) $(DOCKER_COMPOSE) $(COMPOSE_ENV_FILE) -f "$(TEST_COMPOSE_FILE)" build python-test web-test

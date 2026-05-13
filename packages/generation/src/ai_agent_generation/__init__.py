@@ -18,6 +18,7 @@ from ai_agent_generation.migration_guide import (
     P24_REQUIRED_SECTION_IDS,
     evaluate_p24_migration_guide_quality,
 )
+from ai_agent_generation.migration_guide_builder import build_migration_guide_payload
 from ai_agent_generation.models import (
     DraftFile,
     EvidenceRef,
@@ -52,6 +53,7 @@ __all__ = [
     "GenerationPolicyError",
     "expand_requested_output_type",
     "evaluate_p24_migration_guide_quality",
+    "build_migration_guide_payload",
     "load_generation_assets",
     "load_generation_policy",
     "load_template_registry",

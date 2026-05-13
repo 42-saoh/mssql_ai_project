@@ -16,6 +16,7 @@ P24_REQUIRED_SECTION_IDS = (
     "complexity_risk_metrics",
     "migration_strategy",
     "appendix_mappings",
+    "metadata_extraction_appendix",
     "evidence_assumptions_review",
 )
 
@@ -29,6 +30,7 @@ P24_SECTION_TITLES = {
     "complexity_risk_metrics": "Complexity and risk metrics",
     "migration_strategy": "Migration strategy and Java/MyBatis draft readiness",
     "appendix_mappings": "Parameter and code mapping appendix",
+    "metadata_extraction_appendix": "Manual metadata extraction appendix",
     "evidence_assumptions_review": "Evidence refs, assumptions, and REVIEW_REQUIRED markers",
 }
 
@@ -97,6 +99,8 @@ def render_p24_migration_guide_sections(context: GenerationContext) -> list[str]
             _append_migration_strategy(lines, context)
         elif section_id == "appendix_mappings":
             _append_appendix_mappings(lines, guide)
+        elif section_id == "metadata_extraction_appendix":
+            _append_metadata_extraction_appendix(lines, guide)
         elif section_id == "evidence_assumptions_review":
             _append_evidence_and_review(lines, context, guide)
         lines.append("")
@@ -254,33 +258,99 @@ def _append_dependency_inventory(lines: list[str], guide: Mapping[str, Any]) -> 
     if not inventory:
         lines.append("- REVIEW_REQUIRED: dependency inventory unavailable.")
         return
+    confirmed = _sequence(guide.get("confirmed_dependency_inventory")) or [
+        item
+        for item in inventory
+        if isinstance(item, Mapping)
+        and str(item.get("status", "Confirmed")).lower()
+        not in {"needs verification", "review_required"}
+    ]
+    needs_verification = _sequence(guide.get("needs_verification_dependency_inventory")) or [
+        item
+        for item in inventory
+        if isinstance(item, Mapping)
+        and str(item.get("status", "")).lower() in {"needs verification", "review_required"}
+    ]
     lines.extend(
         [
-            "| kind | object | operations | keyColumns | status | evidenceRefs | summary |",
-            "|---|---|---|---|---|---|---|",
+            "### Confirmed",
+            "| Type | Name | How referenced | Evidence | Notes |",
+            "|---|---|---|---|---|",
         ]
     )
-    for item in inventory:
+    if not confirmed:
+        lines.append(
+            "| REVIEW_REQUIRED | REVIEW_REQUIRED | REVIEW_REQUIRED | REVIEW_REQUIRED | "
+            "No confirmed dependency evidence. |"
+        )
+    for item in confirmed:
         if not isinstance(item, Mapping):
             continue
         lines.append(
             "| "
             f"{item.get('object_kind', 'REVIEW_REQUIRED')} | "
             f"`{item.get('object_ref', 'REVIEW_REQUIRED')}` | "
-            f"{_refs_text(_sequence(item.get('operations')))} | "
-            f"{_refs_text(_sequence(item.get('key_columns')))} | "
-            f"{item.get('status', 'REVIEW_REQUIRED')} | "
+            f"{item.get('how_referenced') or _refs_text(_sequence(item.get('operations')))} | "
             f"{_refs_text(_evidence_refs(item))} | "
             f"{item.get('join_or_where_summary', '')} "
             f"{item.get('value_or_state_patterns', '')} |"
+        )
+    lines.extend(
+        [
+            "",
+            "### Needs verification",
+            "| Type | Name/Candidate | Why uncertain | What to extract next | Notes |",
+            "|---|---|---|---|---|",
+        ]
+    )
+    if not needs_verification:
+        lines.append("| none | none | none | none | No review-required dependency candidates. |")
+    for item in needs_verification:
+        if not isinstance(item, Mapping):
+            continue
+        why_uncertain = (
+            item.get("why_uncertain") or item.get("join_or_where_summary") or "REVIEW_REQUIRED"
+        )
+        lines.append(
+            "| "
+            f"{item.get('object_kind', 'REVIEW_REQUIRED')} | "
+            f"`{item.get('object_ref', 'REVIEW_REQUIRED')}` | "
+            f"{why_uncertain} | "
+            f"{item.get('what_to_extract_next') or 'REVIEW_REQUIRED'} | "
+            f"evidenceRefs={_refs_text(_evidence_refs(item))} |"
         )
 
 
 def _append_dml_matrix(lines: list[str], guide: Mapping[str, Any]) -> None:
     matrix = _sequence(guide.get("dml_matrix"))
-    if not matrix:
+    table_matrix = _sequence(guide.get("table_dml_matrix"))
+    if not matrix and not table_matrix:
         lines.append("- REVIEW_REQUIRED: DML matrix unavailable.")
         return
+    if table_matrix:
+        lines.extend(
+            [
+                "| Table | SELECT | INSERT | UPDATE | DELETE | MERGE | "
+                "Keys/Join/Where summary | Important columns/patterns | Evidence |",
+                "|---|---|---|---|---|---|---|---|---|",
+            ]
+        )
+        for item in table_matrix:
+            if not isinstance(item, Mapping):
+                continue
+            lines.append(
+                "| "
+                f"`{item.get('target_ref', 'REVIEW_REQUIRED')}` | "
+                f"{item.get('select', '')} | "
+                f"{item.get('insert', '')} | "
+                f"{item.get('update', '')} | "
+                f"{item.get('delete', '')} | "
+                f"{item.get('merge', '')} | "
+                f"{item.get('keys_join_where_summary', 'REVIEW_REQUIRED')} | "
+                f"{item.get('important_columns_or_patterns', 'REVIEW_REQUIRED')} | "
+                f"{_refs_text(_evidence_refs(item))} |"
+            )
+        lines.append("")
     lines.extend(
         [
             "| operation | target | phase | status | evidenceRefs | impact |",
@@ -302,7 +372,13 @@ def _append_dml_matrix(lines: list[str], guide: Mapping[str, Any]) -> None:
 
 
 def _append_call_flow(lines: list[str], guide: Mapping[str, Any]) -> None:
-    branches = _sequence(_mapping(guide.get("call_flow")).get("branches"))
+    call_flow = _mapping(guide.get("call_flow"))
+    inputs = _sequence(call_flow.get("inputs"))
+    if inputs:
+        lines.append("- Inputs:")
+        for item in inputs:
+            lines.append(f"  - {item}")
+    branches = _sequence(call_flow.get("branches"))
     if not branches:
         lines.append("- REVIEW_REQUIRED: branch-level call flow unavailable.")
         return
@@ -325,6 +401,13 @@ def _append_call_flow(lines: list[str], guide: Mapping[str, Any]) -> None:
                 f"dependency={action.get('dependency_ref', 'REVIEW_REQUIRED')} "
                 f"evidenceRefs={_refs_text(_evidence_refs(action))}"
             )
+    results = _sequence(call_flow.get("results"))
+    if results:
+        lines.append("- Results / Output:")
+        for item in results:
+            lines.append(f"  - {item}")
+    if call_flow.get("error_handling"):
+        lines.append(f"- Error handling: {call_flow.get('error_handling')}")
 
 
 def _append_critical_phase(lines: list[str], guide: Mapping[str, Any]) -> None:
@@ -350,6 +433,25 @@ def _append_complexity_risk(lines: list[str], guide: Mapping[str, Any]) -> None:
             f"- dmlOperationCount: `{metrics.get('dml_operation_count', 'REVIEW_REQUIRED')}`",
         ]
     )
+    complexity_metrics = _sequence(metrics.get("complexity_metrics"))
+    if complexity_metrics:
+        lines.extend(
+            [
+                "| Metric | Count | Evidence/Rule | Notes | Evidence |",
+                "|---|---:|---|---|---|",
+            ]
+        )
+        for item in complexity_metrics:
+            if not isinstance(item, Mapping):
+                continue
+            lines.append(
+                "| "
+                f"{item.get('metric', 'REVIEW_REQUIRED')} | "
+                f"{item.get('count', 'REVIEW_REQUIRED')} | "
+                f"{item.get('evidence_rule', item.get('evidenceRule', 'REVIEW_REQUIRED'))} | "
+                f"{item.get('notes', '')} | "
+                f"{_refs_text(_evidence_refs(item))} |"
+            )
     for risk in _sequence(metrics.get("risk_flags")):
         if not isinstance(risk, Mapping):
             continue
@@ -408,7 +510,8 @@ def _append_llm_migration_strategy_insights(
             f"{item.get('section', 'REVIEW_REQUIRED')} "
             f"status={item.get('status', 'REVIEW_REQUIRED')} "
             f"evidenceRefs={_refs_text(_evidence_refs(item))} "
-            f"summary={item.get('summary', '')}"
+            f"summary={item.get('summary', '')} "
+            f"whatToExtractNext={item.get('whatToExtractNext', '')}"
         )
 
 
@@ -441,6 +544,32 @@ def _append_appendix_mappings(lines: list[str], guide: Mapping[str, Any]) -> Non
             )
     else:
         lines.append("  - REVIEW_REQUIRED: no result fields supplied.")
+
+
+def _append_metadata_extraction_appendix(lines: list[str], guide: Mapping[str, Any]) -> None:
+    appendix = _mapping(guide.get("metadata_extraction_appendix"))
+    if not appendix:
+        lines.append("- REVIEW_REQUIRED: manual metadata extraction appendix unavailable.")
+        return
+    lines.append(f"- policy: {appendix.get('policy', 'metadata-only manual reviewer aid')}")
+    for query in _sequence(appendix.get("queries")):
+        if not isinstance(query, Mapping):
+            continue
+        lines.extend(
+            [
+                f"### {query.get('id', 'metadata_query')}",
+                f"- title: {query.get('title', 'Metadata query')}",
+                "```sql",
+                str(query.get("sql", "-- REVIEW_REQUIRED")),
+                "```",
+                f"- resultPasteTemplate: {query.get('result_template', 'REVIEW_REQUIRED')}",
+            ]
+        )
+    templates = _sequence(appendix.get("paste_templates"))
+    if templates:
+        lines.append("- pasteTemplates:")
+        for template in templates:
+            lines.append(f"  - {template}")
 
 
 def _append_evidence_and_review(
@@ -604,10 +733,13 @@ def _iter_evidence_claims(scenario: Mapping[str, Any]) -> Sequence[Mapping[str, 
         items.extend(_mapping_items(section.get("claims")))
     items.extend(_mapping_items(scenario.get("dependency_inventory")))
     items.extend(_mapping_items(scenario.get("dml_matrix")))
+    items.extend(_mapping_items(scenario.get("table_dml_matrix")))
     for branch in _mapping_items(_mapping(scenario.get("call_flow")).get("branches")):
         items.append(branch)
         items.extend(_mapping_items(branch.get("actions")))
-    items.extend(_mapping_items(_mapping(scenario.get("phase_risk_metrics")).get("risk_flags")))
+    phase_metrics = _mapping(scenario.get("phase_risk_metrics"))
+    items.extend(_mapping_items(phase_metrics.get("risk_flags")))
+    items.extend(_mapping_items(phase_metrics.get("complexity_metrics")))
     appendix = _mapping(scenario.get("appendix_mappings"))
     items.extend(_mapping_items(appendix.get("parameters")))
     items.extend(_mapping_items(appendix.get("result_fields")))
@@ -649,6 +781,7 @@ def _identity_tokens(item: Mapping[str, Any]) -> list[str]:
         "fact_type",
         "claim_code",
         "obligation",
+        "metric",
     ):
         value = item.get(key)
         if value:

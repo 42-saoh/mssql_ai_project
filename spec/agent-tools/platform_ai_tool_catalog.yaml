@@ -1,0 +1,113 @@
+version: 0.1.0
+service: platformAgentTools
+readOnly: true
+internalOnly: true
+response:
+  success:
+    required: [ok, toolName, collectedAt, evidenceRefs, data]
+    properties:
+      ok: { type: boolean }
+      toolName: { type: string }
+      collectedAt: { type: string, format: date-time }
+      evidenceRefs:
+        type: array
+        items:
+          type: object
+          required: [id, source, path]
+          properties:
+            id: { type: string }
+            source: { type: string }
+            path: { type: string }
+            objectName: { type: string }
+      data: { type: object }
+errorCodes:
+  - PLATFORM_TOOL_UNKNOWN
+  - PLATFORM_TOOL_NOT_ACTIVE_READ_ONLY
+  - PLATFORM_TOOL_INVALID_ARGUMENTS
+  - PLATFORM_TOOL_FORBIDDEN_ARGUMENT
+  - PLATFORM_TOOL_FREEFORM_SQL_BLOCKED
+  - PLATFORM_TOOL_SCOPE_SWITCH_BLOCKED
+  - PLATFORM_TOOL_RESOURCE_NOT_FOUND
+  - PLATFORM_TOOL_EXECUTION_FAILED
+tools:
+  - name: platform.search_knowledge_facts
+    active: true
+    readOnly: true
+    internalOnly: true
+    description: Search sanitized knowledge facts for the current target scope.
+    input:
+      type: object
+      properties:
+        objectRef: { type: string }
+        factType: { type: string }
+        status: { type: string }
+        assetKind: { type: string }
+        targetName: { type: string }
+        lifecycleStatus: { type: string }
+        limit: { type: integer, default: 20, maximum: 50 }
+
+  - name: platform.list_knowledge_assets
+    active: true
+    readOnly: true
+    internalOnly: true
+    description: List sanitized knowledge asset summaries for the current target scope.
+    input:
+      type: object
+      properties:
+        assetKind: { type: string }
+        lifecycleStatus: { type: string }
+        limit: { type: integer, default: 20, maximum: 50 }
+
+  - name: platform.get_knowledge_version_graph
+    active: true
+    readOnly: true
+    internalOnly: true
+    description: Return sanitized facts and edges for a current-scope knowledge asset version.
+    input:
+      type: object
+      required: [assetId, versionId]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+
+  - name: platform.list_job_artifacts
+    active: true
+    readOnly: true
+    internalOnly: true
+    description: List current-job artifact summaries without artifact content.
+    input:
+      type: object
+      properties:
+        jobId: { type: string }
+        limit: { type: integer, default: 20, maximum: 20 }
+
+  - name: platform.get_latest_validation_report
+    active: true
+    readOnly: true
+    internalOnly: true
+    description: Return the latest validation report for a current-job artifact.
+    input:
+      type: object
+      required: [artifactId]
+      properties:
+        artifactId: { type: string }
+
+  - name: platform.list_job_agent_runs
+    active: true
+    readOnly: true
+    internalOnly: true
+    description: List current-job sanitized agent run summaries.
+    input:
+      type: object
+      properties:
+        jobId: { type: string }
+        limit: { type: integer, default: 20, maximum: 20 }
+
+  - name: platform.list_registry_versions
+    active: true
+    readOnly: true
+    internalOnly: true
+    description: Return active prompt, template, policy, model, schema, generator, and profile registry bindings.
+    input:
+      type: object
+      properties: {}

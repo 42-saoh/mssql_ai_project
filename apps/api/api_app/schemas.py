@@ -49,6 +49,10 @@ class SPAnalysisOptions(ApiModel):
         default=True,
         alias="useAiToolOrchestration",
     )
+    use_platform_tool_orchestration: bool = Field(
+        default=True,
+        alias="usePlatformToolOrchestration",
+    )
     persist_knowledge: bool = Field(default=True, alias="persistKnowledge")
 
 

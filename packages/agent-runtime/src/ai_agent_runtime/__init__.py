@@ -7,6 +7,8 @@ from ai_agent_runtime.gateway import (
 )
 from ai_agent_runtime.metadata_analysis import build_metadata_analysis_run
 from ai_agent_runtime.models import (
+    PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
+    PLATFORM_TOOL_PLANNER_PROMPT_VERSION,
     AgentRunPayload,
     AiToolPlanningOutput,
     AiToolRequest,
@@ -45,6 +47,8 @@ __all__ = [
     "ModelInvocationRecord",
     "ModelProfile",
     "OpenAIModelGateway",
+    "PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION",
+    "PLATFORM_TOOL_PLANNER_PROMPT_VERSION",
     "RenderedPrompt",
     "SemanticAnalysisTask",
     "VALID_TOOL_FACT_PREFIXES",

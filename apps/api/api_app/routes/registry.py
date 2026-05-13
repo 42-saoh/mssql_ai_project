@@ -3,8 +3,14 @@ from __future__ import annotations
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import (
     FAST_TEST_MODEL_PROFILE_ID,
+    METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION,
+    METADATA_ANALYSIS_PROMPT_VERSION,
     OUTPUT_SCHEMA_VERSION,
+    PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
+    PLATFORM_TOOL_PLANNER_PROMPT_VERSION,
     PROMPT_VERSION,
+    TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
+    TOOL_PLANNER_PROMPT_VERSION,
 )
 from api_app.schemas import RegistryVersion
 from fastapi import APIRouter
@@ -64,6 +70,36 @@ def active_registry_bindings() -> tuple[RegistryVersion, ...]:
         RegistryVersion(
             registryType="SCHEMA",
             version=OUTPUT_SCHEMA_VERSION,
+            active=True,
+        ),
+        RegistryVersion(
+            registryType="PROMPT",
+            version=TOOL_PLANNER_PROMPT_VERSION,
+            active=True,
+        ),
+        RegistryVersion(
+            registryType="SCHEMA",
+            version=TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
+            active=True,
+        ),
+        RegistryVersion(
+            registryType="PROMPT",
+            version=PLATFORM_TOOL_PLANNER_PROMPT_VERSION,
+            active=True,
+        ),
+        RegistryVersion(
+            registryType="SCHEMA",
+            version=PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
+            active=True,
+        ),
+        RegistryVersion(
+            registryType="PROMPT",
+            version=METADATA_ANALYSIS_PROMPT_VERSION,
+            active=True,
+        ),
+        RegistryVersion(
+            registryType="SCHEMA",
+            version=METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION,
             active=True,
         ),
     )

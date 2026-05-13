@@ -5,12 +5,13 @@ import re
 from collections.abc import Iterable
 from dataclasses import replace as dataclass_replace
 
-from ai_agent_analysis import analyze_stored_procedure
+from ai_agent_analysis import analyze_stored_procedure, migration_guide_static_metrics
 from ai_agent_domain import ArtifactType, JobStatus, RequestedOutputType, WorkflowStepType
 from ai_agent_generation import (
     GenerationContext,
     RenderedArtifact,
     RenderedBundle,
+    build_migration_guide_payload,
     render_artifact,
     render_java_mybatis_sp_wrapper,
 )
@@ -26,9 +27,9 @@ from ai_agent_runtime import (
 )
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import (
-    AgentRunStatus,
     OUTPUT_SCHEMA_VERSION,
     PROMPT_VERSION,
+    AgentRunStatus,
     stable_json_hash,
     text_hash,
 )
@@ -44,10 +45,11 @@ from ai_agent_validation import (
     validate_publish_gate,
 )
 
-from api_app.backpressure import workflow_admission
 from api_app.ai_tool_orchestrator import AiToolOrchestrator
+from api_app.backpressure import workflow_admission
 from api_app.knowledge_service import persist_sp_workflow_knowledge
 from api_app.metadata_gateway import McpMetadataGateway, MetadataCollectionResult, MetadataGateway
+from api_app.platform_tool_orchestrator import PlatformToolOrchestrator
 from api_app.repositories import (
     AgentRunRecord,
     ApprovalRecordData,
@@ -92,6 +94,10 @@ class WorkflowService:
         self.metadata_gateway = metadata_gateway or McpMetadataGateway()
         self.model_gateway = model_gateway or build_model_gateway_from_env()
         self.ai_tool_orchestrator = AiToolOrchestrator(model_gateway=self.model_gateway)
+        self.platform_tool_orchestrator = PlatformToolOrchestrator(
+            model_gateway=self.model_gateway,
+            repository=self.repository,
+        )
 
     def submit_sp_analysis(
         self,
@@ -177,17 +183,29 @@ class WorkflowService:
             static_analysis=static_analysis,
         )
         metadata = orchestration.metadata
+        platform_orchestration = self.platform_tool_orchestrator.run(
+            job_id=job_id,
+            request_record=request,
+            metadata=metadata,
+            static_analysis=static_analysis,
+        )
+        metadata = platform_orchestration.metadata
+        tool_component_invocations = (
+            *orchestration.component_invocations,
+            *platform_orchestration.component_invocations,
+        )
         agent_run = self._run_llm_semantic_analysis(
             job_id,
             request_record=request,
             metadata=metadata,
             static_analysis=static_analysis,
-            ai_tool_component_invocations=orchestration.component_invocations,
+            tool_component_invocations=tool_component_invocations,
         )
         metadata = metadata_with_planner_metrics(
             metadata,
             agent_run=agent_run,
-            component_invocations=orchestration.component_invocations,
+            ai_tool_component_invocations=orchestration.component_invocations,
+            platform_tool_component_invocations=platform_orchestration.component_invocations,
         )
         persist_sp_workflow_knowledge(
             repository=self.repository,
@@ -207,7 +225,13 @@ class WorkflowService:
             status=JobStatus.GENERATING,
             current_step=WorkflowStepType.GENERATE,
         )
-        artifacts = self._generate_artifacts(job_id, request, metadata, agent_run)
+        artifacts = self._generate_artifacts(
+            job_id,
+            request,
+            metadata,
+            agent_run,
+            static_analysis=static_analysis,
+        )
 
         self.repository.transition_job(
             job_id,
@@ -345,8 +369,14 @@ class WorkflowService:
         request: WorkRequestRecord,
         metadata: MetadataCollectionResult,
         agent_run: AgentRunRecord | None = None,
+        static_analysis: dict[str, object] | None = None,
     ) -> list[ArtifactRecord]:
-        context = generation_context_from_request(request, metadata, agent_run)
+        context = generation_context_from_request(
+            request,
+            metadata,
+            agent_run,
+            static_analysis=static_analysis,
+        )
         artifacts: list[ArtifactRecord] = []
         for output in request.outputs:
             if output == RequestedOutputType.SP_ANALYSIS_DOCUMENT.value:
@@ -396,7 +426,7 @@ class WorkflowService:
         request_record: WorkRequestRecord,
         metadata: MetadataCollectionResult,
         static_analysis: dict[str, object],
-        ai_tool_component_invocations: tuple[dict[str, object], ...] = (),
+        tool_component_invocations: tuple[dict[str, object], ...] = (),
     ) -> AgentRunRecord | None:
         if not bool(request_record.options.get("useLlmAnalysis", False)):
             return None
@@ -434,13 +464,16 @@ class WorkflowService:
                 error_code=exc.code,
             )
             raise
-        if ai_tool_component_invocations or (
+        if tool_component_invocations or (
             metadata.ai_tool_evidence
             and metadata.ai_tool_evidence.get("reviewMarkers")
+        ) or (
+            metadata.platform_tool_evidence
+            and metadata.platform_tool_evidence.get("reviewMarkers")
         ):
             run_payload = _append_ai_tool_components(
                 run_payload,
-                ai_tool_component_invocations=ai_tool_component_invocations,
+                ai_tool_component_invocations=tool_component_invocations,
                 metadata=metadata,
             )
         return self.repository.save_agent_run(
@@ -644,6 +677,7 @@ def generation_context_from_request(
     request: WorkRequestRecord,
     metadata: MetadataCollectionResult | None = None,
     agent_run: AgentRunRecord | None = None,
+    static_analysis: dict[str, object] | None = None,
 ) -> GenerationContext:
     target = request.target
     schema = str(target["schema"])
@@ -666,6 +700,21 @@ def generation_context_from_request(
     ]
     input_params = generation_parameters(metadata)
     result_shape = [str(column["name"]) for column in columns]
+    llm_analysis = agent_run.structured_output if agent_run else {}
+    metadata_payload = sanitized_metadata_payload(metadata.as_dict()) if metadata else {}
+    dependency_evidence = dependency_evidence_for_generation(metadata)
+    ai_tool_evidence = ai_tool_evidence_for_generation(metadata)
+    platform_tool_evidence = platform_tool_evidence_for_generation(metadata)
+    migration_guide = build_migration_guide_payload(
+        target_ref=sp_name,
+        db_profile_id=request.db_profile_id,
+        metadata=metadata_payload,
+        static_analysis=static_analysis or {},
+        llm_analysis=llm_analysis,
+        input_params=input_params,
+        result_shape=result_shape,
+        sample_id=request.request_id,
+    )
     return GenerationContext.from_mapping(
         {
             "sampleId": request.request_id,
@@ -684,10 +733,12 @@ def generation_context_from_request(
                 "resultShape": result_shape,
                 "pkColumns": [],
                 "authorId": "AI",
-                "llmAnalysis": agent_run.structured_output if agent_run else None,
+                "llmAnalysis": llm_analysis,
                 "llmTrace": llm_trace_summary(agent_run),
-                "dependencyEvidence": dependency_evidence_for_generation(metadata),
-                "aiToolEvidence": ai_tool_evidence_for_generation(metadata),
+                "dependencyEvidence": dependency_evidence,
+                "aiToolEvidence": ai_tool_evidence,
+                "platformToolEvidence": platform_tool_evidence,
+                "migrationGuide": migration_guide,
             },
             "evidence": {
                 "sources": generation_evidence_sources(metadata, sp_name, agent_run),
@@ -759,6 +810,9 @@ def sanitized_metadata_payload(payload: dict[str, object]) -> dict[str, object]:
     sanitized["aiToolEvidence"] = ai_tool_evidence_for_generation_payload(
         sanitized.get("aiToolEvidence")
     )
+    sanitized["platformToolEvidence"] = ai_tool_evidence_for_generation_payload(
+        sanitized.get("platformToolEvidence")
+    )
     return sanitized
 
 
@@ -766,17 +820,38 @@ def metadata_with_planner_metrics(
     metadata: MetadataCollectionResult,
     *,
     agent_run: AgentRunRecord | None,
-    component_invocations: tuple[dict[str, object], ...],
+    ai_tool_component_invocations: tuple[dict[str, object], ...],
+    platform_tool_component_invocations: tuple[dict[str, object], ...] = (),
 ) -> MetadataCollectionResult:
-    if not isinstance(metadata.ai_tool_evidence, dict):
-        return metadata
-    evidence = attach_planner_metrics_to_ai_tool_evidence(
-        metadata.ai_tool_evidence,
-        deterministic_facts=metadata.deterministic_facts,
-        component_invocations=component_invocations,
-        structured_output=agent_run.structured_output if agent_run else None,
+    updated = metadata
+    if isinstance(metadata.ai_tool_evidence, dict):
+        evidence = attach_planner_metrics_to_ai_tool_evidence(
+            metadata.ai_tool_evidence,
+            deterministic_facts=_deterministic_facts_with_prefix(metadata, ("mcp.",)),
+            component_invocations=ai_tool_component_invocations,
+            structured_output=agent_run.structured_output if agent_run else None,
+        )
+        updated = dataclass_replace(updated, ai_tool_evidence=evidence)
+    if isinstance(metadata.platform_tool_evidence, dict):
+        evidence = attach_planner_metrics_to_ai_tool_evidence(
+            metadata.platform_tool_evidence,
+            deterministic_facts=_deterministic_facts_with_prefix(metadata, ("platform.",)),
+            component_invocations=platform_tool_component_invocations,
+            structured_output=agent_run.structured_output if agent_run else None,
+        )
+        updated = dataclass_replace(updated, platform_tool_evidence=evidence)
+    return updated
+
+
+def _deterministic_facts_with_prefix(
+    metadata: MetadataCollectionResult,
+    prefixes: tuple[str, ...],
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        fact
+        for fact in metadata.deterministic_facts
+        if any(str(fact.get("id") or "").startswith(prefix) for prefix in prefixes)
     )
-    return dataclass_replace(metadata, ai_tool_evidence=evidence)
 
 
 def metadata_detail_lines(metadata: MetadataCollectionResult) -> list[str]:
@@ -905,6 +980,14 @@ def ai_tool_evidence_for_generation(
     return ai_tool_evidence_for_generation_payload(metadata.ai_tool_evidence)
 
 
+def platform_tool_evidence_for_generation(
+    metadata: MetadataCollectionResult | None,
+) -> dict[str, object]:
+    if metadata is None:
+        return {}
+    return ai_tool_evidence_for_generation_payload(metadata.platform_tool_evidence)
+
+
 def ai_tool_evidence_for_generation_payload(value: object) -> dict[str, object]:
     if not isinstance(value, dict):
         return {}
@@ -1025,28 +1108,28 @@ def _append_ai_tool_review_markers(
     markers = output.setdefault("reviewMarkers", [])
     if not isinstance(markers, list):
         return output
-    evidence = metadata.ai_tool_evidence or {}
-    for marker in evidence.get("reviewMarkers", []):
-        if not isinstance(marker, dict):
-            continue
-        marker_code = str(marker.get("code") or "")
-        if not marker_code:
-            continue
-        if any(
-            isinstance(existing, dict) and existing.get("code") == marker_code
-            for existing in markers
-        ):
-            continue
-        markers.append(
-            {
-                "code": marker_code,
-                "message": str(marker.get("message") or ""),
-                "status": "REVIEW_REQUIRED",
-                "evidenceRefs": [
-                    str(ref) for ref in marker.get("evidenceRefs", []) if str(ref)
-                ],
-            }
-        )
+    for evidence in _tool_evidence_blocks(metadata):
+        for marker in evidence.get("reviewMarkers", []):
+            if not isinstance(marker, dict):
+                continue
+            marker_code = str(marker.get("code") or "")
+            if not marker_code:
+                continue
+            if any(
+                isinstance(existing, dict) and existing.get("code") == marker_code
+                for existing in markers
+            ):
+                continue
+            markers.append(
+                {
+                    "code": marker_code,
+                    "message": str(marker.get("message") or ""),
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": [
+                        str(ref) for ref in marker.get("evidenceRefs", []) if str(ref)
+                    ],
+                }
+            )
     return output
 
 
@@ -1060,11 +1143,22 @@ def _summary_with_ai_tool_markers(
     summary: str,
     metadata: MetadataCollectionResult,
 ) -> str:
-    evidence = metadata.ai_tool_evidence or {}
-    marker_count = len(evidence.get("reviewMarkers", []))
+    marker_count = sum(
+        len(evidence.get("reviewMarkers", []))
+        for evidence in _tool_evidence_blocks(metadata)
+    )
     if not marker_count:
         return summary
-    return f"{summary}, {marker_count} AI tool orchestration review markers"
+    return f"{summary}, {marker_count} tool orchestration review markers"
+
+
+def _tool_evidence_blocks(metadata: MetadataCollectionResult) -> list[dict[str, object]]:
+    blocks = []
+    if isinstance(metadata.ai_tool_evidence, dict):
+        blocks.append(metadata.ai_tool_evidence)
+    if isinstance(metadata.platform_tool_evidence, dict):
+        blocks.append(metadata.platform_tool_evidence)
+    return blocks
 
 
 def procedure_definition_text(metadata: MetadataCollectionResult) -> str | None:
@@ -1089,12 +1183,16 @@ def static_analysis_payload(
         snapshot_id=snapshot_id,
         registry_version_refs=[
             {"registry_type": "PROMPT", "version": "prompt:sp_analysis@0.1.0"},
-            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.3.0"},
+            {"registry_type": "PROMPT", "version": PROMPT_VERSION},
             {"registry_type": "MODEL", "version": "model:openai_sp_semantic_analysis@0.1.0"},
         ],
     )
     payload = result.model_dump(mode="json")
     payload.pop("source_name", None)
+    payload["migrationGuideStaticMetrics"] = migration_guide_static_metrics(
+        definition_text,
+        source_name=source_name,
+    )
     return payload
 
 

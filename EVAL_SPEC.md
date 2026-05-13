@@ -178,7 +178,13 @@
 - `useAiToolOrchestration=true` 가 기본값이며 `useLlmAnalysis=false` 이면 자동 비활성화됨
 - metadata tool planning 은 strict `schema:mssql_metadata_tool_plan@0.1.0` 출력만 허용하고,
   실제 MCP 실행은 workflow deterministic policy gate 와 내부 registry 로만 수행함
-- structured output 은 `schema:llm_semantic_analysis@0.3.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
+- `usePlatformToolOrchestration=true` 가 기본값이며 `useLlmAnalysis=false` 이면 자동 비활성화됨
+- platform tool planning 은 strict `schema:platform_tool_plan@0.1.0` 출력만 허용하고,
+  실제 실행은 current job/db profile/target scope gate 와 내부 platform registry 로만 수행함
+- platform tool 결과는 sanitized `platformToolEvidence` 와 `platform.<toolName>.<hash>` fact 로만
+  semantic prompt 에 전달되며 public invoke API, artifact full content, row data, DDL/DML,
+  approval/review write, export creation 을 만들지 않음
+- structured output 은 `schema:llm_semantic_analysis@0.4.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
 - P-GPT 등 remote provider drift 는 strict validation 을 먼저 시도한 뒤, schema/OpenAPI 를 넓히지 않고 extra field/alias/status/severity 만 결정론적으로 정규화한다. 저장되는 normalizer metadata 는 path/code 수준이며 raw provider response, prompt, SQL/SP text 는 저장하지 않는다.
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
@@ -214,6 +220,8 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - scoring runner 는 semantic recall, evidence discipline, overclaim control, storage safety 를 검증하며 raw prompt/SP/provider response text 를 저장하지 않는다
 - storage safety 는 adversarial raw SQL/provider-trace echo payload 를 실패로 판정하며, runtime 은 저장 전 sanitizer 와 `LLM_OUTPUT_STORAGE_SANITIZED` review marker 로 이를 차단한다
 - bounded AI tool orchestration 결과는 sanitized `aiToolEvidence` 와 `mcp.<toolName>.<hash>` deterministic fact id 로만 semantic prompt 에 전달한다
+- bounded platform tool orchestration 결과는 sanitized `platformToolEvidence` 와
+  `platform.<toolName>.<hash>` deterministic fact id 로만 semantic prompt 에 전달한다
 - raw prompt, raw SP definition, raw OpenAI response text, row data, secret 은 fixture trace/API/Web 산출물에 저장하지 않는다
 - optional live gate 는 confidence signal 이며 기본 계약 검증이나 production readiness 의 필수 조건이 아니다
 
@@ -248,7 +256,8 @@ response storage, and `production_ready: false`.
 
 필수 체크:
 - P24A 는 contract/prompt/task/manifest 자산을 고정하고, P24B 는 sanitized fixture-first guide quality expectation 을 추가하며, P24C 는 기존 artifact type renderer/evaluator 로 fixture 를 점수화한다
-- simple/medium/complex synthetic scenarios 가 required section taxonomy, dependency inventory, DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, evidence refs 를 포함한다
+- simple/medium/complex synthetic scenarios 가 required section taxonomy, Confirmed/Needs verification dependency inventory, table-level DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, manual metadata extraction appendix, evidence refs 를 포함한다
+- manual metadata extraction appendix 는 SSMS 수동 실행용 metadata-only query/result paste template 만 포함하며 row data 조회, procedure execution, DDL/DML, raw definition output 을 금지한다
 - P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 를 재사용하고 새 persisted artifact type, API/Web/DB schema 변경, live DB access 를 만들지 않는다
 - fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
 - fixture 와 expected report 는 raw prompt, raw SP definition, raw OpenAI response text, row data, secret, 사용자 제공 guide 본문, 실제 운영 SP 원문을 저장하지 않는다

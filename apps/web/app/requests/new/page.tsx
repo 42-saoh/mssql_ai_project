@@ -40,6 +40,8 @@ async function submitRequest(formData: FormData) {
         | "openai_fast_test",
       allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
       useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
+      usePlatformToolOrchestration:
+        formData.get("usePlatformToolOrchestration") === "on",
     },
   });
   redirect(`/jobs/${response.jobId}`);
@@ -55,6 +57,8 @@ function requestOptionsFromForm(formData: FormData) {
       | "openai_fast_test",
     allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
     useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
+    usePlatformToolOrchestration:
+      formData.get("usePlatformToolOrchestration") === "on",
   };
 }
 

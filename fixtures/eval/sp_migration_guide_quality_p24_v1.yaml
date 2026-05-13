@@ -1,5 +1,5 @@
 fixture_suite_id: sp_migration_guide_quality_p24_v1
-contract_ref: p24_sp_migration_guide_quality@0.1.0
+contract_ref: p24_sp_migration_guide_quality@0.2.0
 phase: P24
 status: authored_p24b
 production_ready: false
@@ -206,6 +206,16 @@ scenarios:
             evidence_refs:
               - ev_p24_simple_proc
               - ev_p24_simple_static_flow
+      - id: metadata_extraction_appendix
+        title: Manual metadata extraction appendix
+        evidence_refs:
+          - ev_p24_simple_proc
+        claims:
+          - id: claim_p24_simple_metadata_queries
+            status: REVIEW_REQUIRED
+            summary: Metadata-only SSMS query templates are included without raw definition output.
+            evidence_refs:
+              - ev_p24_simple_proc
       - id: evidence_assumptions_review
         title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
         evidence_refs:
@@ -249,6 +259,18 @@ scenarios:
         evidence_refs:
           - ev_p24_simple_shipment_table
         status: ACCEPTED
+    table_dml_matrix:
+      - target_ref: PPM.dbo.P24_Shipment
+        select: Y
+        insert: ""
+        update: ""
+        delete: ""
+        merge: ""
+        keys_join_where_summary: ShipmentId filter with optional archive visibility flag.
+        important_columns_or_patterns: StatusCode and LastStatusAt.
+        evidence_refs:
+          - ev_p24_simple_shipment_table
+        status: ACCEPTED
     call_flow:
       branches:
         - id: branch_p24_simple_validate_input
@@ -275,6 +297,19 @@ scenarios:
       complexity_score: 1
       branch_count: 2
       dml_operation_count: 1
+      complexity_metrics:
+        - metric: LOC
+          count: 24
+          evidence_rule: Non-empty sanitized source line count.
+          notes: ""
+          evidence_refs:
+            - ev_p24_simple_static_flow
+        - metric: DYNAMIC_SQL_SIGNAL
+          count: 0
+          evidence_rule: sp_executesql/EXEC dynamic scan.
+          notes: ""
+          evidence_refs:
+            - ev_p24_simple_static_flow
       risk_flags:
         - code: LOW_EVIDENCE_LABEL_MEANING
           status: REVIEW_REQUIRED
@@ -298,6 +333,36 @@ scenarios:
         - name: StatusLabel
           evidence_refs:
             - ev_p24_simple_status_table
+    metadata_extraction_appendix: &p24_metadata_extraction_appendix
+      policy: Metadata-only manual reviewer aid; do not execute procedures, select row data, apply DDL/DML, or paste raw definitions.
+      queries:
+        - id: definition_hash_length
+          title: SP definition hash/length
+          sql: SELECT HASHBYTES('SHA2_256', CONVERT(varbinary(max), sm.definition)) AS definition_sha256, DATALENGTH(sm.definition) AS definition_bytes FROM sys.sql_modules sm WHERE sm.object_id = OBJECT_ID(@FullName);
+          result_template: "| definition_sha256 | definition_bytes | status |"
+        - id: parameters
+          title: Procedure parameters
+          sql: SELECT p.parameter_id, p.name, TYPE_NAME(p.user_type_id) AS data_type, p.is_output FROM sys.parameters p WHERE p.object_id = OBJECT_ID(@FullName);
+          result_template: "| parameter_id | name | data_type | is_output | status |"
+        - id: static_dependencies
+          title: Static catalog dependencies
+          sql: SELECT referenced_database_name, referenced_schema_name, referenced_entity_name, is_caller_dependent, is_ambiguous FROM sys.sql_expression_dependencies WHERE referencing_id = OBJECT_ID(@FullName);
+          result_template: "| database | schema | entity | caller_dependent | ambiguous | status |"
+        - id: referenced_entities
+          title: Referenced entities DMV
+          sql: SELECT referenced_schema_name, referenced_entity_name, referenced_class_desc, is_selected, is_updated FROM sys.dm_sql_referenced_entities(@FullName, N'OBJECT');
+          result_template: "| schema | entity | class | selected | updated | status |"
+        - id: dynamic_sql_indicators
+          title: Dynamic SQL and external reference indicators
+          sql: SELECT CASE WHEN sm.definition LIKE '%sp_executesql%' THEN 1 ELSE 0 END AS has_sp_executesql, CASE WHEN sm.definition LIKE '%OPENQUERY%' THEN 1 ELSE 0 END AS has_openquery FROM sys.sql_modules sm WHERE sm.object_id = OBJECT_ID(@FullName);
+          result_template: "| has_sp_executesql | has_openquery | status | what_to_extract_next |"
+        - id: temp_table_review
+          title: Temp table/table variable review indicators
+          sql: SELECT CASE WHEN sm.definition LIKE '%CREATE TABLE #%' THEN 1 ELSE 0 END AS has_temp_table, CASE WHEN sm.definition LIKE '%DECLARE @% TABLE%' THEN 1 ELSE 0 END AS has_table_variable FROM sys.sql_modules sm WHERE sm.object_id = OBJECT_ID(@FullName);
+          result_template: "| has_temp_table | has_table_variable | status | what_to_extract_next |"
+      paste_templates:
+        - "| Type | Name | How referenced | Evidence | Notes |"
+        - "| Type | Name/Candidate | Why uncertain | What to extract next | Notes |"
     unsupported_claim_expectations:
       - obligation: low_evidence_business_rule_claims
         claim_type: business_rule
@@ -335,6 +400,7 @@ scenarios:
         complexity_risk_metrics: true
         migration_strategy: true
         appendix_mappings: true
+        metadata_extraction_appendix: true
         evidence_assumptions_review: true
       reviewRequiredFindings:
         - LOW_EVIDENCE_LABEL_MEANING
@@ -493,6 +559,16 @@ scenarios:
             summary: Decision code and reviewer parameters are mapped without row data.
             evidence_refs:
               - ev_p24_medium_proc
+      - id: metadata_extraction_appendix
+        title: Manual metadata extraction appendix
+        evidence_refs:
+          - ev_p24_medium_proc
+        claims:
+          - id: claim_p24_medium_metadata_queries
+            status: REVIEW_REQUIRED
+            summary: Metadata-only SSMS query templates are included without raw definition output.
+            evidence_refs:
+              - ev_p24_medium_proc
       - id: evidence_assumptions_review
         title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
         evidence_refs:
@@ -564,6 +640,40 @@ scenarios:
         evidence_refs:
           - ev_p24_medium_audit_table
         status: REVIEW_REQUIRED
+    table_dml_matrix:
+      - target_ref: PPM.dbo.P24_Shipment
+        select: ""
+        insert: ""
+        update: Y
+        delete: ""
+        merge: ""
+        keys_join_where_summary: ShipmentId update predicate.
+        important_columns_or_patterns: HoldState and ReleasedAt.
+        evidence_refs:
+          - ev_p24_medium_shipment_table
+        status: REVIEW_REQUIRED
+      - target_ref: PPM.dbo.P24_ShipmentHoldQueue
+        select: ""
+        insert: Y
+        update: ""
+        delete: ""
+        merge: ""
+        keys_join_where_summary: ShipmentId queue insert.
+        important_columns_or_patterns: Queue reason.
+        evidence_refs:
+          - ev_p24_medium_hold_table
+        status: REVIEW_REQUIRED
+      - target_ref: PPM.dbo.P24_ShipmentDecisionAudit
+        select: ""
+        insert: Y
+        update: ""
+        delete: ""
+        merge: ""
+        keys_join_where_summary: Decision audit insert.
+        important_columns_or_patterns: Decision code and reviewer attribution.
+        evidence_refs:
+          - ev_p24_medium_audit_table
+        status: REVIEW_REQUIRED
     call_flow:
       branches:
         - id: branch_p24_medium_release
@@ -600,6 +710,19 @@ scenarios:
       complexity_score: 3
       branch_count: 3
       dml_operation_count: 3
+      complexity_metrics:
+        - metric: LOC
+          count: 72
+          evidence_rule: Non-empty sanitized source line count.
+          notes: ""
+          evidence_refs:
+            - ev_p24_medium_static_flow
+        - metric: TRANSACTION_SIGNAL
+          count: 3
+          evidence_rule: BEGIN/COMMIT/ROLLBACK transaction scan.
+          notes: REVIEW_REQUIRED transaction boundary.
+          evidence_refs:
+            - ev_p24_medium_static_flow
       risk_flags:
         - code: TRANSACTIONAL_DML_REVIEW_REQUIRED
           status: REVIEW_REQUIRED
@@ -621,6 +744,7 @@ scenarios:
           evidence_refs:
             - ev_p24_medium_proc
       result_fields: []
+    metadata_extraction_appendix: *p24_metadata_extraction_appendix
     unsupported_claim_expectations:
       - obligation: low_evidence_business_rule_claims
         claim_type: business_rule
@@ -658,6 +782,7 @@ scenarios:
         complexity_risk_metrics: true
         migration_strategy: true
         appendix_mappings: true
+        metadata_extraction_appendix: true
         evidence_assumptions_review: true
       reviewRequiredFindings:
         - TRANSACTIONAL_DML_REVIEW_REQUIRED
@@ -828,6 +953,16 @@ scenarios:
             evidence_refs:
               - ev_p24_complex_proc
               - ev_p24_complex_cross_db
+      - id: metadata_extraction_appendix
+        title: Manual metadata extraction appendix
+        evidence_refs:
+          - ev_p24_complex_proc
+        claims:
+          - id: claim_p24_complex_metadata_queries
+            status: REVIEW_REQUIRED
+            summary: Metadata-only SSMS query templates are included without raw definition output.
+            evidence_refs:
+              - ev_p24_complex_proc
       - id: evidence_assumptions_review
         title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
         evidence_refs:
@@ -884,6 +1019,28 @@ scenarios:
         evidence_refs:
           - ev_p24_complex_dynamic_sql
         status: REVIEW_REQUIRED
+      - object_kind: temp_table
+        object_ref: "#P24ExtractWork"
+        operations:
+          - INSERT
+        key_columns:
+          - ExtractBatchId
+        join_or_where_summary: Temp table schema is only a static review candidate.
+        value_or_state_patterns: Temp table columns require reviewer confirmation.
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        status: REVIEW_REQUIRED
+      - object_kind: table_variable
+        object_ref: "@P24ExtractIds"
+        operations:
+          - INSERT
+        key_columns:
+          - ExtractBatchId
+        join_or_where_summary: Table variable schema is only a static review candidate.
+        value_or_state_patterns: Table variable columns require reviewer confirmation.
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+        status: REVIEW_REQUIRED
       - object_kind: table
         object_ref: PPM.dbo.P24_ExtractStaging
         operations:
@@ -910,6 +1067,7 @@ scenarios:
       - SELECT
       - DELETE
       - INSERT
+      - MERGE
     dml_matrix:
       - operation: DELETE
         target_ref: PPM.dbo.P24_ExtractStaging
@@ -930,6 +1088,48 @@ scenarios:
         target_ref: PPMReporting.dbo.P24_ExtractAudit
         phase: audit
         impact: Inserts extract audit summary.
+        evidence_refs:
+          - ev_p24_complex_audit_table
+        status: REVIEW_REQUIRED
+      - operation: MERGE
+        target_ref: PPM.dbo.P24_ExtractStaging
+        phase: staging_upsert_review
+        impact: Merge/upsert behavior is a review-required synthetic fixture expectation.
+        evidence_refs:
+          - ev_p24_complex_staging_table
+        status: REVIEW_REQUIRED
+    table_dml_matrix:
+      - target_ref: PPM.dbo.P24_ExtractStaging
+        select: ""
+        insert: ""
+        update: ""
+        delete: Y
+        merge: Y
+        keys_join_where_summary: ExtractBatchId cleanup predicate.
+        important_columns_or_patterns: Staging cleanup impact.
+        evidence_refs:
+          - ev_p24_complex_staging_table
+        status: REVIEW_REQUIRED
+      - target_ref: tenant_database_parameter.dynamic_orders_shape
+        select: Y
+        insert: ""
+        update: ""
+        delete: ""
+        merge: ""
+        keys_join_where_summary: Dynamic tenant/schema target cannot be catalog-confirmed.
+        important_columns_or_patterns: REVIEW_REQUIRED dynamic result shape.
+        evidence_refs:
+          - ev_p24_complex_dynamic_sql
+          - ev_p24_complex_cross_db
+        status: REVIEW_REQUIRED
+      - target_ref: PPMReporting.dbo.P24_ExtractAudit
+        select: ""
+        insert: Y
+        update: ""
+        delete: ""
+        merge: ""
+        keys_join_where_summary: Audit insert for extract context.
+        important_columns_or_patterns: Audit detail semantics.
         evidence_refs:
           - ev_p24_complex_audit_table
         status: REVIEW_REQUIRED
@@ -980,6 +1180,25 @@ scenarios:
       complexity_score: 5
       branch_count: 4
       dml_operation_count: 3
+      complexity_metrics:
+        - metric: LOC
+          count: 118
+          evidence_rule: Non-empty sanitized source line count.
+          notes: ""
+          evidence_refs:
+            - ev_p24_complex_dynamic_sql
+        - metric: DYNAMIC_SQL_SIGNAL
+          count: 2
+          evidence_rule: sp_executesql/EXEC dynamic scan.
+          notes: REVIEW_REQUIRED dynamic dependency.
+          evidence_refs:
+            - ev_p24_complex_dynamic_sql
+        - metric: CROSS_DB_REFERENCE
+          count: 1
+          evidence_rule: Three- or four-part identifier scan.
+          notes: REVIEW_REQUIRED cross-database reference.
+          evidence_refs:
+            - ev_p24_complex_cross_db
       risk_flags:
         - code: DYNAMIC_SQL_REVIEW_REQUIRED
           status: REVIEW_REQUIRED
@@ -1009,6 +1228,7 @@ scenarios:
         - name: dynamic_result_shape
           evidence_refs:
             - ev_p24_complex_dynamic_sql
+    metadata_extraction_appendix: *p24_metadata_extraction_appendix
     unsupported_claim_expectations:
       - obligation: unsupported_dependency_claims
         claim_type: dependency
@@ -1070,6 +1290,7 @@ scenarios:
         complexity_risk_metrics: true
         migration_strategy: true
         appendix_mappings: true
+        metadata_extraction_appendix: true
         evidence_assumptions_review: true
       reviewRequiredFindings:
         - UNSUPPORTED_DEPENDENCY_CLAIM_REVIEW

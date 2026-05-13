@@ -9,10 +9,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PROMPT_VERSION = "prompt:sp_semantic_analysis@0.3.0"
-OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.3.0"
+PROMPT_VERSION = "prompt:sp_semantic_analysis@0.4.0"
+OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.4.0"
 TOOL_PLANNER_PROMPT_VERSION = "prompt:mssql_metadata_tool_planner@0.1.0"
 TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_tool_plan@0.1.0"
+PLATFORM_TOOL_PLANNER_PROMPT_VERSION = "prompt:platform_tool_planner@0.1.0"
+PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:platform_tool_plan@0.1.0"
 METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.0"
 METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.0"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
@@ -89,6 +91,10 @@ class LlmMigrationGuideInsight(StrictModel):
     summary: str
     status: LlmEvidenceStatus = LlmEvidenceStatus.REVIEW_REQUIRED
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    guide_element: str | None = Field(default=None, alias="guideElement")
+    target_ref: str | None = Field(default=None, alias="targetRef")
+    risk_area: str | None = Field(default=None, alias="riskArea")
+    what_to_extract_next: str | None = Field(default=None, alias="whatToExtractNext")
 
 
 class LlmSemanticAnalysisOutput(StrictModel):
@@ -372,6 +378,10 @@ def semantic_output_schema(
                         "summary": {"type": "string"},
                         "status": evidence_status,
                         "evidenceRefs": evidence_ref_array,
+                        "guideElement": {"type": ["string", "null"]},
+                        "targetRef": {"type": ["string", "null"]},
+                        "riskArea": {"type": ["string", "null"]},
+                        "whatToExtractNext": {"type": ["string", "null"]},
                     },
                     "required": ["section", "summary", "status", "evidenceRefs"],
                     "additionalProperties": False,
@@ -453,6 +463,12 @@ def metadata_tool_planning_output_schema(
         "required": ["toolRequests", "assumptions", "reviewMarkers"],
         "additionalProperties": False,
     }
+
+
+def platform_tool_planning_output_schema(
+    tool_names: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    return metadata_tool_planning_output_schema(tool_names=tool_names)
 
 
 def metadata_analysis_output_schema(

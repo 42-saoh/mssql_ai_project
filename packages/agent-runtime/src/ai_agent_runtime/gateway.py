@@ -23,6 +23,7 @@ from ai_agent_runtime.models import (
     fast_test_model_registry_ref,
     metadata_analysis_output_schema,
     metadata_tool_planning_output_schema,
+    platform_tool_planning_output_schema,
     semantic_output_schema,
     stable_json_hash,
 )
@@ -57,6 +58,14 @@ class ModelGateway(Protocol):
         ...
 
     def analyze_metadata(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        ...
+
+    def plan_platform_tools(
         self,
         *,
         prompt: RenderedPrompt,
@@ -122,6 +131,7 @@ class FakeModelGateway:
         self,
         output_by_target_ref: Mapping[str, Any] | None = None,
         tool_plan_by_target_ref: Mapping[str, Any] | None = None,
+        platform_tool_plan_by_target_ref: Mapping[str, Any] | None = None,
         metadata_analysis_by_target_ref: Mapping[str, Any] | None = None,
     ) -> None:
         self._output_by_target_ref = {
@@ -131,6 +141,10 @@ class FakeModelGateway:
         self._tool_plan_by_target_ref = {
             target_ref: AiToolPlanningOutput.model_validate(output).to_storage_dict()
             for target_ref, output in (tool_plan_by_target_ref or {}).items()
+        }
+        self._platform_tool_plan_by_target_ref = {
+            target_ref: AiToolPlanningOutput.model_validate(output).to_storage_dict()
+            for target_ref, output in (platform_tool_plan_by_target_ref or {}).items()
         }
         self._metadata_analysis_by_target_ref = {
             target_ref: MetadataAnalysisOutput.model_validate(output).to_storage_dict()
@@ -194,6 +208,36 @@ class FakeModelGateway:
             token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
             latency_ms=0,
             provider_request_id="fake-tool-plan",
+        )
+
+    def plan_platform_tools(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        target_ref = str(prompt.metadata.get("targetRef") or "")
+        output = AiToolPlanningOutput.model_validate(
+            self._platform_tool_plan_by_target_ref.get(target_ref)
+            or {"toolRequests": [], "assumptions": [], "reviewMarkers": []}
+        )
+        structured_output = output.to_storage_dict()
+        return ModelInvocationRecord(
+            provider=self.provider,
+            model=profile.model,
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort=profile.reasoning_effort,
+            prompt_version=prompt.prompt_version,
+            output_schema_version=prompt.output_schema_version,
+            input_hash=prompt.input_hash,
+            prompt_hash=prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=0,
+            provider_request_id="fake-platform-tool-plan",
         )
 
     def analyze_metadata(
@@ -408,6 +452,23 @@ class OpenAIModelGateway:
             ),
             parser=AiToolPlanningOutput.model_validate_json,
             invalid_code="OPENAI_TOOL_PLAN_INVALID",
+        )
+
+    def plan_platform_tools(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        return self._invoke_structured_output(
+            prompt=prompt,
+            profile=profile,
+            schema_name="platform_tool_plan",
+            schema=platform_tool_planning_output_schema(
+                tool_names=prompt.metadata.get("toolNames") or (),
+            ),
+            parser=AiToolPlanningOutput.model_validate_json,
+            invalid_code="OPENAI_PLATFORM_TOOL_PLAN_INVALID",
         )
 
     def analyze_metadata(
@@ -701,7 +762,7 @@ def _parse_structured_output(
     try:
         return parser(output_text), []
     except (json.JSONDecodeError, ValueError) as exc:
-        if schema_name == "metadata_tool_plan":
+        if schema_name in {"metadata_tool_plan", "platform_tool_plan"}:
             repaired, removed_paths = _metadata_tool_plan_without_schema_drift(
                 output_text,
                 allowed_tool_names=allowed_tool_names,
@@ -714,7 +775,7 @@ def _parse_structured_output(
                     {
                         "component": "structured_output_normalizer",
                         "status": "SUCCEEDED",
-                        "action": "normalized_metadata_tool_plan",
+                        "action": f"normalized_{schema_name}",
                         "removedFieldPaths": removed_paths,
                     }
                 ],
@@ -772,13 +833,35 @@ def _semantic_output_without_extra_fields(output_text: str) -> tuple[dict[str, A
         "review_markers": {"code", "message", "status", "evidenceRefs", "evidence_refs"},
         "conversionGuidance": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
         "conversion_guidance": {"code", "summary", "status", "evidenceRefs", "evidence_refs"},
-        "migrationGuideInsights": {"section", "summary", "status", "evidenceRefs", "evidence_refs"},
+        "migrationGuideInsights": {
+            "section",
+            "summary",
+            "status",
+            "evidenceRefs",
+            "evidence_refs",
+            "guideElement",
+            "guide_element",
+            "targetRef",
+            "target_ref",
+            "riskArea",
+            "risk_area",
+            "whatToExtractNext",
+            "what_to_extract_next",
+        },
         "migration_guide_insights": {
             "section",
             "summary",
             "status",
             "evidenceRefs",
             "evidence_refs",
+            "guideElement",
+            "guide_element",
+            "targetRef",
+            "target_ref",
+            "riskArea",
+            "risk_area",
+            "whatToExtractNext",
+            "what_to_extract_next",
         },
     }
     required_item_keys = {

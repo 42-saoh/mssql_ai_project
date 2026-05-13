@@ -113,7 +113,7 @@ def test_p18a_canonical_candidate_validates_versioned_domain_contract() -> None:
     assert candidate["status"] == "CONTRACT_CLOSED"
     assert candidate["analysis_status"] == "REVIEW_REQUIRED"
     assert candidate["blockers"] == []
-    assert model.schema_version == "CanonicalAnalysisModel.v1"
+    assert model.schema_version == "CanonicalAnalysisModel.v2"
     assert model.snapshot_id == "mcp-fixture-snapshot-0001"
     assert {ref.registry_type for ref in model.registry_version_refs} == {
         "PROMPT",
