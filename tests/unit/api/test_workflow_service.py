@@ -143,6 +143,7 @@ def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
 
     assert request.options.use_llm_analysis is True
     assert request.options.use_ai_tool_orchestration is True
+    assert request.options.use_platform_tool_orchestration is True
     assert request.options.allow_sp_definition_to_model is True
     assert request.options.llm_profile_id == "openai_sp_semantic_analysis"
 
@@ -208,10 +209,19 @@ def test_submit_with_llm_records_sanitized_agent_run_and_llm_evidence() -> None:
     assert run.agent_type == "LLM_SEMANTIC_ANALYST"
     assert run.model_invocation["model"] == model_profile_from_env("openai_fast_test").model
     assert run.model_invocation["componentInvocations"]
+    assert any(
+        component["stage"] == "platform_tool_execution"
+        for component in run.model_invocation["componentInvocations"]
+    )
     assert "businessRules" in run.structured_output
     assert "CREATE PROCEDURE" not in str(run.model_invocation)
     assert "CREATE PROCEDURE" not in str(run.structured_output)
     assert "CREATE PROCEDURE" not in str(repository.metadata_collections)
+    metadata = next(iter(repository.metadata_collections.values()))
+    assert metadata.payload["platformToolEvidence"]["toolCallCount"] == 1
+    assert metadata.payload["platformToolEvidence"]["toolResults"][0]["factId"].startswith(
+        "platform.list_registry_versions."
+    )
     assert any(
         ref["type"] == "LLM_INFERENCE"
         for artifact in repository.artifacts.values()

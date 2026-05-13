@@ -192,19 +192,32 @@ Remote LLM execution defaults to official OpenAI. Set `LLM_REMOTE_PROVIDER=pgpt`
 - `useLlmAnalysis`: 기본 `true`; deterministic metadata/static analysis 이후 LLM semantic enrichment 실행
 - `useAiToolOrchestration`: 기본 `true`; `useLlmAnalysis=false` 이면 자동 비활성화되며, LLM planner 가
   필요한 read-only MCP metadata tool 을 제안하고 workflow 가 내부 registry/policy gate 로만 실행
+- `usePlatformToolOrchestration`: 기본 `true`; `useLlmAnalysis=false` 이면 자동 비활성화되며, LLM
+  planner 가 필요한 read-only platform context tool 을 제안하고 workflow 가 current job/db
+  profile/target scope gate 와 내부 platform registry 로만 실행
 - `llmProfileId`: 기본 `openai_sp_semantic_analysis`; `openai_fast_test` 는 수동/평가 선택지
 - `allowSpDefinitionToModel`: 기본 `true`; SP definition 원문은 transient model input 으로만 허용
 
 기본 실행은 `FakeModelGateway` 를 사용하므로 외부 OpenAI API 를 호출하지 않는다. Remote 실행은
 `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 준비된 경우에만 가능하다.
 semantic analysis 기본 모델은 `gpt-5.5` 이며 optional live confidence testing 에서는 `OPENAI_MODEL_ANALYSIS` 로 바꿀 수 있다. fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 수동 평가 실행 모델을 바꿀 수 있다.
-내부 runtime 은 요청 target 을 SP task 로 감싼 뒤 bounded metadata tool planning, deterministic evidence digest, business rule extraction, conversion readiness, migration guide insights, evidence critic, optional repair staged calls 를 수행한다. 단일 API 요청 shape 는 그대로이며, batch API 는 추가하지 않는다. 여러 SP task 실행 경로에서는 `LLM_SP_CONCURRENCY` 기본값 `2` 로 fan-out 을 제한한다.
+내부 runtime 은 요청 target 을 SP task 로 감싼 뒤 bounded MCP metadata tool planning, bounded
+platform context tool planning, deterministic evidence digest, business rule extraction, conversion
+readiness, migration guide insights, evidence critic, optional repair staged calls 를 수행한다. 단일 API
+요청 shape 는 그대로이며, batch API 는 추가하지 않는다. 여러 SP task 실행 경로에서는
+`LLM_SP_CONCURRENCY` 기본값 `2` 로 fan-out 을 제한한다.
 
 `GET /api/v1/jobs/{jobId}/agent-runs` 는 sanitized trace summary 만 반환한다. 응답에는
 schema-valid structured output, provider/model/profile, prompt/schema version, input/prompt/output
 hash, token usage, latency, status, optional `componentInvocations` 가 포함된다. raw prompt, raw SP definition, raw OpenAI response text 는 저장하거나 반환하지 않는다.
-AI-selected metadata tool component 는 toolName 과 sanitized argument/output hash 중심으로만 저장하며,
-raw arguments, raw definition text, row data, secret-like fields 는 저장하지 않는다.
+AI-selected MCP metadata/platform context tool component 는 toolName 과 sanitized argument/output hash
+중심으로만 저장하며, raw arguments, raw definition text, artifact full content, row data,
+secret-like fields 는 저장하지 않는다.
+
+Platform context tools are cataloged in `spec/agent-tools/platform_ai_tool_catalog.yaml`.
+They are internal-only and read-only. The API does not expose a public platform tool invoke route;
+workflow execution stores only sanitized `platformToolEvidence`, `platform.<toolName>.<hash>` fact
+ids, and component summaries.
 
 Platform DB 를 사용할 경우 `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql` 을 운영자가
 수동 적용해야 한다. API 는 해당 DDL 을 자동 실행하지 않는다.

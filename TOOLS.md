@@ -108,6 +108,23 @@
   - 목적: 로컬/승인된 dev URL 에 대한 비파괴적 UI smoke 검증
   - 사용 시점: request/job/artifact 화면 확인, build 이후 기본 동작 검증
 
+## Platform internal AI tools
+
+- catalog: `spec/agent-tools/platform_ai_tool_catalog.yaml`
+- 목적: LLM semantic analysis 전에 플랫폼 내부 read-only context 를 보강한다.
+- v1 active tools:
+  - `platform.search_knowledge_facts`
+  - `platform.list_knowledge_assets`
+  - `platform.get_knowledge_version_graph`
+  - `platform.list_job_artifacts`
+  - `platform.get_latest_validation_report`
+  - `platform.list_job_agent_runs`
+  - `platform.list_registry_versions`
+- 제약: 내부 workflow 전용이며 public invoke API 를 만들지 않는다. current job/db profile/target
+  scope 를 벗어나지 않고, artifact full content, raw SQL/SP definition, row data, procedure
+  execution, DDL/DML, approval/review write, export creation, secrets, raw prompt/provider response 를
+  요청하거나 저장하지 않는다.
+
 ## 환경 파일 규칙
 
 - `.env.example` 를 항상 유지한다.
@@ -124,9 +141,11 @@
 - `MSSQL_METADATA_TDS_VERSION` 기본값은 `7.4` 이다. Chakra/legacy gateway 가 기본 TDS negotiation 을 거부하는 로컬 경로에서는 host-run MCP 에 한해 `MSSQL_METADATA_TDS_VERSION=7.0` 으로 낮춰 연결을 검증할 수 있다.
 - `.env` 의 `MSSQL_METADATA_DEFAULT_PROFILE_ID=ppm` 은 registry 파일의 정적 default 보다 우선한다. `/health/ready` 로 PPM readiness 를 직접 보고 싶을 때 이 값을 사용한다.
 - P21 no-mock portal 은 `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 을 요구한다. `P21_LIVE_PORTAL_GATE=1` 은 PLF workflow repository 와 read-only PPM metadata access 가 모두 준비된 경우에만 사용한다.
-- P26+ 기준 API/Web 기본 분석 옵션은 high-quality hybrid semantic analysis 와 bounded AI tool
-  orchestration
-  (`useLlmAnalysis=true`, `useAiToolOrchestration=true`, `allowSpDefinitionToModel=true`, `llmProfileId=openai_sp_semantic_analysis`)
+- P26+ 기준 API/Web 기본 분석 옵션은 high-quality hybrid semantic analysis, bounded AI MCP tool
+  orchestration, bounded platform context tool orchestration
+  (`useLlmAnalysis=true`, `useAiToolOrchestration=true`,
+  `usePlatformToolOrchestration=true`, `allowSpDefinitionToModel=true`,
+  `llmProfileId=openai_sp_semantic_analysis`)
   이다. 그래도 기본 test/fixture 실행은 remote 호출을 하지 않는다. `LLM_ENABLE_REMOTE=1`,
   `LLM_ALLOW_SP_TEXT=1`, `OPENAI_API_KEY` 가 모두 준비된 경우에만 SP definition 을 OpenAI
   Responses API 입력으로 보낼 수 있다.
@@ -158,6 +177,7 @@
 - 기본 semantic analysis model: `OPENAI_MODEL_ANALYSIS=gpt-5.5`
 - fast/test model: 기본 `gpt-5-nano`; manual fast/test 실행에서는 `OPENAI_MODEL_FAST_TEST` 로 `openai_fast_test` profile 의 모델을 override 할 수 있음
 - SP task fan-out concurrency: 기본 `LLM_SP_CONCURRENCY=2`
+- Platform context tool call budget: 기본 `PLATFORM_TOOL_MAX_CALLS=3`
 - 기본 adapter: `FakeModelGateway`
 - remote adapter: `OpenAIModelGateway`
 - provider payloads: official OpenAI sends `text.format.json_schema` and optional `reasoning`; P-GPT sends the minimal Postman-verified `model`, `instructions`, and message-array `input` body without `stream`, `max_output_tokens`, `text.format`, or `reasoning`.
@@ -171,7 +191,7 @@
 - validation / approval / publish 이벤트는 감사 로그 대상이다.
 - 생성 결과에는 `snapshot_id`, `registry_version_refs`, `generator_version` 을 남긴다.
 - LLM trace 에는 raw prompt, raw SP definition, raw provider response text 를 남기지 않는다.
-- LLM trace summary 는 hash/token/latency/status 중심으로 노출한다. AI tool orchestration
+- LLM trace summary 는 hash/token/latency/status 중심으로 노출한다. AI MCP/platform tool orchestration
   component summary 는 stage, toolName, sanitized argument hash, output hash, status, latency,
   evidence count, error code 만 저장한다.
 

@@ -975,6 +975,9 @@ components:
         useAiToolOrchestration:
           type: boolean
           default: true
+        usePlatformToolOrchestration:
+          type: boolean
+          default: true
         persistKnowledge:
           type: boolean
           default: true
@@ -1274,7 +1277,7 @@ components:
           type: integer
         componentInvocations:
           type: array
-          description: Sanitized per-stage model invocation summaries for staged LLM analysis.
+          description: Sanitized per-stage model invocation and internal read-only tool summaries.
           items:
             type: object
             additionalProperties: true

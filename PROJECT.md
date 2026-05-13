@@ -148,6 +148,7 @@ repo/
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - OpenAI LLM runtime package: `packages/agent-runtime/src/ai_agent_runtime`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
+- Platform internal AI tool catalog: `spec/agent-tools/platform_ai_tool_catalog.yaml`
 - Validation rules: `spec/validation/validation_rules.yaml`
 - P24 SP migration guide quality contract: `spec/eval/p24_sp_migration_guide_quality_contract.yaml`
 - P27 dependency evidence tooling design contract: `spec/eval/p27_dependency_evidence_tooling_contract.yaml`

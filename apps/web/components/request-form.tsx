@@ -164,6 +164,10 @@ export function RequestForm({
             Use bounded AI metadata tools
           </label>
           <label>
+            <input type="checkbox" name="usePlatformToolOrchestration" defaultChecked />
+            Use platform context tools
+          </label>
+          <label>
             <input type="checkbox" name="allowSpDefinitionToModel" defaultChecked />
             Allow transient SP definition in model input
           </label>
@@ -264,6 +268,10 @@ export function RequestForm({
           <label>
             <input type="checkbox" name="useAiToolOrchestration" defaultChecked />
             Use bounded AI metadata tools
+          </label>
+          <label>
+            <input type="checkbox" name="usePlatformToolOrchestration" defaultChecked />
+            Use platform context tools
           </label>
           <label>
             <input type="checkbox" name="allowSpDefinitionToModel" defaultChecked />

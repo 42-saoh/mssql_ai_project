@@ -42,6 +42,7 @@ class MetadataCollectionResult:
     procedure_dependencies: dict[str, Any] | None = None
     dependency_evidence: dict[str, Any] | None = None
     ai_tool_evidence: dict[str, Any] | None = None
+    platform_tool_evidence: dict[str, Any] | None = None
     deterministic_facts: tuple[dict[str, Any], ...] = ()
     table_schemas: tuple[dict[str, Any], ...] = ()
     status: str = "COLLECTED"
@@ -74,6 +75,7 @@ class MetadataCollectionResult:
             "procedureDependencies": self.procedure_dependencies,
             "dependencyEvidence": self.dependency_evidence,
             "aiToolEvidence": self.ai_tool_evidence,
+            "platformToolEvidence": self.platform_tool_evidence,
             "deterministicFacts": list(self.deterministic_facts),
             "tableSchemas": list(self.table_schemas),
             "status": self.status,

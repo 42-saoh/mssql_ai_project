@@ -13,6 +13,8 @@ PROMPT_VERSION = "prompt:sp_semantic_analysis@0.4.0"
 OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.4.0"
 TOOL_PLANNER_PROMPT_VERSION = "prompt:mssql_metadata_tool_planner@0.1.0"
 TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_tool_plan@0.1.0"
+PLATFORM_TOOL_PLANNER_PROMPT_VERSION = "prompt:platform_tool_planner@0.1.0"
+PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:platform_tool_plan@0.1.0"
 METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.0"
 METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.0"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
@@ -461,6 +463,12 @@ def metadata_tool_planning_output_schema(
         "required": ["toolRequests", "assumptions", "reviewMarkers"],
         "additionalProperties": False,
     }
+
+
+def platform_tool_planning_output_schema(
+    tool_names: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    return metadata_tool_planning_output_schema(tool_names=tool_names)
 
 
 def metadata_analysis_output_schema(

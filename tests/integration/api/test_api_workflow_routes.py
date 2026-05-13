@@ -521,6 +521,10 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     assert run["modelInvocation"]["model"] == model_profile_from_env("openai_fast_test").model
     assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.4.0"
     assert run["modelInvocation"]["componentInvocations"]
+    assert any(
+        component["stage"] == "platform_tool_execution"
+        for component in run["modelInvocation"]["componentInvocations"]
+    )
     assert "structuredOutput" in run
     assert "CREATE PROCEDURE" not in str(payload)
 

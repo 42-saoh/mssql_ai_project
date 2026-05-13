@@ -14,6 +14,7 @@ OpenAI LLM agent runtime slice for P22.
 - Remote semantic output is strict-validated first. If a provider returns schema-drifted JSON, the runtime deterministically removes unsupported fields, normalizes safe text aliases such as `text` to the canonical summary fields, coerces unsupported claim statuses back to `INFERRED_DESCRIPTION` or `REVIEW_REQUIRED`, and records only sanitized normalizer metadata without raw provider text.
 - When `LLM_REMOTE_PROVIDER=pgpt`, semantic analysis also applies a deterministic safety net after model repair and before storage sanitization. It adds only draft/reviewable claims linked to allowed deterministic fact ids, using `DETERMINISTIC_SAFETY_NET_*` keys, so P23 quality recall can improve without raw prompt/provider/SP text or widened schemas.
 - `ModelGateway.plan_metadata_tools` provides the bounded tool-planning call. It returns strict JSON tool requests only; provider aliases such as `tools`, `args`, or `rationale` are normalized to `toolRequests`, `arguments`, and `reason` before validation. The API workflow executes allowed MCP tools and stores only sanitized tool evidence summaries.
+- `ModelGateway.plan_platform_tools` provides the bounded platform context tool-planning call. It uses the same strict tool request shape, but the API workflow executes only internal read-only platform tools scoped to the current job, db profile, and target, then stores sanitized `platformToolEvidence` summaries.
 - `ModelGateway.analyze_metadata` provides response-only metadata analysis for `POST /api/v1/metadata/analyze`. It uses strict JSON structured output constrained to deterministic fact ids and does not store raw prompt, raw definition, row data, or provider response text.
 - Semantic analysis now runs through per-SP tasks. Multiple SP tasks can fan out with `LLM_SP_CONCURRENCY` (default `2`), while the public single-SP API stays unchanged.
 - P26 high-quality mode is the API/Web default. Each SP task uses staged calls for deterministic evidence digest, business rule extraction, Java/MyBatis conversion readiness, migration guide insights, evidence criticism, plus at most one repair call when evidence refs or required markers are missing.
@@ -28,5 +29,7 @@ OpenAI LLM agent runtime slice for P22.
 - `schema:llm_semantic_analysis@0.4.0`
 - `prompt:mssql_metadata_tool_planner@0.1.0`
 - `schema:mssql_metadata_tool_plan@0.1.0`
+- `prompt:platform_tool_planner@0.1.0`
+- `schema:platform_tool_plan@0.1.0`
 - `prompt:mssql_metadata_analysis@0.1.0`
 - `schema:mssql_metadata_analysis@0.1.0`

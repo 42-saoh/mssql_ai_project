@@ -23,6 +23,7 @@ def test_p22_openapi_declares_llm_options_trace_and_evidence_type() -> None:
         "openai_fast_test",
     ]
     assert options["allowSpDefinitionToModel"]["default"] is True
+    assert options["usePlatformToolOrchestration"]["default"] is True
     assert "LLM_INFERENCE" in schemas["EvidenceRef"]["properties"]["type"]["enum"]
     assert "AgentRunSummary" in schemas
     assert "ModelInvocationSummary" in schemas
@@ -68,6 +69,7 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
         "LLM_ALLOW_SP_TEXT=0",
         "LLM_LIVE_GATE=0",
         "LLM_SP_CONCURRENCY=2",
+        "PLATFORM_TOOL_MAX_CALLS=3",
     ):
         assert name in env_text
     assert "OPENAI_API_KEY=\n" in env_text
@@ -86,3 +88,5 @@ def test_p22_registry_route_exposes_model_prompt_and_schema_bindings(monkeypatch
     assert "model:openai_fast_test@gpt-5.4-mini@0.1.0" in versions
     assert "prompt:sp_semantic_analysis@0.4.0" in versions
     assert "schema:llm_semantic_analysis@0.4.0" in versions
+    assert "prompt:platform_tool_planner@0.1.0" in versions
+    assert "schema:platform_tool_plan@0.1.0" in versions
