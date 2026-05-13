@@ -409,9 +409,24 @@ sanitized versioned knowledge asset, fact graph, export 로 승격한다. v5 DDL
   redaction hash/length 는 storage, API, export, Web summary 에 남지 않는다
 - Platform DB adapter 는 v5 필수 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고,
   Metadata Analyze API 는 503 JSON error 로 반환하며, API 가 DDL 을 자동 적용하지 않는다
+- P35 extends this same v5 manual-apply draft with lifecycle readiness: `KNOWLEDGE_ASSET_VERSIONS`
+  carries `DRAFT`, `REVIEW_REQUIRED`, `REVIEWED`, `ARCHIVED` state, and
+  `KNOWLEDGE_ASSET_REVIEWS` stores append-only review events.
+- New content versions start `DRAFT`; same `contentHash` reuse preserves lifecycle; changed
+  content creates a new `DRAFT` version even when the previous version was `REVIEWED`.
+- Review API transitions only to `REVIEW_REQUIRED`, `REVIEWED`, or `ARCHIVED`; `ARCHIVED` is
+  terminal and returns `KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID` on re-review.
+- Asset search and fact search default to excluding `ARCHIVED`; explicit
+  `lifecycleStatus=ARCHIVED` includes archived versions. Fact search without a meaningful filter
+  returns `KNOWLEDGE_SEARCH_FILTER_REQUIRED`.
+- Review writes require `REVIEWER`/`ADMIN` when RBAC is enabled, reject reviewer spoofing, sanitize
+  comments without raw SQL/SP text, row data, secret, hash, length, or snippet storage, and emit
+  `KNOWLEDGE_ASSET_REVIEW_RECORDED`.
+- `REVIEWED` remains draft/reviewable organizational knowledge and is not production-ready,
+  publish approval, deployment approval, or automatic conversion approval evidence.
 
 통과 기준:
-- `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/integration/api/test_api_auth_rbac.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과
 - `make test-web-smoke` 통과
 
 ### 17. P27 Dependency Evidence Tooling Fixture-First Hardening Contract

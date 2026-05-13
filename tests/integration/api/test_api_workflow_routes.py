@@ -40,6 +40,27 @@ class KnowledgeSchemaRequiredRepository(MemoryWorkflowRepository):
             status_code=503,
         )
 
+    def list_knowledge_assets(self, **_kwargs: Any):
+        raise KnowledgePersistenceError(
+            "Knowledge assetization requires v5 platform schema objects.",
+            code="KNOWLEDGE_SCHEMA_REQUIRED",
+            status_code=503,
+        )
+
+    def search_knowledge_facts(self, **_kwargs: Any):
+        raise KnowledgePersistenceError(
+            "Knowledge assetization requires v5 platform schema objects.",
+            code="KNOWLEDGE_SCHEMA_REQUIRED",
+            status_code=503,
+        )
+
+    def review_knowledge_asset_version(self, **_kwargs: Any):
+        raise KnowledgePersistenceError(
+            "Knowledge assetization requires v5 platform schema objects.",
+            code="KNOWLEDGE_SCHEMA_REQUIRED",
+            status_code=503,
+        )
+
 
 @pytest.fixture
 def client_and_repository(
@@ -146,6 +167,51 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
         "DTO_READINESS",
         "CANONICAL_ANALYSIS",
     }
+    sp_knowledge = next(
+        asset
+        for asset in knowledge_payload["knowledgeAssets"]
+        if asset["assetKind"] == "SP_ANALYSIS"
+    )
+    assert sp_knowledge["lifecycleStatus"] == "DRAFT"
+
+    asset_search = client.get(
+        "/api/v1/knowledge/assets",
+        params={"assetKind": "SP_ANALYSIS", "targetName": "usp_OrderRequest_Select"},
+    )
+    empty_fact_search = client.get("/api/v1/knowledge/facts/search")
+    fact_search = client.get(
+        "/api/v1/knowledge/facts/search",
+        params={"objectRef": "usp_OrderRequest_Select"},
+    )
+    review = client.post(
+        (
+            "/api/v1/knowledge/assets/"
+            f"{sp_knowledge['assetId']}/versions/{sp_knowledge['currentVersionId']}/review"
+        ),
+        json={
+            "status": "REVIEWED",
+            "reasonCode": "ROUTE_FIXTURE_REVIEW",
+            "reviewer": "reviewer@example.com",
+            "comment": "reviewed sanitized fixture knowledge",
+        },
+    )
+    reviews = client.get(
+        f"/api/v1/knowledge/assets/{sp_knowledge['assetId']}/reviews",
+        params={"versionId": sp_knowledge["currentVersionId"]},
+    )
+
+    assert asset_search.status_code == 200
+    assert sp_knowledge["assetId"] in {
+        asset["assetId"] for asset in asset_search.json()["assets"]
+    }
+    assert empty_fact_search.status_code == 422
+    assert empty_fact_search.json()["code"] == "KNOWLEDGE_SEARCH_FILTER_REQUIRED"
+    assert fact_search.status_code == 200
+    assert fact_search.json()["facts"]
+    assert review.status_code == 200
+    assert review.json()["toStatus"] == "REVIEWED"
+    assert reviews.status_code == 200
+    assert reviews.json()["reviews"][0]["reasonCode"] == "ROUTE_FIXTURE_REVIEW"
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
@@ -951,6 +1017,40 @@ def test_sp_workflow_preserves_knowledge_schema_required_failure_code(
     job = repository.get_job(payload["jobId"])
     assert job is not None
     assert job.error_code == "KNOWLEDGE_SCHEMA_REQUIRED"
+
+
+def test_knowledge_lifecycle_routes_map_schema_required_to_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    repository = KnowledgeSchemaRequiredRepository()
+    service = WorkflowService(repository)
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        client = TestClient(app)
+        assets = client.get("/api/v1/knowledge/assets")
+        facts = client.get("/api/v1/knowledge/facts/search", params={"objectRef": "dbo"})
+        review = client.post(
+            "/api/v1/knowledge/assets/know_1/versions/knowv_1/review",
+            json={
+                "status": "REVIEWED",
+                "reasonCode": "SCHEMA_REQUIRED",
+                "reviewer": "reviewer@example.com",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert assets.status_code == 503
+    assert assets.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert facts.status_code == 503
+    assert facts.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert review.status_code == 503
+    assert review.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
 
 
 def test_unknown_resources_return_not_found(client: TestClient) -> None:

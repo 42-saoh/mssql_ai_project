@@ -15,8 +15,11 @@ from api_app.repositories import (
     KnowledgeEdgeRecord,
     KnowledgeExportRecord,
     KnowledgeFactRecord,
+    KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
+    KnowledgeReviewRecord,
     WorkflowRepository,
+    KNOWLEDGE_LIFECYCLE_STATUSES,
     prefixed_id,
 )
 from api_app.schemas import (
@@ -27,6 +30,8 @@ from api_app.schemas import (
     KnowledgeExportResponse,
     KnowledgeFact,
     KnowledgeFactGraph,
+    KnowledgeFactSearchResult,
+    KnowledgeReview,
 )
 
 KNOWLEDGE_ASSET_KINDS = {
@@ -50,6 +55,8 @@ KNOWLEDGE_STORAGE_SANITIZED = "KNOWLEDGE_STORAGE_SANITIZED"
 KNOWLEDGE_PERSISTENCE_SKIPPED = "KNOWLEDGE_PERSISTENCE_SKIPPED"
 KNOWLEDGE_EXPORT_UNSUPPORTED_FORMAT = "KNOWLEDGE_EXPORT_UNSUPPORTED_FORMAT"
 KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID = "KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID"
+KNOWLEDGE_SEARCH_FILTER_REQUIRED = "KNOWLEDGE_SEARCH_FILTER_REQUIRED"
+KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID = "KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID"
 
 _SECRET_KEY_RE = re.compile(
     r"(password|passwd|pwd|secret|token|api[_-]?key|credential|connection[_-]?string)",
@@ -330,6 +337,7 @@ def export_knowledge(
 
 
 def present_knowledge_asset(record: KnowledgeAssetRecord) -> KnowledgeAssetSummary:
+    lifecycle_status = _knowledge_lifecycle_status(record.lifecycle_status)
     return KnowledgeAssetSummary(
         assetId=record.asset_id,
         assetKind=record.asset_kind,
@@ -342,12 +350,18 @@ def present_knowledge_asset(record: KnowledgeAssetRecord) -> KnowledgeAssetSumma
         currentVersionNo=record.current_version_no,
         contentHash=record.content_hash,
         sourceJobId=record.source_job_id,
+        lifecycleStatus=lifecycle_status,
+        reviewReasonCode=record.review_reason_code,
+        reviewer=record.reviewer,
+        reviewedAt=record.reviewed_at,
+        archivedAt=record.archived_at,
         createdAt=record.created_at,
         updatedAt=record.updated_at,
     )
 
 
 def present_knowledge_version(record) -> KnowledgeAssetVersion:
+    lifecycle_status = _knowledge_lifecycle_status(record.lifecycle_status)
     return KnowledgeAssetVersion(
         versionId=record.version_id,
         assetId=record.asset_id,
@@ -357,6 +371,11 @@ def present_knowledge_version(record) -> KnowledgeAssetVersion:
         factCount=len(record.facts),
         edgeCount=len(record.edges),
         sourceJobId=record.source_job_id,
+        lifecycleStatus=lifecycle_status,
+        reviewReasonCode=record.review_reason_code,
+        reviewer=record.reviewer,
+        reviewedAt=record.reviewed_at,
+        archivedAt=record.archived_at,
         createdAt=record.created_at,
     )
 
@@ -410,6 +429,50 @@ def present_fact_graph(
         facts=[present_knowledge_fact(fact) for fact in facts],
         edges=[present_knowledge_edge(edge) for edge in edges],
     )
+
+
+def present_knowledge_review(record: KnowledgeReviewRecord) -> KnowledgeReview:
+    return KnowledgeReview(
+        reviewId=record.review_id,
+        assetId=record.asset_id,
+        versionId=record.version_id,
+        fromStatus=record.from_status,
+        toStatus=record.to_status,
+        reasonCode=record.reason_code,
+        note=record.note,
+        reviewer=record.reviewer,
+        createdAt=record.created_at,
+    )
+
+
+def present_fact_search_result(record: KnowledgeFactSearchRecord) -> KnowledgeFactSearchResult:
+    return KnowledgeFactSearchResult(
+        assetId=record.asset_id,
+        assetKind=record.asset_kind,
+        versionId=record.version_id,
+        lifecycleStatus=_knowledge_lifecycle_status(record.lifecycle_status),
+        fact=present_knowledge_fact(record.fact),
+    )
+
+
+def ensure_knowledge_search_filter(**filters: str | None) -> None:
+    if any(str(value or "").strip() for value in filters.values()):
+        return
+    raise KnowledgePersistenceError(
+        "Knowledge fact search requires at least one filter.",
+        code=KNOWLEDGE_SEARCH_FILTER_REQUIRED,
+        status_code=422,
+    )
+
+
+def sanitize_knowledge_review_note(comment: str | None) -> dict[str, Any]:
+    if comment is None or not comment.strip():
+        return {}
+    stripped = comment.strip()
+    if _unsafe_free_text(stripped):
+        return {"comment": _redacted_value(stripped)}
+    sanitized, _markers = sanitize_knowledge_payload({"comment": stripped})
+    return dict(sanitized)
 
 
 def _persist_specs(
@@ -548,6 +611,26 @@ def _redacted_value(value: Any) -> dict[str, Any]:
         "reason": "unsafe knowledge field removed",
         "code": KNOWLEDGE_STORAGE_SANITIZED,
     }
+
+
+def _unsafe_free_text(value: str) -> bool:
+    lowered = value.lower()
+    if _SQL_TEXT_RE.search(value):
+        return True
+    return any(
+        marker in lowered
+        for marker in (
+            "password",
+            "passwd",
+            "pwd=",
+            "secret",
+            "token",
+            "api_key",
+            "apikey",
+            "credential",
+            "connection string",
+        )
+    )
 
 
 def _facts_from_static_analysis(
@@ -1104,6 +1187,11 @@ def _dependency_edge_type(value: str) -> str:
 
 def _status_from_review(value: Any) -> str:
     return "REVIEW_REQUIRED" if str(value or "").upper() == "REVIEW_REQUIRED" else "OBSERVED"
+
+
+def _knowledge_lifecycle_status(value: Any) -> str:
+    status = str(value or "DRAFT").strip().upper()
+    return status if status in KNOWLEDGE_LIFECYCLE_STATUSES else "DRAFT"
 
 
 def _fact_refs(value: Any) -> list[str]:

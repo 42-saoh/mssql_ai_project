@@ -32,9 +32,13 @@
 - `POST /api/v1/metadata/tools/{toolName}/invoke`
 - `GET /api/v1/metadata/search`
 - `POST /api/v1/metadata/analyze`
+- `GET /api/v1/knowledge/assets`
+- `GET /api/v1/knowledge/facts/search`
 - `GET /api/v1/knowledge/assets/{assetId}`
 - `GET /api/v1/knowledge/assets/{assetId}/versions`
+- `GET /api/v1/knowledge/assets/{assetId}/reviews`
 - `GET /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts`
+- `POST /api/v1/knowledge/assets/{assetId}/versions/{versionId}/review`
 - `POST /api/v1/knowledge/exports`
 - `GET /api/v1/registry/versions`
 
@@ -272,14 +276,24 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
   source of truth 는 내부 link 다.
 - Metadata Analyze 는 별도 workflow state transition 없이 성공 응답에 `knowledgeAssets[]` 를
   포함하고 `METADATA_PROFILE`, `DEPENDENCY_EVIDENCE`, `DTO_READINESS` facts 를 저장한다.
-- Knowledge API 는 asset summary, versions, version facts/edges, `JSONL` / `GRAPH_JSON` export 를
-  반환한다. Export content 는 sanitized facts/edges 로 제한하고, `versionIds` 는 비어 있거나
+- Knowledge API 는 asset summary, versions, version facts/edges, asset search, fact search,
+  append-only review history, review transition, `JSONL` / `GRAPH_JSON` export 를 반환한다.
+  Export content 는 sanitized facts/edges 로 제한하고, `versionIds` 는 비어 있거나
   `assetIds` 와 같은 길이여야 한다.
+- Asset/version lifecycle 은 `DRAFT`, `REVIEW_REQUIRED`, `REVIEWED`, `ARCHIVED` 이다. 새
+  content version 은 항상 `DRAFT` 로 시작하고, 같은 `contentHash` reuse 는 기존 lifecycle 을
+  유지한다. `ARCHIVED` 는 terminal 이며 search default 에서는 제외된다.
+- Review API 는 RBAC enforcement 가 켜진 경우 `REVIEWER`/`ADMIN` actor 만 호출할 수 있고
+  verified actor 와 body `reviewer` 가 일치해야 한다. Enforcement 가 꺼진 fixture/local mode 에서는
+  body `reviewer` 를 사용한다.
+- `REVIEWED` knowledge asset 도 draft/reviewable organizational knowledge 이며 production-ready,
+  publish approval, deployment approval, automatic conversion approval 근거가 아니다.
 - Fact graph edge 는 같은 asset version 의 실제 fact id 를 참조한다. edge endpoint 를 fact 로
   확인할 수 없으면 `REVIEW_REQUIRED` endpoint fact 를 만들어 graph integrity 를 유지한다.
 - Platform DB persistence 는 `db/schema/ai_agent_platform_schema_v5_knowledge_assets.sql` 수동 적용을
-  요구한다. `KNOWLEDGE_ASSET_JOB_LINKS` 를 포함한 v5 필수 table 이 없으면 adapter 는
-  `KNOWLEDGE_SCHEMA_REQUIRED` 를 반환하고 API 는 DDL 을 자동 적용하지 않는다.
+  요구한다. `KNOWLEDGE_ASSET_JOB_LINKS`, `KNOWLEDGE_ASSET_REVIEWS`, lifecycle columns, critical
+  indexes 를 포함한 v5 필수 table/column/index 가 없으면 adapter 는
+  `KNOWLEDGE_SCHEMA_REQUIRED` 를 missing 목록과 함께 반환하고 API 는 DDL 을 자동 적용하지 않는다.
 - raw SP definition, raw SQL text, row data, procedure execution, DDL/DML, secret,
   raw prompt/provider trace 와 raw-derived redaction hash/length 는 knowledge payload, response,
   export 에 저장하지 않는다.

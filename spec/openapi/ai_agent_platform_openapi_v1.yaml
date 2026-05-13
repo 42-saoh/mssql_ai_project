@@ -527,6 +527,113 @@ paths:
           $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/assets:
+    get:
+      tags: [knowledge]
+      summary: Search reviewable knowledge assets.
+      operationId: listKnowledgeAssets
+      parameters:
+        - name: assetKind
+          in: query
+          schema:
+            type: string
+        - name: dbProfileId
+          in: query
+          schema:
+            type: string
+        - name: targetType
+          in: query
+          schema:
+            type: string
+        - name: targetSchema
+          in: query
+          schema:
+            type: string
+        - name: targetName
+          in: query
+          schema:
+            type: string
+        - name: lifecycleStatus
+          in: query
+          schema:
+            $ref: "#/components/schemas/KnowledgeLifecycleStatus"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Matching knowledge assets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assets]
+                properties:
+                  assets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KnowledgeAssetSummary"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/facts/search:
+    get:
+      tags: [knowledge]
+      summary: Search facts across reviewable knowledge asset versions.
+      operationId: searchKnowledgeFacts
+      parameters:
+        - name: objectRef
+          in: query
+          schema:
+            type: string
+        - name: factType
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [OBSERVED, INFERRED_DESCRIPTION, REVIEW_REQUIRED]
+        - name: assetKind
+          in: query
+          schema:
+            type: string
+        - name: targetName
+          in: query
+          schema:
+            type: string
+        - name: lifecycleStatus
+          in: query
+          schema:
+            $ref: "#/components/schemas/KnowledgeLifecycleStatus"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Matching knowledge facts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [facts]
+                properties:
+                  facts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KnowledgeFactSearchResult"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/assets/{assetId}:
     get:
       tags: [knowledge]
@@ -579,6 +686,40 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/assets/{assetId}/reviews:
+    get:
+      tags: [knowledge]
+      summary: List append-only knowledge asset review events.
+      operationId: listKnowledgeAssetReviews
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: versionId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Knowledge review history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assetId, reviews]
+                properties:
+                  assetId:
+                    type: string
+                  reviews:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KnowledgeReview"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts:
     get:
       tags: [knowledge]
@@ -604,6 +745,45 @@ paths:
                 $ref: "#/components/schemas/KnowledgeFactGraph"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/assets/{assetId}/versions/{versionId}/review:
+    post:
+      tags: [knowledge]
+      summary: Record a reviewable lifecycle transition for a knowledge asset version.
+      operationId: reviewKnowledgeAssetVersion
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeReviewRequest"
+      responses:
+        "200":
+          description: Recorded knowledge review event.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeReview"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/exports:
@@ -689,6 +869,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     ValidationError:
       description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Request conflicts with current resource state.
       content:
         application/json:
           schema:
@@ -1663,6 +1849,9 @@ components:
         - METADATA_PROFILE
         - DTO_READINESS
         - CANONICAL_ANALYSIS
+    KnowledgeLifecycleStatus:
+      type: string
+      enum: [DRAFT, REVIEW_REQUIRED, REVIEWED, ARCHIVED]
     KnowledgeAssetSummary:
       type: object
       required:
@@ -1698,6 +1887,18 @@ components:
           type: string
         sourceJobId:
           type: string
+        lifecycleStatus:
+          $ref: "#/components/schemas/KnowledgeLifecycleStatus"
+        reviewReasonCode:
+          type: string
+        reviewer:
+          type: string
+        reviewedAt:
+          type: string
+          format: date-time
+        archivedAt:
+          type: string
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -1728,6 +1929,18 @@ components:
           minimum: 0
         sourceJobId:
           type: string
+        lifecycleStatus:
+          $ref: "#/components/schemas/KnowledgeLifecycleStatus"
+        reviewReasonCode:
+          type: string
+        reviewer:
+          type: string
+        reviewedAt:
+          type: string
+          format: date-time
+        archivedAt:
+          type: string
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -1823,6 +2036,66 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/KnowledgeEdge"
+    KnowledgeReviewRequest:
+      type: object
+      required: [status, reasonCode, reviewer]
+      properties:
+        status:
+          type: string
+          enum: [REVIEW_REQUIRED, REVIEWED, ARCHIVED]
+        reasonCode:
+          type: string
+        reviewer:
+          type: string
+        comment:
+          type: string
+    KnowledgeReview:
+      type: object
+      required:
+        - reviewId
+        - assetId
+        - versionId
+        - fromStatus
+        - toStatus
+        - reasonCode
+        - note
+        - reviewer
+      properties:
+        reviewId:
+          type: string
+        assetId:
+          type: string
+        versionId:
+          type: string
+        fromStatus:
+          $ref: "#/components/schemas/KnowledgeLifecycleStatus"
+        toStatus:
+          type: string
+          enum: [REVIEW_REQUIRED, REVIEWED, ARCHIVED]
+        reasonCode:
+          type: string
+        note:
+          type: object
+          additionalProperties: true
+        reviewer:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    KnowledgeFactSearchResult:
+      type: object
+      required: [assetId, assetKind, versionId, lifecycleStatus, fact]
+      properties:
+        assetId:
+          type: string
+        assetKind:
+          $ref: "#/components/schemas/KnowledgeAssetKind"
+        versionId:
+          type: string
+        lifecycleStatus:
+          $ref: "#/components/schemas/KnowledgeLifecycleStatus"
+        fact:
+          $ref: "#/components/schemas/KnowledgeFact"
     KnowledgeExportRequest:
       type: object
       required: [assetIds, format]
@@ -2002,3 +2275,5 @@ components:
             - KNOWLEDGE_ASSET_NOT_FOUND
             - KNOWLEDGE_EXPORT_UNSUPPORTED_FORMAT
             - KNOWLEDGE_EXPORT_VERSION_SELECTION_INVALID
+            - KNOWLEDGE_SEARCH_FILTER_REQUIRED
+            - KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID

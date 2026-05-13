@@ -160,6 +160,14 @@ class KnowledgePersistenceError(RuntimeError):
         self.status_code = status_code
 
 
+KNOWLEDGE_LIFECYCLE_STATUSES = frozenset(
+    {"DRAFT", "REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"}
+)
+KNOWLEDGE_REVIEW_TARGET_STATUSES = frozenset(
+    {"REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"}
+)
+
+
 @dataclass
 class KnowledgeAssetRecord:
     asset_id: str
@@ -173,6 +181,11 @@ class KnowledgeAssetRecord:
     current_version_no: int = 0
     content_hash: str | None = None
     source_job_id: str | None = None
+    lifecycle_status: str = "DRAFT"
+    review_reason_code: str | None = None
+    reviewer: str | None = None
+    reviewed_at: datetime | None = None
+    archived_at: datetime | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
 
@@ -215,7 +228,35 @@ class KnowledgeAssetVersionRecord:
     facts: list[KnowledgeFactRecord]
     edges: list[KnowledgeEdgeRecord]
     source_job_id: str | None = None
+    lifecycle_status: str = "DRAFT"
+    review_reason_code: str | None = None
+    review_note: dict[str, Any] = field(default_factory=dict)
+    reviewer: str | None = None
+    reviewed_at: datetime | None = None
+    archived_at: datetime | None = None
     created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class KnowledgeReviewRecord:
+    review_id: str
+    asset_id: str
+    version_id: str
+    from_status: str
+    to_status: str
+    reason_code: str
+    note: dict[str, Any]
+    reviewer: str
+    created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class KnowledgeFactSearchRecord:
+    asset_id: str
+    asset_kind: str
+    version_id: str
+    lifecycle_status: str
+    fact: KnowledgeFactRecord
 
 
 @dataclass
@@ -400,6 +441,19 @@ class WorkflowRepository(Protocol):
     def list_job_knowledge_assets(self, job_id: str) -> list[KnowledgeAssetRecord] | None:
         ...
 
+    def list_knowledge_assets(
+        self,
+        *,
+        asset_kind: str | None = None,
+        db_profile_id: str | None = None,
+        target_type: str | None = None,
+        target_schema: str | None = None,
+        target_name: str | None = None,
+        lifecycle_status: str | None = None,
+        limit: int = 50,
+    ) -> list[KnowledgeAssetRecord]:
+        ...
+
     def get_knowledge_asset(self, asset_id: str) -> KnowledgeAssetRecord | None:
         ...
 
@@ -421,6 +475,40 @@ class WorkflowRepository(Protocol):
         asset_id: str,
         version_id: str,
     ) -> tuple[list[KnowledgeFactRecord], list[KnowledgeEdgeRecord]] | None:
+        ...
+
+    def search_knowledge_facts(
+        self,
+        *,
+        object_ref: str | None = None,
+        fact_type: str | None = None,
+        status: str | None = None,
+        asset_kind: str | None = None,
+        target_name: str | None = None,
+        lifecycle_status: str | None = None,
+        limit: int = 50,
+    ) -> list[KnowledgeFactSearchRecord]:
+        ...
+
+    def review_knowledge_asset_version(
+        self,
+        *,
+        asset_id: str,
+        version_id: str,
+        status: str,
+        reason_code: str,
+        note: dict[str, Any],
+        reviewer: str,
+        actor: str = "api-system",
+    ) -> KnowledgeReviewRecord | None:
+        ...
+
+    def list_knowledge_reviews(
+        self,
+        asset_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> list[KnowledgeReviewRecord] | None:
         ...
 
     def save_knowledge_export(
@@ -463,6 +551,7 @@ AUDIT_STAGE_BY_ACTION: dict[str, str] = {
     "APPROVAL_DECISION_RECORDED": "APPROVAL",
     "PUBLISH_GATE_EVALUATED": "APPROVAL_GATE",
     "KNOWLEDGE_ASSET_VERSIONED": "KNOWLEDGE",
+    "KNOWLEDGE_ASSET_REVIEW_RECORDED": "KNOWLEDGE",
     "KNOWLEDGE_EXPORTED": "KNOWLEDGE",
 }
 
