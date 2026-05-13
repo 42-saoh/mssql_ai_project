@@ -50,8 +50,8 @@ P22 OpenAI LLM Agent Runtime 을 기반으로 stored procedure semantic analysis
 
 - 대상 객체: synthetic stored procedure fixtures only
 - 기존 계약:
-  - `prompt:sp_semantic_analysis@0.3.0`
-  - `schema:llm_semantic_analysis@0.3.0`
+  - `prompt:sp_semantic_analysis@0.4.0`
+  - `schema:llm_semantic_analysis@0.4.0`
   - SP별 staged runtime, `LLM_SP_CONCURRENCY=2`, dynamic evidence schema
   - `model:openai_sp_semantic_analysis@0.1.0`
   - `model:openai_fast_test@gpt-5-nano@0.1.0`

@@ -177,6 +177,19 @@ def test_remote_semantic_output_extra_fields_are_pruned_before_storage(
         "conversionGuidance": {
             "summary": [{"text": "Provider guidance text.", "status": "CONFIRMED"}]
         },
+        "migrationGuideInsights": [
+            {
+                "section": "dependency_inventory",
+                "summary": "Provider guide insight.",
+                "status": "SUPPORTED",
+                "evidenceRefs": ["fact_demo"],
+                "guide_element": "Needs verification",
+                "target_ref": "dbo.TargetA",
+                "risk_area": "dynamic_sql",
+                "what_to_extract_next": "Run metadata-only dependency extraction.",
+                "rawSnippet": "SELECT * FROM dbo.SecretTable",
+            }
+        ],
         "riskFlags": [{"evidenceRefs": ["fact_demo"]}],
         "businessRules": [
             {
@@ -207,6 +220,13 @@ def test_remote_semantic_output_extra_fields_are_pruned_before_storage(
     assert result.structured_output["conversionGuidance"][0]["code"].startswith(
         "NORMALIZED_PROVIDER_CONVERSIONGUIDANCE"
     )
+    guide_insight = result.structured_output["migrationGuideInsights"][0]
+    assert guide_insight["status"] == "REVIEW_REQUIRED"
+    assert guide_insight["guideElement"] == "Needs verification"
+    assert guide_insight["targetRef"] == "dbo.TargetA"
+    assert guide_insight["riskArea"] == "dynamic_sql"
+    assert guide_insight["whatToExtractNext"] == "Run metadata-only dependency extraction."
+    assert "rawSnippet" not in guide_insight
     assert result.structured_output["riskFlags"] == []
     assert result.structured_output["assumptions"] == [
         "Provider returned a structured assumption object; text was not stored."
@@ -224,6 +244,8 @@ def test_remote_semantic_output_extra_fields_are_pruned_before_storage(
                 "$.conversionGuidance[0].status",
                 "$.conversionGuidance[0].text",
                 "$.deterministicEvidenceSummary",
+                "$.migrationGuideInsights[0].rawSnippet",
+                "$.migrationGuideInsights[0].status",
                 "$.reviewFlags",
                 "$.riskFlags[0]",
                 "$.target",

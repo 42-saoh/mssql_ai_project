@@ -40,6 +40,7 @@ REQUIRED_GUIDE_SECTIONS = {
     "complexity_risk_metrics",
     "migration_strategy",
     "appendix_mappings",
+    "metadata_extraction_appendix",
     "evidence_assumptions_review",
 }
 
@@ -59,7 +60,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 def test_p24_contract_declares_migration_guide_quality_boundaries() -> None:
     contract = _load_yaml(CONTRACT)
 
-    assert contract["contract_id"] == "p24_sp_migration_guide_quality@0.1.0"
+    assert contract["contract_id"] == "p24_sp_migration_guide_quality@0.2.0"
     assert contract["phase"] == "P24"
     assert contract["production_ready"] is False
     assert contract["status"] == "contract_ready"
@@ -92,12 +93,26 @@ def test_p24_contract_required_sections_and_thresholds_match_plan() -> None:
     assert thresholds["branch_call_flow_coverage_min"] == 0.85
     assert thresholds["unsupported_claim_review_required_ratio_min"] == 1.0
     assert thresholds["forbidden_storage_findings_max"] == 0
+    assert contract["dependency_inventory_requirements"]["status_tables"] == [
+        "Confirmed",
+        "Needs verification",
+    ]
     assert contract["dependency_inventory_requirements"]["operation_fields"] == [
         "SELECT",
         "INSERT",
         "UPDATE",
         "DELETE",
+        "MERGE",
     ]
+    assert contract["manual_metadata_extraction_appendix"]["required"] is True
+    assert set(contract["manual_metadata_extraction_appendix"]["required_queries"]) == {
+        "definition_hash_length",
+        "parameters",
+        "static_dependencies",
+        "referenced_entities",
+        "dynamic_sql_indicators",
+        "temp_table_review",
+    }
 
 
 def test_p24_contract_report_fields_and_review_required_obligations() -> None:
@@ -186,7 +201,7 @@ def test_p24b_fixture_asset_records_fixture_only_boundaries() -> None:
     fixture = _load_yaml(P24_FIXTURE)
 
     assert fixture["fixture_suite_id"] == "sp_migration_guide_quality_p24_v1"
-    assert fixture["contract_ref"] == "p24_sp_migration_guide_quality@0.1.0"
+    assert fixture["contract_ref"] == "p24_sp_migration_guide_quality@0.2.0"
     assert fixture["phase"] == "P24"
     assert fixture["status"] == "authored_p24b"
     assert fixture["production_ready"] is False

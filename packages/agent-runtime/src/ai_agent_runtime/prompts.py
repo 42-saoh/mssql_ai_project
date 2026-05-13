@@ -20,6 +20,10 @@ Return only schema-valid JSON. Treat deterministic metadata and static analysis 
 Every claim must use evidenceRefs copied exactly from evidenceRefContract.allowedFactIds.
 Always return these top-level arrays even when empty: businessRules, modernizationPoints,
 riskFlags, reviewMarkers, conversionGuidance, migrationGuideInsights, and assumptions.
+For migrationGuideInsights, use section keys from the migration guide contract and, when useful,
+populate guideElement, targetRef, riskArea, and whatToExtractNext. Use whatToExtractNext for
+uncertain dependencies, dynamic SQL, cross-database references, result-shape gaps, and any
+Needs verification guide row.
 Never use prompt hashes, input hashes, output hashes, raw SQL snippets, row data, or provider
 trace ids as claim evidence. Do not invent dependencies, tables, functions, or procedures.
 Allowed claim statuses are only INFERRED_DESCRIPTION and REVIEW_REQUIRED. Never use
@@ -306,8 +310,11 @@ def _stage_task(stage: str) -> str:
         return (
             "Focus on migration guide quality. Populate migrationGuideInsights with "
             "section-level insights for overview, dependency inventory, DML matrix, "
-            "call flow, risk metrics, and migration strategy. Use stable guide section "
-            "keys rather than prose-only headings."
+            "call flow, risk metrics, metadata extraction appendix, and migration "
+            "strategy. Distinguish Confirmed from Needs verification in summaries. "
+            "Use stable guide section keys rather than prose-only headings, and fill "
+            "whatToExtractNext for uncertain dynamic SQL, cross-database, ambiguous, "
+            "or unresolved dependency observations."
         )
     if stage == "evidence_critic":
         return (

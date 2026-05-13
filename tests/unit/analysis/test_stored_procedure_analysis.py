@@ -5,14 +5,15 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from ai_agent_analysis import (
     analyze_stored_procedure,
+    complexity_metrics,
+    extract_dml_operations,
     load_schema_search_fixture,
+    migration_guide_static_metrics,
     to_canonical_analysis_model,
     to_canonical_candidate,
 )
-
 
 ROOT = Path(__file__).resolve().parents[3]
 EXPECTED = json.loads(
@@ -107,6 +108,80 @@ def test_dynamic_sql_dependencies_are_not_inferred_from_string_literals() -> Non
         "SNAPSHOT_ID_BINDING_MISSING",
         "REGISTRY_VERSION_REFS_MISSING",
     ]
+
+
+def test_migration_guide_dml_operations_keep_exact_verbs_and_ignore_string_literals() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_GuideDml
+    AS
+    BEGIN
+        SELECT a.Id FROM dbo.SourceA a JOIN ERP.dbo.SourceB b ON b.Id = a.Id;
+        INSERT INTO dbo.AuditA (Id) SELECT Id FROM dbo.SourceA;
+        UPDATE dbo.TargetA SET StatusCode = 'DONE';
+        DELETE FROM dbo.TargetB WHERE IsExpired = 1;
+        MERGE INTO dbo.TargetC AS target USING dbo.SourceA AS src ON src.Id = target.Id
+        WHEN MATCHED THEN UPDATE SET StatusCode = 'MERGED';
+        DECLARE @sql nvarchar(max) = N'SELECT * FROM dbo.HiddenTable';
+        EXEC sp_executesql @sql;
+    END
+    """
+
+    operations = extract_dml_operations(sql, source_name="guide-dml.sql")
+    operation_pairs = {(item["operation"], item["targetRef"]) for item in operations}
+
+    assert ("SELECT", "dbo.SourceA") in operation_pairs
+    assert ("SELECT", "ERP.dbo.SourceB") in operation_pairs
+    assert ("INSERT", "dbo.AuditA") in operation_pairs
+    assert ("UPDATE", "dbo.TargetA") in operation_pairs
+    assert ("DELETE", "dbo.TargetB") in operation_pairs
+    assert ("MERGE", "dbo.TargetC") in operation_pairs
+    assert all("HiddenTable" not in item["targetRef"] for item in operations)
+
+
+def test_migration_guide_complexity_metrics_are_deterministic_counts() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_GuideMetrics
+    AS
+    BEGIN
+        BEGIN TRY
+            BEGIN TRAN;
+            IF @Mode = 'A'
+                SELECT CASE WHEN Flag = 1 THEN 1 ELSE 0 END FROM ERP.dbo.SourceA;
+            WHILE @i < 3
+                SET @i = @i + 1;
+            DECLARE cur CURSOR FOR SELECT Id FROM dbo.SourceB;
+            OPEN cur;
+            FETCH NEXT FROM cur;
+            CLOSE cur;
+            DEALLOCATE cur;
+            EXEC(@sql);
+            COMMIT TRAN;
+            RETURN;
+        END TRY
+        BEGIN CATCH
+            ROLLBACK TRAN;
+            GOTO ErrorHandler;
+        END CATCH
+    ErrorHandler:
+        RETURN;
+    END
+    """
+
+    metrics = {item["metric"]: item["count"] for item in complexity_metrics(sql)}
+    guide_metrics = migration_guide_static_metrics(sql, source_name="guide-metrics.sql")
+
+    assert metrics["BEGIN_END_BLOCK"] >= 3
+    assert metrics["IF"] == 1
+    assert metrics["WHILE"] == 1
+    assert metrics["CASE"] == 1
+    assert metrics["GOTO"] == 1
+    assert metrics["RETURN"] == 2
+    assert metrics["CURSOR_SIGNAL"] >= 5
+    assert metrics["TRY_CATCH_BLOCK"] == 2
+    assert metrics["TRANSACTION_SIGNAL"] == 3
+    assert metrics["DYNAMIC_SQL_SIGNAL"] == 1
+    assert metrics["CROSS_DB_REFERENCE"] == 1
+    assert guide_metrics["crossDatabaseReferences"] == ["ERP.dbo.SourceA"]
 
 
 def test_complex_fixture_detects_calls_functions_cursor_and_multi_result_sets() -> None:
@@ -339,7 +414,7 @@ def test_canonical_candidate_builds_domain_model_when_bindings_exist() -> None:
     candidate = to_canonical_candidate(result)
 
     assert result.canonical_conversion_blockers == []
-    assert canonical_model.schema_version == "CanonicalAnalysisModel.v1"
+    assert canonical_model.schema_version == "CanonicalAnalysisModel.v2"
     assert canonical_model.snapshot_id == CANONICAL_SNAPSHOT_ID
     assert [ref.version for ref in canonical_model.registry_version_refs] == [
         ref["version"] for ref in CANONICAL_REGISTRY_REFS

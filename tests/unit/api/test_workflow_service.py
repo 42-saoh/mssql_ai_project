@@ -822,6 +822,12 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     assert "Order identifier" in contents
     assert "OrderId" in contents
     assert "dependency_closure_evidence" in contents
+    assert "## metadata_extraction_appendix" in contents
+    assert "definition_hash_length" in contents
+    assert "### Confirmed" in contents
+    assert "### Needs verification" in contents
+    assert "| Table | SELECT | INSERT | UPDATE | DELETE | MERGE |" in contents
+    assert "DYNAMIC_SQL_SIGNAL" in contents
     assert "FIXTURE_AMBIGUOUS" in contents
     assert "resolve_dependency_reference" not in contents
     assert any(

@@ -84,5 +84,5 @@ def test_p22_registry_route_exposes_model_prompt_and_schema_bindings(monkeypatch
 
     assert "model:openai_sp_semantic_analysis@0.1.0" in versions
     assert "model:openai_fast_test@gpt-5.4-mini@0.1.0" in versions
-    assert "prompt:sp_semantic_analysis@0.3.0" in versions
-    assert "schema:llm_semantic_analysis@0.3.0" in versions
+    assert "prompt:sp_semantic_analysis@0.4.0" in versions
+    assert "schema:llm_semantic_analysis@0.4.0" in versions

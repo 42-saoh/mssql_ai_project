@@ -54,6 +54,8 @@
 
 - Existing `SP_ANALYSIS_DOC` renderer 에 P24 required sections 를 반영한다.
 - Dependency/DML/call-flow/phase/risk/appended mapping 섹션은 deterministic facts 와 evidence refs 에서만 구성한다.
+- Dependency inventory 는 `Confirmed` 와 `Needs verification` 을 분리하고, 불확실한 행에는 추가 추출할 metadata-only evidence 를 적는다.
+- Manual metadata extraction appendix 는 SSMS 수동 실행용 metadata-only query/result paste template 만 포함하며 row data/procedure execution/DDL/DML/raw definition output 을 금지한다.
 - 불확실한 dependency/table/function/cross-DB/business-rule claim 은 `REVIEW_REQUIRED` 로 표기한다.
 - Quality evaluator 는 `status`, `productionReady`, `scores`, `thresholds`, `evidenceRefs`, `sectionCoverage`, `reviewRequiredFindings`, `storageSafetyFindings` 를 반환한다.
 - Java/MyBatis 내용은 migration strategy/readiness note 로 연결하되 generated source application 은 수행하지 않는다.

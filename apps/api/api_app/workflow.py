@@ -5,12 +5,13 @@ import re
 from collections.abc import Iterable
 from dataclasses import replace as dataclass_replace
 
-from ai_agent_analysis import analyze_stored_procedure
+from ai_agent_analysis import analyze_stored_procedure, migration_guide_static_metrics
 from ai_agent_domain import ArtifactType, JobStatus, RequestedOutputType, WorkflowStepType
 from ai_agent_generation import (
     GenerationContext,
     RenderedArtifact,
     RenderedBundle,
+    build_migration_guide_payload,
     render_artifact,
     render_java_mybatis_sp_wrapper,
 )
@@ -26,9 +27,9 @@ from ai_agent_runtime import (
 )
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import (
-    AgentRunStatus,
     OUTPUT_SCHEMA_VERSION,
     PROMPT_VERSION,
+    AgentRunStatus,
     stable_json_hash,
     text_hash,
 )
@@ -44,8 +45,8 @@ from ai_agent_validation import (
     validate_publish_gate,
 )
 
-from api_app.backpressure import workflow_admission
 from api_app.ai_tool_orchestrator import AiToolOrchestrator
+from api_app.backpressure import workflow_admission
 from api_app.knowledge_service import persist_sp_workflow_knowledge
 from api_app.metadata_gateway import McpMetadataGateway, MetadataCollectionResult, MetadataGateway
 from api_app.repositories import (
@@ -207,7 +208,13 @@ class WorkflowService:
             status=JobStatus.GENERATING,
             current_step=WorkflowStepType.GENERATE,
         )
-        artifacts = self._generate_artifacts(job_id, request, metadata, agent_run)
+        artifacts = self._generate_artifacts(
+            job_id,
+            request,
+            metadata,
+            agent_run,
+            static_analysis=static_analysis,
+        )
 
         self.repository.transition_job(
             job_id,
@@ -345,8 +352,14 @@ class WorkflowService:
         request: WorkRequestRecord,
         metadata: MetadataCollectionResult,
         agent_run: AgentRunRecord | None = None,
+        static_analysis: dict[str, object] | None = None,
     ) -> list[ArtifactRecord]:
-        context = generation_context_from_request(request, metadata, agent_run)
+        context = generation_context_from_request(
+            request,
+            metadata,
+            agent_run,
+            static_analysis=static_analysis,
+        )
         artifacts: list[ArtifactRecord] = []
         for output in request.outputs:
             if output == RequestedOutputType.SP_ANALYSIS_DOCUMENT.value:
@@ -644,6 +657,7 @@ def generation_context_from_request(
     request: WorkRequestRecord,
     metadata: MetadataCollectionResult | None = None,
     agent_run: AgentRunRecord | None = None,
+    static_analysis: dict[str, object] | None = None,
 ) -> GenerationContext:
     target = request.target
     schema = str(target["schema"])
@@ -666,6 +680,20 @@ def generation_context_from_request(
     ]
     input_params = generation_parameters(metadata)
     result_shape = [str(column["name"]) for column in columns]
+    llm_analysis = agent_run.structured_output if agent_run else {}
+    metadata_payload = sanitized_metadata_payload(metadata.as_dict()) if metadata else {}
+    dependency_evidence = dependency_evidence_for_generation(metadata)
+    ai_tool_evidence = ai_tool_evidence_for_generation(metadata)
+    migration_guide = build_migration_guide_payload(
+        target_ref=sp_name,
+        db_profile_id=request.db_profile_id,
+        metadata=metadata_payload,
+        static_analysis=static_analysis or {},
+        llm_analysis=llm_analysis,
+        input_params=input_params,
+        result_shape=result_shape,
+        sample_id=request.request_id,
+    )
     return GenerationContext.from_mapping(
         {
             "sampleId": request.request_id,
@@ -684,10 +712,11 @@ def generation_context_from_request(
                 "resultShape": result_shape,
                 "pkColumns": [],
                 "authorId": "AI",
-                "llmAnalysis": agent_run.structured_output if agent_run else None,
+                "llmAnalysis": llm_analysis,
                 "llmTrace": llm_trace_summary(agent_run),
-                "dependencyEvidence": dependency_evidence_for_generation(metadata),
-                "aiToolEvidence": ai_tool_evidence_for_generation(metadata),
+                "dependencyEvidence": dependency_evidence,
+                "aiToolEvidence": ai_tool_evidence,
+                "migrationGuide": migration_guide,
             },
             "evidence": {
                 "sources": generation_evidence_sources(metadata, sp_name, agent_run),
@@ -1089,12 +1118,16 @@ def static_analysis_payload(
         snapshot_id=snapshot_id,
         registry_version_refs=[
             {"registry_type": "PROMPT", "version": "prompt:sp_analysis@0.1.0"},
-            {"registry_type": "PROMPT", "version": "prompt:sp_semantic_analysis@0.3.0"},
+            {"registry_type": "PROMPT", "version": PROMPT_VERSION},
             {"registry_type": "MODEL", "version": "model:openai_sp_semantic_analysis@0.1.0"},
         ],
     )
     payload = result.model_dump(mode="json")
     payload.pop("source_name", None)
+    payload["migrationGuideStaticMetrics"] = migration_guide_static_metrics(
+        definition_text,
+        source_name=source_name,
+    )
     return payload
 
 

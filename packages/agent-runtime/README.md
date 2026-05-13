@@ -24,8 +24,8 @@ OpenAI LLM agent runtime slice for P22.
 - `model:openai_sp_semantic_analysis@0.1.0`; `OPENAI_MODEL_ANALYSIS` changes the live high-quality model.
 - `model:openai_fast_test@gpt-5-nano@0.1.0` by default; `OPENAI_MODEL_FAST_TEST` changes the runtime registry ref for manual fast/test runs.
 - `PGPT_MODEL_ANALYSIS=gpt-4o` and `PGPT_MODEL_FAST_TEST=gpt-4o-mini` are provider-specific defaults when `LLM_REMOTE_PROVIDER=pgpt`.
-- `prompt:sp_semantic_analysis@0.3.0`
-- `schema:llm_semantic_analysis@0.3.0`
+- `prompt:sp_semantic_analysis@0.4.0`
+- `schema:llm_semantic_analysis@0.4.0`
 - `prompt:mssql_metadata_tool_planner@0.1.0`
 - `schema:mssql_metadata_tool_plan@0.1.0`
 - `prompt:mssql_metadata_analysis@0.1.0`

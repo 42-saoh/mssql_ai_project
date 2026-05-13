@@ -54,7 +54,7 @@
 
 ## 구현 범위
 
-- P24 contract 에 required guide sections, report fields, quality thresholds, storage safety, `REVIEW_REQUIRED` obligations 를 명시한다.
+- P24 contract 에 required guide sections, Confirmed/Needs verification dependency split, manual metadata extraction appendix, report fields, quality thresholds, storage safety, `REVIEW_REQUIRED` obligations 를 명시한다.
 - P24A~P24D prompt pack 과 manifest split tracks 를 추가한다.
 - P24 task brief 를 작성한다.
 - Contract test 로 P24 prompt/contract/manifest/task boundaries 를 고정한다.
