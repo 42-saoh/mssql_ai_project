@@ -232,6 +232,63 @@ def test_remote_semantic_output_extra_fields_are_pruned_before_storage(
     )
 
 
+def test_remote_metadata_tool_plan_aliases_are_normalized_before_storage(
+    monkeypatch: Any,
+) -> None:
+    output = {
+        "tools": [
+            {
+                "tool": "get_table_schema",
+                "args": {
+                    "dbProfileId": "master",
+                    "schema": "dbo",
+                    "tableName": "TB_ORDER",
+                },
+                "rationale": "Need table shape evidence.",
+                "evidenceUse": "Anchor DTO claims.",
+                "confidence": "provider-side-extra",
+            }
+        ],
+        "assumptions": [{"text": "Provider object assumption must not be stored."}],
+        "review_markers": [
+            {
+                "code": "PLANNER_ALIAS_NORMALIZED",
+                "message": "Alias output normalized.",
+                "status": "DONE",
+            }
+        ],
+        "target": {"schema": "dbo", "name": "TB_ORDER"},
+    }
+    _capture_post(monkeypatch, _json_response(output=output))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.test/v1")
+
+    result = OpenAIModelGateway(timeout_seconds=1).plan_metadata_tools(
+        prompt=_tool_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    assert result.structured_output["toolRequests"] == [
+        {
+            "toolName": "get_table_schema",
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "tableName": "TB_ORDER",
+            },
+            "reason": "Need table shape evidence.",
+            "expectedEvidenceUse": "Anchor DTO claims.",
+        }
+    ]
+    assert result.structured_output["reviewMarkers"][0]["status"] == "REVIEW_REQUIRED"
+    assert result.structured_output["assumptions"] == [
+        "Provider returned a structured assumption object; text was not stored."
+    ]
+    assert result.component_invocations[0]["action"] == "normalized_metadata_tool_plan"
+    assert "$.target" in result.component_invocations[0]["removedFieldPaths"]
+    assert "$.tools[0].confidence" in result.component_invocations[0]["removedFieldPaths"]
+
+
 def test_pgpt_model_profile_defaults(monkeypatch: Any) -> None:
     monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
     monkeypatch.setenv("OPENAI_MODEL_ANALYSIS", "gpt-5.5")
@@ -257,6 +314,18 @@ def _prompt() -> RenderedPrompt:
         input_hash="input-hash",
         prompt_hash="prompt-hash",
         metadata={"allowedEvidenceRefs": ["fact_demo"]},
+    )
+
+
+def _tool_prompt() -> RenderedPrompt:
+    return RenderedPrompt(
+        prompt_version="prompt:test@0.1.0",
+        output_schema_version="schema:test@0.1.0",
+        system_prompt="Return only JSON.",
+        user_prompt="Plan tools for dbo.TB_ORDER.",
+        input_hash="input-hash",
+        prompt_hash="prompt-hash",
+        metadata={"toolNames": ["get_table_schema"]},
     )
 
 

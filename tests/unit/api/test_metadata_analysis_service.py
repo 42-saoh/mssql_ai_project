@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from ai_agent_runtime import FakeModelGateway
+from ai_agent_runtime.gateway import ModelGatewayError
 from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.schemas import MetadataAnalysisRequest
 from pydantic import ValidationError
@@ -121,6 +122,11 @@ class SpyRegistry:
             ],
             "data": data_by_tool.get(tool_name, data_by_tool["get_table_schema"]),
         }
+
+
+class InvalidPlannerGateway(FakeModelGateway):
+    def plan_metadata_tools(self, *, prompt, profile):  # type: ignore[override]
+        raise ModelGatewayError("invalid planner output", code="OPENAI_TOOL_PLAN_INVALID")
 
 
 @pytest.fixture(autouse=True)
@@ -410,3 +416,40 @@ def test_metadata_analysis_blocks_adversarial_planner_without_leaking_arguments(
     serialized = str(response).lower()
     assert "drop table" not in serialized
     assert "do-not-return" not in serialized
+
+
+def test_metadata_analysis_runs_deterministic_fallback_when_planner_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = SpyRegistry()
+    monkeypatch.setattr(
+        "api_app.metadata_analysis_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    service = MetadataAnalysisService(model_gateway=InvalidPlannerGateway())
+
+    response = service.analyze(
+        MetadataAnalysisRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+                "options": {"llmProfileId": "openai_fast_test"},
+            }
+        )
+    ).to_response()
+
+    assert [call[0] for call in registry.calls] == [
+        "get_table_schema",
+        "get_table_constraints",
+        "get_table_indexes",
+        "get_extended_properties",
+        "get_related_db_objects",
+    ]
+    assert "AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK" in response["caveats"]
+    assert any(
+        marker["code"] == "AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK"
+        for marker in response["reviewMarkers"]
+    )
+    metrics = response["aiToolEvidence"]["plannerMetrics"]
+    assert metrics["plannedRequestCount"] == 5
+    assert metrics["executedToolCallCount"] == 5

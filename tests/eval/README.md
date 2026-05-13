@@ -157,3 +157,14 @@ Chakra/legacy proxy 경로에서 `python-tds` 기본 negotiation 이 차단되�
 ```bash
 P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
 ```
+
+## P-GPT structured output drift notes
+
+P23/P32 live confidence keeps strict schemas and existing thresholds. P-GPT provider drift is
+handled strict-first: semantic output and metadata tool plans validate before any normalizer runs,
+then only safe aliases/status/severity/extra fields are normalized with path/code metadata. P23
+can add `DETERMINISTIC_SAFETY_NET_*` draft/reviewable claims from allowed deterministic fact ids.
+P32 can use deterministic read-only fallback tool requests for invalid/empty planner output, but
+the requests still pass through the existing policy, budget, dedupe, and sanitizer path. These are
+confidence evidence only and never production readiness, publish approval, or automatic conversion
+approval evidence.

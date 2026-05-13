@@ -182,6 +182,13 @@ def _build_single_semantic_analysis_run(
         _repair_evidence_refs(combined_output, allowed_evidence_refs=allowed_evidence_refs),
         required_review_markers=required_review_markers,
     )
+    if _uses_pgpt(invocations):
+        repaired_output = _apply_deterministic_safety_net(
+            repaired_output,
+            metadata=task.metadata,
+            static_analysis=task.static_analysis,
+            allowed_evidence_refs=allowed_evidence_refs,
+        )
     storage_safe_output = _sanitize_output_for_storage(
         repaired_output,
         procedure_definition=task.procedure_definition or "",
@@ -528,6 +535,350 @@ def _inject_required_review_markers(
                 )
             repaired["reviewMarkers"].append(marker_payload)
     return repaired
+
+
+def _uses_pgpt(invocations: Sequence[tuple[str, ModelInvocationRecord]]) -> bool:
+    if os.getenv("LLM_REMOTE_PROVIDER", "").strip().lower() in {"pgpt", "p-gpt", "private-gpt"}:
+        return True
+    return any(
+        str(invocation.provider).strip().lower() in {"pgpt", "p-gpt", "private-gpt"}
+        for _stage, invocation in invocations
+    )
+
+
+def _apply_deterministic_safety_net(
+    output: Mapping[str, Any],
+    *,
+    metadata: Mapping[str, Any],
+    static_analysis: Mapping[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+) -> dict[str, Any]:
+    repaired = LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
+    facts = _deterministic_fact_index(
+        metadata=metadata,
+        static_analysis=static_analysis,
+        allowed_evidence_refs=allowed_evidence_refs,
+    )
+    if not facts:
+        return repaired
+
+    def refs(*themes: str, limit: int = 3) -> list[str]:
+        values: list[str] = []
+        for theme in themes:
+            values.extend(facts.get(theme, []))
+        return _dedupe(ref for ref in values if ref in allowed_evidence_refs)[:limit]
+
+    read_refs = refs("parameter", "table_read", "result_shape")
+    if read_refs:
+        _append_claim(
+            repaired["businessRules"],
+            key_field="category",
+            key="DETERMINISTIC_SAFETY_NET_READ_ONLY_LOOKUP",
+            payload={
+                "category": "DETERMINISTIC_SAFETY_NET_READ_ONLY_LOOKUP",
+                "summary": (
+                    "Deterministic facts indicate read-only lookup behavior that should "
+                    "be reviewed as draft business context."
+                ),
+                "status": "INFERRED_DESCRIPTION",
+                "evidenceRefs": read_refs,
+            },
+        )
+        _append_claim(
+            repaired["modernizationPoints"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_LOOKUP_DTO_SHAPE",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_LOOKUP_DTO_SHAPE",
+                "summary": (
+                    "Lookup input and result-shape facts should be mapped to explicit "
+                    "DTO fields before Java/MyBatis conversion."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": read_refs,
+            },
+        )
+        _append_claim(
+            repaired["conversionGuidance"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_LOOKUP_CONVERSION_GUIDANCE",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_LOOKUP_CONVERSION_GUIDANCE",
+                "summary": (
+                    "Keep lookup parameter binding and result mapping review-required "
+                    "until deterministic DTO contracts are validated."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": read_refs,
+            },
+        )
+        _append_claim(
+            repaired["migrationGuideInsights"],
+            key_field="section",
+            key="DETERMINISTIC_SAFETY_NET_LOOKUP_GUIDE",
+            payload={
+                "section": "DETERMINISTIC_SAFETY_NET_LOOKUP_GUIDE",
+                "summary": (
+                    "Migration guide should include lookup inputs, read dependencies, "
+                    "and result-shape review notes."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": read_refs,
+            },
+        )
+
+    branch_refs = refs("branch", "parameter")
+    if branch_refs:
+        _append_claim(
+            repaired["businessRules"],
+            key_field="category",
+            key="DETERMINISTIC_SAFETY_NET_BRANCH_RULE",
+            payload={
+                "category": "DETERMINISTIC_SAFETY_NET_BRANCH_RULE",
+                "summary": (
+                    "Deterministic branch facts indicate conditional business outcomes "
+                    "that require review in the migration guide."
+                ),
+                "status": "INFERRED_DESCRIPTION",
+                "evidenceRefs": branch_refs,
+            },
+        )
+
+    dml_refs = refs("transaction", "table_write", "error", "branch", limit=4)
+    if dml_refs:
+        _append_claim(
+            repaired["riskFlags"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_TRANSACTION_DML_REVIEW",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_TRANSACTION_DML_REVIEW",
+                "severity": "WARNING",
+                "summary": (
+                    "Transaction, DML, branch, or error-handling facts need human review "
+                    "before Java/MyBatis transaction boundaries are drafted."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dml_refs,
+            },
+        )
+        _append_claim(
+            repaired["conversionGuidance"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_TRANSACTION_CONVERSION_GUIDANCE",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_TRANSACTION_CONVERSION_GUIDANCE",
+                "summary": (
+                    "Preserve transaction boundaries, branch outcomes, and error handling "
+                    "as review-required conversion guidance."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dml_refs,
+            },
+        )
+        _append_claim(
+            repaired["migrationGuideInsights"],
+            key_field="section",
+            key="DETERMINISTIC_SAFETY_NET_DML_MATRIX",
+            payload={
+                "section": "DETERMINISTIC_SAFETY_NET_DML_MATRIX",
+                "summary": (
+                    "Migration guide should include a DML/transaction matrix and "
+                    "review-required branch outcomes."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dml_refs,
+            },
+        )
+
+    audit_refs = refs("audit_write", "table_write")
+    if audit_refs:
+        _append_claim(
+            repaired["businessRules"],
+            key_field="category",
+            key="DETERMINISTIC_SAFETY_NET_AUDIT_SIDE_EFFECT",
+            payload={
+                "category": "DETERMINISTIC_SAFETY_NET_AUDIT_SIDE_EFFECT",
+                "summary": (
+                    "Deterministic write facts indicate audit or reporting side effects "
+                    "that remain draft business context."
+                ),
+                "status": "INFERRED_DESCRIPTION",
+                "evidenceRefs": audit_refs,
+            },
+        )
+        _append_claim(
+            repaired["modernizationPoints"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_AUDIT_MODERNIZATION_REVIEW",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_AUDIT_MODERNIZATION_REVIEW",
+                "summary": (
+                    "Audit/reporting side effects should be separated from service logic "
+                    "only after deterministic review."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": audit_refs,
+            },
+        )
+
+    dynamic_refs = refs("dynamic_sql", "cross_database", "procedure_call", "result_uncertain", limit=4)
+    if dynamic_refs:
+        _append_claim(
+            repaired["modernizationPoints"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_REVIEW",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_REVIEW",
+                "summary": (
+                    "Dynamic SQL or cross-database evidence should be isolated as "
+                    "review-required modernization work."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dynamic_refs,
+            },
+        )
+        _append_claim(
+            repaired["conversionGuidance"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_CONVERSION_GUIDANCE",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_CONVERSION_GUIDANCE",
+                "summary": (
+                    "Do not confirm dynamic SQL dependencies or result shape without "
+                    "deterministic metadata; keep conversion guidance review-required."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dynamic_refs,
+            },
+        )
+        _append_claim(
+            repaired["migrationGuideInsights"],
+            key_field="section",
+            key="DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_GUIDE",
+            payload={
+                "section": "DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_GUIDE",
+                "summary": (
+                    "Migration guide should list dynamic SQL, cross-database, and "
+                    "uncertain result-shape caveats as review-required."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dynamic_refs,
+            },
+        )
+        _append_claim(
+            repaired["riskFlags"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_RISK",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_RISK",
+                "severity": "WARNING",
+                "summary": (
+                    "Dynamic SQL, cross-database references, or uncertain result shape "
+                    "can hide dependencies and must remain REVIEW_REQUIRED."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dynamic_refs,
+            },
+        )
+        _append_claim(
+            repaired["reviewMarkers"],
+            key_field="code",
+            key="DETERMINISTIC_SAFETY_NET_UNSUPPORTED_DEPENDENCY_REVIEW",
+            payload={
+                "code": "DETERMINISTIC_SAFETY_NET_UNSUPPORTED_DEPENDENCY_REVIEW",
+                "message": (
+                    "Unsupported dependency/table/function/procedure claims from dynamic "
+                    "or cross-database evidence remain review markers only."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": dynamic_refs,
+            },
+        )
+
+    if repaired["assumptions"] and "DETERMINISTIC_SAFETY_NET" not in " ".join(
+        repaired["assumptions"]
+    ):
+        repaired["assumptions"].append(
+            "DETERMINISTIC_SAFETY_NET added draft claims from allowed deterministic fact ids only."
+        )
+    elif not repaired["assumptions"]:
+        repaired["assumptions"].append(
+            "DETERMINISTIC_SAFETY_NET added draft claims from allowed deterministic fact ids only."
+        )
+    return repaired
+
+
+def _deterministic_fact_index(
+    *,
+    metadata: Mapping[str, Any],
+    static_analysis: Mapping[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+) -> dict[str, list[str]]:
+    allowed = {str(ref) for ref in allowed_evidence_refs if str(ref).strip()}
+    themes: dict[str, list[str]] = {}
+    deterministic_facts = metadata.get("deterministicFacts") or metadata.get("deterministic_facts")
+    if isinstance(deterministic_facts, Sequence) and not isinstance(
+        deterministic_facts,
+        str | bytes,
+    ):
+        for fact in deterministic_facts:
+            if not isinstance(fact, Mapping):
+                continue
+            fact_id = str(fact.get("id") or "")
+            if fact_id not in allowed:
+                continue
+            haystack = " ".join(
+                str(fact.get(key) or "")
+                for key in ("id", "type", "fact_type", "summary", "objectRef", "object_ref")
+            ).lower()
+            for theme, keywords in _fact_theme_keywords().items():
+                if any(keyword in haystack for keyword in keywords):
+                    themes.setdefault(theme, []).append(fact_id)
+
+    for ref in _static_pattern_refs(static_analysis):
+        if ref not in allowed:
+            continue
+        haystack = ref.lower()
+        for theme, keywords in _fact_theme_keywords().items():
+            if any(keyword in haystack for keyword in keywords):
+                themes.setdefault(theme, []).append(ref)
+
+    return {theme: _dedupe(refs) for theme, refs in themes.items()}
+
+
+def _fact_theme_keywords() -> dict[str, tuple[str, ...]]:
+    return {
+        "parameter": ("parameter", "input", "param"),
+        "table_read": ("table_read", "read", "lookup", "select"),
+        "result_shape": ("result_shape", "result shape", "result"),
+        "result_uncertain": ("uncertain", "unknown", "ambiguous"),
+        "transaction": ("transaction", "commit", "rollback", "try_catch", "try catch"),
+        "branch": ("branch", "approve", "hold", "conditional", "decision"),
+        "table_write": ("table_write", "write", "insert", "update", "delete", "dml"),
+        "audit_write": ("audit", "reporting", "extract"),
+        "error": ("error", "exception", "raiserror", "throw"),
+        "dynamic_sql": ("dynamic", "sp_executesql"),
+        "cross_database": ("cross", "database", "tenant"),
+        "procedure_call": ("procedure_call", "procedure", "sp_executesql"),
+    }
+
+
+def _append_claim(
+    items: list[dict[str, Any]],
+    *,
+    key_field: str,
+    key: str,
+    payload: dict[str, Any],
+) -> None:
+    for existing in items:
+        if str(existing.get(key_field) or "") == key:
+            existing["evidenceRefs"] = _dedupe(
+                [*_evidence_refs(existing), *_evidence_refs(payload)]
+            )
+            existing["status"] = payload.get("status", existing.get("status"))
+            return
+    if payload.get("evidenceRefs"):
+        items.append(payload)
 
 
 def _sanitize_output_for_storage(

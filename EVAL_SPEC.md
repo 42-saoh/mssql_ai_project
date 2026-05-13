@@ -179,6 +179,7 @@
 - metadata tool planning 은 strict `schema:mssql_metadata_tool_plan@0.1.0` 출력만 허용하고,
   실제 MCP 실행은 workflow deterministic policy gate 와 내부 registry 로만 수행함
 - structured output 은 `schema:llm_semantic_analysis@0.3.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
+- P-GPT 등 remote provider drift 는 strict validation 을 먼저 시도한 뒤, schema/OpenAPI 를 넓히지 않고 extra field/alias/status/severity 만 결정론적으로 정규화한다. 저장되는 normalizer metadata 는 path/code 수준이며 raw provider response, prompt, SQL/SP text 는 저장하지 않는다.
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
 통과 기준:
@@ -202,6 +203,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - P23 은 P22 runtime 이후의 평가 확장으로 분리한다
 - P23A 는 계약/프롬프트 자산을 만들고, P23B 는 synthetic simple/medium/complex fixture 와 fake-gateway 검증을 추가한다
 - P23C 는 P23B fixture 를 `FakeModelGateway` 로 반복 실행하고 quality score 를 계산한다
+- P-GPT live confidence 경로는 prompt quality hints 와 deterministic safety net 을 사용해 read-only lookup, transaction/DML, dynamic SQL/cross-DB, uncertain result-shape coverage 를 보강한다. Safety net claims 는 `DETERMINISTIC_SAFETY_NET_*` prefix 와 allowed deterministic fact id 만 사용하며 draft/reviewable confidence evidence 로만 취급한다.
 - simple/medium/complex stored procedure scenario matrix 와 authored fixture 를 유지한다
 - P26 live confidence 는 기본적으로 `openai_sp_semantic_analysis` / `OPENAI_MODEL_ANALYSIS` 를 사용한다. fast/test profile 은 수동 평가 선택지로 남고 기본값은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 바꿀 수 있다.
 - LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 로 제한한다
@@ -336,6 +338,7 @@ P32 는 bounded AI-MCP planner 가 실제로 유용한 metadata evidence 를 수
 - under-utilized planner evidence 는 `REVIEW_REQUIRED` metrics/status 로 잡힌다
 - raw SQL/definition, row data, procedure execution, DDL/DML, secret, raw prompt/provider response text 를 반환하지 않는다
 - `P32_LIVE_CONFIDENCE_GATE=1` 일 때만 remote LLM 과 live PPM metadata 를 결합한다. Env/profile/prerequisite 누락은 gate enabled 상태에서 blocker failure 이며, 기본 실행은 `NOT_RUN_CONFIDENCE_ONLY` 다
+- P-GPT planner output 은 strict-first 로 검증하고 safe aliases (`tools`, `args`, `rationale`, `evidenceUse`) 만 canonical `toolRequests`, `arguments`, `reason`, `expectedEvidenceUse` 로 정규화한다. Invalid/empty planner output 에서는 TABLE 과 PROCEDURE/VIEW/FUNCTION 대상별 deterministic read-only fallback request 를 만들되 기존 `AgentToolPolicy`, budget, dedupe, sanitizer 를 반드시 통과해야 한다.
 - live confidence 성공은 production readiness 가 아니라 confidence signal 이며 `production_ready: false` 를 유지한다
 
 통과 기준:

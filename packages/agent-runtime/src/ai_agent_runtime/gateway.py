@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 import httpx
@@ -476,6 +476,7 @@ class OpenAIModelGateway:
                 output_text=output_text,
                 parser=parser,
                 schema_name=schema_name,
+                allowed_tool_names=prompt.metadata.get("toolNames") or (),
             )
         except httpx.HTTPStatusError as exc:
             raise ModelGatewayError(
@@ -695,10 +696,29 @@ def _parse_structured_output(
     output_text: str,
     parser,
     schema_name: str,
+    allowed_tool_names: Sequence[str] = (),
 ) -> tuple[Any, list[dict[str, Any]]]:
     try:
         return parser(output_text), []
     except (json.JSONDecodeError, ValueError) as exc:
+        if schema_name == "metadata_tool_plan":
+            repaired, removed_paths = _metadata_tool_plan_without_schema_drift(
+                output_text,
+                allowed_tool_names=allowed_tool_names,
+            )
+            if not removed_paths:
+                raise exc
+            return (
+                AiToolPlanningOutput.model_validate(repaired),
+                [
+                    {
+                        "component": "structured_output_normalizer",
+                        "status": "SUCCEEDED",
+                        "action": "normalized_metadata_tool_plan",
+                        "removedFieldPaths": removed_paths,
+                    }
+                ],
+            )
         if schema_name != "llm_semantic_analysis":
             raise
         repaired, removed_paths = _semantic_output_without_extra_fields(output_text)
@@ -807,6 +827,172 @@ def _semantic_output_without_extra_fields(output_text: str) -> tuple[dict[str, A
             continue
         repaired[key] = value
     return repaired, sorted(removed_paths)
+
+
+def _metadata_tool_plan_without_schema_drift(
+    output_text: str,
+    *,
+    allowed_tool_names: Sequence[str],
+) -> tuple[dict[str, Any], list[str]]:
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return {}, []
+    if not isinstance(payload, dict):
+        return {}, []
+
+    removed_paths: list[str] = []
+    allowed_roots = {
+        "toolRequests",
+        "tool_requests",
+        "tools",
+        "requests",
+        "assumptions",
+        "reviewMarkers",
+        "review_markers",
+    }
+    repaired: dict[str, Any] = {
+        "toolRequests": [],
+        "assumptions": [],
+        "reviewMarkers": [],
+    }
+    tool_request_key, tool_request_value = _first_present(
+        payload,
+        ("toolRequests", "tool_requests", "tools", "requests"),
+    )
+    if tool_request_key and tool_request_key != "toolRequests":
+        removed_paths.append(f"$.{tool_request_key}")
+    repaired["toolRequests"] = _tool_request_items_without_schema_drift(
+        _claim_value_list(
+            tool_request_value if tool_request_key else [],
+            path=f"$.{tool_request_key or 'toolRequests'}",
+            removed_paths=removed_paths,
+        ),
+        allowed_tool_names=allowed_tool_names,
+        path=f"$.{tool_request_key or 'toolRequests'}",
+        removed_paths=removed_paths,
+    )
+
+    assumptions = payload.get("assumptions", [])
+    if isinstance(assumptions, list):
+        repaired["assumptions"] = [
+            _assumption_without_provider_text(
+                item,
+                path=f"$.assumptions[{index}]",
+                removed_paths=removed_paths,
+            )
+            for index, item in enumerate(assumptions)
+        ]
+    elif assumptions:
+        removed_paths.append("$.assumptions")
+
+    marker_key, marker_value = _first_present(payload, ("reviewMarkers", "review_markers"))
+    if marker_key and marker_key != "reviewMarkers":
+        removed_paths.append(f"$.{marker_key}")
+    repaired["reviewMarkers"] = _claim_items_without_schema_drift(
+        _claim_value_list(
+            marker_value if marker_key else [],
+            path=f"$.{marker_key or 'reviewMarkers'}",
+            removed_paths=removed_paths,
+        ),
+        field_name="reviewMarkers",
+        allowed_keys={"code", "message", "status", "evidenceRefs", "evidence_refs"},
+        required_keys={"code", "message"},
+        path=f"$.{marker_key or 'reviewMarkers'}",
+        removed_paths=removed_paths,
+    )
+
+    for key in payload:
+        if key not in allowed_roots:
+            removed_paths.append(f"$.{key}")
+    return repaired, sorted(set(removed_paths))
+
+
+def _first_present(payload: Mapping[str, Any], keys: Sequence[str]) -> tuple[str | None, Any]:
+    for key in keys:
+        if key in payload:
+            return key, payload[key]
+    return None, None
+
+
+def _tool_request_items_without_schema_drift(
+    value: list[Any],
+    *,
+    allowed_tool_names: Sequence[str],
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    allowed = {str(name) for name in allowed_tool_names if str(name).strip()}
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(value):
+        item_path = f"{path}[{index}]"
+        if not isinstance(raw_item, dict):
+            removed_paths.append(item_path)
+            continue
+        tool_name = _first_string(
+            raw_item,
+            ("toolName", "tool_name", "tool", "name"),
+        )
+        if not tool_name or (allowed and tool_name not in allowed):
+            removed_paths.append(f"{item_path}.toolName")
+            continue
+        arguments = _first_mapping(
+            raw_item,
+            ("arguments", "args", "parameters"),
+        )
+        reason = _first_string(raw_item, ("reason", "rationale", "why")) or (
+            "Planner returned a normalized read-only metadata request."
+        )
+        expected = _first_string(
+            raw_item,
+            ("expectedEvidenceUse", "expected_evidence_use", "evidenceUse", "evidence_use"),
+        ) or "Use sanitized metadata evidence for later REVIEW_REQUIRED claims."
+        repaired_items.append(
+            {
+                "toolName": tool_name,
+                "arguments": dict(arguments),
+                "reason": reason,
+                "expectedEvidenceUse": expected,
+            }
+        )
+        canonical_aliases = {
+            "toolName",
+            "tool_name",
+            "tool",
+            "name",
+            "arguments",
+            "args",
+            "parameters",
+            "reason",
+            "rationale",
+            "why",
+            "expectedEvidenceUse",
+            "expected_evidence_use",
+            "evidenceUse",
+            "evidence_use",
+        }
+        for key in raw_item:
+            if key not in canonical_aliases:
+                removed_paths.append(f"{item_path}.{key}")
+            elif key not in {"toolName", "arguments", "reason", "expectedEvidenceUse"}:
+                removed_paths.append(f"{item_path}.{key}")
+    return repaired_items
+
+
+def _first_string(payload: Mapping[str, Any], keys: Sequence[str]) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _first_mapping(payload: Mapping[str, Any], keys: Sequence[str]) -> Mapping[str, Any]:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            return value
+    return {}
 
 
 def _assumption_without_provider_text(

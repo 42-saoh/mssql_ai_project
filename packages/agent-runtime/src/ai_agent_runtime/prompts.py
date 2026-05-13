@@ -18,17 +18,24 @@ from ai_agent_runtime.models import (
 SYSTEM_PROMPT = """You analyze MSSQL stored procedures for a draft-only migration platform.
 Return only schema-valid JSON. Treat deterministic metadata and static analysis as evidence.
 Every claim must use evidenceRefs copied exactly from evidenceRefContract.allowedFactIds.
+Always return these top-level arrays even when empty: businessRules, modernizationPoints,
+riskFlags, reviewMarkers, conversionGuidance, migrationGuideInsights, and assumptions.
 Never use prompt hashes, input hashes, output hashes, raw SQL snippets, row data, or provider
 trace ids as claim evidence. Do not invent dependencies, tables, functions, or procedures.
-Mark uncertain conclusions as REVIEW_REQUIRED. Prioritize migration guide quality and
-Java/MyBatis conversion readiness, but never treat LLM inference as deterministic fact.
+Allowed claim statuses are only INFERRED_DESCRIPTION and REVIEW_REQUIRED. Never use
+CONFIRMED, SUPPORTED, DONE, OK, or other completion statuses. Mark uncertain conclusions
+as REVIEW_REQUIRED. Prioritize migration guide quality and Java/MyBatis conversion
+readiness, but never treat LLM inference as deterministic fact.
 Never request row data, procedure execution, DDL/DML, deployment, or secrets."""
 
 TOOL_PLANNER_SYSTEM_PROMPT = """You plan bounded MSSQL metadata tool use for an AI agent workflow.
 Return only schema-valid JSON. Choose only tools from toolCapabilities. Request metadata-only
 facts that will improve the later semantic analysis. Never request row data, procedure execution,
 free-form SQL, DDL/DML, deployment, secrets, credentials, or profile switching. Prefer the
-smallest number of tool calls and use structured arguments only."""
+smallest number of tool calls and use structured arguments only. Use the exact output field
+names toolRequests, toolName, arguments, reason, expectedEvidenceUse, assumptions, and
+reviewMarkers; do not use aliases such as tools, requests, tool, args, parameters, rationale,
+or evidenceUse. Return no toolRequests only when existing evidence is already sufficient."""
 
 METADATA_ANALYSIS_SYSTEM_PROMPT = """You analyze read-only MSSQL metadata evidence for an
 AI agent platform. Return only schema-valid JSON. Every insight must use evidenceRefs copied
@@ -65,6 +72,7 @@ def render_semantic_analysis_prompt(
         "procedureDefinitionIncluded": procedure_definition is not None,
         "stage": stage,
         "task": _stage_task(stage),
+        "qualityHints": _quality_hints(metadata, static_analysis, allowed_refs),
         "evidenceRefContract": {
             "allowedFactIds": allowed_refs,
             "factCatalog": _fact_catalog(metadata, static_analysis, allowed_refs),
@@ -148,8 +156,10 @@ def render_metadata_tool_planning_prompt(
             "get_extended_properties, and get_related_db_objects when those facts are "
             "missing. For PROCEDURE, VIEW, or FUNCTION targets, prefer dependency closure, "
             "related objects, extended properties, and definition-metadata tools, knowing "
-            "raw definition text will be removed. Return no toolRequests when existing "
-            "evidence is sufficient."
+            "raw definition text will be removed. Use exact JSON field names only: "
+            "toolRequests items must contain toolName, arguments, reason, and "
+            "expectedEvidenceUse. Return no toolRequests only when existing evidence is "
+            "sufficient for dependency, documentation, shape, and relationship claims."
         ),
         "round": round_index,
     }
@@ -280,25 +290,31 @@ def _stage_task(stage: str) -> str:
         )
     if stage == "business_rule_extraction":
         return (
-            "Extract business rules, branch semantics, DML side effects, and risk flags "
-            "that are supported by exact allowedFactIds."
+            "Extract business rules, read-only lookup behavior, transaction/DML side "
+            "effects, dynamic SQL or cross-database risk candidates, and uncertain result "
+            "shape candidates by deterministic fact type. Populate businessRules and "
+            "riskFlags only with exact allowedFactIds."
         )
     if stage == "conversion_readiness":
         return (
             "Focus on Java/MyBatis conversion readiness. Populate conversionGuidance "
             "with draft-only implementation guidance, blockers, and REVIEW_REQUIRED "
-            "caveats tied to exact allowedFactIds."
+            "caveats tied to exact allowedFactIds. Java/MyBatis guidance must be in "
+            "conversionGuidance and marked REVIEW_REQUIRED."
         )
     if stage == "migration_guide_insights":
         return (
             "Focus on migration guide quality. Populate migrationGuideInsights with "
             "section-level insights for overview, dependency inventory, DML matrix, "
-            "call flow, risk metrics, and migration strategy."
+            "call flow, risk metrics, and migration strategy. Use stable guide section "
+            "keys rather than prose-only headings."
         )
     if stage == "evidence_critic":
         return (
             "Critique the accumulated evidence discipline. Add missing REVIEW_REQUIRED "
-            "markers and avoid unsupported dependency, table, function, or procedure claims."
+            "markers and avoid unsupported dependency, table, function, or procedure claims. "
+            "Unsupported dependency/table/function/procedure observations belong only in "
+            "reviewMarkers, not deterministic facts or confirmed claims."
         )
     if stage == "semantic_claims":
         return (
@@ -316,6 +332,79 @@ def _stage_task(stage: str) -> str:
             "and requiredReviewMarkers are present with status REVIEW_REQUIRED."
         )
     return "Infer draft-only SP semantic analysis from deterministic evidence."
+
+
+def _quality_hints(
+    metadata: dict[str, Any],
+    static_analysis: dict[str, Any] | None,
+    allowed_refs: list[str],
+) -> dict[str, Any]:
+    fact_catalog = _fact_catalog(metadata, static_analysis, allowed_refs)
+    coverage = []
+    ref_text = " ".join(
+        [
+            *allowed_refs,
+            *[
+                f"{item.get('type', '')} {item.get('summary', '')}"
+                for item in fact_catalog
+                if isinstance(item, dict)
+            ],
+        ]
+    ).lower()
+    coverage_specs = (
+        (
+            "readOnlyLookup",
+            ("read", "lookup", "parameter", "result_shape", "result shape"),
+            (
+                "When lookup/read/result facts exist, cover businessRules, "
+                "conversionGuidance, and migrationGuideInsights."
+            ),
+        ),
+        (
+            "transactionDml",
+            ("transaction", "commit", "rollback", "insert", "update", "delete", "dml", "write"),
+            (
+                "When transaction or DML facts exist, cover side effects, riskFlags, "
+                "conversionGuidance, and DML-matrix guide sections."
+            ),
+        ),
+        (
+            "dynamicSqlCrossDb",
+            ("dynamic", "sp_executesql", "cross", "database", "tenant"),
+            (
+                "When dynamic SQL or cross-database facts exist, keep dependency "
+                "claims REVIEW_REQUIRED and add reviewMarkers."
+            ),
+        ),
+        (
+            "uncertainResultShape",
+            ("uncertain", "result shape", "result_shape", "rowcount", "unknown shape"),
+            (
+                "When result shape is uncertain, add REVIEW_REQUIRED conversion and "
+                "migration guide caveats."
+            ),
+        ),
+    )
+    for key, keywords, instruction in coverage_specs:
+        if any(keyword in ref_text for keyword in keywords):
+            coverage.append(
+                {
+                    "coverageKey": key,
+                    "instruction": instruction,
+                    "claimKeyExamples": [
+                        f"{key}.business",
+                        f"{key}.conversion",
+                        f"{key}.migration",
+                    ],
+                }
+            )
+    return {
+        "expectedCoverage": coverage,
+        "claimKeyRule": (
+            "Use generic stable keys from the detected coverage area; never copy "
+            "fixture-specific expected wording."
+        ),
+    }
 
 
 def _fact_catalog(

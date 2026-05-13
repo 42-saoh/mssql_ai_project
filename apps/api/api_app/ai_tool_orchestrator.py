@@ -34,6 +34,7 @@ MAX_AI_TOOL_ROUNDS = 2
 REVIEW_STATUS = "REVIEW_REQUIRED"
 SKIPPED_STATUS = "SKIPPED"
 SUCCEEDED_STATUS = "SUCCEEDED"
+AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK = "AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK"
 FORBIDDEN_ARGUMENT_KEYS = frozenset(
     {
         "sql",
@@ -194,6 +195,96 @@ class AgentToolPolicy:
         )
 
 
+def deterministic_fallback_tool_requests(
+    *,
+    db_profile_id: str,
+    target: Mapping[str, Any] | None,
+    tool_names: set[str] | list[str] | tuple[str, ...],
+    max_tool_calls: int,
+) -> list[dict[str, Any]]:
+    target_info = _target_mapping(target)
+    if not target_info or max_tool_calls <= 0:
+        return []
+    schema = target_info["schema"]
+    name = target_info["name"]
+    object_type = target_info["type"]
+    allowed = set(tool_names)
+    requests: list[dict[str, Any]] = []
+
+    def add(
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        reason: str,
+        expected: str,
+    ) -> None:
+        if tool_name not in allowed:
+            return
+        requests.append(
+            {
+                "toolName": tool_name,
+                "arguments": {"dbProfileId": db_profile_id, **arguments},
+                "reason": reason,
+                "expectedEvidenceUse": expected,
+            }
+        )
+
+    if object_type == "TABLE":
+        table_args = {"schema": schema, "tableName": name}
+        add(
+            "get_table_schema",
+            table_args,
+            reason="Fallback needs deterministic table shape evidence.",
+            expected="Anchor column, DTO, and result-shape review claims.",
+        )
+        add(
+            "get_table_constraints",
+            table_args,
+            reason="Fallback needs deterministic key and relationship evidence.",
+            expected="Anchor PK/FK/constraint and relationship claims.",
+        )
+        add(
+            "get_table_indexes",
+            table_args,
+            reason="Fallback needs deterministic index evidence.",
+            expected="Anchor index and access-path review claims.",
+        )
+        object_args = {"schema": schema, "objectName": name, "objectType": object_type}
+        add(
+            "get_extended_properties",
+            object_args,
+            reason="Fallback needs deterministic documentation evidence.",
+            expected="Anchor description coverage and documentation gap claims.",
+        )
+        add(
+            "get_related_db_objects",
+            object_args,
+            reason="Fallback needs deterministic related-object evidence.",
+            expected="Anchor dependency and relationship review claims.",
+        )
+    elif object_type in {"PROCEDURE", "VIEW", "FUNCTION"}:
+        object_args = {"schema": schema, "objectName": name, "objectType": object_type}
+        add(
+            "get_dependency_closure",
+            {**object_args, "maxDepth": 1, "includeReviewRequired": True},
+            reason="Fallback needs bounded dependency closure evidence.",
+            expected="Anchor dependency, related object, and review marker claims.",
+        )
+        add(
+            "get_extended_properties",
+            object_args,
+            reason="Fallback needs deterministic documentation evidence.",
+            expected="Anchor documentation and migration guide review claims.",
+        )
+        add(
+            "get_related_db_objects",
+            object_args,
+            reason="Fallback needs deterministic related-object evidence.",
+            expected="Anchor relationship and dependency review claims.",
+        )
+    return requests[:max_tool_calls]
+
+
 class AiToolOrchestrator:
     def __init__(
         self,
@@ -331,30 +422,69 @@ class AiToolOrchestrator:
                 invocation = planner(prompt=prompt, profile=profile)
                 plan = AiToolPlanningOutput.model_validate(invocation.structured_output)
             except (ModelGatewayError, ValueError) as exc:
-                marker = _review_marker(
-                    "AI_TOOL_ORCHESTRATION_SKIPPED",
-                    (
-                        "Metadata tool planning failed; workflow continued with baseline "
-                        f"metadata. code={getattr(exc, 'code', exc.__class__.__name__)}"
-                    ),
-                    evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
+                fallback_requests = deterministic_fallback_tool_requests(
+                    db_profile_id=request_record.db_profile_id,
+                    target=request_record.target,
+                    tool_names=policy.tool_names,
+                    max_tool_calls=max_tool_calls - len(tool_results),
                 )
-                review_markers.append(marker)
-                caveats.append("AI_TOOL_ORCHESTRATION_SKIPPED")
-                break
-            component_invocations.append(
-                {
-                    "stage": "ai_tool_planning",
-                    "toolName": "metadata_tool_planner",
-                    "status": invocation.status.value,
-                    "inputHash": invocation.input_hash,
-                    "promptHash": invocation.prompt_hash,
-                    "outputHash": invocation.output_hash,
-                    "latencyMs": invocation.latency_ms,
-                    "evidenceCount": 0,
-                    "toolRequestCount": len(plan.tool_requests),
-                }
-            )
+                component_invocations.append(
+                    {
+                        "stage": "ai_tool_planning",
+                        "toolName": "metadata_tool_planner",
+                        "status": REVIEW_STATUS,
+                        "latencyMs": 0,
+                        "evidenceCount": 0,
+                        "toolRequestCount": len(fallback_requests),
+                        "errorCode": getattr(exc, "code", exc.__class__.__name__),
+                    }
+                )
+                if not fallback_requests:
+                    marker = _review_marker(
+                        "AI_TOOL_ORCHESTRATION_SKIPPED",
+                        (
+                            "Metadata tool planning failed; workflow continued with baseline "
+                            f"metadata. code={getattr(exc, 'code', exc.__class__.__name__)}"
+                        ),
+                        evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
+                    )
+                    review_markers.append(marker)
+                    caveats.append("AI_TOOL_ORCHESTRATION_SKIPPED")
+                    break
+                plan = _fallback_tool_plan(
+                    fallback_requests,
+                    evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
+                    detail_code=getattr(exc, "code", exc.__class__.__name__),
+                )
+                caveats.append(AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK)
+            else:
+                component_invocations.append(
+                    {
+                        "stage": "ai_tool_planning",
+                        "toolName": "metadata_tool_planner",
+                        "status": invocation.status.value,
+                        "inputHash": invocation.input_hash,
+                        "promptHash": invocation.prompt_hash,
+                        "outputHash": invocation.output_hash,
+                        "latencyMs": invocation.latency_ms,
+                        "evidenceCount": 0,
+                        "toolRequestCount": len(plan.tool_requests),
+                    }
+                )
+                if not plan.tool_requests and not tool_results:
+                    fallback_requests = deterministic_fallback_tool_requests(
+                        db_profile_id=request_record.db_profile_id,
+                        target=request_record.target,
+                        tool_names=policy.tool_names,
+                        max_tool_calls=max_tool_calls - len(tool_results),
+                    )
+                    if fallback_requests:
+                        plan = _fallback_tool_plan(
+                            fallback_requests,
+                            evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
+                            detail_code="EMPTY_TOOL_PLAN",
+                        )
+                        caveats.append(AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK)
             planned_request_count += len(plan.tool_requests)
             for marker in plan.review_markers:
                 marker_payload = marker.model_dump(by_alias=True, mode="json")
@@ -571,6 +701,17 @@ def _tool_capabilities(tools: list[ToolSpec]) -> list[dict[str, Any]]:
 def _target_ref(request_record: WorkRequestRecord) -> str:
     target = request_record.target
     return f"{target['schema']}.{target['name']}"
+
+
+def _target_mapping(target: Mapping[str, Any] | None) -> dict[str, str] | None:
+    if not isinstance(target, Mapping):
+        return None
+    schema = str(target.get("schema") or target.get("schemaName") or "").strip()
+    name = str(target.get("name") or target.get("objectName") or "").strip()
+    object_type = str(target.get("type") or target.get("objectType") or "").strip().upper()
+    if not schema or not name or object_type not in {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"}:
+        return None
+    return {"schema": schema, "name": name, "type": object_type}
 
 
 def _normalized_arguments(
@@ -837,6 +978,35 @@ def _blocked_request(decision: PolicyDecision) -> dict[str, Any]:
         "code": str(decision.code or "AI_TOOL_REQUEST_BLOCKED"),
         "message": str(decision.message or "AI metadata tool request was blocked."),
     }
+
+
+def _fallback_tool_plan(
+    tool_requests: list[dict[str, Any]],
+    *,
+    evidence_refs: list[str],
+    detail_code: str,
+) -> AiToolPlanningOutput:
+    return AiToolPlanningOutput.model_validate(
+        {
+            "toolRequests": tool_requests,
+            "assumptions": [
+                (
+                    "Deterministic read-only fallback metadata requests were used because "
+                    "the model planner was invalid or empty."
+                )
+            ],
+            "reviewMarkers": [
+                _review_marker(
+                    AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK,
+                    (
+                        "Metadata tool planner output was invalid or empty; deterministic "
+                        f"read-only fallback tool requests were used. code={detail_code}"
+                    ),
+                    evidence_refs=evidence_refs,
+                )
+            ],
+        }
+    )
 
 
 def _review_marker(
