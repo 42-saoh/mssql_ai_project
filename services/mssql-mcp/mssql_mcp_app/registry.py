@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from mssql_mcp_app.backpressure import metadata_admission
 from mssql_mcp_app.catalog import TOOL_CATALOG, ToolSpec
 from mssql_mcp_app.errors import (
     INVALID_ARGUMENTS,
@@ -17,6 +18,12 @@ from mssql_mcp_app.guardrails import enforce_read_only_arguments
 from mssql_mcp_app.profiles import DbProfile
 from mssql_mcp_app.repositories import MetadataRepository
 from mssql_mcp_app.schema_validation import validate_tool_arguments
+from mssql_mcp_app.tool_cache import (
+    cache_key_for_metadata_tool,
+    metadata_tool_result_cache,
+    repository_mode,
+    stable_json_hash,
+)
 from mssql_mcp_app.tool_models import ToolErrorPayload, ToolInvokeRequest, ToolResponse
 
 
@@ -33,8 +40,21 @@ class ToolRegistry:
         self.profiles = profiles
         self._tools = {tool.name: tool for tool in catalog}
         self._profile_ids = {profile.id for profile in profiles}
+        self._catalog_version = stable_json_hash(
+            [
+                {
+                    "name": tool.name,
+                    "active": tool.active,
+                    "readOnly": tool.read_only,
+                    "inputSchema": tool.input_schema,
+                }
+                for tool in catalog
+            ]
+        )[:16]
+        self.last_cache_event = None
 
     def invoke_payload(self, tool_name: str, payload: dict[str, Any] | None) -> dict[str, Any]:
+        self.last_cache_event = None
         tool = self._get_tool(tool_name)
         request = self._parse_request(tool_name, payload)
 
@@ -44,11 +64,26 @@ class ToolRegistry:
             allowed_argument_paths=_allowed_guardrail_paths(tool.name),
         )
         arguments = validate_tool_arguments(tool, raw_arguments)
-        self._validate_profile(tool.name, arguments)
+        profile = self._validate_profile(tool.name, arguments)
 
-        result = self.repository.invoke(tool.name, arguments)
+        cache_key = cache_key_for_metadata_tool(
+            tool_name=tool.name,
+            arguments=arguments,
+            db_profile_id=profile.id,
+            source_database=profile.database,
+            repository_mode=repository_mode(self.repository),
+            catalog_version=self._catalog_version,
+        )
+        cache = metadata_tool_result_cache()
+        cached, cache_event = cache.get(cache_key)
+        self.last_cache_event = cache_event
+        if cached is not None:
+            return cached
+
+        with metadata_admission(tool_name=tool.name, db_profile_id=profile.id):
+            result = self.repository.invoke(tool.name, arguments)
         data = self._standardize_success_data(tool.name, arguments, result.data)
-        return ToolResponse(
+        response = ToolResponse(
             ok=True,
             toolName=tool.name,
             dbProfileId=arguments["dbProfileId"],
@@ -57,6 +92,8 @@ class ToolRegistry:
             evidenceRefs=result.evidence_refs,
             data=data,
         ).model_dump(exclude_none=True)
+        self.last_cache_event = cache.put(cache_key, response)
+        return response
 
     def _get_tool(self, tool_name: str) -> ToolSpec:
         tool = self._tools.get(tool_name)
@@ -85,7 +122,7 @@ class ToolRegistry:
                 {"toolName": tool_name, "validationErrors": _safe_validation_errors(exc)},
             ) from exc
 
-    def _validate_profile(self, tool_name: str, arguments: dict[str, Any]) -> None:
+    def _validate_profile(self, tool_name: str, arguments: dict[str, Any]) -> DbProfile:
         profile_id = arguments.get("dbProfileId")
         profile = self._profile_by_id(profile_id)
         if profile is None:
@@ -96,6 +133,7 @@ class ToolRegistry:
             )
         if tool_name == "check_database_exists":
             self._validate_database_probe_boundary(profile, arguments)
+        return profile
 
     def _profile_by_id(self, profile_id: Any) -> DbProfile | None:
         for profile in self.profiles:

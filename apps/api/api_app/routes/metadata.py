@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from api_app.dependencies import get_metadata_analysis_service
+from api_app.dependencies import get_metadata_analysis_service, get_repository
 from api_app.errors import api_http_exception
+from api_app.repositories import KnowledgePersistenceError, WorkflowRepository
 from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.metadata_service import (
     DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
@@ -63,6 +64,12 @@ def invoke_metadata_tool_route(
             detail=exc.message,
             code=exc.code,
         ) from exc
+    except KnowledgePersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc
     except ValueError as exc:
         raise api_http_exception(
             status_code=422,
@@ -97,6 +104,12 @@ def search_metadata(
             detail=exc.message,
             code=exc.code,
         ) from exc
+    except KnowledgePersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc
     except ValueError as exc:
         raise api_http_exception(
             status_code=422,
@@ -109,8 +122,10 @@ def search_metadata(
 def analyze_metadata(
     request: MetadataAnalysisRequest,
     service: Annotated[MetadataAnalysisService, Depends(get_metadata_analysis_service)],
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
 ) -> MetadataAnalysisResponse:
     try:
+        service.repository = repository
         return service.analyze(request)
     except MetadataSearchDependencyError as exc:
         raise api_http_exception(

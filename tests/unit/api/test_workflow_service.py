@@ -458,6 +458,8 @@ def test_ai_tool_orchestration_invokes_internal_read_only_tool_and_binds_fact_re
         )
     ]
     assert metadata.payload["aiToolEvidence"]["toolCallCount"] == 1
+    assert metadata.payload["aiToolEvidence"]["plannerMetrics"]["executedToolCallCount"] == 1
+    assert metadata.payload["aiToolEvidence"]["plannerMetrics"]["supportedClaimCount"] >= 1
     assert "definition" not in str(metadata.payload["aiToolEvidence"]).lower()
     assert "CREATE PROCEDURE" not in str(metadata.payload)
     assert run.structured_output["businessRules"][0]["evidenceRefs"] == [
@@ -526,6 +528,7 @@ def test_ai_tool_orchestration_blocks_adversarial_tool_plan_without_storing_raw_
     run = repository.list_agent_runs(job.job_id)[0]
     stored_text = str(metadata.payload) + str(run.model_invocation) + str(run.structured_output)
     assert metadata.payload["aiToolEvidence"]["blockedRequests"]
+    assert metadata.payload["aiToolEvidence"]["plannerMetrics"]["blockedRequestCount"] == 1
     assert metadata.payload["aiToolEvidence"]["reviewMarkers"][0]["code"] == (
         "AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED"
     )

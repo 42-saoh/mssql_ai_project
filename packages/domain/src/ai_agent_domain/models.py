@@ -95,7 +95,7 @@ class JobSummary(BaseModel):
     request_id: str
 
 
-CANONICAL_ANALYSIS_MODEL_SCHEMA_VERSION = "CanonicalAnalysisModel.v1"
+CANONICAL_ANALYSIS_MODEL_SCHEMA_VERSION = "CanonicalAnalysisModel.v2"
 
 
 class CanonicalEvidenceStatus(StrEnum):
@@ -288,6 +288,66 @@ class CanonicalModernizationPoint(BaseModel):
     inferred_from: list[str] = Field(default_factory=list)
 
 
+class CanonicalAnalysisSubject(BaseModel):
+    object_type: CanonicalObjectType = Field(alias="objectType")
+    schema_name: str | None = Field(default=None, alias="schema")
+    name: str
+    full_name: str = Field(alias="fullName")
+
+
+class CanonicalMetadataProfile(BaseModel):
+    object_ref: str = Field(alias="objectRef")
+    object_type: str = Field(alias="objectType")
+    metrics: dict[str, object] = Field(default_factory=dict)
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    source_fact_ids: list[str] = Field(default_factory=list, alias="sourceFactIds")
+
+
+class CanonicalDependencyEvidence(BaseModel):
+    fact_id: str | None = Field(default=None, alias="factId")
+    object_ref: str = Field(alias="objectRef")
+    dependency_type: str = Field(default="DEPENDS_ON", alias="dependencyType")
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    payload: dict[str, object] = Field(default_factory=dict)
+
+
+class CanonicalDtoReadiness(BaseModel):
+    object_ref: str = Field(alias="objectRef")
+    status: str = "REVIEW_REQUIRED"
+    field_count: int = Field(default=0, alias="fieldCount")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class CanonicalFactNode(BaseModel):
+    fact_id: str = Field(alias="factId")
+    fact_type: str = Field(alias="factType")
+    object_ref: str = Field(alias="objectRef")
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class CanonicalFactEdge(BaseModel):
+    edge_id: str = Field(alias="edgeId")
+    from_fact_id: str = Field(alias="fromFactId")
+    to_fact_id: str = Field(alias="toFactId")
+    edge_type: str = Field(alias="edgeType")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class CanonicalFactGraph(BaseModel):
+    nodes: list[CanonicalFactNode] = Field(default_factory=list)
+    edges: list[CanonicalFactEdge] = Field(default_factory=list)
+
+
+class CanonicalKnowledgeAssetRef(BaseModel):
+    asset_id: str = Field(alias="assetId")
+    version_id: str | None = Field(default=None, alias="versionId")
+    asset_kind: str = Field(alias="assetKind")
+    content_hash: str | None = Field(default=None, alias="contentHash")
+
+
 class CanonicalAnalysisModel(BaseModel):
     schema_version: str = CANONICAL_ANALYSIS_MODEL_SCHEMA_VERSION
     analysis_version: str
@@ -306,3 +366,24 @@ class CanonicalAnalysisModel(BaseModel):
     todos: list[CanonicalTodoItem] = Field(default_factory=list)
     evidence_assessment: CanonicalEvidenceAssessment
     overall_confidence: CanonicalConfidenceScore
+    analysis_subject: CanonicalAnalysisSubject | None = Field(
+        default=None,
+        alias="analysisSubject",
+    )
+    metadata_profiles: list[CanonicalMetadataProfile] = Field(
+        default_factory=list,
+        alias="metadataProfiles",
+    )
+    dependency_evidence: list[CanonicalDependencyEvidence] = Field(
+        default_factory=list,
+        alias="dependencyEvidence",
+    )
+    dto_readiness: list[CanonicalDtoReadiness] = Field(
+        default_factory=list,
+        alias="dtoReadiness",
+    )
+    fact_graph: CanonicalFactGraph = Field(default_factory=CanonicalFactGraph, alias="factGraph")
+    knowledge_asset_refs: list[CanonicalKnowledgeAssetRef] = Field(
+        default_factory=list,
+        alias="knowledgeAssetRefs",
+    )

@@ -42,6 +42,7 @@ flowchart LR
     WF --> AR[Agent Runtime]
     WF --> VAL[Validation / Approval]
     WF --> ART[Artifact Service]
+    WF --> KAS[Knowledge Asset Service]
 
     AR --> ANALYSIS[Analysis Engine]
     AR --> GEN[Doc / Code Generator]
@@ -53,6 +54,7 @@ flowchart LR
 
     ART --> PDB[(Platform DB)]
     ART --> OBJ[(Object Storage)]
+    KAS --> PDB
     ANALYSIS --> IDX[(Search / Graph / Index)]
     VAL --> PDB
 ```
@@ -78,6 +80,8 @@ flowchart LR
 - registry version binding
 - baseline metadata 수집 후 bounded AI tool planner 를 실행해 active/read-only MCP tool 후보 중
   필요한 추가 metadata evidence 를 내부 registry 로만 수집
+- process-local admission control 로 active workflow/MCP metadata calls 를 제한하고 초과 시
+  `WORKFLOW_BACKPRESSURE` 또는 `MCP_BACKPRESSURE` 로 응답
 
 ### Agent Runtime
 
@@ -124,6 +128,13 @@ flowchart LR
 - 파일 보관
 - export
 
+### Knowledge Asset Service
+- SP analysis, dependency evidence, metadata profile, DTO readiness, canonical analysis 를 sanitized versioned knowledge asset 으로 저장
+- 동일 logical asset key 에서 `contentHash` 가 같으면 current version 을 재사용하고, 바뀔 때만 새 version 생성
+- `mcp.*`, `metadata.profile.*`, `canonical.*` fact id 와 제한된 edge type 으로 fact graph 구성
+- JSONL / GRAPH_JSON export 제공
+- raw SP definition, SQL text, row data, secret, raw prompt/provider trace 는 저장/응답/export 에 포함하지 않음
+
 ### MSSQL Metadata MCP
 - 읽기 전용 메타데이터 도구 제공
 - 자유 SQL 실행 금지
@@ -150,6 +161,7 @@ flowchart LR
 - evidence refs
 
 ### CanonicalAnalysisModel
+- schema version: `CanonicalAnalysisModel.v2`
 - procedure signature / parameters
 - inferred result sets
 - dependencies and call graph
@@ -159,6 +171,12 @@ flowchart LR
 - evidence refs
 - registry version refs
 - snapshot id
+- analysis subject
+- metadata profiles
+- dependency evidence
+- DTO readiness
+- fact graph
+- knowledge asset refs
 
 ### DraftArtifact
 - artifact type
@@ -193,6 +211,7 @@ apps/api
   - workflow orchestration
   - approval endpoints
   - registry/admin endpoints
+  - knowledge asset persistence / fact graph / export endpoints
 
 services/mssql-mcp
   - MSSQL metadata adapters
@@ -204,6 +223,7 @@ packages/domain
   - canonical contracts
   - enums / status models
   - DTO schemas
+  - CanonicalAnalysisModel.v2 knowledge/fact graph extension
 
 packages/analysis
   - parsing / dependency / search logic
@@ -236,20 +256,22 @@ packages/templates
 
 - `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/latest-validation/validation happy path 를 제공한다. P25 기본 workflow 는 validation 이후 `VALIDATION_COMPLETE` 에서 종료하며, approval decision API 는 추후 재활성화 가능한 deferred capability 로 유지한다.
 - `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다. P25 기준 review decision 화면과 CTA 는 기본 UI 에서 제거되었다.
-- `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다. P27 기준 `get_procedure_dependencies` 계약은 resolution confidence/evidence kind/unresolved reason/chain 을 optional evidence 로 확장하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active read-only fixture-first hardened MCP tool 로 구현된다. `P27_HARD_LIVE_GATE=1` 은 PPM selected objects 대상으로 closure/resolver evidence 를 검증하며, 활성화 후 missing PPM prerequisite, inaccessible PPM, template-only selection, PLF fallback 은 blocker failure 다. P28 기준 전용 API invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. P29 기준 `/metadata/dependencies` Web diagnostic UI 는 이 route 를 수동 진단용으로 사용하고, workflow orchestration 은 PROCEDURE target 에 대해 `get_dependency_closure` evidence digest 와 evidence refs 만 병합한다. P29B 기준 DB migration, persisted artifact type, workflow state transition 은 새로 만들지 않고 deferred 로 확정했으며, 기존 metadata collection payload 의 sanitized `dependencyEvidence` 와 기존 draft artifact evidence refs 만 사용한다.
+- `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다. P27 기준 `get_procedure_dependencies` 계약은 resolution confidence/evidence kind/unresolved reason/chain 을 optional evidence 로 확장하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active read-only fixture-first hardened MCP tool 로 구현된다. `P27_HARD_LIVE_GATE=1` 은 PPM selected objects 대상으로 closure/resolver evidence 를 검증하며, 활성화 후 missing PPM prerequisite, inaccessible PPM, template-only selection, PLF fallback 은 blocker failure 다. P28 기준 전용 API invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. P29 기준 `/metadata/dependencies` Web diagnostic UI 는 이 route 를 수동 진단용으로 사용하고, workflow orchestration 은 PROCEDURE target 에 대해 `get_dependency_closure` evidence digest 와 evidence refs 만 병합한다. P29B 기준 DB migration, persisted artifact type, workflow state transition 은 새로 만들지 않고 deferred 로 확정했으며, 기존 metadata collection payload 의 sanitized `dependencyEvidence` 와 기존 draft artifact evidence refs 만 사용한다. P33 기준 active/read-only successful MCP tool result 는 process-local TTL/LRU cache 로 재사용할 수 있고, cache trace 는 `cacheStatus`, `cacheKeyHash`, `cacheAgeMs` 만 남긴다.
 - `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
 - `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. P26 기준 API/Web 기본값은 high-quality hybrid 분석이며 semantic analysis profile `gpt-5.5`, transient SP definition input, guide/conversion insight schema 를 사용한다. fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. 기본 테스트는 remote API 를 호출하지 않는다.
 - P23/P26 LLM-assisted SP analysis quality eval 은 simple/medium/complex synthetic fixtures 를 `FakeModelGateway` 로 fixture-first scoring 한다. API/Web live 기본 profile 은 `openai_sp_semantic_analysis` / `gpt-5.5` 이고, `openai_fast_test` 는 기본 `gpt-5-nano` 에서 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. Optional live OpenAI quality gate 는 confidence signal 이며 production readiness 기준이 아니다. Live 품질 gate 실패는 P24 guide generation failure 가 아니라 P23/P26 semantic-analysis confidence failure 로 해석한다.
 - P24 SP migration guide quality eval 은 sanitized simple/medium/complex fixtures 를 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` draft artifact type 으로 렌더링하고 `evaluate_p24_migration_guide_quality` 로 점수화한다. 새 persisted artifact type, API/Web/DB schema 변경, live DB access 는 없으며 Java/MyBatis 는 `draft_only_readiness_notes` 경계에 남긴다.
-- Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후 bounded AI tool orchestration 과 LLM semantic analysis 를 기본 실행한다. `useAiToolOrchestration=true` 이 기본값이며 `useLlmAnalysis=false` 이면 자동 비활성화된다. AI planner 는 active/read-only MCP catalog 전체를 후보로 보지만, 실행은 내부 registry 와 deterministic policy gate 로만 수행하고 public invoke API allowlist 는 확장하지 않는다. 수집 결과는 sanitized `aiToolEvidence` 와 `mcp.<toolName>.<hash>` deterministic fact id 로 semantic prompt 에 전달된다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
-- Metadata analysis 는 `POST /api/v1/metadata/analyze` 별도 response-only API 로 제공한다. 기존
+- Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후 bounded AI tool orchestration 과 LLM semantic analysis 를 기본 실행한다. `useAiToolOrchestration=true` 이 기본값이며 `useLlmAnalysis=false` 이면 자동 비활성화된다. AI planner 는 active/read-only MCP catalog 전체를 후보로 보지만, 실행은 내부 registry 와 deterministic policy gate 로만 수행하고 public invoke API allowlist 는 확장하지 않는다. 수집 결과는 sanitized `aiToolEvidence` 와 `mcp.<toolName>.<hash>` deterministic fact id 로 semantic prompt 에 전달된다. P33 이후 fact id 는 volatile `snapshotId`/`collectedAt` 이 아니라 sanitized content 와 argument hash 기반 `contentHash` 로 안정화하며, planner metrics 는 cache hit/miss count 를 포함한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
+- Metadata analysis 는 `POST /api/v1/metadata/analyze` 별도 API 로 제공한다. 기존
   `GET /api/v1/metadata/search` 는 deterministic identity/evidence search 로 유지하고,
   analyze API 안에서만 bounded AI tool planner 를 기본 실행한다. 이 경로도 active/read-only MCP
   catalog 전체를 후보로 보되 내부 registry 로만 실행하며, public invoke API allowlist 는 계속
   `get_dependency_closure`, `resolve_dependency_reference` 두 개로 제한한다. 결과는 sanitized
   `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id, metadata insights,
-  object profiles, category insight groups, dependency graph, DTO readiness, review markers 를
-  API 응답으로만 반환하고 DB migration 또는 persisted artifact 를 추가하지 않는다.
+  object profiles, category insight groups, dependency graph, DTO readiness, review markers,
+  knowledge asset summaries 를 반환한다. P34 기준 기본 `persistKnowledge=true` 로 sanitized
+  metadata profile/dependency/dto readiness knowledge asset 도 축적하지만, persisted artifact 또는
+  workflow state transition 은 추가하지 않는다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
 - P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되어 있으나 P25 기본 product path 는 approval UI 를 노출하지 않는다. Live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
 - P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.
@@ -271,6 +293,7 @@ packages/templates
 - OpenAPI 초안: `spec/openapi/ai_agent_platform_openapi_v1.yaml`
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
 - Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
+- Knowledge asset DDL 초안: `db/schema/ai_agent_platform_schema_v5_knowledge_assets.sql`
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - P27 dependency evidence tooling contract: `spec/eval/p27_dependency_evidence_tooling_contract.yaml`

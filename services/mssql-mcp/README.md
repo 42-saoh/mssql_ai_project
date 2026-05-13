@@ -2,6 +2,7 @@
 
 MSSQL Metadata MCP 서버의 시작점이다. 현재는 **read-only tool catalog**, profile registry, fixture-backed execution, env-gated live metadata execution 을 제공한다. 활성 catalog tool 은 fixture 경로와 live repository handler 를 모두 가진다.
 P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 fixture-first hardening 상태의 active/read-only dependency evidence tool 이다. P28 기준 API `/api/v1/metadata/tools` summary 에 `invokable` 상태가 노출되고, `/api/v1/metadata/tools/{toolName}/invoke` 는 두 P27 tool 만 안전하게 호출한다. P29 기준 Web `/metadata/dependencies` diagnostic UI 와 workflow `get_dependency_closure` evidence wiring 이 이 API/MCP boundary 를 사용한다. 명시적 `P27_HARD_LIVE_GATE=1` 을 켠 경우에만 PPM hard-live dependency evidence gate 를 실행한다.
+P33 기준 successful active/read-only tool response 는 process-local TTL/LRU cache 로 재사용될 수 있다. Cache 는 public response shape 를 바꾸지 않고 raw definition/SQL text, row data, procedure execution, DDL/DML, secret-like field, failed/write-like invocation 을 저장하지 않는다. Metadata concurrency 초과는 `MCP_BACKPRESSURE` 로 보고한다.
 
 ## 원칙
 
@@ -9,6 +10,7 @@ P27 기준 `get_dependency_closure` 와 `resolve_dependency_reference` 는 fixtu
 - row data 조회 금지
 - metadata-only
 - snapshot / evidence refs 계약 유지
+- cache trace 는 sanitized status/hash/age summary 만 노출
 - live 연결이 필요해도 metadata read-only 계정만 사용 권장
 - PPM metadata 가 필요할 때 PLF 로 대체하지 않고 blocker/error 로 보고
 

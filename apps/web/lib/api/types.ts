@@ -91,6 +91,13 @@ export interface SPAnalysisRequest {
   options?: SPAnalysisOptions;
 }
 
+export interface SPAnalysisBatchRequest {
+  dbProfileId: string;
+  targets: TargetObject[];
+  outputs: RequestedOutputType[];
+  options?: SPAnalysisOptions;
+}
+
 export interface SPAnalysisOptions {
   includeEvidenceRefs?: boolean;
   includeModernizationHints?: boolean;
@@ -98,6 +105,7 @@ export interface SPAnalysisOptions {
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   allowSpDefinitionToModel?: boolean;
   useAiToolOrchestration?: boolean;
+  persistKnowledge?: boolean;
 }
 
 export interface SubmitRequestResponse {
@@ -105,6 +113,27 @@ export interface SubmitRequestResponse {
   jobId: string;
   status: JobStatus;
   echo?: Record<string, unknown>;
+}
+
+export interface SPAnalysisBatchAcceptedItem {
+  target: TargetObject;
+  requestId: string;
+  jobId: string;
+  status: JobStatus;
+}
+
+export interface SPAnalysisBatchRejectedItem {
+  target: TargetObject;
+  code: string;
+  message: string;
+}
+
+export interface SPAnalysisBatchResponse {
+  batchId: string;
+  status: "ACCEPTED" | "PARTIAL" | "REJECTED";
+  accepted: SPAnalysisBatchAcceptedItem[];
+  rejected: SPAnalysisBatchRejectedItem[];
+  limits: Record<string, number>;
 }
 
 export interface Job {
@@ -272,6 +301,7 @@ export interface MetadataAnalysisOptions {
   useAiToolOrchestration?: boolean;
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   maxTargets?: number;
+  persistKnowledge?: boolean;
 }
 
 export interface MetadataAnalysisRequest {
@@ -355,6 +385,128 @@ export interface MetadataAnalysisReviewMarker {
   evidenceRefs: string[];
 }
 
+export type KnowledgeAssetKind =
+  | "SP_ANALYSIS"
+  | "DEPENDENCY_EVIDENCE"
+  | "METADATA_PROFILE"
+  | "DTO_READINESS"
+  | "CANONICAL_ANALYSIS";
+
+export interface KnowledgeAssetSummary {
+  assetId: string;
+  assetKind: KnowledgeAssetKind;
+  dbProfileId: string;
+  targetType: string;
+  targetSchema: string;
+  targetName: string;
+  logicalKey: string;
+  currentVersionId?: string | null;
+  currentVersionNo: number;
+  contentHash?: string | null;
+  sourceJobId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface KnowledgeAssetVersion {
+  versionId: string;
+  assetId: string;
+  versionNo: number;
+  contentHash: string;
+  payload: Record<string, unknown>;
+  factCount: number;
+  edgeCount: number;
+  sourceJobId?: string | null;
+  createdAt?: string;
+}
+
+export interface KnowledgeFact {
+  factId: string;
+  versionId: string;
+  assetId: string;
+  factType: string;
+  objectRef: string;
+  summary: string;
+  status: "OBSERVED" | "INFERRED_DESCRIPTION" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+  payload: Record<string, unknown>;
+  contentHash: string;
+  createdAt?: string;
+}
+
+export interface KnowledgeEdge {
+  edgeId: string;
+  versionId: string;
+  assetId: string;
+  fromFactId: string;
+  toFactId: string;
+  edgeType:
+    | "DEPENDS_ON"
+    | "DERIVED_FROM"
+    | "SUPPORTS"
+    | "READS"
+    | "WRITES"
+    | "CALLS"
+    | "FK_TO"
+    | "DTO_FIELD_OF";
+  evidenceRefs: string[];
+  payload: Record<string, unknown>;
+  createdAt?: string;
+}
+
+export interface KnowledgeFactGraph {
+  assetId: string;
+  versionId: string;
+  facts: KnowledgeFact[];
+  edges: KnowledgeEdge[];
+}
+
+export interface KnowledgeExportRequest {
+  assetIds: string[];
+  format: "JSONL" | "GRAPH_JSON";
+  versionIds?: string[];
+}
+
+export interface KnowledgeExportResponse {
+  exportId: string;
+  format: "JSONL" | "GRAPH_JSON";
+  contentType: string;
+  content: string;
+  contentHash: string;
+  assetIds: string[];
+  createdAt?: string;
+}
+
+export interface PlannerMetrics {
+  status?: string;
+  plannedRequestCount?: number;
+  executedToolCallCount?: number;
+  blockedRequestCount?: number;
+  failedToolCallCount?: number;
+  dedupedRequestCount?: number;
+  budgetExhausted?: boolean;
+  cacheHitCount?: number;
+  cacheMissCount?: number;
+  evidenceFactCount?: number;
+  citedEvidenceFactCount?: number;
+  evidenceUtilization?: number;
+  claimCount?: number;
+  supportedClaimCount?: number;
+  claimSupportRate?: number;
+  claimAnalysisAvailable?: boolean;
+  validFactPrefixes?: string[];
+}
+
+export interface AiToolEvidenceSummary {
+  status?: string;
+  toolCallCount?: number;
+  blockedRequests?: Record<string, unknown>[];
+  reviewMarkers?: Record<string, unknown>[];
+  caveats?: string[];
+  plannerMetrics?: PlannerMetrics;
+  [key: string]: unknown;
+}
+
 export interface MetadataAnalysisResponse {
   dbProfileId: string;
   mode: "QUERY" | "TARGET";
@@ -372,7 +524,7 @@ export interface MetadataAnalysisResponse {
   insightGroups: MetadataInsightGroup[];
   dependencyGraph: MetadataDependencyGraph;
   dtoReadiness: MetadataDtoReadiness[];
-  aiToolEvidence: Record<string, unknown>;
+  aiToolEvidence: AiToolEvidenceSummary;
   deterministicFacts: Record<string, unknown>[];
   reviewMarkers: MetadataAnalysisReviewMarker[];
   assumptions: string[];
@@ -381,6 +533,7 @@ export interface MetadataAnalysisResponse {
   blockers: MetadataSearchBlocker[];
   modelInvocation?: ModelInvocationSummary | null;
   componentInvocations: Record<string, unknown>[];
+  knowledgeAssets: KnowledgeAssetSummary[];
 }
 
 export interface RegistryVersion {

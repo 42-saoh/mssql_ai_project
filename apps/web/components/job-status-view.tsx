@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
-import type { AgentRunSummary, ArtifactSummary, Job } from "@/lib/api/types";
+import type {
+  AgentRunSummary,
+  ArtifactSummary,
+  Job,
+  KnowledgeAssetSummary,
+} from "@/lib/api/types";
 import {
   artifactStatusLabels,
   artifactTypeLabels,
@@ -46,11 +51,13 @@ export function JobStatusView({
   scenarioSummary,
   artifacts,
   agentRuns,
+  knowledgeAssets,
 }: Readonly<{
   job: Job;
   scenarioSummary: string;
   artifacts: ArtifactSummary[];
   agentRuns: AgentRunSummary[];
+  knowledgeAssets: KnowledgeAssetSummary[];
 }>) {
   return (
     <div className="stack">
@@ -170,6 +177,48 @@ export function JobStatusView({
           <div className="callout">
             <strong>No LLM run recorded</strong>
             <p>Submit a request with LLM semantic analysis enabled to record a sanitized trace.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Knowledge assets</p>
+            <h2>Versioned fact graph</h2>
+          </div>
+          <span className="quiet-label">Sanitized</span>
+        </div>
+
+        {knowledgeAssets.length > 0 ? (
+          <div className="artifact-list">
+            {knowledgeAssets.map((asset) => (
+              <article className="artifact-row" key={asset.assetId}>
+                <div>
+                  <h3>{asset.assetKind}</h3>
+                  <p>
+                    {asset.targetType} · {asset.targetSchema}.{asset.targetName} · v
+                    {asset.currentVersionNo}
+                  </p>
+                  <small>content {asset.contentHash ?? "pending"}</small>
+                </div>
+                <div className="row-actions">
+                  <Link href={`/api/v1/knowledge/assets/${asset.assetId}`}>Open</Link>
+                  {asset.currentVersionId ? (
+                    <Link
+                      href={`/api/v1/knowledge/assets/${asset.assetId}/versions/${asset.currentVersionId}/facts`}
+                    >
+                      Facts
+                    </Link>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="callout">
+            <strong>No knowledge asset recorded</strong>
+            <p>Knowledge assetization may be disabled or awaiting the v5 schema.</p>
           </div>
         )}
       </section>

@@ -19,6 +19,7 @@
 - `sp_migration_guide_quality_p24_v1.yaml` — P24 SP migration guide quality suite. simple/medium/complex synthetic scenarios, required guide section coverage, dependency inventory, DML matrix, branch call flow, phase/risk metrics, appendix mappings, unsupported claim `REVIEW_REQUIRED`, `openai_fast_test` / 기본 `gpt-5-nano`, optional live `OPENAI_MODEL_FAST_TEST` override, and `production_ready: false` 를 정의한다.
 - `metadata_ai_mcp_analysis_p30_v1.yaml` — P30 response-only metadata Analyze API 의 bounded AI-MCP orchestration, sanitized `aiToolEvidence`, deterministic fact id, adversarial planner 차단, and `production_ready: false` 를 정의한다.
 - `metadata_object_insight_depth_p31_v1.yaml` — P31 metadata object depth suite. table schema/constraint/index/documentation/related-object evidence 로 object profiles, grouped insights, dependency graph, DTO readiness, profile fact id, adversarial planner 차단, and `production_ready: false` 를 정의한다.
+- `live_confidence_planner_effectiveness_p32_v1.yaml` — P32 live confidence + planner effectiveness suite. planner planned/executed/blocked/failed/deduped counts, evidence utilization, claim support rate, adversarial/under-utilized planner handling, optional live OpenAI+PPM confidence, and `production_ready: false` 를 정의한다.
 
 P15 fixture 는 `gate_mode: hard_live` 이지만 기본 eval 실행에서는 live PPM 을 호출하지 않는다. `P15_HARD_LIVE_GATE=1` 로 명시 실행할 때 `MSSQL_ENABLE_LIVE_METADATA=1` 과 PPM read-only metadata 권한을 요구한다. PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않고 blocker 로 실패한다.
 

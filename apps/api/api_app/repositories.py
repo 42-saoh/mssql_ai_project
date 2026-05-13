@@ -147,6 +147,88 @@ class AuditEventRecord:
     created_at: datetime = field(default_factory=utc_now)
 
 
+class KnowledgePersistenceError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "KNOWLEDGE_PERSISTENCE_FAILED",
+        status_code: int = 503,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
+
+
+@dataclass
+class KnowledgeAssetRecord:
+    asset_id: str
+    asset_kind: str
+    db_profile_id: str
+    target_type: str
+    target_schema: str
+    target_name: str
+    logical_key: str
+    current_version_id: str | None = None
+    current_version_no: int = 0
+    content_hash: str | None = None
+    source_job_id: str | None = None
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class KnowledgeFactRecord:
+    fact_id: str
+    version_id: str
+    asset_id: str
+    fact_type: str
+    object_ref: str
+    summary: str
+    status: str
+    evidence_refs: list[str]
+    payload: dict[str, Any]
+    content_hash: str
+    created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class KnowledgeEdgeRecord:
+    edge_id: str
+    version_id: str
+    asset_id: str
+    from_fact_id: str
+    to_fact_id: str
+    edge_type: str
+    evidence_refs: list[str]
+    payload: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class KnowledgeAssetVersionRecord:
+    version_id: str
+    asset_id: str
+    version_no: int
+    content_hash: str
+    payload: dict[str, Any]
+    facts: list[KnowledgeFactRecord]
+    edges: list[KnowledgeEdgeRecord]
+    source_job_id: str | None = None
+    created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class KnowledgeExportRecord:
+    export_id: str
+    format: str
+    content_type: str
+    content: str
+    content_hash: str
+    asset_ids: list[str]
+    created_at: datetime = field(default_factory=utc_now)
+
+
 class WorkflowRepository(Protocol):
     def create_request(
         self,
@@ -301,6 +383,57 @@ class WorkflowRepository(Protocol):
     ) -> AuditEventRecord:
         ...
 
+    def upsert_knowledge_asset(
+        self,
+        *,
+        job_id: str | None,
+        db_profile_id: str,
+        asset_kind: str,
+        target: dict[str, str],
+        payload: dict[str, Any],
+        facts: list[dict[str, Any]],
+        edges: list[dict[str, Any]],
+        content_hash: str,
+    ) -> KnowledgeAssetVersionRecord:
+        ...
+
+    def list_job_knowledge_assets(self, job_id: str) -> list[KnowledgeAssetRecord] | None:
+        ...
+
+    def get_knowledge_asset(self, asset_id: str) -> KnowledgeAssetRecord | None:
+        ...
+
+    def list_knowledge_asset_versions(
+        self,
+        asset_id: str,
+    ) -> list[KnowledgeAssetVersionRecord] | None:
+        ...
+
+    def get_knowledge_asset_version(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> KnowledgeAssetVersionRecord | None:
+        ...
+
+    def list_knowledge_facts(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> tuple[list[KnowledgeFactRecord], list[KnowledgeEdgeRecord]] | None:
+        ...
+
+    def save_knowledge_export(
+        self,
+        *,
+        export_format: str,
+        content_type: str,
+        content: str,
+        content_hash: str,
+        asset_ids: list[str],
+    ) -> KnowledgeExportRecord:
+        ...
+
 
 def tracking_payload(
     *,
@@ -329,6 +462,8 @@ AUDIT_STAGE_BY_ACTION: dict[str, str] = {
     "ARTIFACT_VALIDATED": "VALIDATION",
     "APPROVAL_DECISION_RECORDED": "APPROVAL",
     "PUBLISH_GATE_EVALUATED": "APPROVAL_GATE",
+    "KNOWLEDGE_ASSET_VERSIONED": "KNOWLEDGE",
+    "KNOWLEDGE_EXPORTED": "KNOWLEDGE",
 }
 
 

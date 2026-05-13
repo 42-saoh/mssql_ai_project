@@ -39,6 +39,8 @@ tags:
     description: Prompt, template, profile, and policy registry endpoints.
   - name: metadata
     description: Read-only metadata profile and MCP catalog endpoints.
+  - name: knowledge
+    description: Versioned sanitized knowledge assets, fact graph, and export endpoints.
 paths:
   /health:
     get:
@@ -98,6 +100,35 @@ paths:
                 $ref: "#/components/schemas/SubmitRequestResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+  /api/v1/requests/sp-analysis/batch:
+    post:
+      tags: [requests]
+      summary: Submit a bounded batch of MSSQL Stored Procedure analysis requests.
+      operationId: createStoredProcedureAnalysisBatch
+      description: |
+        Accepts a bounded list of stored procedure targets and creates normal workflow jobs
+        for each accepted target. Duplicate targets in the same batch are skipped. The API
+        does not create a persisted batch table and returns only sanitized grouping metadata,
+        accepted job ids, rejected target codes, and active limits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SPAnalysisBatchRequest"
+      responses:
+        "202":
+          description: Batch accepted with per-target accepted/rejected summaries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SPAnalysisBatchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/Backpressure"
   /api/v1/jobs:
     get:
       tags: [jobs]
@@ -176,6 +207,32 @@ paths:
                       $ref: "#/components/schemas/AgentRunSummary"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/jobs/{jobId}/knowledge-assets:
+    get:
+      tags: [jobs, knowledge]
+      summary: List versioned knowledge assets created by a job.
+      operationId: listJobKnowledgeAssets
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: Sanitized knowledge assets for the job.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId, knowledgeAssets]
+                properties:
+                  jobId:
+                    type: string
+                  knowledgeAssets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KnowledgeAssetSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/jobs/{jobId}/artifacts:
     get:
       tags: [artifacts]
@@ -358,6 +415,8 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "424":
           $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
   /api/v1/metadata/search:
@@ -424,6 +483,8 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "424":
           $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
   /api/v1/metadata/analyze:
@@ -462,6 +523,115 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "424":
           $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/assets/{assetId}:
+    get:
+      tags: [knowledge]
+      summary: Read a versioned knowledge asset summary.
+      operationId: getKnowledgeAsset
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sanitized knowledge asset summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeAssetSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/assets/{assetId}/versions:
+    get:
+      tags: [knowledge]
+      summary: List versions for a knowledge asset.
+      operationId: listKnowledgeAssetVersions
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Knowledge asset versions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assetId, versions]
+                properties:
+                  assetId:
+                    type: string
+                  versions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KnowledgeAssetVersion"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts:
+    get:
+      tags: [knowledge]
+      summary: List sanitized facts and edges for one knowledge asset version.
+      operationId: listKnowledgeVersionFacts
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sanitized fact graph for one version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeFactGraph"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/knowledge/exports:
+    post:
+      tags: [knowledge]
+      summary: Export selected knowledge asset versions.
+      operationId: createKnowledgeExport
+      description: |
+        Exports sanitized facts only. v1 supports JSONL and GRAPH_JSON. Raw SP definitions,
+        raw SQL text, row data, secrets, raw prompts, and raw provider responses are never
+        included in export content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeExportRequest"
+      responses:
+        "200":
+          description: Knowledge export content.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeExportResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
   /api/v1/registry/versions:
@@ -529,6 +699,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Backpressure:
+      description: Workflow or metadata tool capacity is temporarily exhausted.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     HealthResponse:
       type: object
@@ -570,6 +746,25 @@ components:
             $ref: "#/components/schemas/RequestedOutputType"
         options:
           $ref: "#/components/schemas/SPAnalysisOptions"
+    SPAnalysisBatchRequest:
+      type: object
+      required: [dbProfileId, targets, outputs]
+      properties:
+        dbProfileId:
+          type: string
+          description: Metadata profile identifier, for example plf, ppm, or master.
+        targets:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/TargetObject"
+        outputs:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/RequestedOutputType"
+        options:
+          $ref: "#/components/schemas/SPAnalysisOptions"
     SPAnalysisOptions:
       type: object
       properties:
@@ -594,6 +789,9 @@ components:
         useAiToolOrchestration:
           type: boolean
           default: true
+        persistKnowledge:
+          type: boolean
+          default: true
     SubmitRequestResponse:
       type: object
       required: [requestId, jobId, status]
@@ -607,6 +805,54 @@ components:
         echo:
           type: object
           description: Optional starter implementation echo of the normalized request.
+    SPAnalysisBatchAcceptedItem:
+      type: object
+      required: [target, requestId, jobId, status]
+      properties:
+        target:
+          $ref: "#/components/schemas/TargetObject"
+        requestId:
+          type: string
+        jobId:
+          type: string
+        status:
+          $ref: "#/components/schemas/JobStatus"
+    SPAnalysisBatchRejectedItem:
+      type: object
+      required: [target, code, message]
+      properties:
+        target:
+          $ref: "#/components/schemas/TargetObject"
+        code:
+          type: string
+          enum:
+            - BATCH_TARGET_LIMIT_EXCEEDED
+            - DUPLICATE_TARGET_SKIPPED
+            - WORKFLOW_BACKPRESSURE
+            - BAD_REQUEST
+        message:
+          type: string
+    SPAnalysisBatchResponse:
+      type: object
+      required: [batchId, status, accepted, rejected, limits]
+      properties:
+        batchId:
+          type: string
+        status:
+          type: string
+          enum: [ACCEPTED, PARTIAL, REJECTED]
+        accepted:
+          type: array
+          items:
+            $ref: "#/components/schemas/SPAnalysisBatchAcceptedItem"
+        rejected:
+          type: array
+          items:
+            $ref: "#/components/schemas/SPAnalysisBatchRejectedItem"
+        limits:
+          type: object
+          additionalProperties:
+            type: integer
     Job:
       type: object
       required: [jobId, requestId, status]
@@ -1105,6 +1351,9 @@ components:
           minimum: 1
           maximum: 5
           default: 3
+        persistKnowledge:
+          type: boolean
+          default: true
     MetadataAnalysisRequest:
       type: object
       required: [dbProfileId]
@@ -1293,6 +1542,325 @@ components:
           type: array
           items:
             type: string
+    PlannerMetrics:
+      type: object
+      description: Sanitized bounded planner effectiveness summary. Contains counts and ratios only.
+      additionalProperties: false
+      required:
+        - status
+        - plannedRequestCount
+        - executedToolCallCount
+        - blockedRequestCount
+        - failedToolCallCount
+        - dedupedRequestCount
+        - budgetExhausted
+        - cacheHitCount
+        - cacheMissCount
+        - evidenceFactCount
+        - citedEvidenceFactCount
+        - evidenceUtilization
+        - claimCount
+        - supportedClaimCount
+        - claimSupportRate
+        - claimAnalysisAvailable
+        - validFactPrefixes
+      properties:
+        status:
+          type: string
+          enum:
+            - SUCCEEDED
+            - REVIEW_REQUIRED
+            - SKIPPED
+            - PENDING_CLAIM_ANALYSIS
+            - NO_TOOL_REQUESTED
+            - NO_TOOL_EVIDENCE
+        plannedRequestCount:
+          type: integer
+          minimum: 0
+        executedToolCallCount:
+          type: integer
+          minimum: 0
+        blockedRequestCount:
+          type: integer
+          minimum: 0
+        failedToolCallCount:
+          type: integer
+          minimum: 0
+        dedupedRequestCount:
+          type: integer
+          minimum: 0
+        budgetExhausted:
+          type: boolean
+        cacheHitCount:
+          type: integer
+          minimum: 0
+        cacheMissCount:
+          type: integer
+          minimum: 0
+        evidenceFactCount:
+          type: integer
+          minimum: 0
+        citedEvidenceFactCount:
+          type: integer
+          minimum: 0
+        evidenceUtilization:
+          type: number
+          minimum: 0
+          maximum: 1
+        claimCount:
+          type: integer
+          minimum: 0
+        supportedClaimCount:
+          type: integer
+          minimum: 0
+        claimSupportRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        claimAnalysisAvailable:
+          type: boolean
+        validFactPrefixes:
+          type: array
+          items:
+            type: string
+    AiToolEvidenceSummary:
+      type: object
+      description: Sanitized internal-only AI MCP planner/tool evidence digest.
+      additionalProperties: true
+      properties:
+        status:
+          type: string
+        toolCallCount:
+          type: integer
+          minimum: 0
+        toolResults:
+          type: array
+          description: Sanitized tool evidence digests include contentHash and outputHash.
+          items:
+            type: object
+            additionalProperties: true
+        blockedRequests:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reviewMarkers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        caveats:
+          type: array
+          items:
+            type: string
+        plannerMetrics:
+          $ref: "#/components/schemas/PlannerMetrics"
+    KnowledgeAssetKind:
+      type: string
+      enum:
+        - SP_ANALYSIS
+        - DEPENDENCY_EVIDENCE
+        - METADATA_PROFILE
+        - DTO_READINESS
+        - CANONICAL_ANALYSIS
+    KnowledgeAssetSummary:
+      type: object
+      required:
+        - assetId
+        - assetKind
+        - dbProfileId
+        - targetType
+        - targetSchema
+        - targetName
+        - logicalKey
+        - currentVersionNo
+      properties:
+        assetId:
+          type: string
+        assetKind:
+          $ref: "#/components/schemas/KnowledgeAssetKind"
+        dbProfileId:
+          type: string
+        targetType:
+          type: string
+        targetSchema:
+          type: string
+        targetName:
+          type: string
+        logicalKey:
+          type: string
+        currentVersionId:
+          type: string
+        currentVersionNo:
+          type: integer
+          minimum: 0
+        contentHash:
+          type: string
+        sourceJobId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    KnowledgeAssetVersion:
+      type: object
+      required: [versionId, assetId, versionNo, contentHash, payload, factCount, edgeCount]
+      properties:
+        versionId:
+          type: string
+        assetId:
+          type: string
+        versionNo:
+          type: integer
+          minimum: 1
+        contentHash:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        factCount:
+          type: integer
+          minimum: 0
+        edgeCount:
+          type: integer
+          minimum: 0
+        sourceJobId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    KnowledgeFact:
+      type: object
+      required:
+        - factId
+        - versionId
+        - assetId
+        - factType
+        - objectRef
+        - summary
+        - status
+        - evidenceRefs
+        - payload
+        - contentHash
+      properties:
+        factId:
+          type: string
+        versionId:
+          type: string
+        assetId:
+          type: string
+        factType:
+          type: string
+        objectRef:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+          enum: [OBSERVED, INFERRED_DESCRIPTION, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        payload:
+          type: object
+          additionalProperties: true
+        contentHash:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    KnowledgeEdge:
+      type: object
+      required:
+        - edgeId
+        - versionId
+        - assetId
+        - fromFactId
+        - toFactId
+        - edgeType
+        - evidenceRefs
+        - payload
+      properties:
+        edgeId:
+          type: string
+        versionId:
+          type: string
+        assetId:
+          type: string
+        fromFactId:
+          type: string
+        toFactId:
+          type: string
+        edgeType:
+          type: string
+          enum: [DEPENDS_ON, DERIVED_FROM, SUPPORTS, READS, WRITES, CALLS, FK_TO, DTO_FIELD_OF]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        payload:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    KnowledgeFactGraph:
+      type: object
+      required: [assetId, versionId, facts, edges]
+      properties:
+        assetId:
+          type: string
+        versionId:
+          type: string
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeFact"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeEdge"
+    KnowledgeExportRequest:
+      type: object
+      required: [assetIds, format]
+      properties:
+        assetIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        format:
+          type: string
+          enum: [JSONL, GRAPH_JSON]
+        versionIds:
+          type: array
+          items:
+            type: string
+    KnowledgeExportResponse:
+      type: object
+      required: [exportId, format, contentType, content, contentHash, assetIds]
+      properties:
+        exportId:
+          type: string
+        format:
+          type: string
+          enum: [JSONL, GRAPH_JSON]
+        contentType:
+          type: string
+        content:
+          type: string
+        contentHash:
+          type: string
+        assetIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
     MetadataAnalysisResponse:
       type: object
       required:
@@ -1316,6 +1884,7 @@ components:
         - reviewRequired
         - blockers
         - componentInvocations
+        - knowledgeAssets
       properties:
         dbProfileId:
           type: string
@@ -1364,8 +1933,7 @@ components:
           items:
             $ref: "#/components/schemas/MetadataDtoReadiness"
         aiToolEvidence:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/AiToolEvidenceSummary"
         deterministicFacts:
           type: array
           items:
@@ -1398,6 +1966,10 @@ components:
           items:
             type: object
             additionalProperties: true
+        knowledgeAssets:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeAssetSummary"
     RegistryVersion:
       type: object
       required: [registryType, version]
@@ -1424,3 +1996,7 @@ components:
             - P21_LIVE_PPM_REQUIRED
             - PPM_DB_ACCESS_DENIED
             - PPM_DB_NOT_FOUND
+            - KNOWLEDGE_SCHEMA_REQUIRED
+            - KNOWLEDGE_PERSISTENCE_FAILED
+            - KNOWLEDGE_ASSET_NOT_FOUND
+            - KNOWLEDGE_EXPORT_UNSUPPORTED_FORMAT

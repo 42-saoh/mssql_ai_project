@@ -12,6 +12,9 @@ from ai_agent_runtime.models import (
     AiToolPlanningOutput,
     stable_json_hash,
 )
+from ai_agent_runtime.planner_effectiveness import (
+    attach_planner_metrics_to_ai_tool_evidence,
+)
 from ai_agent_runtime.prompts import render_metadata_tool_planning_prompt
 from ai_agent_runtime.storage_safety import sanitize_value_for_storage
 from mssql_mcp_app.catalog import ToolSpec, load_tool_catalog
@@ -20,6 +23,7 @@ from mssql_mcp_app.profiles import load_db_profiles
 from mssql_mcp_app.registry import build_tool_registry
 from mssql_mcp_app.repositories import FixtureMetadataRepository, LiveMetadataRepository
 from mssql_mcp_app.settings import load_live_metadata_settings
+from mssql_mcp_app.tool_cache import MetadataToolCacheEvent
 
 from api_app.metadata_gateway import MetadataCollectionResult
 from api_app.metadata_service import load_profiles_for_metadata_request, repo_root
@@ -59,6 +63,59 @@ WRITE_SQL_PATTERN = re.compile(
     r"\b(select|insert|update|delete|merge|exec|execute|create|alter|drop|truncate)\b",
     re.IGNORECASE,
 )
+VOLATILE_FACT_HASH_KEYS = frozenset(
+    {
+        "snapshotid",
+        "snapshot_id",
+        "collectedat",
+        "collected_at",
+    }
+)
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def ai_tool_max_calls() -> int:
+    return max(_env_int("AI_TOOL_MAX_CALLS", MAX_AI_TOOL_CALLS), 0)
+
+
+def ai_tool_max_rounds() -> int:
+    return max(_env_int("AI_TOOL_MAX_ROUNDS", MAX_AI_TOOL_ROUNDS), 0)
+
+
+def ai_tool_live_max_rounds() -> int:
+    return max(_env_int("AI_TOOL_LIVE_MAX_ROUNDS", 1), 0)
+
+
+def effective_ai_tool_budget(
+    db_profile_id: str,
+    *,
+    max_tool_calls: int | None = None,
+    max_rounds: int | None = None,
+) -> tuple[int, int, bool]:
+    calls = ai_tool_max_calls() if max_tool_calls is None else max(max_tool_calls, 0)
+    rounds = ai_tool_max_rounds() if max_rounds is None else max(max_rounds, 0)
+    if _live_ppm_metadata_enabled(db_profile_id):
+        live_rounds = ai_tool_live_max_rounds()
+        if live_rounds < rounds:
+            return calls, live_rounds, True
+    return calls, rounds, False
+
+
+def _live_ppm_metadata_enabled(db_profile_id: str) -> bool:
+    return (
+        db_profile_id.strip().lower() == "ppm"
+        and os.getenv("MSSQL_ENABLE_LIVE_METADATA", "0").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
 
 
 @dataclass(frozen=True)
@@ -142,12 +199,12 @@ class AiToolOrchestrator:
         self,
         *,
         model_gateway: ModelGateway,
-        max_tool_calls: int = MAX_AI_TOOL_CALLS,
-        max_rounds: int = MAX_AI_TOOL_ROUNDS,
+        max_tool_calls: int | None = None,
+        max_rounds: int | None = None,
     ) -> None:
         self.model_gateway = model_gateway
-        self.max_tool_calls = max_tool_calls
-        self.max_rounds = max_rounds
+        self.max_tool_calls = max_tool_calls if max_tool_calls is not None else ai_tool_max_calls()
+        self.max_rounds = max_rounds if max_rounds is not None else ai_tool_max_rounds()
 
     def run(
         self,
@@ -176,6 +233,7 @@ class AiToolOrchestrator:
                 ],
                 caveats=["AI_TOOL_ORCHESTRATION_SKIPPED"],
                 blocked_requests=[],
+                component_invocations=[],
             )
             return AiToolOrchestrationResult(metadata=enriched, component_invocations=())
 
@@ -195,6 +253,7 @@ class AiToolOrchestrator:
                 ],
                 caveats=["AI_TOOL_ORCHESTRATION_SKIPPED"],
                 blocked_requests=[],
+                component_invocations=[],
             )
             return AiToolOrchestrationResult(metadata=enriched, component_invocations=())
 
@@ -214,6 +273,24 @@ class AiToolOrchestrator:
         blocked_requests: list[dict[str, Any]] = []
         caveats: list[str] = []
         seen_requests: set[tuple[str, str]] = set()
+        planned_request_count = 0
+        deduped_request_count = 0
+        failed_tool_call_count = 0
+        budget_exhausted = False
+        max_tool_calls, max_rounds, budget_reduced = effective_ai_tool_budget(
+            request_record.db_profile_id,
+            max_tool_calls=self.max_tool_calls,
+            max_rounds=self.max_rounds,
+        )
+        if budget_reduced:
+            caveats.append("AI_TOOL_BUDGET_REDUCED")
+            review_markers.append(
+                _review_marker(
+                    "AI_TOOL_BUDGET_REDUCED",
+                    "AI tool planning rounds were reduced for live PPM latency and cost control.",
+                    evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
+                )
+            )
 
         try:
             registry = _build_internal_registry(request_record.db_profile_id)
@@ -234,11 +311,12 @@ class AiToolOrchestrator:
                 review_markers=[marker],
                 caveats=["AI_TOOL_ORCHESTRATION_SKIPPED"],
                 blocked_requests=[],
+                component_invocations=[],
             )
             return AiToolOrchestrationResult(metadata=enriched, component_invocations=())
 
-        for round_index in range(1, self.max_rounds + 1):
-            if len(tool_results) >= self.max_tool_calls:
+        for round_index in range(1, max_rounds + 1):
+            if len(tool_results) >= max_tool_calls:
                 break
             prompt = render_metadata_tool_planning_prompt(
                 target_ref=target_ref,
@@ -246,7 +324,7 @@ class AiToolOrchestrator:
                 static_analysis=static_analysis,
                 tool_capabilities=tool_capabilities,
                 previous_tool_evidence=tool_results,
-                max_tool_calls=self.max_tool_calls - len(tool_results),
+                max_tool_calls=max_tool_calls - len(tool_results),
                 round_index=round_index,
             )
             try:
@@ -277,6 +355,7 @@ class AiToolOrchestrator:
                     "toolRequestCount": len(plan.tool_requests),
                 }
             )
+            planned_request_count += len(plan.tool_requests)
             for marker in plan.review_markers:
                 marker_payload = marker.model_dump(by_alias=True, mode="json")
                 if not marker_payload.get("evidenceRefs"):
@@ -286,9 +365,21 @@ class AiToolOrchestrator:
                     )
                 review_markers.append(marker_payload)
             executable_this_round = 0
+            cache_hit_this_round = False
             for request in plan.tool_requests:
-                if len(tool_results) >= self.max_tool_calls:
+                if len(tool_results) >= max_tool_calls:
                     caveats.append("AI_TOOL_CALL_BUDGET_EXHAUSTED")
+                    budget_exhausted = True
+                    review_markers.append(
+                        _review_marker(
+                            "AI_TOOL_CALL_BUDGET_EXHAUSTED",
+                            (
+                                "AI metadata tool call budget was exhausted before all "
+                                "planned requests ran."
+                            ),
+                            evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
+                        )
+                    )
                     break
                 decision = policy.decide(
                     tool_name=request.tool_name,
@@ -299,6 +390,7 @@ class AiToolOrchestrator:
                     stable_json_hash(decision.arguments),
                 )
                 if request_key in seen_requests:
+                    deduped_request_count += 1
                     continue
                 seen_requests.add(request_key)
                 if not decision.allowed:
@@ -332,6 +424,7 @@ class AiToolOrchestrator:
                         {"arguments": decision.arguments},
                     )
                 except MetadataToolError as exc:
+                    failed_tool_call_count += 1
                     review_markers.append(
                         _review_marker(
                             "AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED",
@@ -356,7 +449,22 @@ class AiToolOrchestrator:
                     )
                     continue
                 sanitized_payload = _sanitize_tool_payload(payload)
-                fact = _deterministic_fact(decision.tool_name, sanitized_payload)
+                cache_event = getattr(registry, "last_cache_event", None)
+                if isinstance(cache_event, MetadataToolCacheEvent):
+                    cache_hit_this_round = cache_hit_this_round or cache_event.status == "HIT"
+                argument_hash = stable_json_hash(decision.arguments)
+                content_hash = _tool_content_hash(
+                    decision.tool_name,
+                    sanitized_payload,
+                    argument_hash=argument_hash,
+                )
+                fact = _deterministic_fact(
+                    decision.tool_name,
+                    sanitized_payload,
+                    argument_hash=argument_hash,
+                    content_hash=content_hash,
+                )
+                output_hash = stable_json_hash(sanitized_payload)
                 deterministic_facts.append(fact)
                 tool_results.append(
                     {
@@ -368,8 +476,9 @@ class AiToolOrchestrator:
                             sanitized_payload.get("evidenceRefs")
                         ),
                         "data": _safe_dict(sanitized_payload.get("data")),
-                        "argumentHash": stable_json_hash(decision.arguments),
-                        "outputHash": stable_json_hash(sanitized_payload),
+                        "argumentHash": argument_hash,
+                        "contentHash": content_hash,
+                        "outputHash": output_hash,
                     }
                 )
                 component_invocations.append(
@@ -377,13 +486,22 @@ class AiToolOrchestrator:
                         tool_name=decision.tool_name,
                         arguments=decision.arguments,
                         status=SUCCEEDED_STATUS,
-                        output_hash=stable_json_hash(sanitized_payload),
+                        output_hash=output_hash,
                         latency_ms=int((time.monotonic() - started) * 1000),
-                        evidence_count=len(_safe_dict_list(sanitized_payload.get("evidenceRefs"))),
+                        evidence_count=len(
+                            _safe_dict_list(sanitized_payload.get("evidenceRefs"))
+                        ),
                         error_code=None,
+                        cache_event=(
+                            cache_event
+                            if isinstance(cache_event, MetadataToolCacheEvent)
+                            else None
+                        ),
                     )
                 )
             if executable_this_round == 0:
+                break
+            if cache_hit_this_round and tool_results:
                 break
 
         status = SUCCEEDED_STATUS if tool_results and not blocked_requests else REVIEW_STATUS
@@ -397,6 +515,11 @@ class AiToolOrchestrator:
             review_markers=review_markers,
             caveats=caveats,
             blocked_requests=blocked_requests,
+            component_invocations=component_invocations,
+            planned_request_count=planned_request_count,
+            failed_tool_call_count=failed_tool_call_count,
+            deduped_request_count=deduped_request_count,
+            budget_exhausted=budget_exhausted,
         )
         return AiToolOrchestrationResult(
             metadata=enriched,
@@ -558,13 +681,53 @@ def _sanitize_value(value: Any) -> Any:
     return value
 
 
-def _deterministic_fact(tool_name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
-    fact_hash = stable_json_hash(payload)[:12]
+def _tool_content_hash(
+    tool_name: str,
+    payload: Mapping[str, Any],
+    *,
+    argument_hash: str,
+) -> str:
+    return stable_json_hash(
+        {
+            "toolName": tool_name,
+            "argumentHash": argument_hash,
+            "content": _stable_fact_hash_content(payload),
+        }
+    )
+
+
+def _stable_fact_hash_content(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _stable_fact_hash_content(item)
+            for key, item in value.items()
+            if str(key).replace("-", "_").lower() not in VOLATILE_FACT_HASH_KEYS
+        }
+    if isinstance(value, list):
+        return [_stable_fact_hash_content(item) for item in value]
+    return value
+
+
+def _deterministic_fact(
+    tool_name: str,
+    payload: Mapping[str, Any],
+    *,
+    argument_hash: str | None = None,
+    content_hash: str | None = None,
+) -> dict[str, Any]:
+    argument_hash = argument_hash or stable_json_hash({})
+    content_hash = content_hash or _tool_content_hash(
+        tool_name,
+        payload,
+        argument_hash=argument_hash,
+    )
+    fact_hash = content_hash[:12]
     return {
         "id": f"mcp.{tool_name}.{fact_hash}",
         "type": "MSSQL_MCP_TOOL_EVIDENCE",
         "fact_type": "MSSQL_MCP_TOOL_EVIDENCE",
         "toolName": tool_name,
+        "contentHash": content_hash,
         "summary": _fact_summary(tool_name, payload),
         "evidenceRefs": _safe_dict_list(payload.get("evidenceRefs")),
     }
@@ -600,6 +763,11 @@ def _metadata_with_ai_tool_evidence(
     review_markers: list[dict[str, Any]],
     caveats: list[str],
     blocked_requests: list[dict[str, Any]],
+    component_invocations: list[dict[str, Any]],
+    planned_request_count: int | None = None,
+    failed_tool_call_count: int | None = None,
+    deduped_request_count: int | None = None,
+    budget_exhausted: bool | None = None,
 ) -> MetadataCollectionResult:
     evidence = {
         "status": status,
@@ -609,6 +777,15 @@ def _metadata_with_ai_tool_evidence(
         "reviewMarkers": _dedupe_markers(review_markers),
         "caveats": _dedupe_strings(caveats),
     }
+    evidence = attach_planner_metrics_to_ai_tool_evidence(
+        evidence,
+        deterministic_facts=deterministic_facts,
+        component_invocations=component_invocations,
+        planned_request_count=planned_request_count,
+        failed_tool_call_count=failed_tool_call_count,
+        deduped_request_count=deduped_request_count,
+        budget_exhausted=budget_exhausted,
+    )
     existing_facts = list(metadata.deterministic_facts)
     return replace(
         metadata,
@@ -634,6 +811,7 @@ def _tool_component(
     latency_ms: int,
     evidence_count: int,
     error_code: str | None,
+    cache_event: MetadataToolCacheEvent | None = None,
 ) -> dict[str, Any]:
     component = {
         "stage": "ai_tool_execution",
@@ -647,6 +825,8 @@ def _tool_component(
         component["outputHash"] = output_hash
     if error_code:
         component["errorCode"] = error_code
+    if cache_event is not None:
+        component.update(cache_event.summary())
     return component
 
 

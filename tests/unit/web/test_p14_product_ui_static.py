@@ -44,6 +44,7 @@ def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     assert "/api/v1/metadata/search" in source
     assert "/api/v1/metadata/analyze" in source
     assert "/api/v1/metadata/tools" in source
+    assert "/api/v1/knowledge/" in source
     assert "/metadata/dependencies" in source
     assert "/api/v1/artifacts/" in source
     assert "/publish" not in source
@@ -103,6 +104,8 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
         assert demo_id not in source
 
     assert "api.createSPAnalysisRequest" in request_page
+    assert "api.createSPAnalysisBatchRequest" in request_page
+    assert "batchTargets" in source
     assert "useLlmAnalysis" in request_page
     assert "useAiToolOrchestration" in request_page
     assert "allowSpDefinitionToModel" in request_page
@@ -113,11 +116,18 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "semantic analysis - gpt-5.5" in source
     assert "openai_fast_test" in source
     assert "api.listJobAgentRuns" in source
+    assert "api.listJobKnowledgeAssets" in source
+    assert "createKnowledgeExport" in source
     assert "redirect(`/jobs/${response.jobId}`)" in request_page
     assert "objectProfiles" in source
     assert "insightGroups" in source
     assert "dependencyGraph" in source
     assert "dtoReadiness" in source
+    assert "knowledgeAssets" in source
+    assert "Knowledge assets" in source
+    assert "Versioned fact graph" in source
+    assert "plannerMetrics" in source
+    assert "Planner effectiveness" in source
     assert "api.getLatestValidation(artifactId)" in artifact_page
     assert artifact_page.count("api.validateArtifact(artifactId)") == 1
     assert artifact_page.index("async function runValidation") < artifact_page.index(

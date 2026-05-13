@@ -1,0 +1,36 @@
+version: knowledge_assetization_p34_v1
+production_ready: false
+purpose: >
+  Validate that SP analysis, dependency evidence, metadata profile, and DTO
+  readiness become sanitized versioned knowledge assets with fact graph export.
+scenarios:
+  - id: sp_workflow_knowledge_assets
+    expected_asset_kinds:
+      - SP_ANALYSIS
+      - DEPENDENCY_EVIDENCE
+      - METADATA_PROFILE
+      - DTO_READINESS
+      - CANONICAL_ANALYSIS
+    expected_export_formats:
+      - JSONL
+      - GRAPH_JSON
+  - id: metadata_analysis_knowledge_assets
+    expected_asset_kinds:
+      - DEPENDENCY_EVIDENCE
+      - METADATA_PROFILE
+      - DTO_READINESS
+    expected_fact_prefixes:
+      - mcp.
+      - metadata.profile.
+      - canonical.
+  - id: adversarial_raw_leakage_blocked
+    forbidden_terms:
+      - CREATE PROCEDURE
+      - rawPrompt
+      - rawResponse
+      - rowData
+      - secret-value
+      - password-value
+  - id: stable_version_reuse
+    expected_same_hash_version_reuse: true
+    expected_changed_hash_new_version: true

@@ -2,9 +2,11 @@ import { readPortalApiError } from "./errors.ts";
 import type { PortalApi } from "./portal-api.ts";
 import type {
   MetadataAnalysisRequest,
+  KnowledgeExportRequest,
   MetadataSearchRequest,
   MetadataToolInvokeRequest,
   MetadataToolName,
+  SPAnalysisBatchRequest,
   SPAnalysisRequest,
 } from "./types.ts";
 
@@ -50,6 +52,13 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       });
     },
 
+    createSPAnalysisBatchRequest(request: SPAnalysisBatchRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/requests/sp-analysis/batch", {
+        method: "POST",
+        json: request,
+      });
+    },
+
     listJobs(limit?: number) {
       const params = new URLSearchParams();
       if (limit !== undefined) {
@@ -78,6 +87,47 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
 
     listJobArtifacts(jobId: string) {
       return readJson(fetcher, baseUrl, `/api/v1/jobs/${encodeURIComponent(jobId)}/artifacts`);
+    },
+
+    listJobKnowledgeAssets(jobId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/jobs/${encodeURIComponent(jobId)}/knowledge-assets`,
+      );
+    },
+
+    getKnowledgeAsset(assetId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/knowledge/assets/${encodeURIComponent(assetId)}`,
+      );
+    },
+
+    listKnowledgeAssetVersions(assetId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/knowledge/assets/${encodeURIComponent(assetId)}/versions`,
+      );
+    },
+
+    listKnowledgeFacts(assetId: string, versionId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/knowledge/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(
+          versionId,
+        )}/facts`,
+      );
+    },
+
+    createKnowledgeExport(request: KnowledgeExportRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/knowledge/exports", {
+        method: "POST",
+        json: request,
+      });
     },
 
     getArtifact(artifactId: string) {
