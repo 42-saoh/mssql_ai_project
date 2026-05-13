@@ -72,10 +72,15 @@
   profile 고정, call budget, structured argument guard, sanitized output storage 를 통과해야 한다.
   public metadata invoke API allowlist 는 이 기능 때문에 확장하지 않는다.
 - Metadata analysis API 의 AI-MCP orchestration 도 같은 경계를 따른다. `POST /api/v1/metadata/analyze`
-  는 response-only 분석이며, 기존 search endpoint 를 LLM 호출 경로로 바꾸지 않는다. 분석 응답에는
-  sanitized evidence digest, deterministic fact id, object profile/graph/dto readiness 요약만 포함하고
-  raw definition, row data, free-form SQL, procedure execution, DDL/DML, secrets,
-  raw prompt/provider response text 는 포함하지 않는다.
+  는 기존 search endpoint 를 LLM 호출 경로로 바꾸지 않고, 기본적으로 sanitized response 와
+  versioned knowledge asset 을 함께 만든다. 분석 응답과 knowledge storage 에는 sanitized evidence
+  digest, deterministic fact id, object profile/graph/dto readiness 요약만 포함하고 raw definition,
+  row data, free-form SQL, procedure execution, DDL/DML, secrets, raw prompt/provider response text 는
+  포함하지 않는다.
+- Knowledge assetization 은 조직 지식 축적 경로이지만 draft/reviewable knowledge 로만 해석한다.
+  `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`,
+  `CANONICAL_ANALYSIS` asset 과 JSONL/GRAPH_JSON export 는 sanitized facts/edges 만 포함해야 하며,
+  자동 전환 승인, production readiness, publish/deploy/apply 근거로 사용할 수 없다.
 
 ## 생성 결과 정책
 

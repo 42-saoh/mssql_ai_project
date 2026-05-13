@@ -30,6 +30,12 @@ from api_app.repositories import (
     ArtifactRecord,
     AuditEventRecord,
     JobRecord,
+    KnowledgeAssetRecord,
+    KnowledgeAssetVersionRecord,
+    KnowledgeEdgeRecord,
+    KnowledgeExportRecord,
+    KnowledgeFactRecord,
+    KnowledgePersistenceError,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkflowRepository,
@@ -913,6 +919,328 @@ class MssqlPlatformRepository:
         )
         return record
 
+    def upsert_knowledge_asset(
+        self,
+        *,
+        job_id: str | None,
+        db_profile_id: str,
+        asset_kind: str,
+        target: dict[str, str],
+        payload: dict[str, Any],
+        facts: list[dict[str, Any]],
+        edges: list[dict[str, Any]],
+        content_hash: str,
+    ) -> KnowledgeAssetVersionRecord:
+        self._require_knowledge_schema()
+        target_type = str(target.get("type") or "OBJECT")
+        target_schema = str(target.get("schema") or "")
+        target_name = str(target.get("name") or "")
+        logical_key = "|".join(
+            [db_profile_id, asset_kind, target_type, target_schema, target_name]
+        ).lower()
+        asset = self._knowledge_asset_by_logical_key(logical_key)
+        now = utc_now()
+        if asset is None:
+            asset = KnowledgeAssetRecord(
+                asset_id=prefixed_id("know"),
+                asset_kind=asset_kind,
+                db_profile_id=db_profile_id,
+                target_type=target_type,
+                target_schema=target_schema,
+                target_name=target_name,
+                logical_key=logical_key,
+                source_job_id=job_id,
+                created_at=now,
+                updated_at=now,
+            )
+            self._execute(
+                """
+                INSERT INTO dbo.KNOWLEDGE_ASSETS(
+                    ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
+                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
+                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NULL, 0, NULL, %s, %s, %s)
+                """,
+                (
+                    asset.asset_id,
+                    asset_kind,
+                    db_profile_id,
+                    target_type,
+                    target_schema,
+                    target_name,
+                    logical_key,
+                    job_id,
+                    now,
+                    now,
+                ),
+            )
+        if asset.content_hash == content_hash and asset.current_version_id:
+            existing = self.get_knowledge_asset_version(
+                asset.asset_id,
+                asset.current_version_id,
+            )
+            if existing is not None:
+                return existing
+        version_no = asset.current_version_no + 1
+        version_id = prefixed_id("knowv")
+        self._execute(
+            """
+            INSERT INTO dbo.KNOWLEDGE_ASSET_VERSIONS(
+                ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
+                PAYLD_JSON, SRC_JOB_ID, CRE_DTM
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                version_id,
+                asset.asset_id,
+                version_no,
+                content_hash,
+                json_text(payload),
+                job_id,
+                now,
+            ),
+        )
+        fact_records = []
+        for fact in facts:
+            record = KnowledgeFactRecord(
+                fact_id=str(fact.get("factId") or fact.get("id") or prefixed_id("fact")),
+                version_id=version_id,
+                asset_id=asset.asset_id,
+                fact_type=str(fact.get("factType") or fact.get("type") or asset_kind),
+                object_ref=str(fact.get("objectRef") or ""),
+                summary=str(fact.get("summary") or ""),
+                status=str(fact.get("status") or "REVIEW_REQUIRED"),
+                evidence_refs=[str(ref) for ref in fact.get("evidenceRefs", [])],
+                payload=dict(fact.get("payload") or {}),
+                content_hash=str(fact.get("contentHash") or content_hash),
+                created_at=now,
+            )
+            fact_records.append(record)
+            self._execute(
+                """
+                INSERT INTO dbo.KNOWLEDGE_FACTS(
+                    FACT_ID, ASST_VER_ID, ASST_ID, FACT_TP_CD, OBJ_REF_TXT,
+                    SMRY_TXT, STAT_CD, EVDC_REFS_JSON, PAYLD_JSON,
+                    CNTNT_HASH_SHA256_VAL, CRE_DTM
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    record.fact_id,
+                    version_id,
+                    asset.asset_id,
+                    record.fact_type,
+                    record.object_ref,
+                    record.summary[:1000],
+                    record.status,
+                    json_text(record.evidence_refs),
+                    json_text(record.payload),
+                    record.content_hash,
+                    now,
+                ),
+            )
+        edge_records = []
+        for edge in edges:
+            record = KnowledgeEdgeRecord(
+                edge_id=str(edge.get("edgeId") or prefixed_id("edge")),
+                version_id=version_id,
+                asset_id=asset.asset_id,
+                from_fact_id=str(edge.get("fromFactId") or edge.get("from") or ""),
+                to_fact_id=str(edge.get("toFactId") or edge.get("to") or ""),
+                edge_type=str(edge.get("edgeType") or edge.get("type") or "DERIVED_FROM"),
+                evidence_refs=[str(ref) for ref in edge.get("evidenceRefs", [])],
+                payload=dict(edge.get("payload") or {}),
+                created_at=now,
+            )
+            edge_records.append(record)
+            self._execute(
+                """
+                INSERT INTO dbo.KNOWLEDGE_FACT_EDGES(
+                    EDGE_ID, ASST_VER_ID, ASST_ID, FROM_FACT_ID, TO_FACT_ID,
+                    EDGE_TP_CD, EVDC_REFS_JSON, PAYLD_JSON, CRE_DTM
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    record.edge_id,
+                    version_id,
+                    asset.asset_id,
+                    record.from_fact_id,
+                    record.to_fact_id,
+                    record.edge_type,
+                    json_text(record.evidence_refs),
+                    json_text(record.payload),
+                    now,
+                ),
+            )
+        self._execute(
+            """
+            UPDATE dbo.KNOWLEDGE_ASSETS
+            SET CUR_VER_ID = %s,
+                CUR_VER_NO = %s,
+                CNTNT_HASH_SHA256_VAL = %s,
+                SRC_JOB_ID = COALESCE(%s, SRC_JOB_ID),
+                UPD_DTM = SYSUTCDATETIME()
+            WHERE ASST_ID = %s
+            """,
+            (version_id, version_no, content_hash, job_id, asset.asset_id),
+        )
+        source_job = self.get_job(job_id) if job_id else None
+        self.record_audit_event(
+            action="KNOWLEDGE_ASSET_VERSIONED",
+            target_type="KNOWLEDGE_ASSET",
+            target_ref_id=asset.asset_id,
+            payload={
+                "assetKind": asset_kind,
+                "versionId": version_id,
+                "versionNo": version_no,
+                "contentHash": content_hash,
+                "sourceJobId": job_id,
+            },
+            correlation_id=source_job.correlation_id if source_job else None,
+        )
+        return KnowledgeAssetVersionRecord(
+            version_id=version_id,
+            asset_id=asset.asset_id,
+            version_no=version_no,
+            content_hash=content_hash,
+            payload=payload,
+            facts=fact_records,
+            edges=edge_records,
+            source_job_id=job_id,
+            created_at=now,
+        )
+
+    def list_job_knowledge_assets(self, job_id: str) -> list[KnowledgeAssetRecord] | None:
+        self._require_knowledge_schema()
+        if self.get_job(job_id) is None:
+            return None
+        rows = self._query_all(
+            """
+            SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
+                   TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
+                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
+            FROM dbo.KNOWLEDGE_ASSETS
+            WHERE SRC_JOB_ID = %s
+            ORDER BY UPD_DTM DESC, ASST_ID DESC
+            """,
+            (job_id,),
+        )
+        return [knowledge_asset_from_row(row) for row in rows]
+
+    def get_knowledge_asset(self, asset_id: str) -> KnowledgeAssetRecord | None:
+        self._require_knowledge_schema()
+        row = self._query_one(
+            """
+            SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
+                   TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
+                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
+            FROM dbo.KNOWLEDGE_ASSETS
+            WHERE ASST_ID = %s
+            """,
+            (asset_id,),
+        )
+        return knowledge_asset_from_row(row) if row else None
+
+    def list_knowledge_asset_versions(
+        self,
+        asset_id: str,
+    ) -> list[KnowledgeAssetVersionRecord] | None:
+        self._require_knowledge_schema()
+        if self.get_knowledge_asset(asset_id) is None:
+            return None
+        rows = self._query_all(
+            """
+            SELECT ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
+                   PAYLD_JSON, SRC_JOB_ID, CRE_DTM
+            FROM dbo.KNOWLEDGE_ASSET_VERSIONS
+            WHERE ASST_ID = %s
+            ORDER BY VER_SEQ_NO DESC
+            """,
+            (asset_id,),
+        )
+        return [self._knowledge_version_from_row(row) for row in rows]
+
+    def get_knowledge_asset_version(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> KnowledgeAssetVersionRecord | None:
+        self._require_knowledge_schema()
+        row = self._query_one(
+            """
+            SELECT ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
+                   PAYLD_JSON, SRC_JOB_ID, CRE_DTM
+            FROM dbo.KNOWLEDGE_ASSET_VERSIONS
+            WHERE ASST_ID = %s AND ASST_VER_ID = %s
+            """,
+            (asset_id, version_id),
+        )
+        return self._knowledge_version_from_row(row) if row else None
+
+    def list_knowledge_facts(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> tuple[list[KnowledgeFactRecord], list[KnowledgeEdgeRecord]] | None:
+        self._require_knowledge_schema()
+        if self.get_knowledge_asset_version(asset_id, version_id) is None:
+            return None
+        return (
+            self._knowledge_facts(asset_id, version_id),
+            self._knowledge_edges(asset_id, version_id),
+        )
+
+    def save_knowledge_export(
+        self,
+        *,
+        export_format: str,
+        content_type: str,
+        content: str,
+        content_hash: str,
+        asset_ids: list[str],
+    ) -> KnowledgeExportRecord:
+        self._require_knowledge_schema()
+        record = KnowledgeExportRecord(
+            export_id=prefixed_id("kexp"),
+            format=export_format,
+            content_type=content_type,
+            content=content,
+            content_hash=content_hash,
+            asset_ids=asset_ids,
+        )
+        self._execute(
+            """
+            INSERT INTO dbo.KNOWLEDGE_EXPORTS(
+                EXPRT_ID, FMT_CD, CNTNT_TP_TXT, CNTNT_TXT,
+                CNTNT_HASH_SHA256_VAL, ASST_IDS_JSON, CRE_DTM
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                record.export_id,
+                export_format,
+                content_type,
+                content,
+                content_hash,
+                json_text(asset_ids),
+                record.created_at,
+            ),
+        )
+        self.record_audit_event(
+            action="KNOWLEDGE_EXPORTED",
+            target_type="KNOWLEDGE_EXPORT",
+            target_ref_id=record.export_id,
+            payload={
+                "format": export_format,
+                "contentHash": content_hash,
+                "assetIds": asset_ids,
+            },
+        )
+        return record
+
     def _correlation_for_artifact(self, artifact: ArtifactRecord) -> str | None:
         job = self.get_job(artifact.job_id)
         return job.correlation_id if job else None
@@ -1124,6 +1452,122 @@ class MssqlPlatformRepository:
             )
         )
 
+    def _require_knowledge_schema(self) -> None:
+        row = self._query_one(
+            """
+            SELECT 1
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'KNOWLEDGE_ASSETS'
+            """,
+            (),
+        )
+        if row is None:
+            raise KnowledgePersistenceError(
+                "Knowledge assetization requires v5 platform schema tables.",
+                code="KNOWLEDGE_SCHEMA_REQUIRED",
+                status_code=503,
+            )
+
+    def _knowledge_asset_by_logical_key(
+        self,
+        logical_key: str,
+    ) -> KnowledgeAssetRecord | None:
+        row = self._query_one(
+            """
+            SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
+                   TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
+                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
+            FROM dbo.KNOWLEDGE_ASSETS
+            WHERE LOGICAL_KEY_TXT = %s
+            """,
+            (logical_key,),
+        )
+        return knowledge_asset_from_row(row) if row else None
+
+    def _knowledge_version_from_row(
+        self,
+        row: tuple[Any, ...] | None,
+    ) -> KnowledgeAssetVersionRecord | None:
+        if row is None:
+            return None
+        asset_id = str(row[1])
+        version_id = str(row[0])
+        return KnowledgeAssetVersionRecord(
+            version_id=version_id,
+            asset_id=asset_id,
+            version_no=int(row[2] or 0),
+            content_hash=str(row[3] or ""),
+            payload=dict(parse_json(row[4], {})),
+            facts=self._knowledge_facts(asset_id, version_id),
+            edges=self._knowledge_edges(asset_id, version_id),
+            source_job_id=str(row[5]) if row[5] else None,
+            created_at=as_datetime(row[6]),
+        )
+
+    def _knowledge_facts(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> list[KnowledgeFactRecord]:
+        rows = self._query_all(
+            """
+            SELECT FACT_ID, ASST_VER_ID, ASST_ID, FACT_TP_CD, OBJ_REF_TXT,
+                   SMRY_TXT, STAT_CD, EVDC_REFS_JSON, PAYLD_JSON,
+                   CNTNT_HASH_SHA256_VAL, CRE_DTM
+            FROM dbo.KNOWLEDGE_FACTS
+            WHERE ASST_ID = %s AND ASST_VER_ID = %s
+            ORDER BY FACT_ID
+            """,
+            (asset_id, version_id),
+        )
+        return [
+            KnowledgeFactRecord(
+                fact_id=str(row[0]),
+                version_id=str(row[1]),
+                asset_id=str(row[2]),
+                fact_type=str(row[3] or ""),
+                object_ref=str(row[4] or ""),
+                summary=str(row[5] or ""),
+                status=str(row[6] or "REVIEW_REQUIRED"),
+                evidence_refs=[str(item) for item in parse_json(row[7], [])],
+                payload=dict(parse_json(row[8], {})),
+                content_hash=str(row[9] or ""),
+                created_at=as_datetime(row[10]),
+            )
+            for row in rows
+        ]
+
+    def _knowledge_edges(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> list[KnowledgeEdgeRecord]:
+        rows = self._query_all(
+            """
+            SELECT EDGE_ID, ASST_VER_ID, ASST_ID, FROM_FACT_ID, TO_FACT_ID,
+                   EDGE_TP_CD, EVDC_REFS_JSON, PAYLD_JSON, CRE_DTM
+            FROM dbo.KNOWLEDGE_FACT_EDGES
+            WHERE ASST_ID = %s AND ASST_VER_ID = %s
+            ORDER BY EDGE_ID
+            """,
+            (asset_id, version_id),
+        )
+        return [
+            KnowledgeEdgeRecord(
+                edge_id=str(row[0]),
+                version_id=str(row[1]),
+                asset_id=str(row[2]),
+                from_fact_id=str(row[3] or ""),
+                to_fact_id=str(row[4] or ""),
+                edge_type=str(row[5] or "DERIVED_FROM"),
+                evidence_refs=[str(item) for item in parse_json(row[6], [])],
+                payload=dict(parse_json(row[7], {})),
+                created_at=as_datetime(row[8]),
+            )
+            for row in rows
+        ]
+
     def _fetch_value(self, sql: str, params: tuple[Any, ...]) -> str | None:
         row = self._query_one(sql, params)
         if row is None:
@@ -1279,6 +1723,24 @@ def agent_run_from_row(row: tuple[Any, ...], job_id: str) -> AgentRunRecord:
         structured_output=dict(parse_json(row[5], {})),
         model_invocation=dict(parse_json(row[6], {})),
         created_at=as_datetime(row[7]),
+    )
+
+
+def knowledge_asset_from_row(row: tuple[Any, ...]) -> KnowledgeAssetRecord:
+    return KnowledgeAssetRecord(
+        asset_id=str(row[0]),
+        asset_kind=str(row[1]),
+        db_profile_id=str(row[2]),
+        target_type=str(row[3]),
+        target_schema=str(row[4] or ""),
+        target_name=str(row[5] or ""),
+        logical_key=str(row[6]),
+        current_version_id=str(row[7]) if row[7] else None,
+        current_version_no=int(row[8] or 0),
+        content_hash=str(row[9]) if row[9] else None,
+        source_job_id=str(row[10]) if row[10] else None,
+        created_at=as_datetime(row[11]),
+        updated_at=as_datetime(row[12]),
     )
 
 

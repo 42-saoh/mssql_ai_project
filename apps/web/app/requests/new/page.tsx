@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { RequestForm } from "@/components/request-form";
 import { getPortalApi } from "@/lib/api/client";
@@ -44,6 +45,69 @@ async function submitRequest(formData: FormData) {
   redirect(`/jobs/${response.jobId}`);
 }
 
+function requestOptionsFromForm(formData: FormData) {
+  return {
+    includeEvidenceRefs: formData.get("includeEvidenceRefs") === "on",
+    includeModernizationHints: formData.get("includeModernizationHints") === "on",
+    useLlmAnalysis: formData.get("useLlmAnalysis") === "on",
+    llmProfileId: String(formData.get("llmProfileId") ?? "openai_sp_semantic_analysis") as
+      | "openai_sp_semantic_analysis"
+      | "openai_fast_test",
+    allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
+    useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
+  };
+}
+
+async function submitBatchRequest(formData: FormData) {
+  "use server";
+
+  const outputs = formData.getAll("outputs").map(String) as RequestedOutputType[];
+  const targets = String(formData.get("batchTargets") ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [schema = "dbo", name = ""] = line.includes(".")
+        ? line.split(".", 2)
+        : ["dbo", line];
+      return {
+        type: "PROCEDURE" as TargetObjectType,
+        schema: schema.trim() || "dbo",
+        name: name.trim(),
+      };
+    })
+    .filter((target) => target.name);
+  const api = getPortalApi();
+  const response = await api.createSPAnalysisBatchRequest({
+    dbProfileId: String(formData.get("dbProfileId") ?? "ppm"),
+    targets,
+    outputs: outputs.length > 0 ? outputs : ["SP_ANALYSIS_DOCUMENT"],
+    options: requestOptionsFromForm(formData),
+  });
+  const params = new URLSearchParams({
+    batchId: response.batchId,
+    batchStatus: response.status,
+    batchLimits: `${response.limits.maxTargets ?? 0}/${response.limits.maxConcurrentJobs ?? 0}`,
+  });
+  if (response.accepted.length > 0) {
+    params.set(
+      "batchJobs",
+      response.accepted
+        .map((item) => `${item.jobId}:${item.target.schema}.${item.target.name}`)
+        .join(","),
+    );
+  }
+  if (response.rejected.length > 0) {
+    params.set(
+      "batchRejected",
+      response.rejected
+        .map((item) => `${item.code}:${item.target.schema}.${item.target.name}`)
+        .join(","),
+    );
+  }
+  redirect(`/requests/new?${params.toString()}`);
+}
+
 export default async function NewRequestPage({
   searchParams,
 }: Readonly<{
@@ -82,6 +146,25 @@ export default async function NewRequestPage({
   const selectedSample =
     pilotManifest.procedureSamples.find((sample) => sample.id === requestedSampleId) ??
     pilotManifest.procedureSamples[0];
+  const batchStatus = firstParam(params.batchStatus);
+  const batchId = firstParam(params.batchId);
+  const batchJobs = (firstParam(params.batchJobs) ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const [jobId, target] = item.split(":", 2);
+      return { jobId, target };
+    });
+  const batchRejected = (firstParam(params.batchRejected) ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const [code, target] = item.split(":", 2);
+      return { code, target };
+    });
+  const batchLimits = firstParam(params.batchLimits);
 
   return (
     <div className="stack">
@@ -99,6 +182,51 @@ export default async function NewRequestPage({
         </p>
       </section>
 
+      {batchStatus ? (
+        <section className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Batch result</p>
+              <h2>{batchStatus}</h2>
+            </div>
+            <span className="quiet-label">{batchId}</span>
+          </div>
+          <div className="metric-grid">
+            <div>
+              <span>Accepted</span>
+              <strong>{batchJobs.length}</strong>
+            </div>
+            <div>
+              <span>Rejected</span>
+              <strong>{batchRejected.length}</strong>
+            </div>
+            <div>
+              <span>Limits</span>
+              <strong>{batchLimits ?? "active"}</strong>
+            </div>
+          </div>
+          {batchJobs.length > 0 ? (
+            <div className="batch-list">
+              {batchJobs.map((item) => (
+                <Link href={`/jobs/${item.jobId}`} key={item.jobId}>
+                  {item.target} · {item.jobId}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          {batchRejected.length > 0 ? (
+            <div className="blocker-list">
+              {batchRejected.map((item) => (
+                <article className="blocker-row" key={`${item.code}-${item.target}`}>
+                  <strong>{item.code}</strong>
+                  <span>{item.target}</span>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="panel">
         <RequestForm
           defaultProfileId={profileResponse.defaultProfileId}
@@ -106,6 +234,7 @@ export default async function NewRequestPage({
           pilotManifest={pilotManifest}
           selectedSample={selectedSample}
           action={submitRequest}
+          batchAction={submitBatchRequest}
         />
       </section>
     </div>

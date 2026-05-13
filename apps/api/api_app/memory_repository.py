@@ -20,6 +20,11 @@ from api_app.repositories import (
     ArtifactRecord,
     AuditEventRecord,
     JobRecord,
+    KnowledgeAssetRecord,
+    KnowledgeAssetVersionRecord,
+    KnowledgeEdgeRecord,
+    KnowledgeExportRecord,
+    KnowledgeFactRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkRequestRecord,
@@ -41,6 +46,9 @@ class MemoryWorkflowRepository:
         self.artifacts: dict[str, ArtifactRecord] = {}
         self.validation_reports: dict[str, ValidationReportRecord] = {}
         self.approvals: dict[str, ApprovalRecordData] = {}
+        self.knowledge_assets: dict[str, KnowledgeAssetRecord] = {}
+        self.knowledge_versions: dict[str, KnowledgeAssetVersionRecord] = {}
+        self.knowledge_exports: dict[str, KnowledgeExportRecord] = {}
         self.audit_events: list[AuditEventRecord] = []
         self.auth_actors: dict[str, Actor] = {}
 
@@ -482,6 +490,195 @@ class MemoryWorkflowRepository:
             correlation_id=correlation_id,
         )
         self.audit_events.append(record)
+        return record
+
+    def upsert_knowledge_asset(
+        self,
+        *,
+        job_id: str | None,
+        db_profile_id: str,
+        asset_kind: str,
+        target: dict[str, str],
+        payload: dict[str, Any],
+        facts: list[dict[str, Any]],
+        edges: list[dict[str, Any]],
+        content_hash: str,
+    ) -> KnowledgeAssetVersionRecord:
+        target_type = str(target.get("type") or "OBJECT")
+        target_schema = str(target.get("schema") or "")
+        target_name = str(target.get("name") or "")
+        logical_key = "|".join(
+            [db_profile_id, asset_kind, target_type, target_schema, target_name]
+        ).lower()
+        asset = next(
+            (
+                item
+                for item in self.knowledge_assets.values()
+                if item.logical_key == logical_key
+            ),
+            None,
+        )
+        if asset is None:
+            asset = KnowledgeAssetRecord(
+                asset_id=prefixed_id("know"),
+                asset_kind=asset_kind,
+                db_profile_id=db_profile_id,
+                target_type=target_type,
+                target_schema=target_schema,
+                target_name=target_name,
+                logical_key=logical_key,
+                source_job_id=job_id,
+            )
+            self.knowledge_assets[asset.asset_id] = asset
+        if asset.content_hash == content_hash and asset.current_version_id:
+            version = self.knowledge_versions[asset.current_version_id]
+            if job_id and not asset.source_job_id:
+                asset.source_job_id = job_id
+            return version
+
+        version_no = asset.current_version_no + 1
+        version_id = prefixed_id("knowv")
+        fact_records = [
+            KnowledgeFactRecord(
+                fact_id=str(fact.get("factId") or fact.get("id") or prefixed_id("fact")),
+                version_id=version_id,
+                asset_id=asset.asset_id,
+                fact_type=str(fact.get("factType") or fact.get("type") or asset_kind),
+                object_ref=str(fact.get("objectRef") or ""),
+                summary=str(fact.get("summary") or ""),
+                status=str(fact.get("status") or "REVIEW_REQUIRED"),
+                evidence_refs=[str(ref) for ref in fact.get("evidenceRefs", [])],
+                payload=dict(fact.get("payload") or {}),
+                content_hash=str(fact.get("contentHash") or content_hash),
+            )
+            for fact in facts
+            if isinstance(fact, dict)
+        ]
+        edge_records = [
+            KnowledgeEdgeRecord(
+                edge_id=str(edge.get("edgeId") or prefixed_id("edge")),
+                version_id=version_id,
+                asset_id=asset.asset_id,
+                from_fact_id=str(edge.get("fromFactId") or edge.get("from") or ""),
+                to_fact_id=str(edge.get("toFactId") or edge.get("to") or ""),
+                edge_type=str(edge.get("edgeType") or edge.get("type") or "DERIVED_FROM"),
+                evidence_refs=[str(ref) for ref in edge.get("evidenceRefs", [])],
+                payload=dict(edge.get("payload") or {}),
+            )
+            for edge in edges
+            if isinstance(edge, dict)
+        ]
+        version = KnowledgeAssetVersionRecord(
+            version_id=version_id,
+            asset_id=asset.asset_id,
+            version_no=version_no,
+            content_hash=content_hash,
+            payload=payload,
+            facts=fact_records,
+            edges=edge_records,
+            source_job_id=job_id,
+        )
+        self.knowledge_versions[version_id] = version
+        asset.current_version_id = version_id
+        asset.current_version_no = version_no
+        asset.content_hash = content_hash
+        asset.updated_at = utc_now()
+        if job_id:
+            asset.source_job_id = job_id
+        self.record_audit_event(
+            action="KNOWLEDGE_ASSET_VERSIONED",
+            target_type="KNOWLEDGE_ASSET",
+            target_ref_id=asset.asset_id,
+            payload={
+                "assetKind": asset_kind,
+                "versionId": version_id,
+                "versionNo": version_no,
+                "contentHash": content_hash,
+                "sourceJobId": job_id,
+            },
+            correlation_id=self.jobs[job_id].correlation_id if job_id in self.jobs else None,
+        )
+        return version
+
+    def list_job_knowledge_assets(self, job_id: str) -> list[KnowledgeAssetRecord] | None:
+        if job_id not in self.jobs:
+            return None
+        return [
+            replace(asset)
+            for asset in self.knowledge_assets.values()
+            if asset.source_job_id == job_id
+        ]
+
+    def get_knowledge_asset(self, asset_id: str) -> KnowledgeAssetRecord | None:
+        asset = self.knowledge_assets.get(asset_id)
+        return replace(asset) if asset else None
+
+    def list_knowledge_asset_versions(
+        self,
+        asset_id: str,
+    ) -> list[KnowledgeAssetVersionRecord] | None:
+        if asset_id not in self.knowledge_assets:
+            return None
+        return sorted(
+            [
+                version
+                for version in self.knowledge_versions.values()
+                if version.asset_id == asset_id
+            ],
+            key=lambda version: version.version_no,
+            reverse=True,
+        )
+
+    def get_knowledge_asset_version(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> KnowledgeAssetVersionRecord | None:
+        if asset_id not in self.knowledge_assets:
+            return None
+        version = self.knowledge_versions.get(version_id)
+        if version is None or version.asset_id != asset_id:
+            return None
+        return version
+
+    def list_knowledge_facts(
+        self,
+        asset_id: str,
+        version_id: str,
+    ) -> tuple[list[KnowledgeFactRecord], list[KnowledgeEdgeRecord]] | None:
+        version = self.get_knowledge_asset_version(asset_id, version_id)
+        if version is None:
+            return None
+        return (list(version.facts), list(version.edges))
+
+    def save_knowledge_export(
+        self,
+        *,
+        export_format: str,
+        content_type: str,
+        content: str,
+        content_hash: str,
+        asset_ids: list[str],
+    ) -> KnowledgeExportRecord:
+        record = KnowledgeExportRecord(
+            export_id=prefixed_id("kexp"),
+            format=export_format,
+            content_type=content_type,
+            content=content,
+            content_hash=content_hash,
+            asset_ids=asset_ids,
+        )
+        self.knowledge_exports[record.export_id] = record
+        self.record_audit_event(
+            action="KNOWLEDGE_EXPORTED",
+            target_type="KNOWLEDGE_EXPORT",
+            target_ref_id=record.export_id,
+            payload={
+                "format": export_format,
+                "contentHash": content_hash,
+                "assetIds": asset_ids,
+            },
+        )
         return record
 
 

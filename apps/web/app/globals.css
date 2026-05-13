@@ -265,7 +265,8 @@ legend {
 }
 
 input,
-select {
+select,
+textarea {
   min-height: 42px;
   width: 100%;
   border: 1px solid var(--border-strong);
@@ -276,9 +277,26 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 3px solid rgb(15 118 110 / 18%);
   border-color: var(--accent);
+}
+
+textarea {
+  min-height: 132px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.form-field--wide {
+  grid-column: 1 / -1;
+}
+
+.request-form--batch {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
 }
 
 fieldset {
@@ -388,6 +406,11 @@ legend {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+
+.batch-list {
+  display: grid;
+  gap: 8px;
 }
 
 .status-pill {

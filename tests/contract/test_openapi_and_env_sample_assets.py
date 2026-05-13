@@ -40,10 +40,17 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert data["info"]["title"] == "MSSQL Analysis Agent Platform API"
     assert "/health" in data["paths"]
     assert "/api/v1/requests/sp-analysis" in data["paths"]
+    assert "/api/v1/requests/sp-analysis/batch" in data["paths"]
     assert "/api/v1/jobs" in data["paths"]
     assert "/api/v1/jobs/{jobId}" in data["paths"]
+    assert "/api/v1/jobs/{jobId}/knowledge-assets" in data["paths"]
+    assert "/api/v1/knowledge/assets/{assetId}" in data["paths"]
+    assert "/api/v1/knowledge/assets/{assetId}/versions" in data["paths"]
+    assert "/api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts" in data["paths"]
+    assert "/api/v1/knowledge/exports" in data["paths"]
     assert "/api/v1/artifacts/{artifactId}/validation/latest" in data["paths"]
     assert "SPAnalysisRequest" in data["components"]["schemas"]
+    assert "SPAnalysisBatchRequest" in data["components"]["schemas"]
     assert (
         data["components"]["schemas"]["SPAnalysisOptions"]["properties"][
             "useAiToolOrchestration"
@@ -60,6 +67,8 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "MetadataSearchResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisResponse" in data["components"]["schemas"]
     assert "MetadataToolInvokeResponse" in data["components"]["schemas"]
+    assert "KnowledgeAssetSummary" in data["components"]["schemas"]
+    assert "KnowledgeExportResponse" in data["components"]["schemas"]
 
 
 def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
@@ -100,6 +109,7 @@ def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
     }
     assert responses["403"] == {"$ref": "#/components/responses/Forbidden"}
     assert responses["424"] == {"$ref": "#/components/responses/DependencyBlocked"}
+    assert responses["429"] == {"$ref": "#/components/responses/Backpressure"}
     assert responses["503"] == {"$ref": "#/components/responses/DependencyBlocked"}
 
     result_schema = schemas["MetadataSearchResult"]
@@ -149,6 +159,7 @@ def test_openapi_metadata_tool_invocation_contract_matches_p28_surface() -> None
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/MetadataToolInvokeResponse"
     }
+    assert operation["responses"]["429"] == {"$ref": "#/components/responses/Backpressure"}
     assert schemas["MetadataToolSummary"]["properties"]["invokable"] == {
         "type": "boolean",
         "description": "True only for public API invocation allowlisted metadata tools.",
@@ -200,6 +211,7 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
     options = schemas["MetadataAnalysisOptions"]["properties"]
     assert options["useLlmAnalysis"]["default"] is True
     assert options["useAiToolOrchestration"]["default"] is True
+    assert options["persistKnowledge"]["default"] is True
     assert options["maxTargets"]["maximum"] == 5
     response_properties = set(schemas["MetadataAnalysisResponse"]["properties"])
     assert {
@@ -212,11 +224,14 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
         "dtoReadiness",
         "reviewMarkers",
         "componentInvocations",
+        "knowledgeAssets",
     } <= response_properties
     assert schemas["AiToolEvidenceSummary"]["properties"]["plannerMetrics"] == {
         "$ref": "#/components/schemas/PlannerMetrics"
     }
     assert "claimSupportRate" in schemas["PlannerMetrics"]["properties"]
+    assert "cacheHitCount" in schemas["PlannerMetrics"]["properties"]
+    assert "cacheMissCount" in schemas["PlannerMetrics"]["properties"]
     forbidden_response_fields = {
         "rowData",
         "row_data",
@@ -228,6 +243,81 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
         "rawStorage",
     }
     assert forbidden_response_fields.isdisjoint(response_properties)
+
+
+def test_openapi_sp_batch_contract_matches_p33_scale_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    operation = openapi["paths"]["/api/v1/requests/sp-analysis/batch"]["post"]
+    schemas = openapi["components"]["schemas"]
+
+    assert operation["operationId"] == "createStoredProcedureAnalysisBatch"
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/SPAnalysisBatchRequest"
+    }
+    assert operation["responses"]["202"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/SPAnalysisBatchResponse"
+    }
+    assert operation["responses"]["429"] == {"$ref": "#/components/responses/Backpressure"}
+    assert schemas["SPAnalysisBatchRequest"]["required"] == [
+        "dbProfileId",
+        "targets",
+        "outputs",
+    ]
+    response_properties = schemas["SPAnalysisBatchResponse"]["properties"]
+    assert set(response_properties) == {"batchId", "status", "accepted", "rejected", "limits"}
+    rejected_codes = schemas["SPAnalysisBatchRejectedItem"]["properties"]["code"]["enum"]
+    assert "DUPLICATE_TARGET_SKIPPED" in rejected_codes
+    assert "BATCH_TARGET_LIMIT_EXCEEDED" in rejected_codes
+
+
+def test_openapi_knowledge_assetization_contract_matches_p34_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    paths = openapi["paths"]
+    schemas = openapi["components"]["schemas"]
+
+    assert paths["/api/v1/jobs/{jobId}/knowledge-assets"]["get"]["operationId"] == (
+        "listJobKnowledgeAssets"
+    )
+    assert paths["/api/v1/knowledge/assets/{assetId}"]["get"]["operationId"] == (
+        "getKnowledgeAsset"
+    )
+    assert paths["/api/v1/knowledge/exports"]["post"]["operationId"] == (
+        "createKnowledgeExport"
+    )
+    assert schemas["SPAnalysisOptions"]["properties"]["persistKnowledge"]["default"] is True
+    assert schemas["MetadataAnalysisResponse"]["properties"]["knowledgeAssets"] == {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/KnowledgeAssetSummary"},
+    }
+    assert schemas["KnowledgeAssetKind"]["enum"] == [
+        "SP_ANALYSIS",
+        "DEPENDENCY_EVIDENCE",
+        "METADATA_PROFILE",
+        "DTO_READINESS",
+        "CANONICAL_ANALYSIS",
+    ]
+    assert schemas["KnowledgeExportRequest"]["properties"]["format"]["enum"] == [
+        "JSONL",
+        "GRAPH_JSON",
+    ]
+    assert set(schemas["KnowledgeEdge"]["properties"]["edgeType"]["enum"]) == {
+        "DEPENDS_ON",
+        "DERIVED_FROM",
+        "SUPPORTS",
+        "READS",
+        "WRITES",
+        "CALLS",
+        "FK_TO",
+        "DTO_FIELD_OF",
+    }
 
 
 def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
@@ -315,6 +405,18 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "MSSQL_METADATA_TDS_VERSION=7.4" in text
     assert "P21_LIVE_PORTAL_GATE=0" in text
     assert "P27_HARD_LIVE_GATE=0" in text
+    assert "MCP_TOOL_RESULT_CACHE_ENABLED=1" in text
+    assert "MCP_TOOL_RESULT_CACHE_TTL_SECONDS=300" in text
+    assert "MCP_TOOL_RESULT_CACHE_MAX_ENTRIES=1024" in text
+    assert "WORKFLOW_MAX_ACTIVE_JOBS=4" in text
+    assert "MSSQL_METADATA_MAX_CONCURRENCY=4" in text
+    assert "BACKPRESSURE_WAIT_MS=250" in text
+    assert "SP_BATCH_MAX_TARGETS=20" in text
+    assert "SP_BATCH_MAX_CONCURRENT_JOBS=2" in text
+    assert "AI_TOOL_MAX_CALLS=5" in text
+    assert "AI_TOOL_MAX_ROUNDS=2" in text
+    assert "AI_TOOL_LIVE_MAX_ROUNDS=1" in text
+    assert "KNOWLEDGE_ASSETIZATION_ENABLED=1" in text
     assert "PORTAL_API_MODE=http" in text
     assert "PORTAL_API_BASE_URL=\n" in text
     assert "TPsaoh" not in text

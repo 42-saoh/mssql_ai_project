@@ -21,6 +21,7 @@
 - `GET /api/v1/jobs`
 - `GET /api/v1/jobs/{jobId}`
 - `GET /api/v1/jobs/{jobId}/agent-runs`
+- `GET /api/v1/jobs/{jobId}/knowledge-assets`
 - `GET /api/v1/jobs/{jobId}/artifacts`
 - `GET /api/v1/artifacts/{artifactId}`
 - `GET /api/v1/artifacts/{artifactId}/validation/latest`
@@ -31,6 +32,10 @@
 - `POST /api/v1/metadata/tools/{toolName}/invoke`
 - `GET /api/v1/metadata/search`
 - `POST /api/v1/metadata/analyze`
+- `GET /api/v1/knowledge/assets/{assetId}`
+- `GET /api/v1/knowledge/assets/{assetId}/versions`
+- `GET /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts`
+- `POST /api/v1/knowledge/exports`
 - `GET /api/v1/registry/versions`
 
 `GET /api/v1/metadata/tools` returns a safe read-only catalog summary. P27
@@ -239,7 +244,7 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
 
 ## Metadata analysis
 
-- `POST /api/v1/metadata/analyze` 는 response-only bounded AI-MCP metadata analysis endpoint 다.
+- `POST /api/v1/metadata/analyze` 는 bounded AI-MCP metadata analysis endpoint 다.
   요청은 `dbProfileId` 와 `query` 또는 단일 `target` 중 하나를 받으며, `options.useLlmAnalysis=true`,
   `options.useAiToolOrchestration=true`, `options.maxTargets=3` 을 기본값으로 사용한다.
 - 기존 `GET /api/v1/metadata/search` 는 LLM 호출 없이 deterministic search 로 유지한다. Analyze API 는
@@ -250,9 +255,46 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
 - 응답은 sanitized `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id,
   `metadata.profile.<hash>` profile fact id, `objectInsights`, `objectProfiles`, `insightGroups`,
   `dependencyGraph`, `dtoReadiness`, `reviewMarkers`, caveats 로 제한한다. `aiToolEvidence.plannerMetrics`
-  는 planned/executed/blocked/failed/deduped call count, evidence utilization, claim support rate 만
-  담는 sanitized effectiveness summary 다. v1 은 DB migration,
-  persisted artifact, workflow state transition 을 추가하지 않는다.
+  는 planned/executed/blocked/failed/deduped call count, cache hit/miss count, evidence utilization,
+  claim support rate 만 담는 sanitized effectiveness summary 다. P34 부터 `persistKnowledge=true`
+  기본값에서는 sanitized `knowledgeAssets[]` summary 도 함께 반환한다. persisted artifact 와 workflow
+  state transition 은 추가하지 않는다.
+
+## Knowledge assetization
+
+- `persistKnowledge` 는 SP analysis options 와 Metadata analysis options 에서 기본 `true` 다.
+  `KNOWLEDGE_ASSETIZATION_ENABLED=0` 으로 rollout 중 비활성화하면 skip marker/caveat 만 남긴다.
+- SP workflow 는 완료 시 `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`,
+  `DTO_READINESS`, `CANONICAL_ANALYSIS` knowledge assets 를 만들고
+  `GET /api/v1/jobs/{jobId}/knowledge-assets` 로 조회한다.
+- Metadata Analyze 는 별도 workflow state transition 없이 성공 응답에 `knowledgeAssets[]` 를
+  포함하고 `METADATA_PROFILE`, `DEPENDENCY_EVIDENCE`, `DTO_READINESS` facts 를 저장한다.
+- Knowledge API 는 asset summary, versions, version facts/edges, `JSONL` / `GRAPH_JSON` export 를
+  반환한다. Export content 는 sanitized facts/edges 로 제한한다.
+- Platform DB persistence 는 `db/schema/ai_agent_platform_schema_v5_knowledge_assets.sql` 수동 적용을
+  요구한다. v5 table 이 없으면 adapter 는 `KNOWLEDGE_SCHEMA_REQUIRED` 를 반환하고 API 는 DDL 을
+  자동 적용하지 않는다.
+- raw SP definition, raw SQL text, row data, procedure execution, DDL/DML, secret,
+  raw prompt/provider trace 는 knowledge payload, response, export 에 저장하지 않는다.
+
+## Performance / scale controls
+
+- Metadata MCP tool result cache 는 process-local TTL/LRU 로 동작한다. 기본값은
+  `MCP_TOOL_RESULT_CACHE_ENABLED=1`, `MCP_TOOL_RESULT_CACHE_TTL_SECONDS=300`,
+  `MCP_TOOL_RESULT_CACHE_MAX_ENTRIES=1024` 이며 active/read-only successful tool response 만
+  cache 대상이다.
+- Cache trace 는 raw payload 없이 `cacheStatus`, `cacheKeyHash`, `cacheAgeMs` 만 component summary 에
+  남긴다. Raw definition/SQL text, row data, procedure execution, DDL/DML, secret-like field 또는
+  실패/write-like invocation 은 cache 에 저장하지 않는다.
+- `aiToolEvidence.toolResults[]` 는 volatile response envelope 추적용 `outputHash` 와 sanitized content
+  reuse 판단용 `contentHash` 를 분리한다. `mcp.<toolName>.<hash>` fact id 는 `snapshotId`/`collectedAt`
+  보다 sanitized content 와 argument hash 를 기준으로 안정화된다.
+- `POST /api/v1/requests/sp-analysis/batch` 는 response grouping `batchId`, accepted job links,
+  rejected target codes, active limits 를 반환한다. 별도 batch table, queue infra, DB migration 은 없다.
+- Process-global admission control 기본값은 `WORKFLOW_MAX_ACTIVE_JOBS=4`,
+  `MSSQL_METADATA_MAX_CONCURRENCY=4`, `BACKPRESSURE_WAIT_MS=250` 이다. Public API capacity 초과는
+  `WORKFLOW_BACKPRESSURE` 또는 `MCP_BACKPRESSURE` code 로 반환하고, internal planner tool backpressure 는
+  review marker/caveat 로 남긴다.
 
 ## Metadata tool invocation
 

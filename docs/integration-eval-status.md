@@ -27,8 +27,10 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | P22 LLM runtime | implemented with gates | Default tests use `FakeModelGateway`; remote OpenAI calls require `LLM_ENABLE_REMOTE=1`, `LLM_ALLOW_SP_TEXT=1`, and `OPENAI_API_KEY`. Stored traces contain hashes, model/profile/token/latency/status summaries only, not raw prompt, SP definition, or provider response text. |
 | P23 LLM quality eval | fixture-first scored | `spec/eval/p23_llm_sp_analysis_quality_contract.yaml` and `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml` define and author simple/medium/complex synthetic quality eval fixtures. `tests/eval/test_p23_llm_sp_analysis_quality.py` validates schema, deterministic evidence binding, fake-gateway execution with `openai_fast_test`, no-raw trace storage, no PPM-to-PLF fallback, and P23C/P26 quality scoring. Optional live quality gate uses high-quality `openai_sp_semantic_analysis` and `OPENAI_MODEL_ANALYSIS`; `openai_fast_test` still defaults to `gpt-5-nano` with `OPENAI_MODEL_FAST_TEST` for manual fast/test runs. Optional live output is a confidence signal only; current status remains `production_ready: false`. |
 | P24 migration guide quality | fixture-first rendered/scored | `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` render P24 guide sections from sanitized fixture facts, and `evaluate_p24_migration_guide_quality` scores the rendered artifact pair. The gate validates required section coverage, evidence-linked claims, DML matrix coverage, branch/call-flow coverage, `REVIEW_REQUIRED` unsupported claims, storage safety, PPM target context, no PLF fallback, and `production_ready: false`. |
-| P30/P31 metadata analysis | response-only fixture-first | Metadata Analyze keeps search deterministic and runs bounded internal-only AI-MCP orchestration only inside `POST /api/v1/metadata/analyze`. P31 adds object profiles, grouped insights, dependency graph, DTO readiness, and `metadata.profile.*` facts without DB migration or persisted artifacts. |
+| P30/P31 metadata analysis | fixture-first analysis response | Metadata Analyze keeps search deterministic and runs bounded internal-only AI-MCP orchestration only inside `POST /api/v1/metadata/analyze`. P31 adds object profiles, grouped insights, dependency graph, DTO readiness, and `metadata.profile.*` facts without persisted artifacts or workflow state transition. P34 adds sanitized knowledge asset persistence on top. |
 | P32 planner effectiveness | fixture-first plus optional live confidence | `aiToolEvidence.plannerMetrics` records sanitized planned/executed/blocked/failed/deduped counts, evidence utilization, and claim support rate. `tests/eval/test_p32_live_confidence_planner_effectiveness.py` is fixture-first by default; `P32_LIVE_CONFIDENCE_GATE=1` adds remote LLM plus live PPM metadata confidence only and does not imply `production_ready: true`. |
+| P33 performance/scale | fixture-first process-local | Metadata MCP tool success responses are cached in a TTL/LRU process-local cache, tool evidence includes stable `contentHash`, planner metrics include cache hit/miss counts, and `POST /api/v1/requests/sp-analysis/batch` creates normal per-target jobs with duplicate/limit rejection. Workflow/MCP backpressure uses `WORKFLOW_BACKPRESSURE` and `MCP_BACKPRESSURE`; no DB migration, queue infra, row data, DDL/DML, or public MCP allowlist expansion is added. |
+| P34 knowledge assetization | fixture-first versioned knowledge | SP workflow and Metadata Analyze default `persistKnowledge=true` materialize sanitized `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`, and `CANONICAL_ANALYSIS` assets where applicable. v5 DDL is manual-apply only, same `contentHash` reuses the current version, APIs expose summaries/facts/JSONL/GRAPH_JSON export, and no raw SP definition, SQL text, row data, secrets, raw prompt/provider trace, or production-ready claim is introduced. |
 | P27 dependency evidence tooling | fixture-first hardened | `spec/eval/p27_dependency_evidence_tooling_contract.yaml` and the MCP catalog define active read-only dependency closure/resolution tools plus optional dependency resolution evidence fields. P28 safe API invocation, P29 Web diagnostics, and workflow closure evidence wiring are fixture-first enabled; persisted artifact type and DB schema changes remain deferred. Ambiguous/dynamic/unresolved/cross-server/caller-dependent references stay `REVIEW_REQUIRED`. Explicit hard-live evidence runs only with `P27_HARD_LIVE_GATE=1`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
@@ -49,6 +51,8 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`: P23B/P26 simple/medium/complex synthetic LLM-assisted SP semantic analysis quality fixtures, including deterministic facts, transient model input, golden semantic/guide/conversion outputs, high-quality semantic default posture with `OPENAI_MODEL_ANALYSIS` live override, `gpt-5-nano` fast/test default with `OPENAI_MODEL_FAST_TEST` manual override, `LLM_INFERENCE`, `REVIEW_REQUIRED`, no-raw-trace storage expectations, and `production_ready: false`.
 - `fixtures/eval/sp_migration_guide_quality_p24_v1.yaml`: P24B-authored simple/medium/complex synthetic SP migration guide quality fixtures, including required section taxonomy, dependency inventory, DML matrix, branch call flow, phase/risk metrics, appendix mappings, evidence refs, unsupported claim `REVIEW_REQUIRED`, storage safety, `gpt-5-nano` fast/test default, `OPENAI_MODEL_FAST_TEST` optional live override, and `production_ready: false`.
 - `fixtures/eval/live_confidence_planner_effectiveness_p32_v1.yaml`: P32 planner effectiveness and live confidence fixture, including duplicate/deduped planner requests, blocked unsafe args, under-utilized evidence, optional OpenAI+PPM live confidence, and `production_ready: false`.
+- `fixtures/eval/performance_scale_p33_v1.yaml`: P33 performance/scale fixture, including cache hit reuse, stable fact hashes, batch duplicate/limit handling, live round reduction, backpressure signaling, no raw leakage, and `production_ready: false`.
+- `fixtures/eval/knowledge_assetization_p34_v1.yaml`: P34 knowledge assetization fixture, including SP/metadata asset kinds, version reuse, fact graph export, v5 manual schema boundary, no raw leakage, and `production_ready: false`.
 - `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`: P23 quality contract that separates P23A contract assets, P23B fixture authoring, P23C fixture-first eval runner/scoring, and P23D readiness documentation.
 - `spec/eval/p27_dependency_evidence_tooling_contract.yaml`: P27 fixture-first hardening contract for dependency evidence fields, active read-only MCP tools, P28 safe API invocation, P29 Web diagnostics and workflow evidence wiring, explicit hard-live gate, no-raw/no-row/no-fallback policy, and deferred persisted artifact/DB schema boundaries.
 
@@ -134,6 +138,22 @@ P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE
 
 The first command is fixture-first and does not call live OpenAI/PPM. The second command requires `OPENAI_API_KEY` and read-only `ppm` metadata access; success is confidence evidence only and does not change production readiness.
 
+For P33 performance/scale fixture-first validation, run:
+
+```bash
+make test PYTEST_ARGS="tests/unit/api/test_metadata_tool_cache.py tests/unit/api/test_batch_sp_analysis.py tests/eval/test_p33_performance_scale.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"
+```
+
+This verifies process-local cache behavior, stable fact hashes, batch SP intake, planner cache metrics, and backpressure codes without live PPM or production readiness claims.
+
+For P34 knowledge assetization fixture-first validation, run:
+
+```bash
+make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/eval/test_p34_knowledge_assetization.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"
+```
+
+This verifies sanitized versioned knowledge assets, fact graph/export, stable version reuse, manual v5 schema boundary, and no raw leakage. Knowledge assets are draft/reviewable organizational knowledge and do not imply production readiness.
+
 P24 status interpretation:
 
 - `PASSED`: the fixture-first renderer/evaluator meets every threshold, keeps `productionReady: false`, preserves `REVIEW_REQUIRED` for unsupported or low-evidence claims, and has no storage safety findings or PPM-to-PLF fallback.
@@ -171,6 +191,7 @@ P27 status interpretation:
 - OpenAPI: P21 adds recent jobs and latest validation read routes. Requested output groups remain separate from persisted artifact types.
 - Domain: P18A adds the minimal versioned `CanonicalAnalysisModel` contract in `packages/domain` and keeps missing snapshot/registry/evidence bindings as explicit analysis blockers.
 - MCP catalog: P27 dependency closure/reference resolution tools are active read-only fixture-first hardened tools with structured arguments and safe API summary exposure only.
+- Knowledge: P34 adds manual-apply v5 knowledge asset DDL, `CanonicalAnalysisModel.v2`, sanitized asset/fact/export APIs, and Web summaries without widening the public MCP invoke allowlist.
 - Validation rules: P26 adds guide/conversion recall scoring for LLM semantic quality while existing evidence/review-required rules continue to drive e2e/eval expectations.
 - Policy: P26 documents high-quality semantic analysis defaults, while forbidden automatic publish, automatic DDL, row-data access, raw prompt/SP/provider-response storage, and PLF fallback boundaries remain unchanged.
 - Env/profile: default metadata profile is now consistently `master`; platform DB profile `plf` remains available. Live MSSQL uses `MSSQL_METADATA_TDS_VERSION=7.4` by default, with `7.0` available for local Chakra/legacy proxy paths that reject default `python-tds` negotiation.
@@ -191,3 +212,4 @@ P27 status interpretation:
 10. Keep optional P23 live quality gate evidence separate from default fixture-first scoring.
 11. Broaden P24 guide fixtures only after additional sanitized deterministic facts exist; keep current renderer/evaluator fixture-first and draft-only.
 12. Use explicit P27 hard-live results to reduce residual `REVIEW_REQUIRED` dependency evidence where catalog metadata can uniquely confirm targets, without introducing persisted artifact type changes, DB schema changes, or PLF fallback.
+13. Keep knowledge assets reviewable until multi-process/shared knowledge indexing, lifecycle policy, and human curation workflows are designed.

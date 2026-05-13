@@ -49,6 +49,7 @@ class SPAnalysisOptions(ApiModel):
         default=True,
         alias="useAiToolOrchestration",
     )
+    persist_knowledge: bool = Field(default=True, alias="persistKnowledge")
 
 
 class SPAnalysisRequest(ApiModel):
@@ -58,11 +59,39 @@ class SPAnalysisRequest(ApiModel):
     options: SPAnalysisOptions = Field(default_factory=SPAnalysisOptions)
 
 
+class SPAnalysisBatchRequest(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId")
+    targets: list[TargetObject] = Field(min_length=1)
+    outputs: list[RequestedOutputType] = Field(min_length=1)
+    options: SPAnalysisOptions = Field(default_factory=SPAnalysisOptions)
+
+
 class SubmitRequestResponse(ApiModel):
     request_id: str = Field(alias="requestId")
     job_id: str = Field(alias="jobId")
     status: JobStatus
     echo: dict[str, Any] | None = None
+
+
+class SPAnalysisBatchAcceptedItem(ApiModel):
+    target: TargetObject
+    request_id: str = Field(alias="requestId")
+    job_id: str = Field(alias="jobId")
+    status: JobStatus
+
+
+class SPAnalysisBatchRejectedItem(ApiModel):
+    target: TargetObject
+    code: str
+    message: str
+
+
+class SPAnalysisBatchResponse(ApiModel):
+    batch_id: str = Field(alias="batchId")
+    status: Literal["ACCEPTED", "PARTIAL", "REJECTED"]
+    accepted: list[SPAnalysisBatchAcceptedItem] = Field(default_factory=list)
+    rejected: list[SPAnalysisBatchRejectedItem] = Field(default_factory=list)
+    limits: dict[str, int]
 
 
 class Job(ApiModel):
@@ -257,6 +286,7 @@ class MetadataAnalysisOptions(ApiModel):
         "openai_fast_test",
     ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
     max_targets: int = Field(default=3, ge=1, le=5, alias="maxTargets")
+    persist_knowledge: bool = Field(default=True, alias="persistKnowledge")
 
 
 class MetadataAnalysisRequest(ApiModel):
@@ -355,6 +385,100 @@ class MetadataAnalysisReviewMarker(ApiModel):
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
 
 
+class KnowledgeAssetSummary(ApiModel):
+    asset_id: str = Field(alias="assetId")
+    asset_kind: Literal[
+        "SP_ANALYSIS",
+        "DEPENDENCY_EVIDENCE",
+        "METADATA_PROFILE",
+        "DTO_READINESS",
+        "CANONICAL_ANALYSIS",
+    ] = Field(alias="assetKind")
+    db_profile_id: str = Field(alias="dbProfileId")
+    target_type: str = Field(alias="targetType")
+    target_schema: str = Field(alias="targetSchema")
+    target_name: str = Field(alias="targetName")
+    logical_key: str = Field(alias="logicalKey")
+    current_version_id: str | None = Field(default=None, alias="currentVersionId")
+    current_version_no: int = Field(default=0, alias="currentVersionNo")
+    content_hash: str | None = Field(default=None, alias="contentHash")
+    source_job_id: str | None = Field(default=None, alias="sourceJobId")
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+    updated_at: datetime | None = Field(default=None, alias="updatedAt")
+
+
+class KnowledgeFact(ApiModel):
+    fact_id: str = Field(alias="factId")
+    version_id: str = Field(alias="versionId")
+    asset_id: str = Field(alias="assetId")
+    fact_type: str = Field(alias="factType")
+    object_ref: str = Field(alias="objectRef")
+    summary: str
+    status: Literal["OBSERVED", "INFERRED_DESCRIPTION", "REVIEW_REQUIRED"] = (
+        "REVIEW_REQUIRED"
+    )
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    payload: dict[str, Any] = Field(default_factory=dict)
+    content_hash: str = Field(alias="contentHash")
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+
+class KnowledgeEdge(ApiModel):
+    edge_id: str = Field(alias="edgeId")
+    version_id: str = Field(alias="versionId")
+    asset_id: str = Field(alias="assetId")
+    from_fact_id: str = Field(alias="fromFactId")
+    to_fact_id: str = Field(alias="toFactId")
+    edge_type: Literal[
+        "DEPENDS_ON",
+        "DERIVED_FROM",
+        "SUPPORTS",
+        "READS",
+        "WRITES",
+        "CALLS",
+        "FK_TO",
+        "DTO_FIELD_OF",
+    ] = Field(alias="edgeType")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+
+class KnowledgeAssetVersion(ApiModel):
+    version_id: str = Field(alias="versionId")
+    asset_id: str = Field(alias="assetId")
+    version_no: int = Field(alias="versionNo")
+    content_hash: str = Field(alias="contentHash")
+    payload: dict[str, Any] = Field(default_factory=dict)
+    fact_count: int = Field(default=0, alias="factCount")
+    edge_count: int = Field(default=0, alias="edgeCount")
+    source_job_id: str | None = Field(default=None, alias="sourceJobId")
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+
+class KnowledgeFactGraph(ApiModel):
+    asset_id: str = Field(alias="assetId")
+    version_id: str = Field(alias="versionId")
+    facts: list[KnowledgeFact] = Field(default_factory=list)
+    edges: list[KnowledgeEdge] = Field(default_factory=list)
+
+
+class KnowledgeExportRequest(ApiModel):
+    asset_ids: list[str] = Field(alias="assetIds", min_length=1)
+    format: Literal["JSONL", "GRAPH_JSON"]
+    version_ids: list[str] = Field(default_factory=list, alias="versionIds")
+
+
+class KnowledgeExportResponse(ApiModel):
+    export_id: str = Field(alias="exportId")
+    format: Literal["JSONL", "GRAPH_JSON"]
+    content_type: str = Field(alias="contentType")
+    content: str
+    content_hash: str = Field(alias="contentHash")
+    asset_ids: list[str] = Field(alias="assetIds")
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+
 class MetadataAnalysisResponse(ApiModel):
     db_profile_id: str = Field(alias="dbProfileId")
     mode: Literal["QUERY", "TARGET"]
@@ -410,6 +534,10 @@ class MetadataAnalysisResponse(ApiModel):
     component_invocations: list[dict[str, Any]] = Field(
         default_factory=list,
         alias="componentInvocations",
+    )
+    knowledge_assets: list[KnowledgeAssetSummary] = Field(
+        default_factory=list,
+        alias="knowledgeAssets",
     )
 
 

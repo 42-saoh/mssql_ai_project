@@ -97,6 +97,35 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 
 P24 gate 가 통과해도 `production_ready: false` 를 유지한다. Optional live confidence evidence 가 없으면 보류로 해석할 수 있지만 기본 필수 테스트로 승격하지 않으며, P25+ Java/MyBatis source expansion 은 별도 작업으로 둔다.
 
+## P33 performance / scale
+
+P33 eval 은 기본 실행에서 live PPM, OpenAI, queue infra, DB migration 에 접근하지 않는다.
+`tests/eval/test_p33_performance_scale.py` 는 `fixtures/eval/performance_scale_p33_v1.yaml` 의 cache
+reuse, stable fact hash, batch duplicate/limit, live round reduction, backpressure, no raw leakage
+시나리오를 fixture-first 로 검증한다.
+
+```bash
+make test PYTEST_ARGS="tests/unit/api/test_metadata_tool_cache.py tests/unit/api/test_batch_sp_analysis.py tests/eval/test_p33_performance_scale.py"
+```
+
+이 gate 가 통과해도 process-local 최적화 confidence 만 의미하며 `production_ready: false` 를 유지한다.
+Multi-process/shared cache, durable batch tracking, external queue/backpressure infra 는 후속 hardening 이다.
+
+## P34 knowledge assetization
+
+P34 eval 은 기본 실행에서 live PPM, OpenAI, DB migration 자동 적용에 접근하지 않는다.
+`tests/eval/test_p34_knowledge_assetization.py` 는 `fixtures/eval/knowledge_assetization_p34_v1.yaml`
+의 SP/metadata knowledge asset, version reuse, graph export, adversarial raw leakage 차단
+시나리오를 fixture-first 로 검증한다.
+
+```bash
+make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/eval/test_p34_knowledge_assetization.py"
+```
+
+이 gate 가 통과해도 knowledge assets 는 draft/reviewable organizational knowledge 이며
+`production_ready: false` 를 유지한다. Platform DB v5 DDL 은 수동 적용 대상이고 API/test 가
+자동 적용하지 않는다.
+
 ## P27 dependency evidence tooling
 
 P27 은 MCP dependency evidence 계약을 fixture-first hardening 상태로 유지한다. `get_procedure_dependencies` 는 optional resolution confidence/evidence fields 를 선언하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active/read-only/structured-input MCP tools 로 catalog 에 존재하며 fixture/live repository handler 를 가진다. P28 기준 기존 API `/api/v1/metadata/tools` summary 는 `invokable` 상태를 노출하고, 전용 invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. P29 기준 Web `/metadata/dependencies` diagnostic UI 와 workflow `get_dependency_closure` evidence wiring 이 fixture-first 로 활성화되어 있으며, persisted artifact type 과 DB schema 변경은 여전히 포함하지 않는다.

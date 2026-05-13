@@ -86,6 +86,24 @@ def build_planner_metrics(
         else existing_metrics.get("budgetExhausted")
         or "AI_TOOL_CALL_BUDGET_EXHAUSTED" in _string_list(evidence.get("caveats"))
     )
+    cache_hit_count = _first_int(
+        existing_metrics.get("cacheHitCount"),
+        sum(
+            1
+            for component in components
+            if str(component.get("stage") or "") == "ai_tool_execution"
+            and str(component.get("cacheStatus") or "").upper() == "HIT"
+        ),
+    )
+    cache_miss_count = _first_int(
+        existing_metrics.get("cacheMissCount"),
+        sum(
+            1
+            for component in components
+            if str(component.get("stage") or "") == "ai_tool_execution"
+            and str(component.get("cacheStatus") or "").upper() == "MISS"
+        ),
+    )
 
     evidence_fact_ids = _tool_fact_ids(
         tool_results=tool_results,
@@ -140,6 +158,8 @@ def build_planner_metrics(
         "failedToolCallCount": failed,
         "dedupedRequestCount": deduped,
         "budgetExhausted": exhausted,
+        "cacheHitCount": cache_hit_count,
+        "cacheMissCount": cache_miss_count,
         "evidenceFactCount": evidence_fact_count,
         "citedEvidenceFactCount": cited_fact_count,
         "evidenceUtilization": round(evidence_utilization, 4),

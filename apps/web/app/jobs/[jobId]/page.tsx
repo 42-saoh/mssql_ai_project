@@ -3,7 +3,7 @@ import { JobStatusView } from "@/components/job-status-view";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
-import type { AgentRunSummary, ArtifactSummary, Job } from "@/lib/api/types";
+import type { AgentRunSummary, ArtifactSummary, Job, KnowledgeAssetSummary } from "@/lib/api/types";
 import { jobStatusSummary } from "@/lib/presentation";
 
 export const dynamic = "force-dynamic";
@@ -30,11 +30,13 @@ export default async function JobPage({
   let job: Job;
   let artifactResponse: { jobId: string; artifacts: ArtifactSummary[] };
   let agentRunResponse: { jobId: string; agentRuns: AgentRunSummary[] };
+  let knowledgeResponse: { jobId: string; knowledgeAssets: KnowledgeAssetSummary[] };
   try {
-    [job, artifactResponse, agentRunResponse] = await Promise.all([
+    [job, artifactResponse, agentRunResponse, knowledgeResponse] = await Promise.all([
       api.getJob(jobId),
       api.listJobArtifacts(jobId),
       api.listJobAgentRuns(jobId),
+      api.listJobKnowledgeAssets(jobId),
     ]);
   } catch (error) {
     return (
@@ -54,6 +56,7 @@ export default async function JobPage({
       scenarioSummary={jobStatusSummary(job.status)}
       artifacts={artifactResponse.artifacts}
       agentRuns={agentRunResponse.agentRuns}
+      knowledgeAssets={knowledgeResponse.knowledgeAssets}
     />
   );
 }

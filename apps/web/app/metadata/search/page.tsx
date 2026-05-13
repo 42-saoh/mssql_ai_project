@@ -343,6 +343,34 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
 
       <p>{analysis.summary}</p>
 
+      {analysis.knowledgeAssets.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.knowledgeAssets.map((asset) => (
+            <article className="metadata-result-row" key={asset.assetId}>
+              <div>
+                <p className="eyebrow">Knowledge {asset.assetKind}</p>
+                <h3>
+                  {asset.targetSchema}.{asset.targetName}
+                </h3>
+                <p>
+                  version {asset.currentVersionNo} · content {asset.contentHash ?? "pending"}
+                </p>
+              </div>
+              <div className="metadata-result-detail">
+                <Link href={`/api/v1/knowledge/assets/${asset.assetId}`}>Asset</Link>
+                {asset.currentVersionId ? (
+                  <Link
+                    href={`/api/v1/knowledge/assets/${asset.assetId}/versions/${asset.currentVersionId}/facts`}
+                  >
+                    Facts
+                  </Link>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
       {analysis.objectProfiles.length > 0 ? (
         <div className="metadata-result-list">
           {analysis.objectProfiles.map((profile) => (

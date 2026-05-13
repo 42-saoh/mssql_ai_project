@@ -1,0 +1,47 @@
+id: P33
+name: Performance / Scale v1
+gate_mode: fixture_first
+production_ready: false
+summary: >
+  Fixture-first confidence gate for process-local metadata tool caching, stable MCP fact
+  hashes, bounded SP batch intake, planner budget tuning, and backpressure signaling.
+env_defaults:
+  MCP_TOOL_RESULT_CACHE_ENABLED: "1"
+  MCP_TOOL_RESULT_CACHE_TTL_SECONDS: "300"
+  MCP_TOOL_RESULT_CACHE_MAX_ENTRIES: "1024"
+  AI_TOOL_MAX_CALLS: "5"
+  AI_TOOL_MAX_ROUNDS: "2"
+  AI_TOOL_LIVE_MAX_ROUNDS: "1"
+  WORKFLOW_MAX_ACTIVE_JOBS: "4"
+  MSSQL_METADATA_MAX_CONCURRENCY: "4"
+  BACKPRESSURE_WAIT_MS: "250"
+  SP_BATCH_MAX_TARGETS: "20"
+  SP_BATCH_MAX_CONCURRENT_JOBS: "2"
+scenarios:
+  - id: cache_hit_reuse
+    expects:
+      - repeated metadata analyze over the same table records cacheHitCount > 0
+      - toolResults include contentHash and outputHash
+  - id: stable_fact_hash_reuse
+    expects:
+      - snapshotId and collectedAt changes do not change mcp.* fact ids for equal sanitized content
+  - id: batch_duplicate_dedupe
+    expects:
+      - duplicate procedure targets return DUPLICATE_TARGET_SKIPPED without a second job
+  - id: batch_limit_rejection
+    expects:
+      - over-limit batches return BATCH_TARGET_LIMIT_EXCEEDED
+  - id: planner_live_round_reduction
+    expects:
+      - live ppm planner rounds reduce to AI_TOOL_LIVE_MAX_ROUNDS
+      - AI_TOOL_BUDGET_REDUCED marker is emitted
+  - id: backpressure_marker
+    expects:
+      - public request capacity exhaustion returns WORKFLOW_BACKPRESSURE
+      - internal MCP capacity exhaustion is recorded as MCP_BACKPRESSURE review evidence
+  - id: no_raw_leakage
+    expects:
+      - raw SQL, raw definitions, row data, and secrets are not stored in cache or planner traces
+verification:
+  default_command: make test PYTEST_ARGS="tests/unit/api/test_metadata_tool_cache.py tests/unit/api/test_batch_sp_analysis.py tests/eval/test_p33_performance_scale.py"
+  optional_live_confidence: P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"

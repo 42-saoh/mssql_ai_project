@@ -35,7 +35,9 @@ from ai_agent_validation import (
     validate_publish_gate,
 )
 
+from api_app.backpressure import workflow_admission
 from api_app.ai_tool_orchestrator import AiToolOrchestrator
+from api_app.knowledge_service import persist_sp_workflow_knowledge
 from api_app.metadata_gateway import McpMetadataGateway, MetadataCollectionResult, MetadataGateway
 from api_app.repositories import (
     AgentRunRecord,
@@ -112,28 +114,29 @@ class WorkflowService:
                 )
                 existing_request.status = job.status
                 return existing_request, job
-        request_record = self.repository.create_request(
-            db_profile_id=request.db_profile_id,
-            target=request.target.to_response(),
-            outputs=tuple(output.value for output in request.outputs),
-            options=request.options.to_response(),
-            request_hash=request_hash,
-            correlation_id=tracking.correlation_id,
-            idempotency_key=tracking.idempotency_key,
-        )
-        job = self.repository.create_job(
-            request_record.request_id,
-            correlation_id=tracking.correlation_id,
-        )
-
-        try:
-            job = self.run_initial_workflow(job.job_id, request_record)
-        except Exception as exc:  # pragma: no cover - defensive failure state
-            job = self.repository.fail_job(
-                job.job_id,
-                code=str(getattr(exc, "code", exc.__class__.__name__)),
-                message=str(exc),
+        with workflow_admission():
+            request_record = self.repository.create_request(
+                db_profile_id=request.db_profile_id,
+                target=request.target.to_response(),
+                outputs=tuple(output.value for output in request.outputs),
+                options=request.options.to_response(),
+                request_hash=request_hash,
+                correlation_id=tracking.correlation_id,
+                idempotency_key=tracking.idempotency_key,
             )
+            job = self.repository.create_job(
+                request_record.request_id,
+                correlation_id=tracking.correlation_id,
+            )
+
+            try:
+                job = self.run_initial_workflow(job.job_id, request_record)
+            except Exception as exc:  # pragma: no cover - defensive failure state
+                job = self.repository.fail_job(
+                    job.job_id,
+                    code=str(getattr(exc, "code", exc.__class__.__name__)),
+                    message=str(exc),
+                )
         request_record.status = job.status
         return request_record, job
 
@@ -176,6 +179,14 @@ class WorkflowService:
             metadata,
             agent_run=agent_run,
             component_invocations=orchestration.component_invocations,
+        )
+        persist_sp_workflow_knowledge(
+            repository=self.repository,
+            job_id=job_id,
+            request_record=request,
+            metadata=metadata,
+            static_analysis=static_analysis,
+            agent_run=agent_run,
         )
         self.repository.save_metadata_collection(
             job_id=job_id,

@@ -23,6 +23,7 @@ from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.platform_db import build_platform_repository
 from api_app.repositories import WorkflowRepository
 from api_app.workflow import WorkflowService
+from mssql_mcp_app.tool_cache import clear_metadata_tool_result_cache
 
 
 @lru_cache(maxsize=1)
@@ -107,3 +108,4 @@ def reset_application_state() -> None:
     get_repository.cache_clear()
     get_jwt_verifier.cache_clear()
     get_auth_settings.cache_clear()
+    clear_metadata_tool_result_cache()

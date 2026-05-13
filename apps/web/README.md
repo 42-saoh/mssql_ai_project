@@ -6,10 +6,10 @@
 ## Routes
 
 - `/` - 최근 jobs, PPM metadata search, draft artifact 목록 요약
-- `/requests/new` - API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect
+- `/requests/new` - 단일 API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect, batch mode 는 `POST /api/v1/requests/sp-analysis/batch` accepted/rejected summary 를 표시
 - `/metadata/search` - read-only metadata identity/evidence search and explicit metadata analyze action
 - `/metadata/dependencies` - safe dependency closure/reference diagnostics
-- `/jobs/[jobId]` - 실제 job 상태와 draft artifact 목록
+- `/jobs/[jobId]` - 실제 job 상태, draft artifact 목록, sanitized knowledge asset summary
 - `/artifacts/[artifactId]` - artifact preview 와 latest validation 표시
 
 ## API boundary
@@ -26,6 +26,8 @@
 ## P21 behavior
 
 - `/requests/new` 는 mock draft job 이 아니라 API 가 반환한 job id 로 이동한다.
+- Batch mode 는 한 줄당 하나의 `schema.name` PROCEDURE target 을 제출하고, accepted job links,
+  rejected targets, active limits 만 표시한다.
 - `/artifacts/[artifactId]` 는 page-load 에 validation write 를 만들지 않는다.
   Latest validation 은 `GET /api/v1/artifacts/{artifactId}/validation/latest` 로 읽고,
   validation write 는 사용자가 `Run validation` 을 누를 때만 실행한다.
@@ -55,11 +57,19 @@
 
 - `/metadata/search` keeps deterministic search as the default page load. The `Analyze metadata`
   action calls `POST /api/v1/metadata/analyze` explicitly.
-- The analysis panel renders response-only `summary`, `objectInsights`, `objectProfiles`,
+- The analysis panel renders `summary`, `objectInsights`, `objectProfiles`,
   `insightGroups`, `dependencyGraph`, `dtoReadiness`, deterministic fact count, sanitized
-  tool-call count, planner effectiveness metrics, review markers, and caveats.
+  tool-call count, planner effectiveness metrics, knowledge asset summaries, review markers, and caveats.
 - The Web client does not expose MCP input schemas, raw definition text, row data, procedure
   execution, DDL/DML controls, or raw provider traces.
+
+## Knowledge asset behavior
+
+- `/jobs/[jobId]` reads `GET /api/v1/jobs/{jobId}/knowledge-assets` and renders asset kind, target,
+  current version, content hash, and safe API links for asset/fact graph JSON.
+- `/metadata/search` renders Metadata Analyze `knowledgeAssets[]` summaries in the analysis panel.
+- The Web client includes `POST /api/v1/knowledge/exports` for sanitized JSONL/GRAPH_JSON exports,
+  but does not render raw fact payloads, raw metadata payloads, provider traces, row data, or raw SQL.
 
 ## P22 behavior
 

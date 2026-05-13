@@ -280,7 +280,8 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 
 필수 체크:
 - 기존 `GET /api/v1/metadata/search` 는 deterministic search 로 유지하고 LLM 호출을 기본 포함하지 않는다
-- analyze API 는 `query` 또는 단일 `target` 중 하나만 받아 response-only 분석을 수행한다
+- analyze API 는 `query` 또는 단일 `target` 중 하나만 받아 metadata analysis 응답을 생성한다.
+  P34 이후 기본 실행은 sanitized knowledge asset 도 함께 저장한다
 - `useLlmAnalysis=true`, `useAiToolOrchestration=true`, `maxTargets=3` 이 analyze API 기본값이다
 - LLM planner 는 active/read-only MCP catalog 를 후보로 보지만 실행은 내부 registry/policy gate 로만 수행한다
 - public metadata invoke API allowlist 는 `get_dependency_closure`, `resolve_dependency_reference` 로 유지한다
@@ -302,7 +303,8 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 - `tests/eval/test_p31_metadata_object_insight_depth.py`
 
 필수 체크:
-- analyze API 는 response-only 로 유지하고 DB migration, persisted artifact, workflow state transition 을 추가하지 않는다
+- analyze API 는 DB migration, persisted artifact, workflow state transition 을 추가하지 않는다.
+  P34 이후 기본 실행은 sanitized knowledge asset persistence 를 수행한다
 - TABLE 대상은 schema/constraints/indexes/extended properties/related objects evidence 로 `objectProfiles`, `insightGroups`, `dependencyGraph`, `dtoReadiness` 를 반환한다
 - PROCEDURE/VIEW/FUNCTION 대상은 dependency/docs/related-object 중심으로 확장 가능하되 raw definition text 는 prompt/response/trace 에 남기지 않는다
 - object profile 과 graph 요약은 `metadata.profile.<hash>` deterministic fact id 로 승격되고, LLM insight/dto claim 은 `mcp.*`, `metadata.profile.*`, `metadata.search.*` fact id 만 evidence 로 사용할 수 있다
@@ -340,7 +342,73 @@ P32 는 bounded AI-MCP planner 가 실제로 유용한 metadata evidence 를 수
 - `make test PYTEST_ARGS="tests/unit/agent_runtime/test_planner_effectiveness.py tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p32_live_confidence_planner_effectiveness.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
 - 선택 live: `P32_LIVE_CONFIDENCE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p32_live_confidence_planner_effectiveness.py"`
 
-### 15. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
+### 15. P33 Performance / Scale Fixture-First Gate
+
+P33 은 live PPM latency/cost 흔들림을 줄이기 위한 process-local 최적화 경계를 검증한다. 기본 구현은
+DB migration, queue infra, 새 runtime dependency 없이 fixture-first 로 동작한다.
+
+대상:
+- `MCP_TOOL_RESULT_CACHE_ENABLED`, `MCP_TOOL_RESULT_CACHE_TTL_SECONDS`,
+  `MCP_TOOL_RESULT_CACHE_MAX_ENTRIES`
+- `WORKFLOW_MAX_ACTIVE_JOBS`, `MSSQL_METADATA_MAX_CONCURRENCY`, `BACKPRESSURE_WAIT_MS`
+- `AI_TOOL_MAX_CALLS`, `AI_TOOL_MAX_ROUNDS`, `AI_TOOL_LIVE_MAX_ROUNDS`
+- `POST /api/v1/requests/sp-analysis/batch`
+- `fixtures/eval/performance_scale_p33_v1.yaml`
+- `tests/eval/test_p33_performance_scale.py`
+
+필수 체크:
+- active/read-only MCP tool 성공 응답만 TTL/LRU process-local cache 에 저장한다
+- cache key 는 sanitized arguments, profile/database, live/fixture repository identity, catalog version 을
+  포함하고, trace 에는 `cacheStatus`, `cacheKeyHash`, `cacheAgeMs` 만 남긴다
+- raw SQL/definition text, row data, secret-like values, failed/write-like calls 는 cache 저장 대상이 아니다
+- `mcp.<toolName>.<hash>` fact id 는 volatile `snapshotId`/`collectedAt` 이 아니라 sanitized content 와
+  argument hash 기반 `contentHash` 로 안정화한다
+- `aiToolEvidence.plannerMetrics` 는 `cacheHitCount` 와 `cacheMissCount` 를 포함한다
+- batch SP endpoint 는 max target cap, duplicate target dedupe, accepted/rejected summaries 를 반환하고
+  persisted batch table 을 만들지 않는다
+- workflow/MCP capacity 초과는 각각 `WORKFLOW_BACKPRESSURE`, `MCP_BACKPRESSURE` 로 표시한다
+- live PPM planner round 는 기본 `AI_TOOL_LIVE_MAX_ROUNDS=1` 로 줄이고 `AI_TOOL_BUDGET_REDUCED` marker 를 남긴다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/unit/api/test_metadata_tool_cache.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_batch_sp_analysis.py tests/integration/api/test_api_workflow_routes.py tests/eval/test_p33_performance_scale.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- `make test-web-smoke` 통과
+
+### 16. P34 Knowledge Assetization Fixture-First Gate
+
+P34 는 SP 분석, dependency evidence, metadata profile, DTO readiness 를 일회성 응답/trace 에서
+sanitized versioned knowledge asset, fact graph, export 로 승격한다. v5 DDL 은 저장소에 추가만 하고
+실제 DB 적용은 운영자의 수동 절차로 둔다.
+
+대상:
+- `db/schema/ai_agent_platform_schema_v5_knowledge_assets.sql`
+- `GET /api/v1/jobs/{jobId}/knowledge-assets`
+- `GET /api/v1/knowledge/assets/{assetId}`
+- `GET /api/v1/knowledge/assets/{assetId}/versions`
+- `GET /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts`
+- `POST /api/v1/knowledge/exports`
+- `fixtures/eval/knowledge_assetization_p34_v1.yaml`
+- `tests/eval/test_p34_knowledge_assetization.py`
+
+필수 체크:
+- `persistKnowledge=true` 가 SP analysis 와 Metadata Analyze 의 기본값이다
+- `KNOWLEDGE_ASSETIZATION_ENABLED=0` 이면 persistence 를 skip marker 로 남길 수 있다
+- SP workflow 는 `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`,
+  `CANONICAL_ANALYSIS` summaries 를 job knowledge API 로 조회 가능해야 한다
+- Metadata Analyze 는 response 에 `knowledgeAssets[]` 를 포함하고 fact endpoint 에서 `mcp.*` /
+  `metadata.profile.*` refs 를 조회 가능해야 한다
+- 동일 logical asset key 에서 같은 `contentHash` 는 version 을 재사용하고, content 변경 시에만
+  새 version 을 만든다
+- JSONL export 는 fact one-line-per-record, GRAPH_JSON export 는 nodes/edges/contentHash 를 포함한다
+- raw SP definition, SQL text, row data, secret, raw prompt/provider response text 는 storage, API,
+  export, Web summary 에 남지 않는다
+- Platform DB adapter 는 v5 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고, API 가 DDL 을
+  자동 적용하지 않는다
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과
+- `make test-web-smoke` 통과
+
+### 17. P27 Dependency Evidence Tooling Fixture-First Hardening Contract
 
 P27 은 dependency evidence 계약을 fixture-first MCP 구현과 명시적 hard-live gate 로 강화한다.
 목표는 AI-heavy semantic analysis 와 P24 guide renderer 에 raw SQL 이 아닌 구조화된

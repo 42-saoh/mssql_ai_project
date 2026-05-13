@@ -39,7 +39,8 @@ function assertObserved(label, predicate) {
 function assertNoForbiddenPath() {
   const forbiddenFragments = ["/publish", "/export", "/deploy", "/execute", "/approval-decisions"];
   const forbidden = observedRequests.find(({ path }) =>
-    forbiddenFragments.some((fragment) => path.includes(fragment)),
+    forbiddenFragments.some((fragment) => path.includes(fragment)) &&
+    !path.includes("/api/v1/knowledge/exports"),
   );
   assert(!forbidden, `Forbidden HTTP adapter path observed: ${forbidden?.method} ${forbidden?.path}`);
 }
@@ -115,6 +116,7 @@ const submitted = await api.createSPAnalysisRequest({
 const job = await api.getJob(submitted.jobId);
 const jobs = await api.listJobs(5);
 const listed = await api.listJobArtifacts(submitted.jobId);
+const knowledgeAssets = await api.listJobKnowledgeAssets(submitted.jobId);
 const analysisSummary = listed.artifacts.find((artifact) => artifact.type === "SP_ANALYSIS_DOC");
 assert(analysisSummary, "HTTP smoke could not find SP_ANALYSIS_DOC artifact summary");
 
@@ -162,12 +164,20 @@ const metadataAnalysis = await api.analyzeMetadata({
     maxTargets: 3,
   },
 });
+const exportCandidate = knowledgeAssets.knowledgeAssets[0] ?? metadataAnalysis.knowledgeAssets[0];
+const knowledgeExport = exportCandidate
+  ? await api.createKnowledgeExport({
+      assetIds: [exportCandidate.assetId],
+      format: "GRAPH_JSON",
+    })
+  : null;
 const registry = await api.listRegistryVersions();
 
 assert(submitted.status === "VALIDATION_COMPLETE", `Unexpected submit status: ${submitted.status}`);
 assert(job.currentStep === "VALIDATE", `Unexpected job current step: ${job.currentStep}`);
 assert(jobs.jobs.some((item) => item.jobId === job.jobId), "Recent jobs did not include submitted job");
 assert(listed.artifacts.length > 0, "HTTP smoke returned no artifacts");
+assert(knowledgeAssets.knowledgeAssets.length > 0, "HTTP smoke returned no knowledge assets");
 assert(artifact.evidenceRefs.length > 0, "HTTP smoke artifact has no evidence refs");
 assert(validation.status === "PASSED" || validation.status === "REVIEW_REQUIRED", `Unexpected validation status: ${validation.status}`);
 assert(latestValidation.validationReportId === validation.validationReportId, "Latest validation did not match explicit validation");
@@ -188,7 +198,9 @@ assert(Array.isArray(metadataAnalysis.insightGroups), "Metadata analysis must in
 assert(metadataAnalysis.dependencyGraph?.nodes, "Metadata analysis must include dependencyGraph");
 assert(Array.isArray(metadataAnalysis.dtoReadiness), "Metadata analysis must include dtoReadiness");
 assert(metadataAnalysis.aiToolEvidence?.plannerMetrics, "Metadata analysis must include planner metrics");
+assert(Array.isArray(metadataAnalysis.knowledgeAssets), "Metadata analysis must include knowledgeAssets");
 assert(metadataAnalysis.summary.length > 0, "Metadata analysis summary is empty");
+assert(!knowledgeExport || knowledgeExport.format === "GRAPH_JSON", "Knowledge export must return GRAPH_JSON");
 assert(registry.versions.length > 0, "Registry versions response is empty");
 
 assertNoPublishedState(listed.artifacts, artifact);
@@ -199,6 +211,7 @@ for (const [label, payload] of Object.entries({
   job,
   jobs,
   listed,
+  knowledgeAssets,
   artifact,
   validation,
   latestValidation,
@@ -208,6 +221,7 @@ for (const [label, payload] of Object.entries({
   dependencyResolution,
   metadataSearch,
   metadataAnalysis,
+  knowledgeExport,
   registry,
 })) {
   assertNoForbiddenPayload(payload, label);
@@ -224,6 +238,9 @@ assertObserved("GET /api/v1/jobs", ({ method, path }) =>
 );
 assertObserved("GET /api/v1/jobs/{jobId}/artifacts", ({ method, path }) =>
   method === "GET" && /^\/api\/v1\/jobs\/[^/]+\/artifacts$/.test(path),
+);
+assertObserved("GET /api/v1/jobs/{jobId}/knowledge-assets", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/jobs\/[^/]+\/knowledge-assets$/.test(path),
 );
 assertObserved("GET /api/v1/artifacts/{artifactId}", ({ method, path }) =>
   method === "GET" && /^\/api\/v1\/artifacts\/[^/]+$/.test(path),
@@ -251,6 +268,9 @@ assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
 );
 assertObserved("POST /api/v1/metadata/analyze", ({ method, path }) =>
   method === "POST" && path === "/api/v1/metadata/analyze",
+);
+assertObserved("POST /api/v1/knowledge/exports", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/knowledge/exports",
 );
 assertObserved("GET /api/v1/registry/versions", ({ method, path }) =>
   method === "GET" && path === "/api/v1/registry/versions",

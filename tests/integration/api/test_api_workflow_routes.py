@@ -118,7 +118,19 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     submitted = submit.json()
     assert submitted["requestId"].startswith("req_")
     assert submitted["jobId"].startswith("job_")
+
     assert submitted["status"] == "VALIDATION_COMPLETE"
+
+    knowledge = client.get(f"/api/v1/jobs/{submitted['jobId']}/knowledge-assets")
+    assert knowledge.status_code == 200
+    knowledge_payload = knowledge.json()
+    assert {asset["assetKind"] for asset in knowledge_payload["knowledgeAssets"]} == {
+        "SP_ANALYSIS",
+        "DEPENDENCY_EVIDENCE",
+        "METADATA_PROFILE",
+        "DTO_READINESS",
+        "CANONICAL_ANALYSIS",
+    }
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
@@ -161,6 +173,31 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert latest_validation.headers["X-Correlation-ID"] == "corr-route-flow"
     assert latest_validation.json()["artifactId"] == artifact_id
     assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
+
+
+def test_sp_analysis_batch_route_returns_accepted_and_duplicate_rejections(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/requests/sp-analysis/batch",
+        json={
+            "dbProfileId": "master",
+            "targets": [
+                {"type": "PROCEDURE", "schema": "dbo", "name": "usp_GetOrderSummary"},
+                {"type": "PROCEDURE", "schema": "dbo", "name": "usp_GetOrderSummary"},
+            ],
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+            "options": {"includeEvidenceRefs": True, "useLlmAnalysis": False},
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["batchId"].startswith("batch_")
+    assert payload["status"] == "PARTIAL"
+    assert len(payload["accepted"]) == 1
+    assert payload["accepted"][0]["jobId"].startswith("job_")
+    assert payload["rejected"][0]["code"] == "DUPLICATE_TARGET_SKIPPED"
 
 
 def test_workflow_binds_dependency_closure_evidence_to_metadata_and_artifacts(
@@ -815,6 +852,12 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
     assert "insightGroups" in query_payload
     assert "dependencyGraph" in query_payload
     assert "dtoReadiness" in query_payload
+    assert "knowledgeAssets" in query_payload
+    assert {asset["assetKind"] for asset in query_payload["knowledgeAssets"]} >= {
+        "METADATA_PROFILE",
+        "DEPENDENCY_EVIDENCE",
+        "DTO_READINESS",
+    }
     assert query_payload["modelInvocation"]["outputSchemaVersion"] == (
         "schema:mssql_metadata_analysis@0.1.0"
     )
