@@ -45,6 +45,18 @@ function Find-WinGetPackagePath {
     return $null
 }
 
+function Find-CommandDirectory {
+    param([string]$CommandName)
+
+    $command = Get-Command $CommandName -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($command -and $command.Source -and (Test-Path -LiteralPath $command.Source)) {
+        return (Split-Path -Parent (Resolve-Path -LiteralPath $command.Source).Path)
+    }
+
+    return $null
+}
+
 function Convert-ToBashPath {
     param([string]$Path)
 
@@ -92,6 +104,14 @@ if ($makePath) {
 $pnpmPath = Find-WinGetPackagePath "pnpm.pnpm_*" "pnpm.exe"
 if ($pnpmPath) {
     $pathEntries.Add((Convert-ToBashPath $pnpmPath))
+}
+
+$nodePath = Find-WinGetPackagePath "OpenJS.NodeJS*" "node.exe"
+if (-not $nodePath) {
+    $nodePath = Find-CommandDirectory "node.exe"
+}
+if ($nodePath) {
+    $pathEntries.Add((Convert-ToBashPath $nodePath))
 }
 
 $pathPrefix = ($pathEntries | Where-Object { $_ }) -join ":"
