@@ -23,7 +23,18 @@ PORT_RESOLVER ?= $(REPO_ROOT)/scripts/resolve_dev_ports.sh
 APP_PORT ?= $(shell WORKTREE_PATH="$(WORKTREE_PATH)" WORKTREE_PORT_SLOT="$(WORKTREE_PORT_SLOT)" sh "$(PORT_RESOLVER)" APP_PORT 2>/dev/null || echo 8000)
 MCP_PORT ?= $(shell WORKTREE_PATH="$(WORKTREE_PATH)" WORKTREE_PORT_SLOT="$(WORKTREE_PORT_SLOT)" sh "$(PORT_RESOLVER)" MCP_PORT 2>/dev/null || echo 8100)
 WEB_PORT ?= $(shell WORKTREE_PATH="$(WORKTREE_PATH)" WORKTREE_PORT_SLOT="$(WORKTREE_PORT_SLOT)" sh "$(PORT_RESOLVER)" WEB_PORT 2>/dev/null || echo 3000)
-LOCAL_PYTHONPATH ?= $(REPO_ROOT)/apps/api:$(REPO_ROOT)/services/mssql-mcp:$(REPO_ROOT)/packages/domain/src:$(REPO_ROOT)/packages/analysis/src:$(REPO_ROOT)/packages/generation/src:$(REPO_ROOT)/packages/validation/src:$(REPO_ROOT)/packages/agent-runtime/src
+PYTHONPATH_SEP ?= $(shell $(PYTHON) -c "import os; print(os.pathsep)" 2>/dev/null || echo :)
+empty :=
+space := $(empty) $(empty)
+LOCAL_PYTHONPATH_ENTRIES = \
+	$(REPO_ROOT)/apps/api \
+	$(REPO_ROOT)/services/mssql-mcp \
+	$(REPO_ROOT)/packages/domain/src \
+	$(REPO_ROOT)/packages/analysis/src \
+	$(REPO_ROOT)/packages/generation/src \
+	$(REPO_ROOT)/packages/validation/src \
+	$(REPO_ROOT)/packages/agent-runtime/src
+LOCAL_PYTHONPATH ?= $(subst $(space),$(PYTHONPATH_SEP),$(strip $(LOCAL_PYTHONPATH_ENTRIES)))
 PYTHON_LOCK_FILE ?= requirements/lock/py314-dev.txt
 PYTHON_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_python_locked.sh
 WEB_INSTALL_SCRIPT ?= $(REPO_ROOT)/scripts/install_web_workspace.sh
@@ -74,10 +85,10 @@ test-live-confidence:
 check: fmt lint test-core test-quality
 
 run-api:
-	@$(LOAD_ENV); PYTHONPATH="$(LOCAL_PYTHONPATH)$${PYTHONPATH:+:$$PYTHONPATH}" $(UVICORN) api_app.main:app --app-dir apps/api --reload --port $(APP_PORT)
+	@$(LOAD_ENV); PYTHONPATH="$(LOCAL_PYTHONPATH)$${PYTHONPATH:+$(PYTHONPATH_SEP)$$PYTHONPATH}" $(UVICORN) api_app.main:app --app-dir apps/api --reload --port $(APP_PORT)
 
 run-mcp:
-	@$(LOAD_ENV); PYTHONPATH="$(LOCAL_PYTHONPATH)$${PYTHONPATH:+:$$PYTHONPATH}" $(UVICORN) mssql_mcp_app.main:app --app-dir services/mssql-mcp --reload --port $(MCP_PORT)
+	@$(LOAD_ENV); PYTHONPATH="$(LOCAL_PYTHONPATH)$${PYTHONPATH:+$(PYTHONPATH_SEP)$$PYTHONPATH}" $(UVICORN) mssql_mcp_app.main:app --app-dir services/mssql-mcp --reload --port $(MCP_PORT)
 
 run-web:
 	@$(LOAD_ENV); cd apps/web && PORT=$(WEB_PORT) $(PNPM) exec next dev --port $(WEB_PORT)

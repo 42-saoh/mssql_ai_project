@@ -122,6 +122,9 @@ def test_p21_python314_assets_are_active_baseline() -> None:
     assert "PYTHON ?= $(if $(PYTHON_FROM_ENV_FILE),$(PYTHON_FROM_ENV_FILE),python3.14)" in makefile
     assert "PNPM_FROM_ENV_FILE" in makefile
     assert "DOCKER_COMPOSE_FROM_ENV_FILE" in makefile
+    assert "PYTHONPATH_SEP ?= $(shell $(PYTHON) -c" in makefile
+    assert "LOCAL_PYTHONPATH_ENTRIES" in makefile
+    assert "$${PYTHONPATH:+$(PYTHONPATH_SEP)$$PYTHONPATH}" in makefile
     assert "PYTHON_LOCK_FILE ?= requirements/lock/py314-dev.txt" in makefile
     assert "$(PYTHON) -m uvicorn" in makefile
     assert "$(PYTHON) -m ruff" in makefile
