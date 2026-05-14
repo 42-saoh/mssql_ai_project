@@ -931,7 +931,16 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
         self.external_catalog_error = external_catalog_error
         self.queried_databases: list[str] = []
 
-    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+    def _query(  # noqa: ANN001
+        self,
+        database,
+        sql,
+        params,
+        *,
+        tool_name,
+        profile,
+        lock_timeout_ms=None,
+    ):
         self.queried_databases.append(database)
         assert tool_name in {
             "get_procedure_dependencies",
@@ -946,8 +955,12 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
         if "FROM sys.sql_expression_dependencies AS dep" in sql:
             return self.dependency_rows
         if "FROM sys.databases" in sql:
+            assert database == "PPM"
+            assert lock_timeout_ms == 1000
             return self.external_database_rows
         if ".sys.objects AS candidate" in sql:
+            assert database == "PPM"
+            assert lock_timeout_ms == 1000
             assert "[OtherDB].sys.objects" in sql
             assert "OtherDB.sys.objects" not in sql
             assert params == ["TB_ORDER", "dbo", "dbo"]
@@ -1025,19 +1038,6 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
                 "resolutionStrategy": "AMBIGUOUS_CATALOG_NAME",
                 "reviewStatus": "REVIEW_REQUIRED",
                 "isAmbiguous": True,
-            },
-        ),
-        (
-            _dependency_row(referenced_database_name="OtherDB"),
-            {
-                "objectType": "UNKNOWN",
-                "schema": "dbo",
-                "name": "TB_ORDER",
-                "resolutionStatus": "REVIEW_REQUIRED",
-                "resolutionStrategy": "CROSS_DATABASE_NOT_FOUND",
-                "sourceScope": "SAME_SERVER_CROSS_DATABASE",
-                "reviewStatus": "REVIEW_REQUIRED",
-                "isAmbiguous": False,
             },
         ),
         (
@@ -1128,7 +1128,7 @@ def test_live_procedure_dependency_resolver_statuses(
     if dependency_row.get("referenced_database_name") and not dependency_row.get(
         "referenced_server_name"
     ):
-        assert repository.queried_databases == ["PPM", "PPM", "master", "PPM"]
+        assert repository.queried_databases == ["PPM", "PPM", "PPM", "PPM"]
     else:
         assert repository.queried_databases == ["PPM", "PPM", "PPM"]
 
@@ -1173,7 +1173,7 @@ def test_live_procedure_dependency_resolver_confirms_same_server_cross_database_
     assert dependency["reviewStatus"] == "CONFIRMED"
     assert payload["data"]["caveats"] == []
     assert payload["data"]["reviewRequired"] is False
-    assert repository.queried_databases == ["PPM", "PPM", "master", "master", "PPM"]
+    assert repository.queried_databases == ["PPM", "PPM", "PPM", "PPM", "PPM"]
 
 
 def test_live_procedure_dependency_resolver_marks_ambiguous_external_catalog_review() -> None:
@@ -1212,7 +1212,7 @@ def test_live_procedure_dependency_resolver_marks_ambiguous_external_catalog_rev
     assert payload["data"]["caveats"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
 
 
-def test_live_procedure_dependency_resolver_marks_inaccessible_external_catalog_review() -> None:
+def test_live_procedure_dependency_resolver_fails_inaccessible_external_catalog() -> None:
     repository = ProcedureDependencyLiveMetadataRepository(
         dependency_rows=[_dependency_row(referenced_database_name="OtherDB")],
         external_database_rows=[{"name": "OtherDB", "state_desc": "ONLINE"}],
@@ -1224,22 +1224,80 @@ def test_live_procedure_dependency_resolver_marks_inaccessible_external_catalog_
     )
     registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
 
-    payload = registry.invoke_payload(
-        "get_procedure_dependencies",
-        {
-            "arguments": {
-                "dbProfileId": "ppm",
-                "schema": "dbo",
-                "procedureName": "usp_Selected",
-            }
-        },
-    )
+    with pytest.raises(MetadataToolError) as exc_info:
+        registry.invoke_payload(
+            "get_procedure_dependencies",
+            {
+                "arguments": {
+                    "dbProfileId": "ppm",
+                    "schema": "dbo",
+                    "procedureName": "usp_Selected",
+                }
+            },
+        )
 
-    dependency = payload["data"]["dependencies"][0]
-    assert dependency["resolutionStatus"] == "REVIEW_REQUIRED"
-    assert dependency["resolutionStrategy"] == "CROSS_DATABASE_CATALOG_UNAVAILABLE"
-    assert dependency["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
-    assert payload["data"]["caveats"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
+    assert exc_info.value.code == "METADATA_READ_ONLY_PERMISSION_INSUFFICIENT"
+    assert exc_info.value.details["database"] == "PPM"
+    assert exc_info.value.details["externalDatabase"] == "OtherDB"
+    assert exc_info.value.details["externalCatalogStage"] == "object_lookup"
+
+
+def test_live_procedure_dependency_resolver_fails_unavailable_external_catalog() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[_dependency_row(referenced_database_name="OtherDB")],
+        external_database_rows=[{"name": "OtherDB", "state_desc": "ONLINE"}],
+        external_catalog_error=MetadataToolError(
+            "LIVE_METADATA_UNAVAILABLE",
+            "External catalog timeout.",
+            {"database": "OtherDB", "errorClass": "TimeoutError"},
+        ),
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    with pytest.raises(MetadataToolError) as exc_info:
+        registry.invoke_payload(
+            "get_procedure_dependencies",
+            {
+                "arguments": {
+                    "dbProfileId": "ppm",
+                    "schema": "dbo",
+                    "procedureName": "usp_Selected",
+                }
+            },
+        )
+
+    assert exc_info.value.code == "LIVE_METADATA_UNAVAILABLE"
+    assert exc_info.value.details["database"] == "PPM"
+    assert exc_info.value.details["externalDatabase"] == "OtherDB"
+    assert exc_info.value.details["externalCatalogStage"] == "object_lookup"
+    assert exc_info.value.details["errorClass"] == "TimeoutError"
+
+
+def test_live_procedure_dependency_resolver_fails_missing_external_database() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[_dependency_row(referenced_database_name="OtherDB")],
+        external_database_rows=[],
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    with pytest.raises(MetadataToolError) as exc_info:
+        registry.invoke_payload(
+            "get_procedure_dependencies",
+            {
+                "arguments": {
+                    "dbProfileId": "ppm",
+                    "schema": "dbo",
+                    "procedureName": "usp_Selected",
+                }
+            },
+        )
+
+    assert exc_info.value.code == "LIVE_METADATA_UNAVAILABLE"
+    assert exc_info.value.details["database"] == "PPM"
+    assert exc_info.value.details["externalDatabase"] == "OtherDB"
+    assert exc_info.value.details["externalCatalogStage"] == "database_lookup"
+    assert exc_info.value.details["externalCatalogReason"] == "not_found"
+    assert repository.queried_databases == ["PPM", "PPM", "PPM"]
 
 
 @pytest.mark.parametrize(

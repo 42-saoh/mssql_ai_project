@@ -83,6 +83,9 @@
   - 범위: procedure/table/column/index/constraint/function/view/extended property
   - 제약: 읽기 전용, 자유 SQL 금지, 실제 데이터 접근 금지
   - P27 fixture-first tools: `get_dependency_closure`, `resolve_dependency_reference`
+    Same-server cross-database dependency catalog checks run only from the PPM profile context.
+    There is no PLF fallback. External catalog timeout/permission/connect/query failures are
+    retryable tool failures, not hangs or partial deterministic dependency evidence.
     는 active/read-only MCP tool 이며 fixture/live repository handler 를 가진다. P28 기준
     `/api/v1/metadata/tools/{toolName}/invoke` 는 이 두 tool 만 public allowlist 로 호출한다.
     P29 기준 `/metadata/dependencies` Web diagnostic UI 와 workflow `get_dependency_closure`

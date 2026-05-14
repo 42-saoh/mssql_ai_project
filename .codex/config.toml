@@ -59,7 +59,7 @@ model_reasoning_effort = "xhigh"
 
 [sandbox_workspace_write]
 writable_roots = []
-network_access = false
+network_access = true
 
 [shell_environment_policy]
 inherit = "all"

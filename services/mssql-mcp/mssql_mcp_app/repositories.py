@@ -30,6 +30,9 @@ from mssql_mcp_app.profiles import DbProfile, load_db_profiles
 from mssql_mcp_app.settings import LiveMetadataSettings, load_live_metadata_settings
 
 
+EXTERNAL_CATALOG_LOCK_TIMEOUT_MS = 1000
+
+
 @dataclass(frozen=True)
 class MetadataToolResult:
     snapshot_id: str
@@ -985,51 +988,64 @@ class LiveMetadataRepository:
     def _handle_list_procedures(self, arguments: dict[str, Any]) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
         schema_filter, params = _schema_filter(arguments)
+        top_k = int(arguments.get("topK", 100))
+        selected_procedures_cte = f"""
+            WITH selected_procedures AS (
+                SELECT TOP (%s)
+                    s.name AS schema_name,
+                    p.name AS object_name,
+                    p.object_id
+                FROM sys.procedures AS p
+                INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
+                WHERE p.is_ms_shipped = 0{schema_filter}
+                ORDER BY s.name, p.name
+            )
+        """
+        selected_procedure_params = [top_k, *params]
         rows = self._query(
             profile.database,
             f"""
+            {selected_procedures_cte}
             SELECT
-                s.name AS schema_name,
-                p.name AS object_name,
-                p.object_id,
-                CONVERT(int, OBJECTPROPERTY(p.object_id, 'IsEncrypted')) AS is_encrypted,
+                sp.schema_name,
+                sp.object_name,
+                sp.object_id,
+                CONVERT(int, OBJECTPROPERTY(sp.object_id, 'IsEncrypted')) AS is_encrypted,
                 m.definition
-            FROM sys.procedures AS p
-            INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
-            LEFT JOIN sys.sql_modules AS m ON p.object_id = m.object_id
-            WHERE p.is_ms_shipped = 0{schema_filter}
-            ORDER BY s.name, p.name
+            FROM selected_procedures AS sp
+            LEFT JOIN sys.sql_modules AS m ON sp.object_id = m.object_id
+            ORDER BY sp.schema_name, sp.object_name
             """,
-            params,
+            selected_procedure_params,
             tool_name="list_procedures",
             profile=profile,
         )
         parameter_rows = self._query(
             profile.database,
             f"""
+            {selected_procedures_cte}
             SELECT
-                p.object_id,
+                sp.object_id,
                 prm.name,
                 TYPE_NAME(prm.user_type_id) AS data_type,
                 prm.parameter_id AS ordinal,
                 prm.is_output,
                 prm.has_default_value,
                 CONVERT(nvarchar(4000), prm.default_value) AS default_value
-            FROM sys.procedures AS p
-            INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
-            INNER JOIN sys.parameters AS prm ON p.object_id = prm.object_id
-            WHERE p.is_ms_shipped = 0{schema_filter}
-            ORDER BY p.object_id, prm.parameter_id
+            FROM selected_procedures AS sp
+            INNER JOIN sys.parameters AS prm ON sp.object_id = prm.object_id
+            ORDER BY sp.object_id, prm.parameter_id
             """,
-            params,
+            selected_procedure_params,
             tool_name="list_procedures",
             profile=profile,
         )
         dependency_rows = self._query(
             profile.database,
             f"""
+            {selected_procedures_cte}
             SELECT
-                p.object_id,
+                sp.object_id,
                 dep.referenced_id,
                 dep.referenced_server_name,
                 dep.referenced_database_name,
@@ -1048,10 +1064,9 @@ class LiveMetadataRepository:
                 syn_s.name AS synonym_schema_name,
                 syn.name AS synonym_name,
                 syn.base_object_name AS synonym_base_object_name
-            FROM sys.procedures AS p
-            INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
+            FROM selected_procedures AS sp
             INNER JOIN sys.sql_expression_dependencies AS dep
-                ON p.object_id = dep.referencing_id
+                ON sp.object_id = dep.referencing_id
             LEFT JOIN sys.objects AS direct_o ON dep.referenced_id = direct_o.object_id
             LEFT JOIN sys.schemas AS direct_s ON direct_o.schema_id = direct_s.schema_id
             OUTER APPLY (
@@ -1081,13 +1096,12 @@ class LiveMetadataRepository:
             LEFT JOIN sys.synonyms AS syn
                 ON syn.object_id = COALESCE(direct_o.object_id, match_o.object_id)
             LEFT JOIN sys.schemas AS syn_s ON syn.schema_id = syn_s.schema_id
-            WHERE p.is_ms_shipped = 0{schema_filter}
             ORDER BY
-                p.object_id,
+                sp.object_id,
                 COALESCE(direct_s.name, match_s.name, dep.referenced_schema_name),
                 COALESCE(direct_o.name, match_o.name, dep.referenced_entity_name)
             """,
-            params,
+            selected_procedure_params,
             tool_name="list_procedures",
             profile=profile,
         )
@@ -1125,7 +1139,7 @@ class LiveMetadataRepository:
             data={
                 **source_context(arguments),
                 "schema": arguments.get("schema"),
-                "procedures": procedures[: arguments.get("topK", 100)],
+                "procedures": procedures,
                 "caveats": [],
                 "reviewRequired": False,
             },
@@ -2451,6 +2465,22 @@ class LiveMetadataRepository:
         *,
         tool_name: str,
     ) -> list[dict[str, Any]]:
+        database_names: list[str] = []
+        seen_database_names: set[str] = set()
+        for row in rows:
+            database_name = row.get("referenced_database_name")
+            if database_name and not row.get("referenced_server_name"):
+                normalized_database_name = str(database_name).lower()
+                if normalized_database_name not in seen_database_names:
+                    seen_database_names.add(normalized_database_name)
+                    database_names.append(str(database_name))
+        for database_name in database_names:
+            self._catalog_database(
+                database_name,
+                profile=profile,
+                tool_name=tool_name,
+            )
+
         resolved = []
         for row in rows:
             item = dict(row)
@@ -2496,15 +2526,12 @@ class LiveMetadataRepository:
             profile=profile,
             tool_name=tool_name,
         )
-        if database_result.get("external_resolution_status") == "REVIEW_REQUIRED":
-            self._external_dependency_cache[cache_key] = database_result
-            return dict(database_result)
 
         catalog_database = str(database_result["external_database_name"])
         quoted_database = _quote_mssql_identifier(catalog_database)
         try:
             rows = self._query(
-                "master",
+                profile.database,
                 f"""
                 SELECT
                     match_info.match_count AS external_catalog_match_count,
@@ -2545,16 +2572,16 @@ class LiveMetadataRepository:
                 [entity, schema, schema],
                 tool_name=tool_name,
                 profile=profile,
+                lock_timeout_ms=EXTERNAL_CATALOG_LOCK_TIMEOUT_MS,
             )
         except MetadataToolError as exc:
-            result = {
-                **database_result,
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_CATALOG_UNAVAILABLE",
-                "external_resolution_error_code": exc.code,
-            }
-            self._external_dependency_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_error(
+                exc,
+                profile=profile,
+                tool_name=tool_name,
+                external_database=catalog_database,
+                stage="object_lookup",
+            ) from exc
 
         row = rows[0] if rows else {}
         result = {
@@ -2582,7 +2609,7 @@ class LiveMetadataRepository:
             return dict(self._catalog_database_cache[cache_key])
         try:
             rows = self._query(
-                "master",
+                profile.database,
                 """
                 SELECT
                     name,
@@ -2593,37 +2620,100 @@ class LiveMetadataRepository:
                 [database_name],
                 tool_name=tool_name,
                 profile=profile,
+                lock_timeout_ms=EXTERNAL_CATALOG_LOCK_TIMEOUT_MS,
             )
         except MetadataToolError as exc:
-            result = {
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_CATALOG_UNAVAILABLE",
-                "external_resolution_error_code": exc.code,
-            }
-            self._catalog_database_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_error(
+                exc,
+                profile=profile,
+                tool_name=tool_name,
+                external_database=database_name,
+                stage="database_lookup",
+            ) from exc
 
         if not rows:
-            result = {
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_NOT_FOUND",
-            }
-            self._catalog_database_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_blocker(
+                profile=profile,
+                tool_name=tool_name,
+                external_database=database_name,
+                stage="database_lookup",
+                reason="not_found",
+            )
 
         row = rows[0]
         if row.get("state_desc") and str(row["state_desc"]).upper() != "ONLINE":
-            result = {
-                "external_database_name": row["name"],
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_NOT_ONLINE",
-            }
-            self._catalog_database_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_blocker(
+                profile=profile,
+                tool_name=tool_name,
+                external_database=str(row["name"]),
+                stage="database_state",
+                reason="not_online",
+                state_desc=str(row["state_desc"]),
+            )
 
         result = {"external_database_name": row["name"]}
         self._catalog_database_cache[cache_key] = result
         return dict(result)
+
+    def _external_catalog_error(
+        self,
+        exc: MetadataToolError,
+        *,
+        profile: DbProfile,
+        tool_name: str,
+        external_database: str,
+        stage: str,
+    ) -> MetadataToolError:
+        code = (
+            METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+            if exc.code == METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+            else LIVE_METADATA_UNAVAILABLE
+        )
+        details = {
+            "toolName": tool_name,
+            "dbProfileId": profile.id,
+            "database": profile.database,
+            "externalDatabase": external_database,
+            "externalCatalogStage": stage,
+            "timeoutSeconds": self.settings.connect_timeout_seconds,
+            "attempt": 1,
+            "rootErrorCode": exc.code,
+        }
+        if exc.details.get("errorClass"):
+            details["errorClass"] = str(exc.details["errorClass"])
+        return MetadataToolError(
+            code,
+            "External cross-database catalog metadata could not be confirmed.",
+            details,
+        )
+
+    def _external_catalog_blocker(
+        self,
+        *,
+        profile: DbProfile,
+        tool_name: str,
+        external_database: str,
+        stage: str,
+        reason: str,
+        state_desc: str | None = None,
+    ) -> MetadataToolError:
+        details: dict[str, Any] = {
+            "toolName": tool_name,
+            "dbProfileId": profile.id,
+            "database": profile.database,
+            "externalDatabase": external_database,
+            "externalCatalogStage": stage,
+            "externalCatalogReason": reason,
+            "timeoutSeconds": self.settings.connect_timeout_seconds,
+            "attempt": 1,
+        }
+        if state_desc:
+            details["externalDatabaseState"] = state_desc
+        return MetadataToolError(
+            LIVE_METADATA_UNAVAILABLE,
+            "External cross-database catalog metadata could not be confirmed.",
+            details,
+        )
 
     def _module_dependency_metadata(
         self,
@@ -2891,11 +2981,14 @@ class LiveMetadataRepository:
         *,
         tool_name: str,
         profile: DbProfile,
+        lock_timeout_ms: int | None = None,
     ) -> list[dict[str, Any]]:
         connection = self._connect(database, profile=profile, tool_name=tool_name)
         cursor = None
         try:
             cursor = connection.cursor()
+            if lock_timeout_ms is not None:
+                cursor.execute(f"SET LOCK_TIMEOUT {int(lock_timeout_ms)}", ())
             cursor.execute(sql, self._prepare_query_params(params))
             columns = [column[0] for column in cursor.description or []]
             return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
