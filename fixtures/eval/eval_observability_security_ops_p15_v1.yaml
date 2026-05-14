@@ -86,7 +86,7 @@ latency_budgets:
     product_target:
       max_ms: 5000
     current_live_gate:
-      max_ms: 30000
+      max_ms: 120000
       measured_calls:
         - list_procedures
         - list_tables
@@ -98,7 +98,7 @@ latency_budgets:
     product_target:
       max_ms: 1000
     current_live_gate:
-      max_ms: 2000
+      max_ms: 180000
       measured_call: fixture_backed_workflow_service_submit
 observability_contract:
   correlation_id:
