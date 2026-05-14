@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
@@ -532,12 +533,16 @@ class OpenAIModelGateway:
                 payload=payload,
             )
             response.raise_for_status()
-            response_payload, output_text = _response_payload_and_output_text(response)
+            if self.provider == REMOTE_PROVIDER_PGPT:
+                response_payload, output_text = _pgpt_response_payload_and_output_text(response)
+            else:
+                response_payload, output_text = _response_payload_and_output_text(response)
             output, normalizer_components = _parse_structured_output(
                 output_text=output_text,
                 parser=parser,
                 schema_name=schema_name,
                 allowed_tool_names=prompt.metadata.get("toolNames") or (),
+                provider=self.provider,
             )
         except httpx.HTTPStatusError as exc:
             raise ModelGatewayError(
@@ -702,6 +707,21 @@ def _response_payload_and_output_text(response: httpx.Response) -> tuple[dict[st
     return payload, _response_output_text(payload)
 
 
+def _pgpt_response_payload_and_output_text(response: httpx.Response) -> tuple[dict[str, Any], str]:
+    content_type = response.headers.get("content-type", "").lower()
+    text = response.text
+    if "text/event-stream" in content_type or text.lstrip().startswith("data:"):
+        return {}, _sse_output_text(text)
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        return {}, text
+    try:
+        return payload, _response_output_text(payload)
+    except ValueError:
+        return payload, json.dumps(payload, ensure_ascii=False)
+
+
 def _response_output_text(payload: dict[str, Any]) -> str:
     if isinstance(payload.get("output_text"), str):
         return str(payload["output_text"])
@@ -758,9 +778,13 @@ def _parse_structured_output(
     parser,
     schema_name: str,
     allowed_tool_names: Sequence[str] = (),
+    provider: str = REMOTE_PROVIDER_OPENAI,
 ) -> tuple[Any, list[dict[str, Any]]]:
+    adapter_components: list[dict[str, Any]] = []
+    if provider == REMOTE_PROVIDER_PGPT and schema_name == "llm_semantic_analysis":
+        output_text, adapter_components = _pgpt_semantic_output_text(output_text)
     try:
-        return parser(output_text), []
+        return parser(output_text), adapter_components
     except (json.JSONDecodeError, ValueError) as exc:
         if schema_name in {"metadata_tool_plan", "platform_tool_plan"}:
             repaired, removed_paths = _metadata_tool_plan_without_schema_drift(
@@ -772,6 +796,7 @@ def _parse_structured_output(
             return (
                 AiToolPlanningOutput.model_validate(repaired),
                 [
+                    *adapter_components,
                     {
                         "component": "structured_output_normalizer",
                         "status": "SUCCEEDED",
@@ -788,6 +813,7 @@ def _parse_structured_output(
         return (
             LlmSemanticAnalysisOutput.model_validate(repaired),
             [
+                *adapter_components,
                 {
                     "component": "structured_output_normalizer",
                     "status": "SUCCEEDED",
@@ -796,6 +822,108 @@ def _parse_structured_output(
                 }
             ],
         )
+
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
+_SEMANTIC_ROOT_KEYS = (
+    "businessRules",
+    "modernizationPoints",
+    "riskFlags",
+    "reviewMarkers",
+    "conversionGuidance",
+    "migrationGuideInsights",
+    "assumptions",
+)
+_SEMANTIC_ROOT_KEY_SET = set(_SEMANTIC_ROOT_KEYS)
+_SEMANTIC_ROOT_ALIASES = {
+    "business_rules": "businessRules",
+    "modernization_points": "modernizationPoints",
+    "risk_flags": "riskFlags",
+    "review_markers": "reviewMarkers",
+    "conversion_guidance": "conversionGuidance",
+    "migration_guide_insights": "migrationGuideInsights",
+}
+_SEMANTIC_WRAPPER_KEYS = (
+    "structuredOutput",
+    "llmSemanticAnalysis",
+    "semanticAnalysis",
+    "analysis",
+)
+_TEXT_WRAPPER_KEYS = ("output_text", "text", "content", "message", "response")
+
+
+def _pgpt_semantic_output_text(output_text: str) -> tuple[str, list[dict[str, Any]]]:
+    payload = _pgpt_semantic_payload_from_text(output_text, depth=0)
+    if payload is None:
+        raise ValueError("No P-GPT semantic JSON object found.")
+    canonical = _canonical_semantic_payload(payload)
+    return (
+        json.dumps(canonical, ensure_ascii=False, separators=(",", ":")),
+        [
+            {
+                "component": "pgpt_structured_output_adapter",
+                "status": "SUCCEEDED",
+                "action": "adapted_pgpt_semantic_output",
+            }
+        ],
+    )
+
+
+def _pgpt_semantic_payload_from_text(output_text: str, *, depth: int) -> dict[str, Any] | None:
+    if depth > 6:
+        return None
+    candidates = [output_text.strip()]
+    candidates.extend(match.group(1).strip() for match in _JSON_FENCE_RE.finditer(output_text))
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        payload = _pgpt_semantic_payload_from_value(value, depth=depth + 1)
+        if payload is not None:
+            return payload
+    return None
+
+
+def _pgpt_semantic_payload_from_value(value: Any, *, depth: int) -> dict[str, Any] | None:
+    if depth > 6:
+        return None
+    if isinstance(value, str):
+        return _pgpt_semantic_payload_from_text(value, depth=depth + 1)
+    if isinstance(value, list):
+        for item in value:
+            payload = _pgpt_semantic_payload_from_value(item, depth=depth + 1)
+            if payload is not None:
+                return payload
+        return None
+    if not isinstance(value, dict):
+        return None
+    if _is_semantic_payload(value):
+        return value
+    for key in (*_SEMANTIC_WRAPPER_KEYS, *_TEXT_WRAPPER_KEYS):
+        if key not in value:
+            continue
+        payload = _pgpt_semantic_payload_from_value(value[key], depth=depth + 1)
+        if payload is not None:
+            return payload
+    return None
+
+
+def _is_semantic_payload(value: Mapping[str, Any]) -> bool:
+    return any(key in value for key in _SEMANTIC_ROOT_KEY_SET | set(_SEMANTIC_ROOT_ALIASES))
+
+
+def _canonical_semantic_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    canonical: dict[str, Any] = {key: [] for key in _SEMANTIC_ROOT_KEYS}
+    for key, value in payload.items():
+        target_key = _SEMANTIC_ROOT_ALIASES.get(key, key)
+        if target_key in _SEMANTIC_ROOT_KEY_SET:
+            canonical[target_key] = value
+        else:
+            canonical[key] = value
+    return canonical
 
 
 def _semantic_output_without_extra_fields(output_text: str) -> tuple[dict[str, Any], list[str]]:
@@ -1151,6 +1279,12 @@ def _claim_item_without_schema_drift(
         removed_paths=removed_paths,
     )
     _normalize_risk_severity(normalized, path=path, removed_paths=removed_paths)
+    _normalize_migration_guide_optional_text_fields(
+        normalized,
+        field_name=field_name,
+        path=path,
+        removed_paths=removed_paths,
+    )
     if not required_keys <= set(normalized):
         removed_paths.append(path)
         return None
@@ -1192,6 +1326,38 @@ def _normalize_risk_severity(
         return
     removed_paths.append(f"{path}.severity")
     value["severity"] = "WARNING"
+
+
+def _normalize_migration_guide_optional_text_fields(
+    value: dict[str, Any],
+    *,
+    field_name: str,
+    path: str,
+    removed_paths: list[str],
+) -> None:
+    if field_name not in {"migrationGuideInsights", "migration_guide_insights"}:
+        return
+    for key in (
+        "guideElement",
+        "guide_element",
+        "targetRef",
+        "target_ref",
+        "riskArea",
+        "risk_area",
+        "whatToExtractNext",
+        "what_to_extract_next",
+    ):
+        if key not in value:
+            continue
+        normalized_text = _provider_optional_text(value[key])
+        if normalized_text is None:
+            if value[key] is not None:
+                removed_paths.append(f"{path}.{key}")
+                value.pop(key, None)
+            continue
+        if normalized_text != value[key]:
+            removed_paths.append(f"{path}.{key}")
+        value[key] = normalized_text
 
 
 def _normalized_claim_item(
@@ -1250,6 +1416,17 @@ def _provider_text_value(value: dict[str, Any], keys: tuple[str, ...]) -> str | 
         text = _first_text(candidate)
         if text:
             return text
+    return None
+
+
+def _provider_optional_text(value: Any) -> str | None:
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, list):
+        parts = [_first_text(item) for item in value]
+        return "; ".join(part for part in parts if part) or None
+    if isinstance(value, dict):
+        return _first_text(value)
     return None
 
 

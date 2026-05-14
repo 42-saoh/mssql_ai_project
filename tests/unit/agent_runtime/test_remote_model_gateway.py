@@ -45,6 +45,7 @@ def test_openai_default_responses_url_and_payload_are_unchanged(
     assert captured["json"]["model"] == "gpt-5.5"
     assert captured["json"]["input"][0]["role"] == "system"
     assert captured["json"]["text"]["format"]["type"] == "json_schema"
+    assert captured["json"]["text"]["format"]["strict"] is True
     assert captured["json"]["reasoning"]["effort"] == "medium"
     assert "instructions" not in captured["json"]
     assert result.provider == "openai"
@@ -165,6 +166,152 @@ def test_pgpt_sse_output_text_delta_parses_structured_json(monkeypatch: Any) -> 
     assert result.token_usage == {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
 
 
+def test_pgpt_markdown_fenced_semantic_json_is_adapted_and_fills_missing_roots(
+    monkeypatch: Any,
+) -> None:
+    partial_output = {"businessRules": SEMANTIC_OUTPUT["businessRules"]}
+    fenced_output = f"```json\n{json.dumps(partial_output)}\n```"
+    _capture_post(monkeypatch, _pgpt_response({"output_text": fenced_output}))
+    _set_pgpt_env(monkeypatch)
+
+    result = OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+        prompt=_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    assert result.provider == "pgpt"
+    assert result.structured_output["businessRules"][0]["category"] == "TEST_RULE"
+    assert result.structured_output["modernizationPoints"] == []
+    assert result.structured_output["riskFlags"] == []
+    assert result.structured_output["reviewMarkers"] == []
+    assert result.structured_output["conversionGuidance"] == []
+    assert result.structured_output["migrationGuideInsights"] == []
+    assert result.structured_output["assumptions"] == []
+    assert result.component_invocations == (
+        {
+            "component": "pgpt_structured_output_adapter",
+            "status": "SUCCEEDED",
+            "action": "adapted_pgpt_semantic_output",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"output_text": json.dumps(SEMANTIC_OUTPUT)},
+        {"message": {"content": json.dumps(SEMANTIC_OUTPUT)}},
+    ],
+)
+def test_pgpt_text_wrappers_with_json_strings_are_adapted(
+    monkeypatch: Any,
+    payload: dict[str, Any],
+) -> None:
+    _capture_post(monkeypatch, _pgpt_response(payload))
+    _set_pgpt_env(monkeypatch)
+
+    result = OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+        prompt=_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    assert result.provider == "pgpt"
+    assert result.structured_output["businessRules"][0]["summary"] == (
+        "Schema-valid semantic output for gateway tests."
+    )
+
+
+@pytest.mark.parametrize("wrapper_key", ["structuredOutput", "llmSemanticAnalysis"])
+def test_pgpt_semantic_wrapper_objects_are_adapted(
+    monkeypatch: Any,
+    wrapper_key: str,
+) -> None:
+    _capture_post(
+        monkeypatch,
+        _pgpt_response(
+            {
+                wrapper_key: {
+                    "business_rules": SEMANTIC_OUTPUT["businessRules"],
+                }
+            }
+        ),
+    )
+    _set_pgpt_env(monkeypatch)
+
+    result = OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+        prompt=_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    assert result.provider == "pgpt"
+    assert result.structured_output["businessRules"][0]["category"] == "TEST_RULE"
+    assert result.structured_output["modernizationPoints"] == []
+
+
+def test_pgpt_migration_guide_text_lists_are_normalized(monkeypatch: Any) -> None:
+    output = {
+        **SEMANTIC_OUTPUT,
+        "migrationGuideInsights": [
+            {
+                "section": "dependency_inventory",
+                "summary": "Provider guide insight.",
+                "status": "SUPPORTED",
+                "evidenceRefs": ["fact_demo"],
+                "whatToExtractNext": [
+                    "Enumerate permitted tenant schemas.",
+                    "Confirm read-only metadata evidence.",
+                ],
+            }
+        ],
+    }
+    _capture_post(monkeypatch, _pgpt_response({"output_text": json.dumps(output)}))
+    _set_pgpt_env(monkeypatch)
+
+    result = OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+        prompt=_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    guide_insight = result.structured_output["migrationGuideInsights"][0]
+    assert guide_insight["status"] == "REVIEW_REQUIRED"
+    assert guide_insight["whatToExtractNext"] == (
+        "Enumerate permitted tenant schemas.; Confirm read-only metadata evidence."
+    )
+    assert result.component_invocations == (
+        {
+            "component": "pgpt_structured_output_adapter",
+            "status": "SUCCEEDED",
+            "action": "adapted_pgpt_semantic_output",
+        },
+        {
+            "component": "structured_output_normalizer",
+            "status": "SUCCEEDED",
+            "action": "removed_schema_extra_fields",
+            "removedFieldPaths": [
+                "$.migrationGuideInsights[0].status",
+                "$.migrationGuideInsights[0].whatToExtractNext",
+            ],
+        },
+    )
+
+
+def test_pgpt_natural_language_response_fails_without_storing_raw_output(
+    monkeypatch: Any,
+) -> None:
+    raw_output = "I cannot produce the requested JSON for dbo.usp_Demo."
+    _capture_post(monkeypatch, _pgpt_response({"output_text": raw_output}))
+    _set_pgpt_env(monkeypatch)
+
+    with pytest.raises(ModelGatewayError) as exc_info:
+        OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+            prompt=_prompt(),
+            profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+        )
+
+    assert exc_info.value.code == "OPENAI_STRUCTURED_OUTPUT_INVALID"
+    assert raw_output not in str(exc_info.value)
+
+
 def test_remote_semantic_output_extra_fields_are_pruned_before_storage(
     monkeypatch: Any,
 ) -> None:
@@ -200,6 +347,7 @@ def test_remote_semantic_output_extra_fields_are_pruned_before_storage(
         ],
     }
     _capture_post(monkeypatch, _json_response(output=output))
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.test/v1")
 
@@ -282,6 +430,7 @@ def test_remote_metadata_tool_plan_aliases_are_normalized_before_storage(
         "target": {"schema": "dbo", "name": "TB_ORDER"},
     }
     _capture_post(monkeypatch, _json_response(output=output))
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.test/v1")
 
@@ -361,6 +510,20 @@ def _json_response(*, output: dict[str, Any] | None = None) -> httpx.Response:
         },
         request=httpx.Request("POST", "https://api.openai.test/v1/responses"),
     )
+
+
+def _pgpt_response(payload: dict[str, Any]) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={"id": "resp_test", **payload},
+        request=httpx.Request("POST", "http://pgpt.test/v1/responses"),
+    )
+
+
+def _set_pgpt_env(monkeypatch: Any) -> None:
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://pgpt.test")
 
 
 def _capture_post(monkeypatch: Any, response: httpx.Response) -> dict[str, Any]:
