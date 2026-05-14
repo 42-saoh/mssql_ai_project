@@ -51,7 +51,7 @@ def extract_result_set_hints(
             else EvidenceStatus.OBSERVED
         )
         review_notes = (
-            ["Result-set columns include wildcard or complex expressions that need review."]
+            ["result-set 컬럼에 wildcard 또는 검토가 필요한 복합 expression이 포함되어 있습니다."]
             if status == EvidenceStatus.REVIEW_REQUIRED
             else []
         )
@@ -105,7 +105,7 @@ def _derive_column_name(expression: str) -> tuple[str | None, EvidenceStatus, li
         return (
             None,
             EvidenceStatus.REVIEW_REQUIRED,
-            ["Wildcard result columns require metadata-backed review."],
+            ["wildcard result 컬럼은 메타데이터 근거 기반 검토가 필요합니다."],
         )
     alias_match = AS_ALIAS_RE.search(expression)
     if alias_match:
@@ -123,7 +123,7 @@ def _derive_column_name(expression: str) -> tuple[str | None, EvidenceStatus, li
     return (
         None,
         EvidenceStatus.REVIEW_REQUIRED,
-        ["Complex result expression requires alias or manual review."],
+        ["복합 result expression은 alias 또는 수동 검토가 필요합니다."],
     )
 
 

@@ -49,6 +49,8 @@ def test_prompt_renderer_hashes_inputs_and_sanitizes_metadata_copy() -> None:
     assert '"definitionHash": "abc"' in prompt.user_prompt
     assert "businessRules, modernizationPoints" in prompt.system_prompt
     assert "CONFIRMED, SUPPORTED, DONE, OK" in prompt.system_prompt
+    assert "Korean (ko-KR)" in prompt.system_prompt
+    assert '"languageContract":' in prompt.user_prompt
     assert '"qualityHints":' in prompt.user_prompt
 
 
@@ -94,6 +96,7 @@ def test_fake_gateway_returns_schema_valid_sanitized_invocation(monkeypatch: Any
     assert result.model_profile_id == "openai_fast_test"
     assert result.status == "SUCCEEDED"
     assert "businessRules" in result.structured_output
+    assert "초안 의미 요약" in result.structured_output["businessRules"][0]["summary"]
     assert "CREATE PROCEDURE" not in str(result.to_storage_dict())
 
 
@@ -325,7 +328,8 @@ def test_fake_gateway_can_return_metadata_analysis(monkeypatch: Any) -> None:
         profile=model_profile_from_env("openai_fast_test"),
     )
 
-    assert result.output_schema_version == "schema:mssql_metadata_analysis@0.1.0"
+    assert result.output_schema_version == "schema:mssql_metadata_analysis@0.1.1"
+    assert "초안 메타데이터 분석" in result.structured_output["summary"]
     assert result.structured_output["objectInsights"][0]["evidenceRefs"] == [
         "mcp.get_table_schema.abc123"
     ]
@@ -399,6 +403,47 @@ def test_staged_semantic_run_repairs_invalid_evidence_refs(monkeypatch: Any) -> 
         "migration_guide_insights",
         "evidence_critic",
     ]
+
+
+def test_staged_semantic_run_marks_non_korean_human_text_for_review(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.usp_English",
+        metadata={"deterministicFacts": [{"id": "fact_demo", "summary": "확인된 근거"}]},
+        static_analysis={"fact_ids": ["fact_demo"]},
+        procedure_definition=None,
+        model_gateway=FakeModelGateway(
+            output_by_target_ref={
+                "dbo.usp_English": {
+                    "businessRules": [
+                        {
+                            "category": "DEMO_RULE",
+                            "summary": "Review customer status before conversion.",
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["fact_demo"],
+                        }
+                    ],
+                    "modernizationPoints": [],
+                    "riskFlags": [],
+                    "reviewMarkers": [],
+                    "conversionGuidance": [],
+                    "migrationGuideInsights": [],
+                    "assumptions": [],
+                }
+            }
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    markers = {
+        marker["code"]: marker
+        for marker in payload.structured_output["reviewMarkers"]
+    }
+    assert "LLM_OUTPUT_LANGUAGE_REVIEW_REQUIRED" in markers
+    assert markers["LLM_OUTPUT_LANGUAGE_REVIEW_REQUIRED"]["evidenceRefs"] == ["fact_demo"]
+    assert payload.structured_output["businessRules"][0]["evidenceRefs"] == ["fact_demo"]
 
 
 def test_complex_staged_run_injects_required_review_markers(monkeypatch: Any) -> None:

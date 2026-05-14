@@ -29,7 +29,7 @@ def canonical_conversion_blockers(
         blockers.append(
             CanonicalConversionBlocker(
                 code="SNAPSHOT_ID_BINDING_MISSING",
-                message="CanonicalAnalysisModel requires an explicit metadata snapshot id.",
+                message="CanonicalAnalysisModel에는 명시적인 metadata snapshot id가 필요합니다.",
                 target_path="packages/analysis/src/ai_agent_analysis/models.py",
             )
         )
@@ -37,7 +37,7 @@ def canonical_conversion_blockers(
         blockers.append(
             CanonicalConversionBlocker(
                 code="REGISTRY_VERSION_REFS_MISSING",
-                message="CanonicalAnalysisModel requires bound registry version refs.",
+                message="CanonicalAnalysisModel에는 연결된 registry version ref가 필요합니다.",
                 target_path="packages/analysis/src/ai_agent_analysis/models.py",
             )
         )
@@ -45,7 +45,7 @@ def canonical_conversion_blockers(
         blockers.append(
             CanonicalConversionBlocker(
                 code="CANONICAL_EVIDENCE_REFS_MISSING",
-                message="CanonicalAnalysisModel requires evidence refs for observed fields.",
+                message="CanonicalAnalysisModel의 observed field에는 evidence ref가 필요합니다.",
                 target_path="packages/analysis/src/ai_agent_analysis/canonical.py",
             )
         )

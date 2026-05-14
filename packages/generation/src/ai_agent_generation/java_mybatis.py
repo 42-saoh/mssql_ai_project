@@ -228,7 +228,8 @@ class JavaMyBatisDraftRendererBase:
         todo_lines = self._todo_lines(context)
         llm_conversion_lines = self._llm_conversion_lines(context)
         unconfirmed_lines = [
-            f"- REVIEW_REQUIRED: {marker}" for marker in self.assets.todo_markers()
+            f"- REVIEW_REQUIRED: `{marker}` 항목은 근거 확정 전까지 미확정으로 유지합니다."
+            for marker in self.assets.todo_markers()
         ]
 
         lines = [
@@ -294,7 +295,7 @@ class JavaMyBatisDraftRendererBase:
             "## diff_review_summary",
             "- 모든 파일은 artifact preview/diff 대상으로만 생성한다.",
             "- 실제 프로젝트 소스 반영, DDL/DML 실행, procedure 실행은 수행하지 않는다.",
-            "- reviewer 는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.",
+            "- 검토자는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.",
             "",
             "## sql_risk_markers",
             *risk_lines,
@@ -306,9 +307,9 @@ class JavaMyBatisDraftRendererBase:
             *unconfirmed_lines,
             "",
             "## message_and_config_examples",
-            f"- message key example: `{names.message_key_example}`",
-            f"- message value example: `{label} 목록을 조회했습니다.`",
-            "- application yml example:",
+            f"- message key 예시: `{names.message_key_example}`",
+            f"- message value 예시: `{label} 목록을 조회했습니다.`",
+            "- application yml 예시:",
             "",
             "```yaml",
             f"{names.application_yml_root}:",
@@ -544,7 +545,7 @@ class JavaMyBatisDraftRendererBase:
 
     def _sql_risk_marker_lines(self) -> list[str]:
         return [
-            f"- {marker['status']}: {marker['code']} - {marker['description']}"
+            f"- 상태 {marker['status']}: `{marker['code']}` - {marker['description']}"
             for marker in self.assets.sql_risk_markers(self.template_id)
         ]
 
@@ -677,7 +678,7 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
     ) -> RenderedArtifact:
         return RenderedArtifact(
             artifact_type=self.requested_output_type,
-            title=context.sample_id or f"{context.entity_name} Java/MyBatis draft",
+            title=context.sample_id or f"{context.entity_name} Java/MyBatis 초안",
             content=self.render_manifest(
                 context,
                 files,
@@ -741,7 +742,7 @@ class JavaMyBatisDtoModelRenderer(JavaMyBatisDraftRendererBase):
         )
         manifest = RenderedArtifact(
             artifact_type=self.requested_output_type,
-            title=context.sample_id or f"{context.entity_name} DTO/VO/Model draft",
+            title=context.sample_id or f"{context.entity_name} DTO/VO/Model 초안",
             content=self.render_manifest(
                 context,
                 files,

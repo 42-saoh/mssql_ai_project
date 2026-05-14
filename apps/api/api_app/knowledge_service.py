@@ -108,9 +108,9 @@ def persist_sp_workflow_knowledge(
     agent_run: AgentRunRecord | None,
 ) -> KnowledgePersistResult:
     if not bool(request_record.options.get("persistKnowledge", True)):
-        return _skipped_result("SP workflow knowledge persistence was skipped by request option.")
+        return _skipped_result("요청 옵션으로 SP workflow knowledge persistence를 건너뛰었습니다.")
     if not knowledge_assetization_enabled():
-        return _skipped_result("Knowledge assetization is disabled by environment.")
+        return _skipped_result("환경 설정에서 knowledge assetization이 비활성화되어 있습니다.")
 
     target = {
         "type": str(request_record.target.get("type") or "PROCEDURE"),
@@ -212,9 +212,9 @@ def persist_metadata_analysis_knowledge(
     response,
 ) -> KnowledgePersistResult:
     if not bool(getattr(request.options, "persist_knowledge", True)):
-        return _skipped_result("Metadata analysis knowledge persistence was skipped by request option.")
+        return _skipped_result("요청 옵션으로 metadata analysis knowledge persistence를 건너뛰었습니다.")
     if not knowledge_assetization_enabled():
-        return _skipped_result("Knowledge assetization is disabled by environment.")
+        return _skipped_result("환경 설정에서 knowledge assetization이 비활성화되어 있습니다.")
     if repository is None:
         return KnowledgePersistResult(assets=())
 
@@ -503,7 +503,7 @@ def _persist_specs(
             raise
         except Exception as exc:  # pragma: no cover - adapter defensive guard
             raise KnowledgePersistenceError(
-                f"Knowledge persistence failed for {spec.asset_kind}: {exc.__class__.__name__}",
+                f"{spec.asset_kind} knowledge persistence가 실패했습니다: {exc.__class__.__name__}",
                 code="KNOWLEDGE_PERSISTENCE_FAILED",
                 status_code=503,
             ) from exc
@@ -514,7 +514,7 @@ def _persist_specs(
             markers.append(
                 _review_marker(
                     KNOWLEDGE_STORAGE_SANITIZED,
-                    f"{spec.asset_kind} knowledge payload was sanitized before storage.",
+                    f"{spec.asset_kind} knowledge payload는 저장 전에 sanitize되었습니다.",
                 )
             )
             caveats.append(KNOWLEDGE_STORAGE_SANITIZED)
@@ -544,7 +544,7 @@ def _asset_spec(
             *[
                 _review_marker(
                     KNOWLEDGE_STORAGE_SANITIZED,
-                    "Unsafe raw knowledge field was removed before storage.",
+                    "안전하지 않은 raw knowledge field를 저장 전에 제거했습니다.",
                 )
                 for _ in all_markers[:1]
             ],
@@ -647,7 +647,7 @@ def _facts_from_static_analysis(
                     fact_id=_canonical_fact_id(key, {"target": target, "value": value}),
                     fact_type=f"STATIC_{key.upper()}",
                     object_ref=_target_ref(target),
-                    summary=f"Static analysis produced {key}.",
+                    summary=f"정적 분석이 {key} 결과를 생성했습니다.",
                     status="OBSERVED",
                     evidence_refs=_fact_refs(value),
                     payload={key: value},
@@ -676,7 +676,10 @@ def _facts_from_structured_output(
                     fact_id=_canonical_fact_id(fact_type.lower(), item),
                     fact_type=fact_type,
                     object_ref=_target_ref(target),
-                    summary=str(item.get("summary") or item.get("message") or fact_type),
+                    summary=_ensure_korean_summary(
+                        item.get("summary") or item.get("message") or fact_type,
+                        fallback=f"{fact_type} 요약입니다.",
+                    ),
                     status=str(item.get("status") or "REVIEW_REQUIRED"),
                     evidence_refs=[str(ref) for ref in item.get("evidenceRefs", [])],
                     payload=item,
@@ -695,7 +698,7 @@ def _facts_from_dependency_evidence(
             fact_id=_canonical_fact_id("dependency_summary", dependency_evidence.get("summary", {})),
             fact_type="DEPENDENCY_SUMMARY",
             object_ref=_target_ref(target),
-            summary="Dependency closure summary.",
+            summary="의존성 closure 요약입니다.",
             status="REVIEW_REQUIRED" if dependency_evidence.get("reviewRequired") else "OBSERVED",
             evidence_refs=_fact_refs(dependency_evidence),
             payload=dict(dependency_evidence.get("summary") or {}),
@@ -712,7 +715,7 @@ def _facts_from_dependency_evidence(
                 fact_id=_canonical_fact_id("dependency_node", node),
                 fact_type="DEPENDENCY_NODE",
                 object_ref=object_ref,
-                summary=f"Dependency node {object_ref}.",
+                summary=f"의존성 node {object_ref}입니다.",
                 status=_status_from_review(node.get("reviewStatus")),
                 evidence_refs=_fact_refs(node),
                 payload=node,
@@ -729,7 +732,7 @@ def _facts_from_dependency_evidence(
                     fact_id=_dependency_endpoint_fact_id(endpoint),
                     fact_type="DEPENDENCY_ENDPOINT",
                     object_ref=endpoint,
-                    summary=f"Dependency endpoint {endpoint} requires review.",
+                    summary=f"의존성 endpoint {endpoint}는 검토가 필요합니다.",
                     status="REVIEW_REQUIRED",
                     evidence_refs=_fact_refs(edge),
                     payload={"objectRef": endpoint, "source": "dependencyEdge"},
@@ -771,7 +774,7 @@ def _facts_from_table_schemas(
                 fact_id=_canonical_fact_id("metadata_profile", table),
                 fact_type="METADATA_PROFILE",
                 object_ref=object_ref,
-                summary=f"{object_ref} profile has {len(columns)} columns.",
+                summary=f"{object_ref} 프로파일에는 컬럼 {len(columns)}개가 있습니다.",
                 status="OBSERVED" if columns else "REVIEW_REQUIRED",
                 evidence_refs=_fact_refs(table),
                 payload={
@@ -803,7 +806,7 @@ def _facts_from_dto_readiness(
                 fact_id=_canonical_fact_id("dto_readiness", table),
                 fact_type="DTO_READINESS",
                 object_ref=object_ref,
-                summary=f"{object_ref} has {len(columns)} DTO candidate fields.",
+                summary=f"{object_ref}에는 DTO 후보 필드 {len(columns)}개가 있습니다.",
                 status="PARTIAL" if nullable_without_description else "OBSERVED",
                 evidence_refs=_fact_refs(table),
                 payload={
@@ -835,7 +838,10 @@ def _facts_from_deterministic_facts(
                 fact_id=fact_id,
                 fact_type=str(fact.get("type") or fallback_type),
                 object_ref=str(fact.get("objectRef") or _target_ref(target)),
-                summary=str(fact.get("summary") or fact_id),
+                summary=_ensure_korean_summary(
+                    fact.get("summary") or fact_id,
+                    fallback=f"{fact_id} fact 요약입니다.",
+                ),
                 status=str(fact.get("status") or "OBSERVED"),
                 evidence_refs=_fact_refs(fact),
                 payload=fact,
@@ -858,7 +864,7 @@ def _facts_from_profiles(profiles) -> list[dict[str, Any]]:
                 fact_type="METADATA_PROFILE",
                 object_ref=str(payload.get("objectRef") or ""),
                 summary=(
-                    f"{payload.get('objectRef')} has {payload.get('columnCount', 0)} columns."
+                    f"{payload.get('objectRef')}에는 컬럼 {payload.get('columnCount', 0)}개가 있습니다."
                 ),
                 status="REVIEW_REQUIRED" if payload.get("reviewRequired") else "OBSERVED",
                 evidence_refs=[str(ref) for ref in payload.get("evidenceRefs", [])],
@@ -866,6 +872,18 @@ def _facts_from_profiles(profiles) -> list[dict[str, Any]]:
             )
         )
     return facts
+
+
+_KOREAN_TEXT_RE = re.compile(r"[\uac00-\ud7a3]")
+
+
+def _ensure_korean_summary(value: Any, *, fallback: str) -> str:
+    summary = str(value or "").strip()
+    if summary and _KOREAN_TEXT_RE.search(summary):
+        return summary
+    if summary:
+        return f"{fallback} 기존 요약: {summary}"
+    return fallback
 
 
 def _facts_from_dependency_graph(graph: dict[str, Any]) -> list[dict[str, Any]]:
@@ -878,7 +896,7 @@ def _facts_from_dependency_graph(graph: dict[str, Any]) -> list[dict[str, Any]]:
                 fact_id=_canonical_fact_id("graph_node", node),
                 fact_type="DEPENDENCY_NODE",
                 object_ref=str(node.get("objectRef") or ""),
-                summary=f"Dependency graph node {node.get('objectRef')}.",
+                summary=f"의존성 graph node {node.get('objectRef')}입니다.",
                 status="REVIEW_REQUIRED" if node.get("status") == "REVIEW_REQUIRED" else "OBSERVED",
                 evidence_refs=[str(ref) for ref in node.get("evidenceRefs", [])],
                 payload=node,
@@ -895,7 +913,7 @@ def _facts_from_dependency_graph(graph: dict[str, Any]) -> list[dict[str, Any]]:
                     fact_id=_graph_endpoint_fact_id(endpoint),
                     fact_type="DEPENDENCY_ENDPOINT",
                     object_ref=endpoint,
-                    summary=f"Dependency graph endpoint {endpoint} requires review.",
+                    summary=f"의존성 graph endpoint {endpoint}는 검토가 필요합니다.",
                     status="REVIEW_REQUIRED",
                     evidence_refs=[str(ref) for ref in edge.get("evidenceRefs", [])],
                     payload={"objectRef": endpoint, "source": "dependencyGraphEdge"},
@@ -933,7 +951,7 @@ def _facts_from_metadata_dto(items) -> list[dict[str, Any]]:
                 fact_type="DTO_READINESS",
                 object_ref=str(payload.get("objectRef") or ""),
                 summary=(
-                    f"{payload.get('objectRef')} DTO readiness is {payload.get('status')}."
+                    f"{payload.get('objectRef')} DTO readiness 상태는 {payload.get('status')}입니다."
                 ),
                 status=str(payload.get("status") or "REVIEW_REQUIRED"),
                 evidence_refs=[str(ref) for ref in payload.get("evidenceRefs", [])],

@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from ai_agent_runtime.gateway import ModelGateway, model_profile_from_env
+from ai_agent_runtime.localization import (
+    append_korean_language_review_marker,
+    contains_korean,
+    human_text_needs_korean,
+    korean_language_review_paths,
+)
 from ai_agent_runtime.models import (
     AgentRunPayload,
     AgentRunStatus,
@@ -189,6 +195,39 @@ def _build_single_semantic_analysis_run(
             static_analysis=task.static_analysis,
             allowed_evidence_refs=allowed_evidence_refs,
         )
+    language_paths = korean_language_review_paths(repaired_output)
+    if language_paths:
+        prompt = render_semantic_analysis_prompt(
+            target_ref=task.target_ref,
+            metadata=task.metadata,
+            static_analysis=task.static_analysis,
+            procedure_definition=task.procedure_definition,
+            stage="language_repair",
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context={
+                "locale": "ko-KR",
+                "languageReviewPaths": language_paths,
+                "structuredOutput": _repair_context(repaired_output),
+            },
+        )
+        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
+        invocations.append(("language_repair", invocation))
+        language_repair_output = LlmSemanticAnalysisOutput.model_validate(
+            invocation.structured_output,
+        ).to_storage_dict()
+        repaired_output = _repair_evidence_refs(
+            _apply_language_repair_output(repaired_output, language_repair_output),
+            allowed_evidence_refs=allowed_evidence_refs,
+        )
+        if korean_language_review_paths(repaired_output):
+            repaired_output = append_korean_language_review_marker(
+                repaired_output,
+                evidence_refs=_fallback_evidence_refs(
+                    {"code": "LLM_OUTPUT_LANGUAGE_REVIEW_REQUIRED"},
+                    allowed_evidence_refs,
+                ),
+            )
     storage_safe_output = _sanitize_output_for_storage(
         repaired_output,
         procedure_definition=task.procedure_definition or "",
@@ -225,12 +264,12 @@ def merge_llm_semantic_analysis(
 
 def _summary(output: LlmSemanticAnalysisOutput) -> str:
     return (
-        f"{len(output.business_rules)} business rules, "
-        f"{len(output.modernization_points)} modernization points, "
-        f"{len(output.risk_flags)} risk flags, "
-        f"{len(output.review_markers)} review markers, "
-        f"{len(output.conversion_guidance)} conversion guidance items, "
-        f"{len(output.migration_guide_insights)} migration guide insights"
+        f"비즈니스 규칙 {len(output.business_rules)}개, "
+        f"현대화 포인트 {len(output.modernization_points)}개, "
+        f"위험 플래그 {len(output.risk_flags)}개, "
+        f"검토 마커 {len(output.review_markers)}개, "
+        f"전환 가이드 {len(output.conversion_guidance)}개, "
+        f"마이그레이션 가이드 인사이트 {len(output.migration_guide_insights)}개"
     )
 
 
@@ -367,8 +406,8 @@ def _required_review_markers(
         {
             "code": "UNSUPPORTED_TABLE_CLAIM_REVIEW",
             "message": (
-                "Any inferred concrete table dependency from dynamic or cross-database SQL "
-                "must remain REVIEW_REQUIRED until deterministic metadata confirms it."
+                "동적 SQL 또는 cross-database SQL에서 추론한 구체 테이블 의존성은 "
+                "결정론적 메타데이터가 확인하기 전까지 REVIEW_REQUIRED로 유지해야 합니다."
             ),
             "status": "REVIEW_REQUIRED",
             "evidenceRefs": dynamic_refs,
@@ -376,8 +415,8 @@ def _required_review_markers(
         {
             "code": "UNSUPPORTED_FUNCTION_CLAIM_REVIEW",
             "message": (
-                "Any inferred helper function dependency must remain REVIEW_REQUIRED until "
-                "deterministic metadata confirms it."
+                "추론된 helper function 의존성은 결정론적 메타데이터가 확인하기 전까지 "
+                "REVIEW_REQUIRED로 유지해야 합니다."
             ),
             "status": "REVIEW_REQUIRED",
             "evidenceRefs": function_refs or dynamic_refs,
@@ -385,8 +424,8 @@ def _required_review_markers(
         {
             "code": "UNSUPPORTED_PROCEDURE_CLAIM_REVIEW",
             "message": (
-                "Only deterministic procedure-call facts may be treated as confirmed; "
-                "additional procedure dependencies require review."
+                "결정론적 procedure-call fact만 확인된 호출로 취급할 수 있으며, "
+                "추가 procedure 의존성은 검토가 필요합니다."
             ),
             "status": "REVIEW_REQUIRED",
             "evidenceRefs": procedure_refs or dynamic_refs,
@@ -434,6 +473,36 @@ def _merge_item(items: list[dict[str, Any]], item: Mapping[str, Any], *, key_fie
                 existing[text_field] = item[text_field]
         return
     items.append(dict(item))
+
+
+def _apply_language_repair_output(
+    output: Mapping[str, Any],
+    repair_output: Mapping[str, Any],
+) -> dict[str, Any]:
+    repaired = LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
+    candidate = LlmSemanticAnalysisOutput.model_validate(repair_output).to_storage_dict()
+    for field_name in OUTPUT_FIELDS:
+        key_field = KEY_FIELDS[field_name]
+        candidate_by_key = {
+            str(item.get(key_field) or ""): item
+            for item in candidate[field_name]
+            if isinstance(item, Mapping)
+        }
+        for item in repaired[field_name]:
+            candidate_item = candidate_by_key.get(str(item.get(key_field) or ""))
+            if not candidate_item:
+                continue
+            for text_field in ("summary", "message", "whatToExtractNext"):
+                if text_field not in item or text_field not in candidate_item:
+                    continue
+                candidate_text = str(candidate_item.get(text_field) or "")
+                if human_text_needs_korean(item.get(text_field)) and contains_korean(
+                    candidate_text
+                ):
+                    item[text_field] = candidate_text
+    if any(contains_korean(item) for item in candidate["assumptions"]):
+        repaired["assumptions"] = list(candidate["assumptions"])
+    return repaired
 
 
 def _needs_repair(
@@ -577,8 +646,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "category": "DETERMINISTIC_SAFETY_NET_READ_ONLY_LOOKUP",
                 "summary": (
-                    "Deterministic facts indicate read-only lookup behavior that should "
-                    "be reviewed as draft business context."
+                    "결정론적 fact가 읽기 전용 조회 동작을 보여 주며, 초안 비즈니스 "
+                    "맥락으로 검토해야 합니다."
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": read_refs,
@@ -591,8 +660,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_LOOKUP_DTO_SHAPE",
                 "summary": (
-                    "Lookup input and result-shape facts should be mapped to explicit "
-                    "DTO fields before Java/MyBatis conversion."
+                    "조회 입력과 result-shape fact는 Java/MyBatis 전환 전에 명시적인 "
+                    "DTO 필드로 매핑해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": read_refs,
@@ -605,8 +674,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_LOOKUP_CONVERSION_GUIDANCE",
                 "summary": (
-                    "Keep lookup parameter binding and result mapping review-required "
-                    "until deterministic DTO contracts are validated."
+                    "결정론적 DTO 계약이 검증될 때까지 조회 parameter binding과 결과 "
+                    "매핑은 REVIEW_REQUIRED로 유지합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": read_refs,
@@ -619,8 +688,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "section": "DETERMINISTIC_SAFETY_NET_LOOKUP_GUIDE",
                 "summary": (
-                    "Migration guide should include lookup inputs, read dependencies, "
-                    "and result-shape review notes."
+                    "마이그레이션 가이드는 조회 입력, 읽기 의존성, result-shape 검토 "
+                    "메모를 포함해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": read_refs,
@@ -636,8 +705,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "category": "DETERMINISTIC_SAFETY_NET_BRANCH_RULE",
                 "summary": (
-                    "Deterministic branch facts indicate conditional business outcomes "
-                    "that require review in the migration guide."
+                    "결정론적 branch fact가 조건별 비즈니스 결과를 나타내며, "
+                    "마이그레이션 가이드에서 검토해야 합니다."
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": branch_refs,
@@ -654,8 +723,8 @@ def _apply_deterministic_safety_net(
                 "code": "DETERMINISTIC_SAFETY_NET_TRANSACTION_DML_REVIEW",
                 "severity": "WARNING",
                 "summary": (
-                    "Transaction, DML, branch, or error-handling facts need human review "
-                    "before Java/MyBatis transaction boundaries are drafted."
+                    "Transaction, DML, branch, error-handling fact는 Java/MyBatis "
+                    "transaction boundary 초안 작성 전에 사람 검토가 필요합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dml_refs,
@@ -668,8 +737,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_TRANSACTION_CONVERSION_GUIDANCE",
                 "summary": (
-                    "Preserve transaction boundaries, branch outcomes, and error handling "
-                    "as review-required conversion guidance."
+                    "Transaction boundary, branch 결과, error handling은 REVIEW_REQUIRED "
+                    "전환 가이드로 보존합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dml_refs,
@@ -682,8 +751,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "section": "DETERMINISTIC_SAFETY_NET_DML_MATRIX",
                 "summary": (
-                    "Migration guide should include a DML/transaction matrix and "
-                    "review-required branch outcomes."
+                    "마이그레이션 가이드는 DML/transaction matrix와 REVIEW_REQUIRED "
+                    "branch 결과를 포함해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dml_refs,
@@ -699,8 +768,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "category": "DETERMINISTIC_SAFETY_NET_AUDIT_SIDE_EFFECT",
                 "summary": (
-                    "Deterministic write facts indicate audit or reporting side effects "
-                    "that remain draft business context."
+                    "결정론적 write fact가 audit 또는 reporting side effect를 나타내며, "
+                    "초안 비즈니스 맥락으로 유지합니다."
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": audit_refs,
@@ -713,8 +782,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_AUDIT_MODERNIZATION_REVIEW",
                 "summary": (
-                    "Audit/reporting side effects should be separated from service logic "
-                    "only after deterministic review."
+                    "Audit/reporting side effect는 결정론적 검토 후에만 service logic과 "
+                    "분리합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": audit_refs,
@@ -730,8 +799,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_REVIEW",
                 "summary": (
-                    "Dynamic SQL or cross-database evidence should be isolated as "
-                    "review-required modernization work."
+                    "Dynamic SQL 또는 cross-database evidence는 REVIEW_REQUIRED 현대화 "
+                    "작업으로 분리해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -744,8 +813,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_CONVERSION_GUIDANCE",
                 "summary": (
-                    "Do not confirm dynamic SQL dependencies or result shape without "
-                    "deterministic metadata; keep conversion guidance review-required."
+                    "결정론적 메타데이터 없이는 dynamic SQL 의존성이나 result shape를 "
+                    "확정하지 말고 전환 가이드는 REVIEW_REQUIRED로 유지합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -758,8 +827,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "section": "DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_GUIDE",
                 "summary": (
-                    "Migration guide should list dynamic SQL, cross-database, and "
-                    "uncertain result-shape caveats as review-required."
+                    "마이그레이션 가이드는 dynamic SQL, cross-database, 불확실한 "
+                    "result-shape caveat를 REVIEW_REQUIRED로 나열해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -773,8 +842,8 @@ def _apply_deterministic_safety_net(
                 "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_RISK",
                 "severity": "WARNING",
                 "summary": (
-                    "Dynamic SQL, cross-database references, or uncertain result shape "
-                    "can hide dependencies and must remain REVIEW_REQUIRED."
+                    "Dynamic SQL, cross-database reference, 불확실한 result shape는 "
+                    "의존성을 숨길 수 있으므로 REVIEW_REQUIRED로 유지해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -787,8 +856,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_UNSUPPORTED_DEPENDENCY_REVIEW",
                 "message": (
-                    "Unsupported dependency/table/function/procedure claims from dynamic "
-                    "or cross-database evidence remain review markers only."
+                    "Dynamic 또는 cross-database evidence에서 나온 미지원 dependency/table/"
+                    "function/procedure claim은 review marker로만 유지합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -799,11 +868,11 @@ def _apply_deterministic_safety_net(
         repaired["assumptions"]
     ):
         repaired["assumptions"].append(
-            "DETERMINISTIC_SAFETY_NET added draft claims from allowed deterministic fact ids only."
+            "DETERMINISTIC_SAFETY_NET은 허용된 결정론적 fact id만 사용해 초안 claim을 추가했습니다."
         )
     elif not repaired["assumptions"]:
         repaired["assumptions"].append(
-            "DETERMINISTIC_SAFETY_NET added draft claims from allowed deterministic fact ids only."
+            "DETERMINISTIC_SAFETY_NET은 허용된 결정론적 fact id만 사용해 초안 claim을 추가했습니다."
         )
     return repaired
 
@@ -921,8 +990,8 @@ def _append_storage_safety_marker(
     marker = {
         "code": marker_code,
         "message": (
-            "Unsafe SQL, provider trace, row-data, or secret-like content was removed "
-            "from LLM output before storage."
+            "저장 전에 LLM 출력에서 안전하지 않은 SQL, provider trace, row-data 또는 "
+            "secret-like 내용을 제거했습니다."
         ),
         "status": "REVIEW_REQUIRED",
         "evidenceRefs": evidence_refs,

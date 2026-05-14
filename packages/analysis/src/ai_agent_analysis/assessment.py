@@ -53,7 +53,7 @@ def summarize_business_rules(
         summaries.append(
             BusinessRuleSummary(
                 category="DEPENDENCY",
-                summary=f"{verb} {reference.full_name} ({reference.object_type.value}).",
+                summary=f"{reference.full_name}({reference.object_type.value}) 객체를 {verb}.",
                 status=reference.status,
                 evidence=reference.evidence,
                 inferred_from=["static dependency token"],
@@ -63,19 +63,19 @@ def summarize_business_rules(
         summaries.append(
             BusinessRuleSummary(
                 category="CALL_GRAPH",
-                summary=f"Executes nested procedure {call.full_name}.",
+                summary=f"중첩 procedure {call.full_name} 호출을 확인했습니다.",
                 status=call.status,
                 evidence=call.evidence,
                 inferred_from=["EXEC statement"],
             )
         )
     for finding, summary in (
-        (patterns.transaction, "Uses explicit transaction control."),
-        (patterns.try_catch, "Uses TRY/CATCH exception handling."),
-        (patterns.temp_table, "Uses temporary table staging."),
-        (patterns.cursor, "Uses cursor-based iteration."),
-        (patterns.dynamic_sql, "Builds or executes dynamic SQL."),
-        (patterns.multi_result_set, "May return multiple result sets."),
+        (patterns.transaction, "명시적 트랜잭션 제어를 사용합니다."),
+        (patterns.try_catch, "TRY/CATCH 예외 처리를 사용합니다."),
+        (patterns.temp_table, "임시 테이블 staging을 사용합니다."),
+        (patterns.cursor, "cursor 기반 반복 처리를 사용합니다."),
+        (patterns.dynamic_sql, "Dynamic SQL을 생성하거나 실행합니다."),
+        (patterns.multi_result_set, "여러 result set을 반환할 수 있습니다."),
     ):
         if finding.detected:
             summaries.append(
@@ -89,11 +89,11 @@ def summarize_business_rules(
             )
     for result_set in result_sets:
         column_names = [column.name for column in result_set.columns if column.name]
-        column_summary = ", ".join(column_names) if column_names else "review-required columns"
+        column_summary = ", ".join(column_names) if column_names else "검토 필요한 컬럼"
         summaries.append(
             BusinessRuleSummary(
                 category="RESULT_SET",
-                summary=f"Returns result set {result_set.ordinal}: {column_summary}.",
+                summary=f"result set {result_set.ordinal} 반환 후보: {column_summary}.",
                 status=result_set.status
                 if result_set.status == EvidenceStatus.REVIEW_REQUIRED
                 else EvidenceStatus.INFERRED_DESCRIPTION,
@@ -113,7 +113,7 @@ def summarize_modernization_points(
         points.append(
             ModernizationPoint(
                 code="DYNAMIC_SQL_MODERNIZATION_REVIEW",
-                summary="Dynamic SQL migration strategy requires manual review.",
+                summary="Dynamic SQL 전환 전략은 수동 검토가 필요합니다.",
                 status=EvidenceStatus.REVIEW_REQUIRED,
                 evidence=patterns.dynamic_sql.evidence,
                 inferred_from=["dynamic_sql"],
@@ -123,7 +123,7 @@ def summarize_modernization_points(
         points.append(
             ModernizationPoint(
                 code="CURSOR_MODERNIZATION_REVIEW",
-                summary="Cursor-based iteration should be reviewed before Java/MyBatis draft adoption.",
+                summary="Java/MyBatis 초안 적용 전에 cursor 기반 반복 처리를 검토해야 합니다.",
                 status=EvidenceStatus.REVIEW_REQUIRED,
                 evidence=patterns.cursor.evidence,
                 inferred_from=["cursor"],
@@ -138,7 +138,7 @@ def summarize_modernization_points(
         points.append(
             ModernizationPoint(
                 code="TEMP_TABLE_STAGING_REVIEW",
-                summary="Temporary table staging should be reviewed for equivalent application flow.",
+                summary="동등한 application flow 설계를 위해 임시 테이블 staging을 검토해야 합니다.",
                 status=EvidenceStatus.REVIEW_REQUIRED,
                 evidence=evidence,
                 inferred_from=["temp_table"],
@@ -158,7 +158,7 @@ def build_todos(
         todos.append(
             TodoItem(
                 code="DYNAMIC_SQL_DEPENDENCY_REVIEW",
-                message="Review dependencies and result sets produced inside dynamic SQL.",
+                message="Dynamic SQL 내부에서 생성되는 의존성과 result set을 검토합니다.",
                 evidence=patterns.dynamic_sql.evidence,
             )
         )
@@ -166,7 +166,7 @@ def build_todos(
         todos.append(
             TodoItem(
                 code="MULTI_RESULT_SET_REVIEW",
-                message="Confirm client expectations for multiple result sets.",
+                message="여러 result set에 대한 client 기대 동작을 확인합니다.",
                 evidence=patterns.multi_result_set.evidence,
             )
         )
@@ -174,7 +174,7 @@ def build_todos(
         todos.append(
             TodoItem(
                 code="VIEW_DEPENDENCY_TYPE_REVIEW",
-                message=f"Confirm {reference.full_name} object type with metadata evidence.",
+                message=f"{reference.full_name} 객체 유형을 메타데이터 근거로 확인합니다.",
                 evidence=reference.evidence,
             )
         )
@@ -183,7 +183,7 @@ def build_todos(
             todos.append(
                 TodoItem(
                     code="RESULT_SET_COLUMN_REVIEW",
-                    message=f"Review result set {result_set.ordinal} columns.",
+                    message=f"result set {result_set.ordinal} 컬럼을 검토합니다.",
                     evidence=result_set.evidence,
                 )
             )
@@ -207,16 +207,16 @@ def calculate_overall_confidence(
     blockers: list[CanonicalConversionBlocker],
 ) -> ConfidenceScore:
     score = 0.95
-    factors = ["procedure signature and static SQL tokens parsed deterministically"]
+    factors = ["procedure signature와 static SQL token을 결정론적으로 파싱했습니다."]
     if patterns.dynamic_sql.detected:
         score -= 0.25
-        factors.append("dynamic SQL requires manual dependency review")
+        factors.append("dynamic SQL 의존성은 수동 검토가 필요합니다.")
     if patterns.multi_result_set.detected:
         score -= 0.05
-        factors.append("multiple result sets require consumer review")
+        factors.append("여러 result set은 consumer 검토가 필요합니다.")
     if dependencies.view_references:
         score -= 0.05
-        factors.append("view/table classification is metadata-limited")
+        factors.append("view/table 분류는 메타데이터 근거가 제한적입니다.")
     review_required_dependencies = [
         *[
             call.full_name
@@ -231,19 +231,19 @@ def calculate_overall_confidence(
     ]
     if review_required_dependencies:
         score -= 0.10
-        factors.append("one or more dependency references are review-required")
+        factors.append("하나 이상의 의존성 참조가 REVIEW_REQUIRED 상태입니다.")
     if any(result_set.status == EvidenceStatus.REVIEW_REQUIRED for result_set in result_sets):
         score -= 0.10
-        factors.append("one or more result-set hints are review-required")
+        factors.append("하나 이상의 result-set hint가 REVIEW_REQUIRED 상태입니다.")
     if review_markers:
         score -= min(0.20, 0.05 * len(review_markers))
-        factors.append("analysis emitted review markers")
+        factors.append("분석 결과에 검토 마커가 포함되어 있습니다.")
     if blockers:
         score -= 0.05
-        factors.append("canonical conversion bindings remain blocked")
+        factors.append("canonical conversion binding이 아직 차단되어 있습니다.")
     if todos:
         score -= min(0.15, 0.03 * len(todos))
-        factors.append("manual TODOs remain")
+        factors.append("수동 확인 TODO가 남아 있습니다.")
     score = max(0.05, round(score, 2))
     status = (
         EvidenceStatus.REVIEW_REQUIRED
@@ -253,7 +253,7 @@ def calculate_overall_confidence(
     return ConfidenceScore(
         score=score,
         status=status,
-        rationale="Confidence is deterministic and decreases for review-required evidence.",
+        rationale="confidence는 결정론적으로 산출되며 REVIEW_REQUIRED 근거가 있으면 낮아집니다.",
         factors=factors,
     )
 
@@ -269,9 +269,9 @@ def assess_evidence(
     review_required = bool(review_required_count or todos)
     notes: list[str] = []
     if review_required_count:
-        notes.append("Some evidence refs are marked REVIEW_REQUIRED.")
+        notes.append("일부 evidence ref가 REVIEW_REQUIRED로 표시되어 있습니다.")
     if todos:
-        notes.append("Manual TODOs remain as validation caveats.")
+        notes.append("수동 TODO가 validation caveat로 남아 있습니다.")
     return EvidenceAssessment(
         status=EvidenceStatus.REVIEW_REQUIRED if review_required else EvidenceStatus.OBSERVED,
         review_required=review_required,
@@ -287,11 +287,11 @@ def assess_evidence(
 
 def _operation_verb(operation: DependencyOperation) -> str:
     return {
-        DependencyOperation.READ: "Reads from",
-        DependencyOperation.WRITE: "Writes to",
-        DependencyOperation.EXECUTE: "Executes",
-        DependencyOperation.DECLARE: "Declares",
-        DependencyOperation.UNKNOWN: "References",
+        DependencyOperation.READ: "읽습니다",
+        DependencyOperation.WRITE: "수정합니다",
+        DependencyOperation.EXECUTE: "실행합니다",
+        DependencyOperation.DECLARE: "선언합니다",
+        DependencyOperation.UNKNOWN: "참조합니다",
     }[operation]
 
 

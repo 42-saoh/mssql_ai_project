@@ -16,9 +16,11 @@ from ai_agent_runtime.models import (
     stable_json_hash,
     text_hash,
 )
+from ai_agent_runtime.localization import KOREAN_OUTPUT_INSTRUCTION
 
-SYSTEM_PROMPT = """You analyze MSSQL stored procedures for a draft-only migration platform.
+SYSTEM_PROMPT = f"""You analyze MSSQL stored procedures for a draft-only migration platform.
 Return only schema-valid JSON. Treat deterministic metadata and static analysis as evidence.
+{KOREAN_OUTPUT_INSTRUCTION}
 Every claim must use evidenceRefs copied exactly from evidenceRefContract.allowedFactIds.
 Always return these top-level arrays even when empty: businessRules, modernizationPoints,
 riskFlags, reviewMarkers, conversionGuidance, migrationGuideInsights, and assumptions.
@@ -54,13 +56,14 @@ output field names toolRequests, toolName, arguments, reason, expectedEvidenceUs
 assumptions, and reviewMarkers; do not use aliases such as tools, requests, tool, args,
 parameters, rationale, or evidenceUse."""
 
-METADATA_ANALYSIS_SYSTEM_PROMPT = """You analyze read-only MSSQL metadata evidence for an
+METADATA_ANALYSIS_SYSTEM_PROMPT = f"""You analyze read-only MSSQL metadata evidence for an
 AI agent platform. Return only schema-valid JSON. Every insight must use evidenceRefs copied
 exactly from evidenceRefContract.allowedFactIds. Do not invent tables, columns, procedures,
 views, functions, dependencies, or constraints. Never use prompt hashes, input hashes, output
 hashes, raw SQL snippets, row data, or provider trace ids as claim evidence. Mark uncertain
 conclusions as REVIEW_REQUIRED. Group object insights by column risk, relationship, index,
 constraint, documentation gap, DTO readiness, and dependency categories when supported.
+{KOREAN_OUTPUT_INSTRUCTION}
 Never request or imply row data access, procedure execution, DDL/DML, deployment, secrets,
 credentials, or profile switching."""
 
@@ -90,6 +93,20 @@ def render_semantic_analysis_prompt(
         "stage": stage,
         "task": _stage_task(stage),
         "qualityHints": _quality_hints(metadata, static_analysis, allowed_refs),
+        "languageContract": {
+            "locale": "ko-KR",
+            "rule": KOREAN_OUTPUT_INSTRUCTION,
+            "preserveIdentifiers": [
+                "JSON keys",
+                "enum/status/code values",
+                "section ids",
+                "artifact types",
+                "evidence refs",
+                "registry refs",
+                "SQL identifiers",
+                "Java identifiers",
+            ],
+        },
         "evidenceRefContract": {
             "allowedFactIds": allowed_refs,
             "factCatalog": _fact_catalog(metadata, static_analysis, allowed_refs),
@@ -279,6 +296,7 @@ def render_metadata_analysis_prompt(
     metadata: dict[str, Any],
     allowed_evidence_refs: list[str] | tuple[str, ...] | None = None,
     stage: str = "metadata_analysis",
+    repair_context: dict[str, Any] | None = None,
 ) -> RenderedPrompt:
     allowed_refs = sorted(
         {str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()}
@@ -287,6 +305,19 @@ def render_metadata_analysis_prompt(
         "targetRef": target_ref,
         "metadata": _metadata_without_raw_definition(metadata),
         "stage": stage,
+        "languageContract": {
+            "locale": "ko-KR",
+            "rule": KOREAN_OUTPUT_INSTRUCTION,
+            "preserveIdentifiers": [
+                "JSON keys",
+                "enum/status/code values",
+                "category values",
+                "evidence refs",
+                "registry refs",
+                "SQL identifiers",
+                "Java identifiers",
+            ],
+        },
         "task": (
             "Summarize metadata structure, object profile depth, column risk, relationships, "
             "indexes, constraints, documentation gaps, dependency graph implications, and "
@@ -312,6 +343,8 @@ def render_metadata_analysis_prompt(
             ),
         },
     }
+    if repair_context is not None:
+        input_payload["repairContext"] = repair_context
     user_prompt = json.dumps(input_payload, ensure_ascii=False, sort_keys=True, default=str)
     prompt_hash = text_hash(f"{METADATA_ANALYSIS_SYSTEM_PROMPT}\n{user_prompt}")
     return RenderedPrompt(
@@ -419,6 +452,11 @@ def _stage_task(stage: str) -> str:
         return (
             "Repair the supplied structured output so evidenceRefs use exact allowedFactIds "
             "and requiredReviewMarkers are present with status REVIEW_REQUIRED."
+        )
+    if stage == "language_repair":
+        return (
+            "Translate human-readable free-text fields to Korean (ko-KR) while preserving "
+            "all machine contract identifiers, evidenceRefs, statuses, codes, and section ids."
         )
     return "Infer draft-only SP semantic analysis from deterministic evidence."
 

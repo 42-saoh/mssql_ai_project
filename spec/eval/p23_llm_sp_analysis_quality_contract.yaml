@@ -5,8 +5,8 @@ status: contract_ready
 production_ready: false
 depends_on:
   - P22 OpenAI LLM Agent Runtime
-  - prompt:sp_semantic_analysis@0.4.0
-  - schema:llm_semantic_analysis@0.4.0
+  - prompt:sp_semantic_analysis@0.4.1
+  - schema:llm_semantic_analysis@0.4.1
   - model:openai_sp_semantic_analysis@0.1.0
   - model:openai_fast_test@gpt-5-nano@0.1.0
 objective:

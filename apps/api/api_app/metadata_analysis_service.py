@@ -150,18 +150,18 @@ class MetadataAnalysisService:
             for item in object_depth.dto_readiness
         ]
         assumptions: list[str] = []
-        summary = "Metadata analysis did not run because no deterministic evidence was available."
+        summary = "결정론적 근거가 없어 metadata analysis를 실행하지 않았습니다."
 
         if not options.use_llm_analysis:
             review_markers.append(
                 _review_marker(
                     AI_METADATA_ANALYSIS_SKIPPED,
-                    "Metadata LLM analysis was skipped because useLlmAnalysis=false.",
+                    "useLlmAnalysis=false 요청 옵션으로 Metadata LLM analysis를 건너뛰었습니다.",
                     evidence_refs=_fallback_fact_refs(deterministic_facts),
                 )
             )
             all_caveats = _dedupe_strings([*all_caveats, AI_METADATA_ANALYSIS_SKIPPED])
-            summary = "Metadata LLM analysis skipped by request option."
+            summary = "요청 옵션에 따라 Metadata LLM analysis를 건너뛰었습니다."
         elif deterministic_facts:
             try:
                 run = build_metadata_analysis_run(
@@ -216,19 +216,19 @@ class MetadataAnalysisService:
                     _review_marker(
                         AI_METADATA_ANALYSIS_SKIPPED,
                         (
-                            "Metadata LLM analysis failed; response contains deterministic "
-                            f"metadata only. code={getattr(exc, 'code', exc.__class__.__name__)}"
+                            "Metadata LLM analysis가 실패해 응답에는 결정론적 metadata만 포함합니다. "
+                            f"code={getattr(exc, 'code', exc.__class__.__name__)}"
                         ),
                         evidence_refs=_fallback_fact_refs(deterministic_facts),
                     )
                 )
                 all_caveats = _dedupe_strings([*all_caveats, AI_METADATA_ANALYSIS_SKIPPED])
-                summary = "Metadata LLM analysis skipped after model gateway failure."
+                summary = "model gateway 실패 후 Metadata LLM analysis를 건너뛰었습니다."
         else:
             review_markers.append(
                 _review_marker(
                     AI_METADATA_ANALYSIS_SKIPPED,
-                    "Metadata LLM analysis was skipped because no deterministic fact ids exist.",
+                    "deterministic fact id가 없어 Metadata LLM analysis를 건너뛰었습니다.",
                     evidence_refs=["metadata.analysis.no_fact"],
                 )
             )
@@ -692,7 +692,7 @@ def _run_ai_metadata_tools(
     if not options.use_llm_analysis or not options.use_ai_tool_orchestration:
         marker = _review_marker(
             AI_METADATA_ANALYSIS_SKIPPED,
-            "AI metadata tool orchestration was skipped by request options.",
+            "요청 옵션으로 AI metadata tool orchestration을 건너뛰었습니다.",
             evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
         )
         return _tool_run_result(
@@ -709,7 +709,7 @@ def _run_ai_metadata_tools(
     if not callable(planner):
         marker = _review_marker(
             AI_METADATA_ANALYSIS_SKIPPED,
-            "Configured model gateway does not expose metadata tool planning.",
+            "설정된 model gateway가 metadata tool planning을 제공하지 않습니다.",
             evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
         )
         return _tool_run_result(
@@ -743,8 +743,8 @@ def _run_ai_metadata_tools(
             _review_marker(
                 "AI_TOOL_BUDGET_REDUCED",
                 (
-                    "AI metadata analysis planning rounds were reduced for live PPM "
-                    "latency and cost control."
+                    "live PPM latency와 비용 제어를 위해 AI metadata analysis planning round를 "
+                    "줄였습니다."
                 ),
                 evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
             )
@@ -756,7 +756,7 @@ def _run_ai_metadata_tools(
     except Exception as exc:
         marker = _review_marker(
             AI_METADATA_ANALYSIS_SKIPPED,
-            f"Internal MCP registry setup failed for metadata analysis: {exc.__class__.__name__}.",
+            f"metadata analysis용 internal MCP registry 설정이 실패했습니다: {exc.__class__.__name__}.",
             evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
         )
         return _tool_run_result(
@@ -818,8 +818,8 @@ def _run_ai_metadata_tools(
                     _review_marker(
                         AI_METADATA_ANALYSIS_SKIPPED,
                         (
-                            "Metadata tool planning failed; analysis continued with baseline "
-                            f"metadata. code={getattr(exc, 'code', exc.__class__.__name__)}"
+                            "Metadata tool planning이 실패해 baseline metadata로 분석을 계속했습니다. "
+                            f"code={getattr(exc, 'code', exc.__class__.__name__)}"
                         ),
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
@@ -884,8 +884,8 @@ def _run_ai_metadata_tools(
                     _review_marker(
                         "AI_TOOL_CALL_BUDGET_EXHAUSTED",
                         (
-                            "AI metadata analysis tool call budget was exhausted before "
-                            "all planned requests ran."
+                            "계획된 요청을 모두 실행하기 전에 AI metadata analysis tool call budget을 "
+                            "소진했습니다."
                         ),
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
@@ -905,7 +905,7 @@ def _run_ai_metadata_tools(
                 review_markers.append(
                     _review_marker(
                         AI_METADATA_ANALYSIS_REVIEW_REQUIRED,
-                        str(decision.message or "AI metadata tool request was blocked."),
+                        str(decision.message or "AI metadata tool request가 차단되었습니다."),
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
                         ),
@@ -936,7 +936,7 @@ def _run_ai_metadata_tools(
                 review_markers.append(
                     _review_marker(
                         AI_METADATA_ANALYSIS_REVIEW_REQUIRED,
-                        f"AI metadata tool invocation failed with MCP error: {exc.code}.",
+                        f"AI metadata tool invocation이 MCP error {exc.code}로 실패했습니다.",
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
                         ),
@@ -1092,8 +1092,8 @@ def _baseline_facts(targets: list[MetadataSearchResult]) -> list[dict[str, Any]]
                 "type": "MSSQL_METADATA_SEARCH_RESULT",
                 "fact_type": "MSSQL_METADATA_SEARCH_RESULT",
                 "summary": (
-                    f"Metadata search identified {identity.type} "
-                    f"{identity.schema_name}.{identity.name}."
+                    f"Metadata search로 {identity.type} "
+                    f"{identity.schema_name}.{identity.name}을 확인했습니다."
                 ),
                 "evidenceRefs": [ref.to_response() for ref in target.evidence_refs],
             }
@@ -1353,10 +1353,10 @@ def _merge_dependency_closure(
                 code="DEPENDENCY_GRAPH_SUMMARY",
                 object_ref=object_ref,
                 summary=(
-                    "Dependency closure contains "
-                    f"{summary.get('nodeCount', 0)} nodes, "
-                    f"{summary.get('edgeCount', 0)} edges, and "
-                    f"{summary.get('reviewRequiredCount', 0)} review-required items."
+                    "의존성 closure에 "
+                    f"노드 {summary.get('nodeCount', 0)}개, "
+                    f"엣지 {summary.get('edgeCount', 0)}개, "
+                    f"검토 필요 항목 {summary.get('reviewRequiredCount', 0)}개가 있습니다."
                 ),
                 status=(
                     "REVIEW_REQUIRED"
@@ -1380,9 +1380,9 @@ def _profile_fact(profile: dict[str, Any]) -> dict[str, Any]:
         "type": "MSSQL_METADATA_OBJECT_PROFILE",
         "fact_type": "MSSQL_METADATA_OBJECT_PROFILE",
         "summary": (
-            f"Object profile for {profile['objectType']} {profile['objectRef']} "
-            f"with {profile['columnCount']} columns, {profile['constraintCount']} "
-            f"constraints, and {profile['indexCount']} indexes."
+            f"{profile['objectType']} {profile['objectRef']} 오브젝트 프로파일입니다. "
+            f"컬럼 {profile['columnCount']}개, constraint {profile['constraintCount']}개, "
+            f"index {profile['indexCount']}개를 포함합니다."
         ),
         "evidenceRefs": [],
     }
@@ -1395,10 +1395,10 @@ def _graph_fact(dependency_graph: dict[str, Any]) -> dict[str, Any]:
         "type": "MSSQL_METADATA_DEPENDENCY_GRAPH_PROFILE",
         "fact_type": "MSSQL_METADATA_DEPENDENCY_GRAPH_PROFILE",
         "summary": (
-            "Metadata dependency graph profile with "
-            f"{len(dependency_graph.get('nodes', []))} nodes, "
-            f"{len(dependency_graph.get('edges', []))} edges, and "
-            f"{len(dependency_graph.get('unresolved', []))} unresolved items."
+            "Metadata dependency graph 프로파일입니다. "
+            f"노드 {len(dependency_graph.get('nodes', []))}개, "
+            f"엣지 {len(dependency_graph.get('edges', []))}개, "
+            f"미해결 항목 {len(dependency_graph.get('unresolved', []))}개를 포함합니다."
         ),
         "evidenceRefs": [],
     }
@@ -1459,8 +1459,8 @@ def _build_insight_groups(
                         code="COLUMN_DESCRIPTION_GAP",
                         object_ref=object_ref,
                         summary=(
-                            f"{len(missing_descriptions)} columns need confirmed "
-                            "descriptions or logical names."
+                            f"컬럼 {len(missing_descriptions)}개에 확정된 description 또는 "
+                            "logical name이 필요합니다."
                         ),
                         status="REVIEW_REQUIRED",
                         evidence_refs=refs,
@@ -1472,9 +1472,9 @@ def _build_insight_groups(
                         code="COLUMN_NULLABILITY_OR_DOMAIN_REVIEW",
                         object_ref=object_ref,
                         summary=(
-                            f"{len(nullable_columns)} nullable columns and "
-                            f"{len(missing_descriptions)} review-required descriptions "
-                            "need DTO field review."
+                            f"nullable column {len(nullable_columns)}개와 "
+                            f"review-required description {len(missing_descriptions)}개는 "
+                            "DTO field 검토가 필요합니다."
                         ),
                         status="REVIEW_REQUIRED",
                         evidence_refs=refs,
@@ -1486,9 +1486,9 @@ def _build_insight_groups(
                     code="TABLE_CONSTRAINT_SUMMARY",
                     object_ref=object_ref,
                     summary=(
-                        f"Table has {profile['primaryKeyCount']} PK, "
-                        f"{profile['foreignKeyCount']} FK, and "
-                        f"{profile['constraintCount']} total constraints."
+                        f"테이블에 PK {profile['primaryKeyCount']}개, "
+                        f"FK {profile['foreignKeyCount']}개, "
+                        f"constraint 총 {profile['constraintCount']}개가 있습니다."
                     ),
                     status="INFERRED_DESCRIPTION",
                     evidence_refs=refs,
@@ -1506,8 +1506,8 @@ def _build_insight_groups(
                             code="FOREIGN_KEY_RELATIONSHIP",
                             object_ref=object_ref,
                             summary=(
-                                f"{constraint.get('name')} references "
-                                f"{ref_schema}.{ref_table}."
+                                f"{constraint.get('name')} constraint가 "
+                                f"{ref_schema}.{ref_table}을 참조합니다."
                             ),
                             status="INFERRED_DESCRIPTION",
                             evidence_refs=refs,
@@ -1518,7 +1518,7 @@ def _build_insight_groups(
                 _insight(
                     code="CONSTRAINT_METADATA_MISSING",
                     object_ref=object_ref,
-                    summary="Constraint metadata was not available for this table profile.",
+                    summary="이 table 프로파일에는 constraint metadata가 없습니다.",
                     status="REVIEW_REQUIRED",
                     evidence_refs=refs,
                 )
@@ -1528,7 +1528,7 @@ def _build_insight_groups(
                 _insight(
                     code="TABLE_INDEX_SUMMARY",
                     object_ref=object_ref,
-                    summary=f"Table has {len(indexes)} indexes in metadata evidence.",
+                    summary=f"metadata evidence 기준 index {len(indexes)}개가 있습니다.",
                     status="INFERRED_DESCRIPTION",
                     evidence_refs=refs,
                 )
@@ -1538,7 +1538,7 @@ def _build_insight_groups(
                 _insight(
                     code="INDEX_METADATA_MISSING",
                     object_ref=object_ref,
-                    summary="Index metadata was not available for this table profile.",
+                    summary="이 table 프로파일에는 index metadata가 없습니다.",
                     status="REVIEW_REQUIRED",
                     evidence_refs=refs,
                 )
@@ -1564,13 +1564,13 @@ def _build_dto_readiness(
         columns = table_columns.get(object_ref, [])
         reasons = []
         if profile["objectType"] != "TABLE":
-            reasons.append("DTO readiness v1 is deepest for TABLE objects.")
+            reasons.append("DTO readiness v1은 TABLE object를 가장 깊게 평가합니다.")
         if not columns:
-            reasons.append("Column metadata was not available.")
+            reasons.append("Column metadata를 사용할 수 없습니다.")
         if profile["primaryKeyCount"] == 0 and profile["objectType"] == "TABLE":
-            reasons.append("Primary key metadata was not confirmed.")
+            reasons.append("Primary key metadata가 확정되지 않았습니다.")
         if float(profile["descriptionCoverage"]) < 1 and columns:
-            reasons.append("Column or table descriptions need review.")
+            reasons.append("Column 또는 table description 검토가 필요합니다.")
         if profile["objectType"] == "TABLE" and columns and not reasons:
             status = "READY"
         elif columns:

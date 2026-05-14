@@ -41,7 +41,7 @@ scope:
 
 generationModes:
   metadataCrud:
-    description: table/column metadata is sufficient for CRUD-style draft generation
+    description: 테이블/컬럼 메타데이터가 CRUD 스타일 초안 생성에 충분한 상태
     defaultOutputs:
       - dto
       - service
@@ -50,7 +50,7 @@ generationModes:
       - evidence_summary
       - todo
   spWrapper:
-    description: SP call is preserved because rebuild evidence is insufficient
+    description: 재구성 근거가 부족해 SP 호출을 유지하는 상태
     defaultOutputs:
       - dto
       - service
@@ -59,7 +59,7 @@ generationModes:
       - evidence_summary
       - todo
   spRebuild:
-    description: SP logic can be rebuilt into SQL based on sufficiently analyzed evidence
+    description: 충분히 분석된 근거를 바탕으로 SP 로직을 SQL로 재구성할 수 있는 상태
     defaultOutputs:
       - dto
       - service
@@ -68,7 +68,7 @@ generationModes:
       - evidence_summary
       - todo
   metadataObject:
-    description: object model generation only
+    description: 객체 모델만 생성하는 상태
     defaultOutputs:
       - dto_or_vo_or_model
       - field_mapping_summary

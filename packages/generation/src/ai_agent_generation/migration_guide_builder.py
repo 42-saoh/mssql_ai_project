@@ -144,19 +144,19 @@ def _sanitized_facts(
         {
             "id": "fact_target_identity",
             "fact_type": "PROCEDURE_IDENTITY",
-            "summary": f"Migration guide target is {target_ref}.",
+            "summary": f"전환 가이드 대상은 {target_ref}입니다.",
             "evidence_refs": [primary_ref],
         },
         {
             "id": "fact_parameter_inventory",
             "fact_type": "PROCEDURE_PARAMETERS",
-            "summary": f"{len(input_params)} parameter(s) available from metadata.",
+            "summary": f"메타데이터에서 파라미터 {len(input_params)}개를 확인했습니다.",
             "evidence_refs": [primary_ref],
         },
         {
             "id": "fact_result_shape",
             "fact_type": "RESULT_SHAPE",
-            "summary": f"{len(result_shape)} result field candidate(s) available.",
+            "summary": f"결과 필드 후보 {len(result_shape)}개를 사용할 수 있습니다.",
             "evidence_refs": [static_ref],
         },
     ]
@@ -171,7 +171,7 @@ def _section_expectations(primary_ref: str, static_ref: str) -> list[dict[str, A
             if section_id not in {"sp_overview", "appendix_mappings"}
             else [primary_ref]
         )
-        summary = f"{section_id} is rendered from sanitized metadata/static facts."
+        summary = f"{section_id} section은 sanitized metadata/static fact를 근거로 렌더링됩니다."
         sections.append(
             {
                 "id": section_id,
@@ -217,12 +217,12 @@ def _dependency_inventory(
                 "how_referenced": str(edge.get("resolutionStrategy") or "dependency closure"),
                 "why_uncertain": ""
                 if status == "Confirmed"
-                else str(edge.get("unresolvedReason") or "Dependency was not catalog-confirmed."),
+                else str(edge.get("unresolvedReason") or "카탈로그에서 확정된 의존성이 아닙니다."),
                 "what_to_extract_next": ""
                 if status == "Confirmed"
                 else (
-                    "Run dependency closure/reference resolution metadata tools "
-                    "or manual catalog queries."
+                    "dependency closure/reference resolution 메타데이터 도구 또는 수동 카탈로그 "
+                    "쿼리로 확인합니다."
                 ),
             }
         )
@@ -247,9 +247,9 @@ def _dependency_inventory(
                 "evidence_refs": _edge_refs(unresolved) or [static_ref],
                 "status": "Needs verification",
                 "how_referenced": "unresolved dependency evidence",
-                "why_uncertain": str(unresolved.get("unresolvedReason") or "Unresolved reference."),
+                "why_uncertain": str(unresolved.get("unresolvedReason") or "해결되지 않은 참조입니다."),
                 "what_to_extract_next": (
-                    "Resolve candidates with catalog metadata; do not infer from LLM text."
+                    "카탈로그 메타데이터로 후보를 확인하고 LLM 텍스트만으로 추론하지 않습니다."
                 ),
             }
         )
@@ -263,17 +263,17 @@ def _dependency_inventory(
                 "object_ref": "sp_executesql/EXEC dynamic candidate",
                 "operations": ["REVIEW_REQUIRED"],
                 "key_columns": [],
-                "join_or_where_summary": "Dynamic SQL may hide object dependencies.",
+                "join_or_where_summary": "Dynamic SQL 안에 객체 의존성이 숨을 수 있습니다.",
                 "value_or_state_patterns": (
-                    "Generated SQL text is not promoted as deterministic dependency evidence."
+                    "생성된 SQL text는 결정론적 의존성 근거로 승격하지 않습니다."
                 ),
                 "evidence_refs": [static_ref],
                 "status": "Needs verification",
                 "how_referenced": "dynamic SQL signal",
-                "why_uncertain": "Static parser cannot confirm dependencies inside generated SQL.",
+                "why_uncertain": "정적 parser는 생성 SQL 내부 의존성을 확정할 수 없습니다.",
                 "what_to_extract_next": (
-                    "Capture catalog-confirmed dependency closure or reviewer-supplied "
-                    "sanitized metadata."
+                    "카탈로그로 확인된 dependency closure 또는 검토자가 제공한 sanitized "
+                    "metadata를 확보합니다."
                 ),
             }
         )
@@ -309,17 +309,17 @@ def _static_dependency_refs(static_analysis: Mapping[str, Any]) -> list[dict[str
                     ),
                     "operations": [operation],
                     "key_columns": [],
-                    "join_or_where_summary": "Static parser reference.",
+                    "join_or_where_summary": "정적 parser에서 확인한 참조입니다.",
                     "value_or_state_patterns": "",
                     "evidence_refs": ["static.analysis.migration_guide"],
                     "status": status,
                     "how_referenced": "static parser",
                     "why_uncertain": ""
                     if status == "Confirmed"
-                    else "Static reference requires catalog confirmation.",
+                    else "정적 참조는 카탈로그 확인이 필요합니다.",
                     "what_to_extract_next": ""
                     if status == "Confirmed"
-                    else "Confirm object type and database with MCP metadata.",
+                    else "MCP 메타데이터로 객체 유형과 데이터베이스를 확인합니다.",
                 }
             )
     for call in _sequence(dependencies.get("called_procedures")):
@@ -334,17 +334,17 @@ def _static_dependency_refs(static_analysis: Mapping[str, Any]) -> list[dict[str
                 ),
                 "operations": ["EXECUTE"],
                 "key_columns": [],
-                "join_or_where_summary": "EXEC call parsed from static SQL.",
+                "join_or_where_summary": "정적 SQL에서 EXEC 호출을 파싱했습니다.",
                 "value_or_state_patterns": "",
                 "evidence_refs": ["static.analysis.migration_guide"],
                 "status": status,
                 "how_referenced": "static EXEC parser",
                 "why_uncertain": ""
                 if status == "Confirmed"
-                else "Dynamic or system procedure call.",
+                else "동적 또는 시스템 procedure 호출입니다.",
                 "what_to_extract_next": ""
                 if status == "Confirmed"
-                else "Confirm executed target through metadata or review.",
+                else "메타데이터 또는 검토로 실행 대상을 확인합니다.",
             }
         )
     return refs
@@ -373,10 +373,10 @@ def _dml_matrices(
                 "operation": operation,
                 "target_ref": target,
                 "phase": "static_dml_scan",
-                "impact": f"{operation} reference detected for {target}.",
-                "keys_join_where_summary": "REVIEW_REQUIRED: inspect predicates and join keys.",
+                "impact": f"{target}에 대한 {operation} 참조를 감지했습니다.",
+                "keys_join_where_summary": "REVIEW_REQUIRED: predicate와 join key를 검토합니다.",
                 "important_columns_or_patterns": (
-                    "REVIEW_REQUIRED: column-level write/read pattern extraction pending."
+                    "REVIEW_REQUIRED: column-level write/read 패턴 추출이 남아 있습니다."
                 ),
                 "evidence_refs": [str(item.get("evidenceRef") or static_ref)],
                 "status": "Confirmed",
@@ -391,10 +391,10 @@ def _dml_matrices(
             "delete": "Y" if "DELETE" in operations else "",
             "merge": "Y" if "MERGE" in operations else "",
             "keys_join_where_summary": (
-                "REVIEW_REQUIRED: predicate/key extraction requires reviewer confirmation."
+                "REVIEW_REQUIRED: predicate/key 추출은 검토자 확인이 필요합니다."
             ),
             "important_columns_or_patterns": (
-                "REVIEW_REQUIRED: important column patterns are not inferred from LLM output."
+                "REVIEW_REQUIRED: 중요 컬럼 패턴은 LLM 출력만으로 추론하지 않습니다."
             ),
             "evidence_refs": [
                 str(item.get("evidenceRef") or static_ref)
@@ -467,12 +467,12 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
     branches = []
     if not dml_matrix:
         return {
-            "inputs": ["Procedure parameters from metadata."],
+            "inputs": ["메타데이터에서 확인한 procedure 파라미터입니다."],
             "branches": [
                 {
                     "id": "branch_review_required_flow",
                     "phase": "review_required",
-                    "condition_summary": "No deterministic DML operation sequence was extracted.",
+                    "condition_summary": "결정론적 DML 작업 순서를 추출하지 못했습니다.",
                     "evidence_refs": [static_ref],
                     "actions": [
                         {
@@ -483,8 +483,8 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
                     ],
                 }
             ],
-            "results": ["REVIEW_REQUIRED: result shape must be validated."],
-            "error_handling": "REVIEW_REQUIRED: error handling requires reviewer confirmation.",
+            "results": ["REVIEW_REQUIRED: result shape 검증이 필요합니다."],
+            "error_handling": "REVIEW_REQUIRED: 오류 처리는 검토자 확인이 필요합니다.",
         }
     for index, item in enumerate(dml_matrix, start=1):
         refs = [str(ref) for ref in _sequence(item.get("evidence_refs"))] or [static_ref]
@@ -504,10 +504,10 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
             }
         )
     return {
-        "inputs": ["Procedure parameters from metadata."],
+        "inputs": ["메타데이터에서 확인한 procedure 파라미터입니다."],
         "branches": branches,
-        "results": ["Result shape candidates are rendered in appendix mappings."],
-        "error_handling": "REVIEW_REQUIRED: confirm normal/exception/resource cleanup branches.",
+        "results": ["결과 shape 후보는 appendix mappings에 렌더링됩니다."],
+        "error_handling": "REVIEW_REQUIRED: 정상/예외/resource cleanup 분기를 확인합니다.",
     }
 
 
@@ -520,13 +520,13 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
     )
     return {
         "policy": (
-            "Manual reviewer aid only. Run in SSMS against the source metadata DB; "
-            "do not execute procedures, select row data, apply DDL/DML, or paste raw definitions."
+            "수동 검토자 보조용입니다. 원천 메타데이터 DB에 대해 SSMS에서 실행하되, "
+            "procedure 실행, row data 조회, DDL/DML 적용, raw definition 붙여넣기는 금지합니다."
         ),
         "queries": [
             {
                 "id": "definition_hash_length",
-                "title": "SP definition hash/length",
+                "title": "SP definition hash/length 확인",
                 "sql": (
                     prelude
                     + "\nSELECT DB_NAME() AS database_name, s.name AS schema_name,"
@@ -546,7 +546,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "parameters",
-                "title": "Procedure parameters",
+                "title": "Procedure parameters 확인",
                 "sql": (
                     prelude
                     + "\nSELECT p.parameter_id, p.name, TYPE_NAME(p.user_type_id) AS data_type,"
@@ -562,7 +562,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "static_dependencies",
-                "title": "Static catalog dependencies",
+                "title": "Static catalog dependencies 확인",
                 "sql": (
                     prelude
                     + "\nSELECT referenced_server_name, referenced_database_name,"
@@ -579,7 +579,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "referenced_entities",
-                "title": "Referenced entities DMV",
+                "title": "Referenced entities DMV 확인",
                 "sql": (
                     prelude
                     + "\nSELECT referenced_schema_name, referenced_entity_name,"
@@ -594,7 +594,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "dynamic_sql_indicators",
-                "title": "Dynamic SQL and external reference indicators",
+                "title": "Dynamic SQL 및 외부 참조 indicator 확인",
                 "sql": (
                     prelude
                     + "\nSELECT CASE WHEN sm.definition LIKE '%sp_executesql%'"
@@ -614,7 +614,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "temp_table_review",
-                "title": "Temp table/table variable review indicators",
+                "title": "Temp table/table variable 검토 indicator 확인",
                 "sql": (
                     prelude
                     + "\nSELECT CASE WHEN sm.definition LIKE '%CREATE TABLE #%'"
@@ -630,8 +630,8 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
         ],
         "paste_templates": [
-            "| Type | Name | How referenced | Evidence | Notes |",
-            "| Type | Name/Candidate | Why uncertain | What to extract next | Notes |",
+            "| 유형 | 이름 | 참조 방식 | 근거 | 비고 |",
+            "| 유형 | 이름/후보 | 불확실한 이유 | 다음 추출 항목 | 비고 |",
         ],
     }
 

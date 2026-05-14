@@ -38,7 +38,7 @@ def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None
             "conversionGuidance": [
                 {
                     "code": "DTO_FIELD_MAPPING",
-                    "summary": "Map read-only projection fields into DTO draft notes.",
+                    "summary": "read-only projection field를 DTO 초안 메모에 매핑합니다.",
                     "status": "REVIEW_REQUIRED",
                     "evidenceRefs": ["ev_p24_simple_proc"],
                 }
@@ -46,10 +46,10 @@ def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None
             "migrationGuideInsights": [
                 {
                     "section": "migration_strategy",
-                    "summary": "Keep migration output as draft-only readiness notes.",
+                    "summary": "전환 출력은 draft-only readiness note로 유지합니다.",
                     "status": "REVIEW_REQUIRED",
                     "evidenceRefs": ["ev_p24_simple_proc"],
-                    "whatToExtractNext": "Confirm metadata-only appendix results.",
+                    "whatToExtractNext": "metadata-only appendix 결과를 확인합니다.",
                 }
             ],
         },
@@ -59,7 +59,7 @@ def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None
     assert "llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`" in artifact.content
     assert "llmConversionGuidance: DTO_FIELD_MAPPING" in artifact.content
     assert "llmMigrationGuideInsight: migration_strategy" in artifact.content
-    assert "whatToExtractNext=Confirm metadata-only appendix results." in artifact.content
+    assert "whatToExtractNext=metadata-only appendix 결과를 확인합니다." in artifact.content
     assert "generated_source_application: `not_performed`" in artifact.content
 
 
@@ -80,10 +80,10 @@ def test_p24_renderer_emits_confirmed_needs_verification_metrics_and_manual_quer
     scenario = _scenario("p24_complex_dynamic_cross_db_extract")
     artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, _context_from_scenario(scenario))
 
-    assert "### Confirmed" in artifact.content
-    assert "### Needs verification" in artifact.content
-    assert "What to extract next" in artifact.content
-    assert "| Table | SELECT | INSERT | UPDATE | DELETE | MERGE |" in artifact.content
+    assert "### 확인됨" in artifact.content
+    assert "### 검증 필요" in artifact.content
+    assert "다음 추출 항목" in artifact.content
+    assert "| 테이블 | SELECT | INSERT | UPDATE | DELETE | MERGE |" in artifact.content
     assert "DYNAMIC_SQL_SIGNAL" in artifact.content
     assert "CROSS_DB_REFERENCE" in artifact.content
     assert "## metadata_extraction_appendix" in artifact.content

@@ -85,7 +85,7 @@ def _passed_sp_analysis_content() -> str:
             "dbo.usp_demo",
             "",
             "## analysis_summary",
-            "dbo.usp_demo is represented by metadata-only evidence.",
+            "dbo.usp_demo는 metadata-only evidence로 표현됩니다.",
             "",
             "## procedure_signature",
             "dbo.usp_demo()",
@@ -94,10 +94,10 @@ def _passed_sp_analysis_content() -> str:
             "dbo.usp_demo",
             "",
             "## assumptions_and_todo",
-            "None.",
+            "없음.",
             "",
             "## review_checklist",
-            "- [x] Evidence refs checked.",
+            "- [x] Evidence ref 확인 완료.",
             "",
         ]
     )
@@ -283,7 +283,7 @@ def test_llm_prompt_receives_dependency_evidence_and_can_bind_claim_refs() -> No
                 "businessRules": [
                     {
                         "category": "DEPENDENCY_EVIDENCE_BOUND_RULE",
-                        "summary": "Dependency closure evidence anchored the semantic claim.",
+                        "summary": "의존성 closure 근거가 semantic claim에 연결되었습니다.",
                         "status": "INFERRED_DESCRIPTION",
                         "evidenceRefs": [fact_ref],
                     }
@@ -342,7 +342,7 @@ def test_llm_prompt_receives_dependency_evidence_and_can_bind_claim_refs() -> No
     assert run.structured_output["businessRules"][0]["evidenceRefs"] == [
         spy_gateway.dependency_fact_refs[0]
     ]
-    assert "Dependency closure evidence anchored the semantic claim." in artifact.content
+    assert "의존성 closure 근거가 semantic claim에 연결되었습니다." in artifact.content
     assert "dependencyEvidence" in spy_gateway.prompt_payloads[0]["metadata"]
 
 
@@ -834,9 +834,9 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     assert "dependency_closure_evidence" in contents
     assert "## metadata_extraction_appendix" in contents
     assert "definition_hash_length" in contents
-    assert "### Confirmed" in contents
-    assert "### Needs verification" in contents
-    assert "| Table | SELECT | INSERT | UPDATE | DELETE | MERGE |" in contents
+    assert "### 확인됨" in contents
+    assert "### 검증 필요" in contents
+    assert "| 테이블 | SELECT | INSERT | UPDATE | DELETE | MERGE |" in contents
     assert "DYNAMIC_SQL_SIGNAL" in contents
     assert "FIXTURE_AMBIGUOUS" in contents
     assert "resolve_dependency_reference" not in contents

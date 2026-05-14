@@ -67,8 +67,8 @@ from api_app.tracking import (
 )
 
 WORKFLOW_METADATA_NOTE = (
-    "REVIEW_REQUIRED: metadata is collected through the MSSQL MCP registry boundary "
-    "and persisted through the platform DB workflow repository for this integration slice."
+    "REVIEW_REQUIRED: metadata는 MSSQL MCP registry 경계를 통해 수집되며 "
+    "이 integration slice에서는 platform DB workflow repository에 저장됩니다."
 )
 
 
@@ -502,7 +502,7 @@ class WorkflowService:
             "reviewMarkers": [
                 {
                     "code": "LLM_SEMANTIC_ANALYSIS_FAILED",
-                    "message": f"LLM semantic analysis failed with safe code {error_code}.",
+                    "message": f"LLM semantic analysis가 안전 코드 {error_code}로 실패했습니다.",
                     "status": "REVIEW_REQUIRED",
                     "evidenceRefs": [],
                 }
@@ -510,7 +510,7 @@ class WorkflowService:
             "conversionGuidance": [],
             "migrationGuideInsights": [],
             "assumptions": [
-                "Remote model output was not used because semantic analysis failed.",
+                "semantic analysis 실패로 remote model output은 사용하지 않았습니다.",
             ],
         }
         failure_input = {
@@ -549,7 +549,7 @@ class WorkflowService:
             agent_type="LLM_SEMANTIC_ANALYST",
             status=AgentRunStatus.FAILED.value,
             target_ref=target_ref,
-            summary=f"LLM semantic analysis failed with safe code {error_code}.",
+            summary=f"LLM semantic analysis가 안전 코드 {error_code}로 실패했습니다.",
             structured_output=structured_output,
             model_invocation=invocation.to_storage_dict(),
         )
@@ -618,7 +618,7 @@ class WorkflowService:
         metadata_lines = metadata_summary_lines(metadata)
         content = "\n".join(
             [
-                f"# {artifact_type.value} Draft",
+                f"# {artifact_type.value} 초안",
                 "",
                 "## input_interpretation",
                 f"- dbProfileId: `{request.db_profile_id}`",
@@ -633,8 +633,8 @@ class WorkflowService:
                 "## assumptions_and_review",
                 f"- {WORKFLOW_METADATA_NOTE}",
                 (
-                    "- REVIEW_REQUIRED: package-backed renderer is not available for this "
-                    "artifact type."
+                    "- REVIEW_REQUIRED: 이 artifact type에 사용할 package-backed renderer가 "
+                    "아직 없습니다."
                 ),
                 "",
                 "## review_checklist",
@@ -645,7 +645,7 @@ class WorkflowService:
         return self.repository.add_artifact(
             job_id=job_id,
             artifact_type=artifact_type,
-            title=f"{artifact_type.value} Draft",
+            title=f"{artifact_type.value} 초안",
             content=content,
             evidence_refs=list(metadata.evidence_refs)
             or [
@@ -856,11 +856,11 @@ def _deterministic_facts_with_prefix(
 
 def metadata_detail_lines(metadata: MetadataCollectionResult) -> list[str]:
     if not metadata.table_schemas:
-        return ["- REVIEW_REQUIRED: table schema metadata was not available."]
+        return ["- REVIEW_REQUIRED: table schema metadata를 사용할 수 없습니다."]
     lines: list[str] = []
     for table in metadata.table_schemas:
         table_ref = f"{table.get('schema')}.{table.get('tableName')}"
-        lines.append(f"- Table: `{table_ref}`")
+        lines.append(f"- 테이블: `{table_ref}`")
         for column in table.get("columns", []):
             description = str(column.get("description", "")).strip()
             logical_name = str(column.get("logicalName", "")).strip()
@@ -913,7 +913,7 @@ def generation_evidence_sources(
             {
                 "type": "storedProcedure",
                 "name": sp_name,
-                "reason": "request target only; metadata collection unavailable",
+                "reason": "request target만 있으며 metadata collection을 사용할 수 없습니다.",
             }
         ]
     else:
@@ -930,7 +930,7 @@ def generation_evidence_sources(
             {
                 "type": "table",
                 "name": f"{table['schema']}.{table['tableName']}",
-                "reason": "MSSQL MCP table schema metadata",
+                "reason": "MSSQL MCP table schema metadata 근거입니다.",
                 "locator": "MSSQL MCP table schema metadata",
                 "snapshotId": metadata.snapshot_id,
             }
@@ -942,7 +942,7 @@ def generation_evidence_sources(
             {
                 "type": "dependencyEvidence",
                 "name": str(ref.get("objectRef") or metadata.object_ref),
-                "reason": "MSSQL MCP dependency closure evidence",
+                "reason": "MSSQL MCP dependency closure 근거입니다.",
                 "locator": str(ref.get("locator") or "MSSQL MCP dependency closure"),
                 "snapshotId": str(ref.get("snapshotId") or metadata.snapshot_id or ""),
             }
@@ -1149,7 +1149,7 @@ def _summary_with_ai_tool_markers(
     )
     if not marker_count:
         return summary
-    return f"{summary}, {marker_count} tool orchestration review markers"
+    return f"{summary}, tool orchestration 검토 마커 {marker_count}개"
 
 
 def _tool_evidence_blocks(metadata: MetadataCollectionResult) -> list[dict[str, object]]:

@@ -27,6 +27,12 @@
    P25 기본 제품 플로우는 Draft → Validate → `VALIDATION_COMPLETE` 에서 멈추며,
    review/approval 은 deferred capability 로만 남긴다. Publish/deploy/apply 흐름은 여전히 금지한다.
 
+6. **작업자-facing 결과 한국어, machine contract 영어 유지**
+   작업자가 읽는 `title`, `summary`, `message`, artifact 본문, validation 설명,
+   metadata/knowledge 요약은 한국어(ko-KR)를 기본으로 한다. JSON key, enum,
+   artifact type, rule id, status/code 값, section id, evidence ref, SQL/Java 식별자는
+   기존 영어 계약값을 유지한다.
+
 ## 시스템 구성
 
 ```mermaid
@@ -87,6 +93,8 @@ flowchart LR
 
 - Remote model provider mode defaults to official OpenAI. `LLM_REMOTE_PROVIDER=pgpt` uses the private P-GPT `/v1/responses` contract with a minimal `model`, `instructions`, and message-array `input` request while retaining JSON/SSE response parsing.
 - 프롬프트 조합
+- semantic/metadata 구조화 출력의 자유 텍스트는 한국어로 생성·repair 하며, 식별자와
+  evidence ref 는 영어 계약값 그대로 보존
 - bounded metadata tool planning
 - bounded platform context tool planning: knowledge asset, artifact summary, validation summary,
   agent-run summary, registry version 같은 플랫폼 내부 read-only context 만 조회하며 public invoke
@@ -120,6 +128,8 @@ flowchart LR
 - Mapper XML / Interface / Service
 - DTO / VO / Model
 - DDL 초안
+- 사람이 읽는 문서 본문과 표 헤더는 한국어로 렌더링하되 section id, artifact type,
+  registry ref, SQL/Java 식별자는 번역하지 않음
 
 ### Validation / Approval
 - 규칙 검증
@@ -127,6 +137,8 @@ flowchart LR
 - manual review points
 - preview
 - approval record
+- 생성 artifact 의 작업자-facing 본문에 한국어 설명이 포함되는지
+  `artifact.localized_human_text.ko_kr` 규칙으로 점검
 
 ### Artifact Service
 - 버전 관리

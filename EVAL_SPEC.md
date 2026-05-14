@@ -184,7 +184,10 @@
 - platform tool 결과는 sanitized `platformToolEvidence` 와 `platform.<toolName>.<hash>` fact 로만
   semantic prompt 에 전달되며 public invoke API, artifact full content, row data, DDL/DML,
   approval/review write, export creation 을 만들지 않음
-- structured output 은 `schema:llm_semantic_analysis@0.4.0` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드를 포함해야 함
+- structured output 은 `schema:llm_semantic_analysis@0.4.1` strict JSON schema 를 통과해야 하며 guide/conversion 품질 필드와 한국어 작업자-facing 자유 텍스트를 포함해야 함
+- 언어 경계는 한국어 자유 텍스트와 영어 machine contract 의 공존으로 검증한다. JSON key,
+  enum/status/code, artifact type, rule id, section id, evidence ref, SQL/Java 식별자는
+  번역하지 않는다.
 - P-GPT 등 remote provider drift 는 strict validation 을 먼저 시도한 뒤, schema/OpenAPI 를 넓히지 않고 extra field/alias/status/severity 만 결정론적으로 정규화한다. 저장되는 normalizer metadata 는 path/code 수준이며 raw provider response, prompt, SQL/SP text 는 저장하지 않는다.
 - LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지됨
 
@@ -256,7 +259,7 @@ response storage, and `production_ready: false`.
 
 필수 체크:
 - P24A 는 contract/prompt/task/manifest 자산을 고정하고, P24B 는 sanitized fixture-first guide quality expectation 을 추가하며, P24C 는 기존 artifact type renderer/evaluator 로 fixture 를 점수화한다
-- simple/medium/complex synthetic scenarios 가 required section taxonomy, Confirmed/Needs verification dependency inventory, table-level DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, manual metadata extraction appendix, evidence refs 를 포함한다
+- simple/medium/complex synthetic scenarios 가 required section taxonomy, internal `Confirmed`/`Needs verification` status 를 유지한 dependency inventory, table-level DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, manual metadata extraction appendix, evidence refs 를 포함한다. 렌더링된 작업자-facing 표제와 설명은 한국어로 표시한다.
 - manual metadata extraction appendix 는 SSMS 수동 실행용 metadata-only query/result paste template 만 포함하며 row data 조회, procedure execution, DDL/DML, raw definition output 을 금지한다
 - P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 를 재사용하고 새 persisted artifact type, API/Web/DB schema 변경, live DB access 를 만들지 않는다
 - fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
@@ -553,6 +556,7 @@ P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT
 | MCP tool 변경 | contract test + read-only enforcement test |
 | parser/analysis 변경 | fixture 기반 analysis eval |
 | generator 변경 | artifact format eval + evidence coverage |
+| 작업자-facing 언어 변경 | `artifact.localized_human_text.ko_kr` validation + generator/API unit |
 | policy/approval 변경 | workflow state test + reviewer checklist |
 | auth/RBAC source 변경 | ADR/admin guide sync + role matrix contract test |
 | auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |

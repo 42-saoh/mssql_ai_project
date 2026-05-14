@@ -16,7 +16,7 @@ class SPAnalysisDocumentRenderer:
     def render(self, context: GenerationContext) -> RenderedArtifact:
         llm_analysis = _llm_analysis(context)
         lines = [
-            f"# {context.entity_name} SP Analysis Draft",
+            f"# {context.entity_name} SP 분석 초안",
             "",
             "## input_interpretation",
             f"- systemCode: {context.system_code}",
@@ -25,7 +25,7 @@ class SPAnalysisDocumentRenderer:
             f"- tableName: {context.table_name}",
             "",
             "## analysis_summary",
-            "- status: DRAFT",
+            "- 상태: 초안(`DRAFT`)",
             (
                 "- REVIEW_REQUIRED: SP 내부 제어 흐름과 비즈니스 규칙은 "
                 "canonical analysis 확정 후 보강"
@@ -42,8 +42,8 @@ class SPAnalysisDocumentRenderer:
             *[f"- `{column}`" for column in context.result_shape],
             "",
             "## dependency_summary",
-            f"- Stored Procedure: `{context.sp_name}`",
-            f"- Table: `{context.table_name}`",
+            f"- 저장 프로시저: `{context.sp_name}`",
+            f"- 테이블: `{context.table_name}`",
             "",
             *render_p24_migration_guide_sections(context),
             "## llm_semantic_analysis",
@@ -67,7 +67,7 @@ class SPAnalysisDocumentRenderer:
         ]
         return RenderedArtifact(
             artifact_type=self.artifact_type,
-            title=f"{context.entity_name} SP Analysis Draft",
+            title=f"{context.entity_name} SP 분석 초안",
             content=ensure_trailing_newline("\n".join(lines)),
             evidence_refs=context.evidence_refs,
             registry_refs=("template:sp_analysis_doc@0.1.0",),
@@ -83,16 +83,16 @@ class DependencyReportRenderer:
         llm_analysis = _llm_analysis(context)
         dependency_evidence = _dependency_evidence(context)
         lines = [
-            f"# {context.entity_name} Dependency Report Draft",
+            f"# {context.entity_name} 의존성 보고서 초안",
             "",
             "## dependency_summary",
-            "- status: DRAFT",
+            "- 상태: 초안(`DRAFT`)",
             "- REVIEW_REQUIRED: 호출 그래프는 canonical dependency resolver 결과로 확정",
             f"- rootProcedure: `{context.sp_name}`",
             *_dependency_summary_lines(dependency_evidence),
             "",
             "## dependency_table",
-            "| kind | object | evidence |",
+            "| 유형 | 객체 | 근거 |",
             "|---|---|---|",
         ]
         for source in context.evidence_sources:
@@ -125,7 +125,7 @@ class DependencyReportRenderer:
         )
         return RenderedArtifact(
             artifact_type=self.artifact_type,
-            title=f"{context.entity_name} Dependency Report Draft",
+            title=f"{context.entity_name} 의존성 보고서 초안",
             content=ensure_trailing_newline("\n".join(lines)),
             evidence_refs=context.evidence_refs,
             registry_refs=("template:dependency_report@0.1.0",),
@@ -147,7 +147,7 @@ def _dependency_evidence(context: GenerationContext) -> dict:
 def _dependency_summary_lines(payload: dict) -> list[str]:
     summary = payload.get("summary")
     if not isinstance(summary, dict):
-        return ["- dependencyClosure: NOT_AVAILABLE"]
+        return ["- dependencyClosure: 근거 없음(`NOT_AVAILABLE`)"]
     return [
         f"- dependencyClosureTool: `{payload.get('toolName', 'get_dependency_closure')}`",
         f"- dependencySnapshot: `{payload.get('snapshotId') or 'REVIEW_REQUIRED'}`",
@@ -159,9 +159,9 @@ def _dependency_summary_lines(payload: dict) -> list[str]:
 
 def _dependency_closure_lines(payload: dict) -> list[str]:
     if not payload:
-        return ["- REVIEW_REQUIRED: dependency closure evidence was not available."]
+        return ["- REVIEW_REQUIRED: 의존성 closure 근거를 사용할 수 없습니다."]
     lines = [
-        "| status | object | kind | strategy |",
+        "| 상태 | 객체 | 유형 | 확인 전략 |",
         "|---|---|---|---|",
     ]
     for edge in _dict_items(payload.get("edges")):
@@ -186,7 +186,7 @@ def _dependency_closure_lines(payload: dict) -> list[str]:
             f"{_table_text(item.get('resolutionStrategy', 'UNRESOLVED'))} |"
         )
     if len(lines) == 2:
-        lines.append("| CONFIRMED | `no dependencies returned` | none | none |")
+        lines.append("| CONFIRMED | `no dependencies returned` | 없음 | 없음 |")
     return lines
 
 
@@ -202,34 +202,34 @@ def _table_text(value: object) -> str:
 
 def _llm_semantic_lines(payload: dict) -> list[str]:
     if not payload:
-        return ["- status: NOT_REQUESTED"]
-    lines = ["- status: REVIEW_REQUIRED"]
+        return ["- 상태: 요청하지 않음(`NOT_REQUESTED`)"]
+    lines = ["- 상태: 검토 필요(`REVIEW_REQUIRED`)"]
     for rule in payload.get("businessRules", []) or []:
-        lines.append(f"- Business rule ({rule.get('category')}): {rule.get('summary')}")
+        lines.append(f"- 비즈니스 규칙({rule.get('category')}): {rule.get('summary')}")
     for point in payload.get("modernizationPoints", []) or []:
-        lines.append(f"- Modernization ({point.get('code')}): {point.get('summary')}")
+        lines.append(f"- 현대화 포인트({point.get('code')}): {point.get('summary')}")
     for guidance in payload.get("conversionGuidance", []) or []:
-        lines.append(f"- Conversion guidance ({guidance.get('code')}): {guidance.get('summary')}")
+        lines.append(f"- 전환 가이드({guidance.get('code')}): {guidance.get('summary')}")
     for insight in payload.get("migrationGuideInsights", []) or []:
         suffix = (
-            f" whatToExtractNext={insight.get('whatToExtractNext')}"
+            f" 다음 추출 항목={insight.get('whatToExtractNext')}"
             if insight.get("whatToExtractNext")
             else ""
         )
         lines.append(
-            f"- Guide insight ({insight.get('section')}): {insight.get('summary')}{suffix}"
+            f"- 가이드 인사이트({insight.get('section')}): {insight.get('summary')}{suffix}"
         )
     for marker in payload.get("reviewMarkers", []) or []:
-        lines.append(f"- Review marker ({marker.get('code')}): {marker.get('message')}")
+        lines.append(f"- 검토 마커({marker.get('code')}): {marker.get('message')}")
     return lines
 
 
 def _llm_risk_lines(payload: dict) -> list[str]:
     if not payload:
-        return ["- status: NOT_REQUESTED"]
+        return ["- 상태: 요청하지 않음(`NOT_REQUESTED`)"]
     risk_flags = payload.get("riskFlags", []) or []
     if not risk_flags:
-        return ["- status: NO_RISK_FLAGS_RETURNED"]
+        return ["- 상태: 반환된 위험 플래그 없음(`NO_RISK_FLAGS_RETURNED`)"]
     return [
         f"- {item.get('severity')} `{item.get('code')}`: {item.get('summary')}"
         for item in risk_flags

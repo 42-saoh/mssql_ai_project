@@ -14,6 +14,9 @@ info:
 
     - metadata access is read-only and routed through the MSSQL Metadata MCP boundary;
     - generated documentation, Java/MyBatis code, DTO/VO/Model, and DDL are draft artifacts;
+    - worker-facing analysis text is Korean (ko-KR), while JSON keys, enum/status/code values,
+      artifact types, rule ids, section ids, evidence refs, and SQL/Java identifiers remain the
+      stable English machine contract;
     - default P25 workflows stop at validation-complete draft output without user review UI;
     - deferred publish-like actions still require validation evidence and retained approval capability;
     - live row-data queries, automatic DDL execution, and unreviewed code application are out of scope.

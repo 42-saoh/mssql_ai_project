@@ -519,7 +519,7 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     assert len(payload["agentRuns"]) == 1
     run = payload["agentRuns"][0]
     assert run["modelInvocation"]["model"] == model_profile_from_env("openai_fast_test").model
-    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.4.0"
+    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.4.1"
     assert run["modelInvocation"]["componentInvocations"]
     assert any(
         component["stage"] == "platform_tool_execution"
@@ -944,7 +944,7 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
         "DTO_READINESS",
     }
     assert query_payload["modelInvocation"]["outputSchemaVersion"] == (
-        "schema:mssql_metadata_analysis@0.1.0"
+        "schema:mssql_metadata_analysis@0.1.1"
     )
     assert query_payload["aiToolEvidence"]["status"] in {"SUCCEEDED", "REVIEW_REQUIRED"}
     assert query_payload["aiToolEvidence"]["plannerMetrics"]["claimAnalysisAvailable"] is True

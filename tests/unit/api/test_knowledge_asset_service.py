@@ -100,12 +100,12 @@ def _agent_run(job_id: str) -> AgentRunRecord:
         agent_type="sp_semantic_analysis",
         status="SUCCEEDED",
         target_ref="dbo.usp_Order",
-        summary="semantic summary",
+        summary="semantic 요약",
         structured_output={
             "businessRules": [
                 {
                     "category": "ORDER",
-                    "summary": "Loads order rows.",
+                    "summary": "주문 행을 조회합니다.",
                     "status": "INFERRED_DESCRIPTION",
                     "evidenceRefs": ["mcp.get_table_schema.abc123"],
                 }
@@ -184,6 +184,7 @@ def test_sp_workflow_knowledge_persists_versions_reuses_hash_and_exports_graph()
     )
     assert facts is not None
     assert any(fact.fact_id.startswith("mcp.") for fact in facts[0])
+    assert any("기존 요약: table schema" in fact.summary for fact in facts[0])
     assert any(edge.edge_type == "READS" for edge in facts[1])
     fact_ids = {fact.fact_id for fact in facts[0]}
     assert all(edge.from_fact_id in fact_ids for edge in facts[1])

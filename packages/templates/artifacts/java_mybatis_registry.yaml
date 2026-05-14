@@ -5,7 +5,7 @@ templates:
   java_mybatis_sp_wrapper:
     version: 0.2.0
     requestedOutputType: JAVA_MYBATIS_DRAFT
-    description: Draft Java/MyBatis stored procedure wrapper bundle.
+    description: Java/MyBatis 저장 프로시저 wrapper 초안 bundle.
     reviewChecklistPolicyRef: reviewChecklist
     outputRoles:
       dto:
@@ -26,13 +26,13 @@ templates:
     sqlRiskMarkers:
       - code: SP_EXEC_WRAPPER
         status: REVIEW_REQUIRED
-        description: Mapper XML preserves EXEC stored procedure wrapper; generation never executes it.
+        description: Mapper XML은 EXEC 저장 프로시저 wrapper를 유지하며 생성 과정에서는 실행하지 않는다.
       - code: SQL_REBUILD_NOT_CONFIRMED
         status: REVIEW_REQUIRED
-        description: Stored procedure logic is not rebuilt as inline SQL without stronger evidence.
+        description: 더 강한 근거가 없으면 저장 프로시저 로직을 inline SQL로 재구성하지 않는다.
       - code: PARAMETER_BINDING_REVIEW_REQUIRED
         status: REVIEW_REQUIRED
-        description: Parameter binding must be checked against procedure metadata before adoption.
+        description: 적용 전 procedure metadata 기준으로 parameter binding을 확인해야 한다.
     manualReviewChecklist:
       - sql_risk_markers_reviewed
       - unconfirmed_areas_reviewed
@@ -40,7 +40,7 @@ templates:
   java_mybatis_dto_model_bundle:
     version: 0.1.0
     requestedOutputType: DTO_MODEL_DRAFT
-    description: Draft DTO/VO/Model bundle from metadata-only field evidence.
+    description: metadata-only field evidence 기반 DTO/VO/Model 초안 bundle.
     reviewChecklistPolicyRef: reviewChecklist
     outputRoles:
       dto:
@@ -58,10 +58,10 @@ templates:
     sqlRiskMarkers:
       - code: NO_SQL_RENDERED
         status: PASS
-        description: DTO/VO/Model drafts contain no executable SQL.
+        description: DTO/VO/Model 초안에는 실행 가능한 SQL이 포함되지 않는다.
       - code: FIELD_MAPPING_REVIEW_REQUIRED
         status: REVIEW_REQUIRED
-        description: Field names and Java types remain draft mappings until reviewed.
+        description: field name과 Java type은 검토 전까지 초안 mapping으로 유지한다.
     manualReviewChecklist:
       - dto_vo_model_final_choice_reviewed
       - field_mapping_reviewed

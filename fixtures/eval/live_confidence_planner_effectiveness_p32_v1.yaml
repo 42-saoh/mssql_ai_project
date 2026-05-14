@@ -100,7 +100,7 @@ scenarios:
             schema: dbo
             tableName: TB_ORDER
             sql: DROP TABLE dbo.TB_ORDER
-            secret: do-not-return
+            unsafeArgument: do-not-return
           reason: Unsafe request.
           expectedEvidenceUse: Must be blocked by deterministic policy.
       assumptions: []

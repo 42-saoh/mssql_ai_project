@@ -9,14 +9,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PROMPT_VERSION = "prompt:sp_semantic_analysis@0.4.0"
-OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.4.0"
+PROMPT_VERSION = "prompt:sp_semantic_analysis@0.4.1"
+OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.4.1"
 TOOL_PLANNER_PROMPT_VERSION = "prompt:mssql_metadata_tool_planner@0.1.0"
 TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_tool_plan@0.1.0"
 PLATFORM_TOOL_PLANNER_PROMPT_VERSION = "prompt:platform_tool_planner@0.1.0"
 PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:platform_tool_plan@0.1.0"
-METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.0"
-METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.0"
+METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.1"
+METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.1"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
 FAST_TEST_MODEL_PROFILE_ID = "openai_fast_test"
 FAST_TEST_DEFAULT_MODEL = "gpt-5-nano"

@@ -96,7 +96,7 @@ def detect_patterns(sql_text: str, *, source_name: str = "<memory>") -> PatternS
             status=EvidenceStatus.REVIEW_REQUIRED if dynamic_evidence else EvidenceStatus.OBSERVED,
             evidence=dynamic_evidence,
             details={
-                "review_reason": "Dynamic SQL text can contain unresolved dependencies."
+                "review_reason": "Dynamic SQL text에는 미확정 의존성이 포함될 수 있습니다."
                 if dynamic_evidence
                 else None
             },

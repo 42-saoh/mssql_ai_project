@@ -131,8 +131,8 @@
 - 사유: 생성 모드는 policy asset 의 generationModes 기준을 따른다.
 
 ## evidence_summary
-- Stored Procedure: `dbo.USP_ORDER_REQUEST_LIST` - 조회 SQL 재구성 근거가 부족하므로 SP wrapper 유지
-- Table: `dbo.ORD_REQ` - DTO 필드 정의 및 컬럼 타입 근거
+- 저장 프로시저: `dbo.USP_ORDER_REQUEST_LIST` - 조회 SQL 재구성 근거가 부족하므로 SP wrapper 유지
+- 테이블: `dbo.ORD_REQ` - DTO 필드 정의 및 컬럼 타입 근거
 - DTO 필드 정의는 metadata column/result shape evidence 에 근거함
 - 모든 생성물은 draft-only artifact 이며 자동 적용 대상이 아님
 
@@ -166,27 +166,30 @@
 ## diff_review_summary
 - 모든 파일은 artifact preview/diff 대상으로만 생성한다.
 - 실제 프로젝트 소스 반영, DDL/DML 실행, procedure 실행은 수행하지 않는다.
-- reviewer 는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.
+- 검토자는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.
 
 ## sql_risk_markers
-- REVIEW_REQUIRED: SP_EXEC_WRAPPER - Mapper XML preserves EXEC stored procedure wrapper; generation never executes it.
-- REVIEW_REQUIRED: SQL_REBUILD_NOT_CONFIRMED - Stored procedure logic is not rebuilt as inline SQL without stronger evidence.
-- REVIEW_REQUIRED: PARAMETER_BINDING_REVIEW_REQUIRED - Parameter binding must be checked against procedure metadata before adoption.
+- 상태 REVIEW_REQUIRED: `SP_EXEC_WRAPPER` - Mapper XML은 EXEC 저장 프로시저 wrapper를 유지하며 생성 과정에서는 실행하지 않는다.
+- 상태 REVIEW_REQUIRED: `SQL_REBUILD_NOT_CONFIRMED` - 더 강한 근거가 없으면 저장 프로시저 로직을 inline SQL로 재구성하지 않는다.
+- 상태 REVIEW_REQUIRED: `PARAMETER_BINDING_REVIEW_REQUIRED` - 적용 전 procedure metadata 기준으로 parameter binding을 확인해야 한다.
+
+## llm_conversion_guidance
+- status: NO_CONVERSION_GUIDANCE_RETURNED
 
 ## unconfirmed_areas
-- REVIEW_REQUIRED: pk_columns
-- REVIEW_REQUIRED: transaction_boundary
-- REVIEW_REQUIRED: validation_group_usage
-- REVIEW_REQUIRED: base_framework_usage
-- REVIEW_REQUIRED: exact_exception_message_codes
-- REVIEW_REQUIRED: controller_need
-- REVIEW_REQUIRED: dto_vo_model_final_choice
-- REVIEW_REQUIRED: sp_rebuild_feasibility
+- REVIEW_REQUIRED: `pk_columns` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `transaction_boundary` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `validation_group_usage` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `base_framework_usage` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `exact_exception_message_codes` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `controller_need` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `dto_vo_model_final_choice` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `sp_rebuild_feasibility` 항목은 근거 확정 전까지 미확정으로 유지합니다.
 
 ## message_and_config_examples
-- message key example: `biz.info.order.request.retrieve.001`
-- message value example: `주문 요청 목록을 조회했습니다.`
-- application yml example:
+- message key 예시: `biz.info.order.request.retrieve.001`
+- message value 예시: `주문 요청 목록을 조회했습니다.`
+- application yml 예시:
 
 ```yaml
 pem:

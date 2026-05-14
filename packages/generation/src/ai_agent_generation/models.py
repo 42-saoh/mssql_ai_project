@@ -50,14 +50,14 @@ class EvidenceSource:
     @property
     def display_type(self) -> str:
         labels = {
-            "storedProcedure": "Stored Procedure",
-            "procedure": "Stored Procedure",
-            "table": "Table",
-            "view": "View",
-            "function": "Function",
-            "dependencyEvidence": "Dependency Evidence",
-            "llmInference": "LLM Inference",
-            "policy": "Policy",
+            "storedProcedure": "저장 프로시저",
+            "procedure": "저장 프로시저",
+            "table": "테이블",
+            "view": "뷰",
+            "function": "함수",
+            "dependencyEvidence": "의존성 근거",
+            "llmInference": "LLM 추론",
+            "policy": "정책",
         }
         return labels.get(self.type, self.type)
 

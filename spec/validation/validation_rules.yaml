@@ -12,19 +12,19 @@ rules:
       - VO_DRAFT
       - MODEL_DRAFT
       - DDL_DRAFT
-    description: Every generated artifact must contain evidence refs or explicit review-required markers.
+    description: 모든 생성 artifact에는 evidence ref 또는 명시적인 review-required marker가 있어야 한다.
 
   - id: workflow.approval.before_publish
     severity: error
     appliesTo:
       - artifact-workflow
-    description: Publish is not allowed unless the artifact has a passed validation report and an approval record.
+    description: artifact에 passed validation report와 approval record가 없으면 publish를 허용하지 않는다.
 
   - id: mcp.read_only.boundary
     severity: error
     appliesTo:
       - mssql-mcp
-    description: Metadata tool surfaces must remain read-only and must not expose row-data retrieval or SQL write actions.
+    description: Metadata tool surface는 read-only로 유지하고 row-data 조회나 SQL write action을 노출하지 않는다.
 
   - id: generator.uncertainty.marker
     severity: warning
@@ -34,7 +34,7 @@ rules:
       - DTO_DRAFT
       - VO_DRAFT
       - MODEL_DRAFT
-    description: Inferred or ambiguous sections should be marked REVIEW_REQUIRED.
+    description: 추론 또는 모호한 section은 REVIEW_REQUIRED로 표시해야 한다.
 
   - id: llm.inference.review_required
     severity: warning
@@ -48,16 +48,26 @@ rules:
       - VO_DRAFT
       - MODEL_DRAFT
       - DDL_DRAFT
-    description: LLM inference may enrich draft semantics but cannot confirm new dependency facts without deterministic evidence.
+    description: LLM inference는 초안 의미를 보강할 수 있지만 결정론적 근거 없이 새 dependency fact를 확정할 수 없다.
+
+  - id: artifact.localized_human_text.ko_kr
+    severity: warning
+    appliesTo:
+      - SP_ANALYSIS_DOC
+      - SP_ANALYSIS_DOCUMENT
+      - DEPENDENCY_REPORT
+      - JAVA_MYBATIS_DRAFT
+      - DTO_MODEL_DRAFT
+    description: 작업자-facing 자유 텍스트는 한국어(ko-KR)를 포함해야 하며 식별자와 코드블록은 검사에서 제외한다.
 
   - id: repo.schema.versioned_file_only
     severity: error
     appliesTo:
       - repository-workflow
-    description: DB schema changes must be represented as versioned SQL files under db/schema and are never auto-applied by repo tooling.
+    description: DB schema 변경은 db/schema 아래 versioned SQL 파일로만 표현하고 repo tooling이 자동 적용하지 않는다.
 
   - id: repo.test.execution.dockerized
     severity: warning
     appliesTo:
       - repository-workflow
-    description: Automated verification commands should provide a dockerized execution path.
+    description: 자동 검증 명령은 docker 기반 실행 경로를 제공해야 한다.

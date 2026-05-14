@@ -55,8 +55,13 @@ def test_validate_java_mybatis_golden_draft_requires_review_without_failure() ->
         and check.result == ValidationCheckResult.REVIEW_REQUIRED
         for check in report.checks
     )
-    assert "Draft artifact has validation caveats before downstream use." in (
+    assert "초안 artifact에는 downstream 사용 전 확인할 validation caveat가 있습니다." in (
         report.manual_review_points
+    )
+    assert any(
+        check.rule_id == "artifact.localized_human_text.ko_kr"
+        and check.result == ValidationCheckResult.PASS
+        for check in report.checks
     )
 
 
@@ -160,7 +165,7 @@ def test_export_gate_uses_same_approval_rule_without_taxonomy_change() -> None:
     assert report.status == ValidationStatus.FAILED
     assert report.checks[0].rule_id == "workflow.approval.before_publish"
     assert report.metadata["gate"] == "export"
-    assert "Export requires PASSED validation" in report.checks[0].message
+    assert "Export에는 PASSED validation" in report.checks[0].message
 
 
 def test_validation_summary_and_reviewer_checklist_are_deterministic() -> None:
@@ -170,7 +175,7 @@ def test_validation_summary_and_reviewer_checklist_are_deterministic() -> None:
             "content": "# Missing baseline sections\nREVIEW_REQUIRED\n",
             "evidenceRefs": [],
             "reviewRequired": True,
-            "assumptions": ["REVIEW_REQUIRED: table dependency evidence is incomplete."],
+            "assumptions": ["REVIEW_REQUIRED: table dependency evidence가 불완전합니다."],
         },
         artifact_id="review-required-doc",
     )
@@ -187,11 +192,11 @@ def test_validation_summary_and_reviewer_checklist_are_deterministic() -> None:
     assert summary["checkCounts"] == {
         "PASS": 0,
         "FAIL": 6,
-        "REVIEW_REQUIRED": 2,
+        "REVIEW_REQUIRED": 3,
     }
     assert summary["severityCounts"] == {
         "INFO": 0,
-        "WARNING": 1,
+        "WARNING": 2,
         "ERROR": 7,
         "BLOCKER": 0,
     }

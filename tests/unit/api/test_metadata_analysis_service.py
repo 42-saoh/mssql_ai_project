@@ -10,6 +10,10 @@ from api_app.schemas import MetadataAnalysisRequest
 from pydantic import ValidationError
 
 
+def _has_korean_text(value: object) -> bool:
+    return any("\uac00" <= char <= "\ud7a3" for char in str(value))
+
+
 class SpyRegistry:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -339,6 +343,11 @@ def test_metadata_analysis_builds_object_depth_from_planned_table_tools(
         "DOCUMENTATION_GAP",
         "DTO_READINESS",
     } <= categories
+    assert any(
+        _has_korean_text(insight["summary"])
+        for group in response["insightGroups"]
+        for insight in group["insights"]
+    )
     assert response["dependencyGraph"]["edges"]
     assert response["dtoReadiness"][0]["fieldCount"] == 2
     metrics = response["aiToolEvidence"]["plannerMetrics"]

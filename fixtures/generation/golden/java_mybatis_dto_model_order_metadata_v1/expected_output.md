@@ -103,7 +103,7 @@
 - 사유: 생성 모드는 policy asset 의 generationModes 기준을 따른다.
 
 ## evidence_summary
-- Table: `dbo.TB_ORDER` - synthetic metadata-only table fixture; no row data included
+- 테이블: `dbo.TB_ORDER` - synthetic metadata-only table fixture; no row data included
 - DTO 필드 정의는 metadata column/result shape evidence 에 근거함
 - 모든 생성물은 draft-only artifact 이며 자동 적용 대상이 아님
 
@@ -131,26 +131,29 @@
 ## diff_review_summary
 - 모든 파일은 artifact preview/diff 대상으로만 생성한다.
 - 실제 프로젝트 소스 반영, DDL/DML 실행, procedure 실행은 수행하지 않는다.
-- reviewer 는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.
+- 검토자는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.
 
 ## sql_risk_markers
-- PASS: NO_SQL_RENDERED - DTO/VO/Model drafts contain no executable SQL.
-- REVIEW_REQUIRED: FIELD_MAPPING_REVIEW_REQUIRED - Field names and Java types remain draft mappings until reviewed.
+- 상태 PASS: `NO_SQL_RENDERED` - DTO/VO/Model 초안에는 실행 가능한 SQL이 포함되지 않는다.
+- 상태 REVIEW_REQUIRED: `FIELD_MAPPING_REVIEW_REQUIRED` - field name과 Java type은 검토 전까지 초안 mapping으로 유지한다.
+
+## llm_conversion_guidance
+- status: NO_CONVERSION_GUIDANCE_RETURNED
 
 ## unconfirmed_areas
-- REVIEW_REQUIRED: pk_columns
-- REVIEW_REQUIRED: transaction_boundary
-- REVIEW_REQUIRED: validation_group_usage
-- REVIEW_REQUIRED: base_framework_usage
-- REVIEW_REQUIRED: exact_exception_message_codes
-- REVIEW_REQUIRED: controller_need
-- REVIEW_REQUIRED: dto_vo_model_final_choice
-- REVIEW_REQUIRED: sp_rebuild_feasibility
+- REVIEW_REQUIRED: `pk_columns` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `transaction_boundary` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `validation_group_usage` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `base_framework_usage` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `exact_exception_message_codes` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `controller_need` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `dto_vo_model_final_choice` 항목은 근거 확정 전까지 미확정으로 유지합니다.
+- REVIEW_REQUIRED: `sp_rebuild_feasibility` 항목은 근거 확정 전까지 미확정으로 유지합니다.
 
 ## message_and_config_examples
-- message key example: `biz.info.order.metadata.retrieve.001`
-- message value example: `주문 메타데이터 DTO/VO/Model 목록을 조회했습니다.`
-- application yml example:
+- message key 예시: `biz.info.order.metadata.retrieve.001`
+- message value 예시: `주문 메타데이터 DTO/VO/Model 목록을 조회했습니다.`
+- application yml 예시:
 
 ```yaml
 pem:
