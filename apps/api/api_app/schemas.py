@@ -51,6 +51,10 @@ class SPAnalysisOptions(ApiModel):
         default="RETRIEVED_SPANS",
         alias="sourceContextMode",
     )
+    source_dependency_mode: Literal["NONE", "CONFIRMED_PROCEDURES"] = Field(
+        default="CONFIRMED_PROCEDURES",
+        alias="sourceDependencyMode",
+    )
     use_ai_tool_orchestration: bool = Field(
         default=True,
         alias="useAiToolOrchestration",

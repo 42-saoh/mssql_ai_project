@@ -42,6 +42,9 @@ async function submitRequest(formData: FormData) {
       sourceContextMode: String(formData.get("sourceContextMode") ?? "RETRIEVED_SPANS") as
         | "NONE"
         | "RETRIEVED_SPANS",
+      sourceDependencyMode: String(
+        formData.get("sourceDependencyMode") ?? "CONFIRMED_PROCEDURES",
+      ) as "NONE" | "CONFIRMED_PROCEDURES",
       useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
       usePlatformToolOrchestration:
         formData.get("usePlatformToolOrchestration") === "on",
@@ -62,6 +65,9 @@ function requestOptionsFromForm(formData: FormData) {
     sourceContextMode: String(formData.get("sourceContextMode") ?? "RETRIEVED_SPANS") as
       | "NONE"
       | "RETRIEVED_SPANS",
+    sourceDependencyMode: String(
+      formData.get("sourceDependencyMode") ?? "CONFIRMED_PROCEDURES",
+    ) as "NONE" | "CONFIRMED_PROCEDURES",
     useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
     usePlatformToolOrchestration:
       formData.get("usePlatformToolOrchestration") === "on",

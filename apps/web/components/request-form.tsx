@@ -193,6 +193,13 @@ export function RequestForm({
               <option value="NONE">metadata only</option>
             </select>
           </label>
+          <label>
+            <span>Dependency analysis</span>
+            <select name="sourceDependencyMode" defaultValue="CONFIRMED_PROCEDURES">
+              <option value="CONFIRMED_PROCEDURES">confirmed procedures</option>
+              <option value="NONE">root procedure only</option>
+            </select>
+          </label>
         </div>
       </fieldset>
 
@@ -305,6 +312,13 @@ export function RequestForm({
             <select name="sourceContextMode" defaultValue="RETRIEVED_SPANS">
               <option value="RETRIEVED_SPANS">retrieved spans</option>
               <option value="NONE">metadata only</option>
+            </select>
+          </label>
+          <label>
+            <span>Dependency analysis</span>
+            <select name="sourceDependencyMode" defaultValue="CONFIRMED_PROCEDURES">
+              <option value="CONFIRMED_PROCEDURES">confirmed procedures</option>
+              <option value="NONE">root procedure only</option>
             </select>
           </label>
         </div>

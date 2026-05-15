@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from dataclasses import replace as dataclass_replace
+from typing import Any
 
 from ai_agent_analysis import (
     analyze_stored_procedure,
@@ -75,6 +77,19 @@ WORKFLOW_METADATA_NOTE = (
     "REVIEW_REQUIRED: metadata는 MSSQL MCP registry 경계를 통해 수집되며 "
     "이 integration slice에서는 platform DB workflow repository에 저장됩니다."
 )
+DEPENDENCY_AGENT_TYPE = "LLM_SEMANTIC_ANALYST_DEPENDENCY"
+SOURCE_DEPENDENCY_MODE_CONFIRMED = "CONFIRMED_PROCEDURES"
+
+
+@dataclass(frozen=True)
+class DependencyProcedureCandidate:
+    target_ref: str
+    schema: str
+    name: str
+    depth: int
+    node: dict[str, Any]
+    edge: dict[str, Any]
+    evidence_refs: tuple[str, ...]
 
 
 def dedupe_strings(items: Iterable[str]) -> tuple[str, ...]:
@@ -477,6 +492,16 @@ class WorkflowService:
                 provider_error=exc.provider_error,
             )
             raise
+        dependency_analysis = self._run_dependency_semantic_analyses(
+            job_id=job_id,
+            request_record=request_record,
+            metadata=metadata,
+        )
+        if dependency_analysis["enabled"]:
+            run_payload = _append_dependency_semantic_analysis(
+                run_payload,
+                dependency_analysis=dependency_analysis,
+            )
         if tool_component_invocations or (
             metadata.ai_tool_evidence
             and metadata.ai_tool_evidence.get("reviewMarkers")
@@ -499,6 +524,130 @@ class WorkflowService:
             model_invocation=run_payload.model_invocation.to_storage_dict(),
         )
 
+    def _run_dependency_semantic_analyses(
+        self,
+        *,
+        job_id: str,
+        request_record: WorkRequestRecord,
+        metadata: MetadataCollectionResult,
+    ) -> dict[str, Any]:
+        mode = source_dependency_mode_for_options(request_record.options)
+        summary: dict[str, Any] = {
+            "enabled": mode == SOURCE_DEPENDENCY_MODE_CONFIRMED,
+            "mode": mode,
+            "requestedDepth": dependency_depth_from_env(),
+            "maxTasks": dependency_task_limit_from_env(),
+            "selectedCount": 0,
+            "analyzedCount": 0,
+            "skippedCount": 0,
+            "childRunCount": 0,
+            "analyzedTargets": [],
+            "skippedTargets": [],
+            "reviewMarkers": [],
+        }
+        if mode != SOURCE_DEPENDENCY_MODE_CONFIRMED:
+            return summary
+        dependency_evidence = metadata.dependency_evidence or {}
+        candidates, skipped = dependency_procedure_candidates(
+            dependency_evidence,
+            max_depth=summary["requestedDepth"],
+            max_tasks=summary["maxTasks"],
+        )
+        summary["selectedCount"] = len(candidates)
+        summary["skippedTargets"] = skipped
+        summary["skippedCount"] = len(skipped)
+        summary["reviewMarkers"].extend(dependency_review_markers(skipped))
+        for candidate in candidates:
+            payload = self.metadata_gateway.collect_procedure_definition(
+                db_profile_id=request_record.db_profile_id,
+                schema=candidate.schema,
+                procedure_name=candidate.name,
+            )
+            definition_payload = dict(payload.get("data") or {}) if payload else {}
+            definition_text = str(definition_payload.get("definition") or "")
+            if not definition_text or not definition_payload.get("hasDefinitionAccess", True):
+                skipped_item = {
+                    "targetRef": candidate.target_ref,
+                    "reason": "DEFINITION_UNAVAILABLE",
+                    "depth": candidate.depth,
+                    "evidenceRefs": list(candidate.evidence_refs),
+                }
+                summary["skippedTargets"].append(skipped_item)
+                summary["skippedCount"] += 1
+                summary["reviewMarkers"].extend(dependency_review_markers([skipped_item]))
+                continue
+            child_static = static_analysis_payload(
+                definition_text,
+                source_name=candidate.target_ref,
+                snapshot_id=metadata.snapshot_id,
+            )
+            child_context_packs = source_context_packs_for_options(
+                definition_text,
+                options=request_record.options,
+                source_name=candidate.target_ref,
+            )
+            try:
+                child_payload = build_semantic_analysis_run(
+                    target_ref=candidate.target_ref,
+                    metadata=dependency_child_metadata(
+                        request_record=request_record,
+                        metadata=metadata,
+                        candidate=candidate,
+                        definition_payload=definition_payload,
+                        tool_payload=payload,
+                    ),
+                    static_analysis=child_static,
+                    procedure_definition=definition_text if child_context_packs else None,
+                    source_context_packs=child_context_packs,
+                    model_gateway=self.model_gateway,
+                    profile_id=str(request_record.options.get("llmProfileId") or ""),
+                )
+            except ModelGatewayError as exc:
+                self._record_failed_llm_agent_run(
+                    job_id=job_id,
+                    target_ref=candidate.target_ref,
+                    profile_id=str(request_record.options.get("llmProfileId") or ""),
+                    error_code=exc.code,
+                    provider_error=exc.provider_error,
+                    agent_type=DEPENDENCY_AGENT_TYPE,
+                )
+                skipped_item = {
+                    "targetRef": candidate.target_ref,
+                    "reason": "SEMANTIC_ANALYSIS_FAILED",
+                    "depth": candidate.depth,
+                    "evidenceRefs": list(candidate.evidence_refs),
+                    "errorCode": exc.code,
+                }
+                summary["skippedTargets"].append(skipped_item)
+                summary["skippedCount"] += 1
+                summary["reviewMarkers"].extend(dependency_review_markers([skipped_item]))
+                continue
+            child_run = self.repository.save_agent_run(
+                job_id=job_id,
+                agent_type=DEPENDENCY_AGENT_TYPE,
+                status=child_payload.status.value,
+                target_ref=child_payload.target_ref,
+                summary=child_payload.summary,
+                structured_output=child_payload.structured_output,
+                model_invocation=child_payload.model_invocation.to_storage_dict(),
+            )
+            summary["analyzedCount"] += 1
+            summary["childRunCount"] += 1
+            summary["analyzedTargets"].append(
+                {
+                    "targetRef": candidate.target_ref,
+                    "agentRunId": child_run.agent_run_id,
+                    "depth": candidate.depth,
+                    "evidenceRefs": list(candidate.evidence_refs),
+                    "structuredOutput": child_payload.structured_output,
+                    "sourceContextSummary": child_payload.model_invocation.to_storage_dict().get(
+                        "sourceContextSummary",
+                        {},
+                    ),
+                }
+            )
+        return summary
+
     def _record_failed_llm_agent_run(
         self,
         *,
@@ -507,6 +656,7 @@ class WorkflowService:
         profile_id: str,
         error_code: str,
         provider_error: dict[str, str] | None = None,
+        agent_type: str = "LLM_SEMANTIC_ANALYST",
     ) -> None:
         profile = model_profile_from_env(profile_id)
         structured_output = {
@@ -561,7 +711,7 @@ class WorkflowService:
         )
         self.repository.save_agent_run(
             job_id=job_id,
-            agent_type="LLM_SEMANTIC_ANALYST",
+            agent_type=agent_type,
             status=AgentRunStatus.FAILED.value,
             target_ref=target_ref,
             summary=f"LLM semantic analysis가 안전 코드 {error_code}로 실패했습니다.",
@@ -1221,15 +1371,39 @@ def source_context_mode_for_options(options: dict[str, object]) -> str:
     return "RETRIEVED_SPANS" if mode == "RETRIEVED_SPANS" else "NONE"
 
 
+def source_dependency_mode_for_options(options: dict[str, object]) -> str:
+    if source_context_mode_for_options(options) != "RETRIEVED_SPANS":
+        return "NONE"
+    mode = str(
+        options.get("sourceDependencyMode") or SOURCE_DEPENDENCY_MODE_CONFIRMED
+    ).strip().upper()
+    if mode == SOURCE_DEPENDENCY_MODE_CONFIRMED:
+        return SOURCE_DEPENDENCY_MODE_CONFIRMED
+    return "NONE"
+
+
 def source_context_packs_for_request(
     definition_text: str | None,
     *,
     request_record: WorkRequestRecord,
     source_name: str,
 ) -> dict[str, dict[str, object]] | None:
+    return source_context_packs_for_options(
+        definition_text,
+        options=request_record.options,
+        source_name=source_name,
+    )
+
+
+def source_context_packs_for_options(
+    definition_text: str | None,
+    *,
+    options: dict[str, object],
+    source_name: str,
+) -> dict[str, dict[str, object]] | None:
     if not definition_text:
         return None
-    mode = source_context_mode_for_options(request_record.options)
+    mode = source_context_mode_for_options(options)
     if mode != "RETRIEVED_SPANS":
         return None
     source_map = build_procedure_source_map(definition_text, source_name=source_name)
@@ -1240,6 +1414,517 @@ def source_context_packs_for_request(
         mode=mode,
     )
     return {stage: pack.to_prompt_dict() for stage, pack in packs.items()}
+
+
+def dependency_depth_from_env() -> int:
+    return min(max(_env_int("LLM_SP_DEPENDENCY_DEPTH", 2), 0), 3)
+
+
+def dependency_task_limit_from_env() -> int:
+    return max(0, _env_int("LLM_SP_MAX_DEPENDENCY_TASKS", 8))
+
+
+def dependency_procedure_candidates(
+    dependency_evidence: Mapping[str, Any],
+    *,
+    max_depth: int,
+    max_tasks: int,
+) -> tuple[list[DependencyProcedureCandidate], list[dict[str, Any]]]:
+    root = _mapping(dependency_evidence.get("rootObject"))
+    nodes = {
+        str(node.get("id") or ""): dict(node)
+        for node in _mapping_items(dependency_evidence.get("nodes"))
+        if node.get("id")
+    }
+    edges = [dict(edge) for edge in _mapping_items(dependency_evidence.get("edges"))]
+    root_id = _dependency_root_id(root, nodes, edges)
+    depths = _dependency_node_depths(root_id, edges)
+    candidates: list[DependencyProcedureCandidate] = []
+    skipped: list[dict[str, Any]] = []
+
+    for unresolved in _mapping_items(dependency_evidence.get("unresolved")):
+        skipped.append(
+            {
+                "targetRef": _dependency_object_ref(unresolved),
+                "reason": _unresolved_dependency_reason(unresolved),
+                "depth": None,
+                "evidenceRefs": _dependency_ref_ids(unresolved.get("evidenceRefs")),
+            }
+        )
+
+    for edge in sorted(edges, key=lambda item: (str(item.get("to")), str(item.get("from")))):
+        target_id = str(edge.get("to") or "")
+        if target_id == root_id:
+            continue
+        node = nodes.get(target_id)
+        if not node or str(node.get("objectType") or "").upper() != "PROCEDURE":
+            continue
+        depth = depths.get(target_id, max_depth + 1)
+        target_ref = _dependency_object_ref(node)
+        evidence_refs = tuple(
+            _dedupe_string_list(
+                [
+                    *_dependency_ref_ids(edge.get("evidenceRefs")),
+                    *_dependency_ref_ids(node.get("evidenceRefs")),
+                ]
+            )
+        )
+        reason = _confirmed_procedure_skip_reason(
+            edge=edge,
+            node=node,
+            root=root,
+            depth=depth,
+            max_depth=max_depth,
+        )
+        if reason:
+            skipped.append(
+                {
+                    "targetRef": target_ref,
+                    "reason": reason,
+                    "depth": depth,
+                    "evidenceRefs": list(evidence_refs),
+                }
+            )
+            continue
+        candidates.append(
+            DependencyProcedureCandidate(
+                target_ref=target_ref,
+                schema=str(node.get("schema") or ""),
+                name=str(node.get("name") or ""),
+                depth=depth,
+                node=dict(node),
+                edge=dict(edge),
+                evidence_refs=evidence_refs,
+            )
+        )
+
+    if max_tasks < len(candidates):
+        overflow = candidates[max_tasks:]
+        candidates = candidates[:max_tasks]
+        for candidate in overflow:
+            skipped.append(
+                {
+                    "targetRef": candidate.target_ref,
+                    "reason": "DEPENDENCY_TASK_LIMIT_EXCEEDED",
+                    "depth": candidate.depth,
+                    "evidenceRefs": list(candidate.evidence_refs),
+                }
+            )
+    return candidates, skipped
+
+
+def dependency_child_metadata(
+    *,
+    request_record: WorkRequestRecord,
+    metadata: MetadataCollectionResult,
+    candidate: DependencyProcedureCandidate,
+    definition_payload: Mapping[str, Any],
+    tool_payload: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    sanitized_definition = dict(definition_payload)
+    sanitized_definition.pop("definition", None)
+    evidence_refs = _safe_evidence_refs(
+        [
+            *candidate.node.get("evidenceRefs", []),
+            *candidate.edge.get("evidenceRefs", []),
+            *((tool_payload or {}).get("evidenceRefs") or []),
+        ]
+    )
+    return {
+        "dbProfileId": request_record.db_profile_id,
+        "objectRef": candidate.target_ref,
+        "snapshotId": metadata.snapshot_id,
+        "collectedAt": metadata.collected_at,
+        "procedureDefinition": sanitized_definition,
+        "dependencyEvidence": {
+            "toolName": "get_dependency_closure",
+            "rootObject": metadata.dependency_evidence.get("rootObject")
+            if metadata.dependency_evidence
+            else {},
+            "nodes": [candidate.node],
+            "edges": [candidate.edge],
+            "unresolved": [],
+            "summary": {
+                "maxDepth": candidate.depth,
+                "nodeCount": 1,
+                "edgeCount": 1,
+                "reviewRequiredCount": 0,
+            },
+            "evidenceRefs": evidence_refs,
+            "reviewRequired": False,
+        },
+        "evidenceRefs": evidence_refs,
+        "notes": [
+            "Dependency procedure metadata is collected through the internal read-only "
+            "MCP registry.",
+            "Raw dependency procedure definition is transient model input only.",
+        ],
+    }
+
+
+def dependency_review_markers(items: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    markers = []
+    for item in items:
+        reason = str(item.get("reason") or "DEPENDENCY_SEMANTIC_ANALYSIS_INCOMPLETE")
+        target_ref = str(item.get("targetRef") or "REVIEW_REQUIRED")
+        code = (
+            "DEPENDENCY_SEMANTIC_ANALYSIS_INCOMPLETE"
+            if reason in {"DEFINITION_UNAVAILABLE", "SEMANTIC_ANALYSIS_FAILED"}
+            else "DEPENDENCY_MANUAL_REVIEW_REQUIRED"
+        )
+        markers.append(
+            {
+                "code": code,
+                "message": f"{target_ref} dependency analysis skipped: {reason}.",
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": list(item.get("evidenceRefs") or []),
+            }
+        )
+    return _dedupe_markers(markers)
+
+
+def _append_dependency_semantic_analysis(
+    run_payload: AgentRunPayload,
+    *,
+    dependency_analysis: Mapping[str, Any],
+) -> AgentRunPayload:
+    output = {
+        key: list(value) if isinstance(value, list) else value
+        for key, value in run_payload.structured_output.items()
+    }
+    analyzed_targets = [
+        dict(item)
+        for item in dependency_analysis.get("analyzedTargets", [])
+        if isinstance(item, Mapping)
+    ]
+    markers = [
+        dict(item)
+        for item in dependency_analysis.get("reviewMarkers", [])
+        if isinstance(item, Mapping)
+    ]
+    for item in analyzed_targets:
+        target_ref = str(item.get("targetRef") or "REVIEW_REQUIRED")
+        refs = _safe_claim_refs(item.get("evidenceRefs"))
+        child_output = _mapping(item.get("structuredOutput"))
+        child_marker_count = len(_mapping_items(child_output.get("reviewMarkers")))
+        output.setdefault("conversionGuidance", []).append(
+            {
+                "code": f"CALLED_PROCEDURE_STRATEGY_{_code_suffix(target_ref)}",
+                "summary": (
+                    f"{target_ref} 의존 프로시저는 child semantic run으로 별도 분석되었습니다. "
+                    "Java/MyBatis 전환 시 wrapper 호출 유지, 서비스 분리, 또는 수동 재설계 여부를 "
+                    "검토해야 합니다."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": refs,
+            }
+        )
+        output.setdefault("migrationGuideInsights", []).append(
+            {
+                "section": f"dependency_child_analysis_{_code_suffix(target_ref).lower()}",
+                "summary": (
+                    f"{target_ref} child 분석 결과를 migration guide의 called procedure strategy에 "
+                    "반영해야 합니다."
+                ),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": refs,
+                "guideElement": "called_procedure_strategy",
+                "targetRef": target_ref,
+                "riskArea": "dependency_call_flow",
+                "whatToExtractNext": (
+                    "transaction boundary, input/output DTO, nested DML/result shape를 reviewer가 "
+                    "child AgentRun과 대조합니다."
+                ),
+            }
+        )
+        if child_marker_count:
+            markers.append(
+                {
+                    "code": "DEPENDENCY_CHILD_REVIEW_MARKERS_PRESENT",
+                    "message": f"{target_ref} child semantic run has review markers.",
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": refs,
+                }
+            )
+    output.setdefault("reviewMarkers", []).extend(markers)
+    output["reviewMarkers"] = _dedupe_markers(output.get("reviewMarkers", []))
+    output.setdefault("assumptions", []).append(
+        "confirmed dependency procedure semantic outputs are draft-only review aids.",
+    )
+    output["assumptions"] = list(dedupe_strings(str(item) for item in output["assumptions"]))
+
+    component = {
+        "stage": "dependency_semantic_reduce",
+        "status": "SUCCEEDED",
+        "sourceContextSummary": {
+            "mode": "RETRIEVED_SPANS" if dependency_analysis.get("enabled") else "NONE",
+            "budgetStatus": "WITHIN_BUDGET",
+            "selectedSpanCount": 0,
+            "skippedSpanCount": int(dependency_analysis.get("skippedCount") or 0),
+            "dependencyAnalysis": dependency_analysis_summary(dependency_analysis),
+            "reviewMarkers": markers,
+        },
+    }
+    invocation = dataclass_replace(
+        run_payload.model_invocation,
+        structured_output=output,
+        output_hash=stable_json_hash(output),
+        component_invocations=(
+            *run_payload.model_invocation.component_invocations,
+            component,
+        ),
+    )
+    return dataclass_replace(
+        run_payload,
+        structured_output=output,
+        model_invocation=invocation,
+        summary=(
+            f"{run_payload.summary} Dependency child analysis "
+            f"{dependency_analysis.get('analyzedCount', 0)}건을 반영했습니다."
+        ),
+    )
+
+
+def dependency_analysis_summary(dependency_analysis: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "mode": str(dependency_analysis.get("mode") or "NONE"),
+        "requestedDepth": int(dependency_analysis.get("requestedDepth") or 0),
+        "maxTasks": int(dependency_analysis.get("maxTasks") or 0),
+        "selectedCount": int(dependency_analysis.get("selectedCount") or 0),
+        "analyzedCount": int(dependency_analysis.get("analyzedCount") or 0),
+        "skippedCount": int(dependency_analysis.get("skippedCount") or 0),
+        "childRunCount": int(dependency_analysis.get("childRunCount") or 0),
+        "analyzedTargets": [
+            {
+                "targetRef": str(item.get("targetRef") or ""),
+                "agentRunId": str(item.get("agentRunId") or ""),
+                "depth": item.get("depth"),
+                "evidenceRefs": list(item.get("evidenceRefs") or []),
+                "sourceContextSummary": dict(item.get("sourceContextSummary") or {}),
+            }
+            for item in dependency_analysis.get("analyzedTargets", [])
+            if isinstance(item, Mapping)
+        ],
+        "skippedTargets": [
+            {
+                "targetRef": str(item.get("targetRef") or ""),
+                "reason": str(item.get("reason") or ""),
+                "depth": item.get("depth"),
+                "evidenceRefs": list(item.get("evidenceRefs") or []),
+            }
+            for item in dependency_analysis.get("skippedTargets", [])
+            if isinstance(item, Mapping)
+        ],
+    }
+
+
+def _dependency_root_id(
+    root: Mapping[str, Any],
+    nodes: Mapping[str, Mapping[str, Any]],
+    edges: Sequence[Mapping[str, Any]],
+) -> str:
+    for node_id, node in nodes.items():
+        if (
+            _same_text(node.get("schema"), root.get("schema"))
+            and _same_text(node.get("name"), root.get("name"))
+            and _same_text(node.get("objectType"), root.get("objectType"))
+        ):
+            return node_id
+    if edges:
+        return str(edges[0].get("from") or "")
+    return ""
+
+
+def _dependency_node_depths(
+    root_id: str,
+    edges: Sequence[Mapping[str, Any]],
+) -> dict[str, int]:
+    if not root_id:
+        return {}
+    depths = {root_id: 0}
+    queue = [root_id]
+    while queue:
+        source = queue.pop(0)
+        next_depth = depths[source] + 1
+        for edge in edges:
+            if str(edge.get("from") or "") != source:
+                continue
+            if str(edge.get("resolutionStatus") or "").upper() != "CONFIRMED":
+                continue
+            target = str(edge.get("to") or "")
+            if not target:
+                continue
+            if target not in depths or next_depth < depths[target]:
+                depths[target] = next_depth
+                queue.append(target)
+    return depths
+
+
+def _confirmed_procedure_skip_reason(
+    *,
+    edge: Mapping[str, Any],
+    node: Mapping[str, Any],
+    root: Mapping[str, Any],
+    depth: int,
+    max_depth: int,
+) -> str | None:
+    if depth > max_depth:
+        return "DEPENDENCY_DEPTH_EXCEEDED"
+    if str(edge.get("resolutionStatus") or "").upper() != "CONFIRMED":
+        return "UNCONFIRMED_DEPENDENCY"
+    if str(node.get("reviewStatus") or "").upper() not in {"", "CONFIRMED"}:
+        return "REVIEW_REQUIRED_DEPENDENCY"
+    strategy = str(edge.get("resolutionStrategy") or "").upper()
+    if "CALLER" in strategy:
+        return "CALLER_DEPENDENT_REFERENCE"
+    if node.get("server") or node.get("referencedServer"):
+        return "CROSS_SERVER_REFERENCE"
+    root_database = root.get("database")
+    node_database = node.get("database") or node.get("referencedDatabase")
+    if root_database and node_database and not _same_text(root_database, node_database):
+        return "CROSS_DATABASE_DEFINITION_UNSUPPORTED"
+    if not node.get("schema") or not node.get("name"):
+        return "UNRESOLVED_REFERENCE"
+    return None
+
+
+def _unresolved_dependency_reason(item: Mapping[str, Any]) -> str:
+    dependency_type = str(item.get("dependencyType") or "").upper()
+    strategy = str(item.get("resolutionStrategy") or "").upper()
+    if "DYNAMIC" in dependency_type or "DYNAMIC" in strategy:
+        return "DYNAMIC_SQL_REVIEW_REQUIRED"
+    if bool(item.get("isAmbiguous")) or "AMBIGUOUS" in strategy:
+        return "AMBIGUOUS_REFERENCE"
+    if "CALLER" in strategy:
+        return "CALLER_DEPENDENT_REFERENCE"
+    if item.get("server") or item.get("referencedServer"):
+        return "CROSS_SERVER_REFERENCE"
+    if item.get("database") or item.get("referencedDatabase"):
+        return "CROSS_DATABASE_DEFINITION_UNSUPPORTED"
+    return "UNRESOLVED_REFERENCE"
+
+
+def _dependency_object_ref(item: Mapping[str, Any]) -> str:
+    schema = str(item.get("schema") or "").strip()
+    name = str(item.get("name") or "").strip()
+    if schema and name:
+        return f"{schema}.{name}"
+    if name:
+        return name
+    return "REVIEW_REQUIRED"
+
+
+def _dependency_ref_ids(value: Any) -> list[str]:
+    refs = []
+    for item in _mapping_items(value):
+        object_ref = str(
+            item.get("objectRef")
+            or item.get("object_ref")
+            or item.get("objectName")
+            or item.get("id")
+            or ""
+        ).strip()
+        locator = str(item.get("locator") or item.get("path") or "").strip()
+        if object_ref or locator:
+            refs.append(f"metadata:{object_ref}:{locator}")
+    return _dedupe_string_list(refs)
+
+
+def _safe_evidence_refs(values: Sequence[Any]) -> list[dict[str, Any]]:
+    refs = []
+    seen: set[tuple[str, str, str | None]] = set()
+    for value in values:
+        if not isinstance(value, Mapping):
+            continue
+        object_ref = str(
+            value.get("objectRef")
+            or value.get("object_ref")
+            or value.get("objectName")
+            or value.get("id")
+            or "metadata"
+        )
+        locator = str(value.get("locator") or value.get("path") or "mssql-mcp")
+        snapshot_id = value.get("snapshotId")
+        key = (object_ref, locator, str(snapshot_id) if snapshot_id else None)
+        if key in seen:
+            continue
+        item = {
+            "type": str(value.get("type") or "MSSQL_METADATA"),
+            "objectRef": object_ref,
+            "locator": locator,
+        }
+        if snapshot_id:
+            item["snapshotId"] = str(snapshot_id)
+        refs.append(item)
+        seen.add(key)
+    return refs
+
+
+def _safe_claim_refs(value: Any) -> list[str]:
+    forbidden_prefixes = ("prompt.", "modelInvocation.")
+    forbidden_values = {"metadata.snapshot", "static.analysis"}
+    refs = [str(item) for item in (value or []) if str(item).strip()]
+    return [
+        ref
+        for ref in _dedupe_string_list(refs)
+        if not ref.startswith(forbidden_prefixes) and ref not in forbidden_values
+    ]
+
+
+def _dedupe_markers(items: Sequence[Any]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        marker = dict(item)
+        key = (str(marker.get("code") or ""), str(marker.get("message") or ""))
+        if key in seen:
+            continue
+        marker["evidenceRefs"] = _safe_claim_refs(marker.get("evidenceRefs"))
+        deduped.append(marker)
+        seen.add(key)
+    return deduped
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _mapping_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _dedupe_string_list(items: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in items:
+        text = str(item).strip()
+        if text and text not in seen:
+            deduped.append(text)
+            seen.add(text)
+    return deduped
+
+
+def _same_text(left: Any, right: Any) -> bool:
+    return str(left or "").casefold() == str(right or "").casefold()
+
+
+def _code_suffix(value: str) -> str:
+    cleaned = re.sub(r"[^0-9A-Za-z]+", "_", value).strip("_").upper()
+    return cleaned or "REVIEW_REQUIRED"
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
 
 
 def system_code(db_profile_id: str) -> str:

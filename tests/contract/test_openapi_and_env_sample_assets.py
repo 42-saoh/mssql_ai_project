@@ -69,6 +69,12 @@ def test_openapi_skeleton_exists_and_parses() -> None:
         ]["default"]
         == "RETRIEVED_SPANS"
     )
+    assert (
+        data["components"]["schemas"]["SPAnalysisOptions"]["properties"][
+            "sourceDependencyMode"
+        ]["default"]
+        == "CONFIRMED_PROCEDURES"
+    )
     assert "Artifact" in data["components"]["schemas"]
     assert "ValidationReport" in data["components"]["schemas"]
     assert "RequestedOutputType" in data["components"]["schemas"]
@@ -509,6 +515,8 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "LLM_SEMANTIC_INPUT_TOKEN_BUDGET=64000" in text
     assert "LLM_SEMANTIC_SOURCE_TOKEN_BUDGET=32000" in text
     assert "LLM_SP_MAX_RETRIEVED_SPANS=24" in text
+    assert "LLM_SP_DEPENDENCY_DEPTH=2" in text
+    assert "LLM_SP_MAX_DEPENDENCY_TASKS=8" in text
     assert "AI_TOOL_MAX_CALLS=5" in text
     assert "AI_TOOL_MAX_ROUNDS=2" in text
     assert "AI_TOOL_LIVE_MAX_ROUNDS=1" in text

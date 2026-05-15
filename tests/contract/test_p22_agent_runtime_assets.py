@@ -25,6 +25,8 @@ def test_p22_openapi_declares_llm_options_trace_and_evidence_type() -> None:
     assert options["allowSpDefinitionToModel"]["default"] is True
     assert options["sourceContextMode"]["default"] == "RETRIEVED_SPANS"
     assert options["sourceContextMode"]["enum"] == ["NONE", "RETRIEVED_SPANS"]
+    assert options["sourceDependencyMode"]["default"] == "CONFIRMED_PROCEDURES"
+    assert options["sourceDependencyMode"]["enum"] == ["NONE", "CONFIRMED_PROCEDURES"]
     assert options["usePlatformToolOrchestration"]["default"] is True
     assert "LLM_INFERENCE" in schemas["EvidenceRef"]["properties"]["type"]["enum"]
     assert "AgentRunSummary" in schemas
@@ -76,6 +78,8 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
         "LLM_SEMANTIC_INPUT_TOKEN_BUDGET=64000",
         "LLM_SEMANTIC_SOURCE_TOKEN_BUDGET=32000",
         "LLM_SP_MAX_RETRIEVED_SPANS=24",
+        "LLM_SP_DEPENDENCY_DEPTH=2",
+        "LLM_SP_MAX_DEPENDENCY_TASKS=8",
         "PLATFORM_TOOL_MAX_CALLS=3",
     ):
         assert name in env_text

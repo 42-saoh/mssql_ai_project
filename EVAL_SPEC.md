@@ -15,6 +15,9 @@ Required checks for Copilot-style SP analysis:
   `REVIEW_REQUIRED`.
 - Integration coverage for long SP fixtures must finish at `VALIDATION_COMPLETE` without raw SP
   definitions in metadata, artifacts, knowledge assets, exports, or trace summaries.
+- Multi-SP dependency coverage proves confirmed dependency procedures are stored as child
+  `LLM_SEMANTIC_ANALYST_DEPENDENCY` AgentRuns, only sanitized guidance is reduced into the root run,
+  and dynamic/unresolved/cross-db/cross-server/caller-dependent items remain `REVIEW_REQUIRED`.
 
 ## 목적
 

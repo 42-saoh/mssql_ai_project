@@ -25,6 +25,7 @@ from api_app.live_gate import (
     p21_live_portal_enabled,
 )
 from api_app.repositories import (
+    KNOWLEDGE_REVIEW_TARGET_STATUSES,
     AgentRunRecord,
     ApprovalRecordData,
     ArtifactRecord,
@@ -34,11 +35,10 @@ from api_app.repositories import (
     KnowledgeAssetVersionRecord,
     KnowledgeEdgeRecord,
     KnowledgeExportRecord,
-    KnowledgeFactSearchRecord,
     KnowledgeFactRecord,
+    KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
     KnowledgeReviewRecord,
-    KNOWLEDGE_REVIEW_TARGET_STATUSES,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkflowRepository,
@@ -2323,6 +2323,8 @@ def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
             "status",
             "tokenUsage",
             "latencyMs",
+            "analysisCoverage",
+            "sourceContextSummary",
             "componentInvocations",
         }
     }

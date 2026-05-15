@@ -13,6 +13,10 @@
   provider responses, row data, or snippets derived from source text.
 - Context budget fallback is a review caveat. `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED` is not production
   approval or automatic conversion evidence.
+- Dependency procedure semantic fan-out is allowed only for confirmed same-profile PROCEDURE
+  dependencies selected from MCP dependency closure evidence. Child AgentRuns may store sanitized
+  analysis output and source context summaries, but never raw dependency definitions, selected span
+  text, prompt bodies, provider responses, row data, or snippets.
 
 ## 절대 금지
 

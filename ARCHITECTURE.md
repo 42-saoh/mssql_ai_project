@@ -14,6 +14,14 @@ The default request behavior is `sourceContextMode=RETRIEVED_SPANS`. Setting
 Provider context-length failures retry with reduced spans, then fall back to evidence digest only
 with `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`.
 
+Confirmed same-profile procedure dependencies can also receive bounded child semantic analysis when
+`sourceDependencyMode=CONFIRMED_PROCEDURES` (default). The workflow selects only
+`resolutionStatus=CONFIRMED` PROCEDURE dependencies from sanitized dependency closure evidence,
+collects their definitions internally through the existing read-only MCP registry path, stores each
+dependency result as a child `LLM_SEMANTIC_ANALYST_DEPENDENCY` AgentRun, and reduces sanitized
+called-procedure strategy guidance back into the root AgentRun. Dynamic SQL, unresolved,
+caller-dependent, cross-server, and v1 cross-database dependencies remain `REVIEW_REQUIRED`.
+
 ## 목적
 
 이 문서는 저장소의 구현 기준 아키텍처를 정의한다.  

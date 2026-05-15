@@ -320,11 +320,14 @@ def _model_source_context_summary(
         {},
     )
     markers: list[dict[str, Any]] = []
+    dependency_analysis: dict[str, Any] | None = None
     for item in summaries:
         for marker in item.get("reviewMarkers", []):
             if isinstance(marker, Mapping):
                 markers.append(dict(marker))
-    return {
+        if isinstance(item.get("dependencyAnalysis"), Mapping):
+            dependency_analysis = dict(item["dependencyAnalysis"])
+    result = {
         "mode": "RETRIEVED_SPANS"
         if any(item.get("mode") == "RETRIEVED_SPANS" for item in summaries)
         else "NONE",
@@ -334,6 +337,9 @@ def _model_source_context_summary(
         "analysisCoverage": coverage,
         "reviewMarkers": markers,
     }
+    if dependency_analysis is not None:
+        result["dependencyAnalysis"] = dependency_analysis
+    return result
 
 
 def semantic_output_schema(

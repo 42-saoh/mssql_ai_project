@@ -15,6 +15,7 @@ from api_app.lifecycle import (
     ensure_job_transition,
 )
 from api_app.repositories import (
+    KNOWLEDGE_REVIEW_TARGET_STATUSES,
     AgentRunRecord,
     ApprovalRecordData,
     ArtifactRecord,
@@ -24,11 +25,10 @@ from api_app.repositories import (
     KnowledgeAssetVersionRecord,
     KnowledgeEdgeRecord,
     KnowledgeExportRecord,
-    KnowledgeFactSearchRecord,
     KnowledgeFactRecord,
+    KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
     KnowledgeReviewRecord,
-    KNOWLEDGE_REVIEW_TARGET_STATUSES,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkRequestRecord,
@@ -930,6 +930,8 @@ def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
             "status",
             "tokenUsage",
             "latencyMs",
+            "analysisCoverage",
+            "sourceContextSummary",
             "componentInvocations",
         }
     }

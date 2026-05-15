@@ -105,6 +105,7 @@ export interface SPAnalysisOptions {
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   allowSpDefinitionToModel?: boolean;
   sourceContextMode?: "NONE" | "RETRIEVED_SPANS";
+  sourceDependencyMode?: "NONE" | "CONFIRMED_PROCEDURES";
   useAiToolOrchestration?: boolean;
   usePlatformToolOrchestration?: boolean;
   persistKnowledge?: boolean;

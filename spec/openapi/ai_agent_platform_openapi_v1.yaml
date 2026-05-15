@@ -987,6 +987,13 @@ components:
             - NONE
             - RETRIEVED_SPANS
           description: Controls whether bounded retrieved SP spans can be used as transient model input. Stored responses include only sanitized coverage summaries.
+        sourceDependencyMode:
+          type: string
+          default: CONFIRMED_PROCEDURES
+          enum:
+            - NONE
+            - CONFIRMED_PROCEDURES
+          description: Controls whether confirmed same-profile dependency procedures receive bounded transient source-context semantic child analysis.
         useAiToolOrchestration:
           type: boolean
           default: true

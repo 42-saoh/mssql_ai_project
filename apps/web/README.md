@@ -77,6 +77,10 @@
   high-quality semantic workflow on bounded retrieved SP spans rather than full-procedure prompt
   input, while the UI still exposes a metadata-only mode for source text suppression.
 
+- `/requests/new` also sends `sourceDependencyMode=CONFIRMED_PROCEDURES` by default so confirmed
+  dependency procedures can be analyzed as bounded child AgentRuns and summarized in the root
+  migration guide.
+
 - `/requests/new` 는 P26 high-quality hybrid 기본값으로 LLM semantic analysis option 을 API
   `SPAnalysisOptions` 로 전송한다. 기본 선택은 semantic analysis profile, LLM analysis enabled,
   bounded AI metadata tool orchestration enabled, bounded platform context tool orchestration enabled,

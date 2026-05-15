@@ -9,7 +9,11 @@ from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stabl
 from api_app.lifecycle import WorkflowStateError
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
-from api_app.workflow import WORKFLOW_METADATA_NOTE, WorkflowService
+from api_app.workflow import (
+    WORKFLOW_METADATA_NOTE,
+    WorkflowService,
+    dependency_procedure_candidates,
+)
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
@@ -146,6 +150,7 @@ def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
     assert request.options.use_platform_tool_orchestration is True
     assert request.options.allow_sp_definition_to_model is True
     assert request.options.source_context_mode == "RETRIEVED_SPANS"
+    assert request.options.source_dependency_mode == "CONFIRMED_PROCEDURES"
     assert request.options.llm_profile_id == "openai_sp_semantic_analysis"
 
 
@@ -200,6 +205,237 @@ def test_llm_prompt_uses_retrieved_source_context_without_full_definition() -> N
     assert run.model_invocation["analysisCoverage"]["spanCount"] > 0
     assert "CREATE PROCEDURE" not in str(metadata.payload)
     assert "CREATE PROCEDURE" not in artifact.content
+
+
+def test_confirmed_dependency_procedure_creates_child_agent_run_and_reduces_root() -> None:
+    class MultiSpSpyGateway:
+        def __init__(self) -> None:
+            self.prompt_payloads: list[dict] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.prompt_payloads.append(payload)
+            assert payload["procedureDefinitionIncluded"] is False
+            assert "procedureDefinition" not in payload
+            ref = (payload["evidenceRefContract"]["allowedFactIds"] or ["metadata.snapshot"])[0]
+            target_ref = payload["targetRef"]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": f"RULE_{target_ref.replace('.', '_')}",
+                        "summary": f"{target_ref} semantic child/root 분석 결과입니다.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-multi-sp",
+                structured_output=structured_output,
+            )
+
+    repository = MemoryWorkflowRepository()
+    spy_gateway = MultiSpSpyGateway()
+    service = WorkflowService(repository, model_gateway=spy_gateway)
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_ProcessOrderBatch",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT", "JAVA_MYBATIS_DRAFT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": True,
+                "llmProfileId": "openai_fast_test",
+                "allowSpDefinitionToModel": True,
+            },
+        }
+    )
+
+    _request_record, job = service.submit_sp_analysis(request)
+
+    runs = repository.list_agent_runs(job.job_id)
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert runs is not None
+    child_runs = [run for run in runs if run.agent_type == "LLM_SEMANTIC_ANALYST_DEPENDENCY"]
+    root_runs = [run for run in runs if run.agent_type == "LLM_SEMANTIC_ANALYST"]
+    assert [run.target_ref for run in child_runs] == ["dbo.usp_GetOrderSummary"]
+    root_run = root_runs[0]
+    dependency_summary = root_run.model_invocation["sourceContextSummary"]["dependencyAnalysis"]
+    assert dependency_summary["analyzedCount"] == 1
+    assert dependency_summary["childRunCount"] == 1
+    assert dependency_summary["skippedCount"] >= 1
+    assert any(
+        item["code"] == "CALLED_PROCEDURE_STRATEGY_DBO_USP_GETORDERSUMMARY"
+        for item in root_run.structured_output["conversionGuidance"]
+    )
+    combined_storage = (
+        str([run.model_invocation for run in runs])
+        + str([run.structured_output for run in runs])
+        + str([artifact.content for artifact in repository.artifacts.values()])
+    )
+    assert "CREATE PROCEDURE" not in combined_storage
+    assert "procedureDefinition" not in str(root_run.model_invocation)
+    assert any(
+        payload["targetRef"] == "dbo.usp_GetOrderSummary"
+        for payload in spy_gateway.prompt_payloads
+    )
+
+
+def test_dependency_child_context_error_records_failed_child_and_keeps_root_complete() -> None:
+    class ChildFailureGateway:
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            if payload["targetRef"] == "dbo.usp_GetOrderSummary":
+                raise ModelGatewayError(
+                    "Input exceeded provider limit.",
+                    code="context_length_exceeded",
+                    provider_error={"code": "context_length_exceeded"},
+                )
+            ref = (payload["evidenceRefContract"]["allowedFactIds"] or ["metadata.snapshot"])[0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "ROOT_RULE",
+                        "summary": "root 분석은 계속 진행되었습니다.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-child-failure",
+                structured_output=structured_output,
+            )
+
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository, model_gateway=ChildFailureGateway())
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_ProcessOrderBatch",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": True,
+                "llmProfileId": "openai_fast_test",
+                "allowSpDefinitionToModel": True,
+            },
+        }
+    )
+
+    _request_record, job = service.submit_sp_analysis(request)
+
+    runs = repository.list_agent_runs(job.job_id)
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert runs is not None
+    assert any(
+        run.agent_type == "LLM_SEMANTIC_ANALYST_DEPENDENCY"
+        and run.status == AgentRunStatus.FAILED.value
+        for run in runs
+    )
+    root_run = next(run for run in runs if run.agent_type == "LLM_SEMANTIC_ANALYST")
+    assert any(
+        marker["code"] == "DEPENDENCY_SEMANTIC_ANALYSIS_INCOMPLETE"
+        for marker in root_run.structured_output["reviewMarkers"]
+    )
+
+
+def test_dependency_selector_keeps_only_confirmed_same_profile_procedures() -> None:
+    evidence = {
+        "rootObject": {
+            "database": "master",
+            "schema": "dbo",
+            "name": "usp_Root",
+            "objectType": "PROCEDURE",
+        },
+        "nodes": [
+            {
+                "id": "master.dbo.usp_Root:PROCEDURE",
+                "database": "master",
+                "schema": "dbo",
+                "name": "usp_Root",
+                "objectType": "PROCEDURE",
+                "reviewStatus": "CONFIRMED",
+                "evidenceRefs": [{"objectRef": "dbo.usp_Root", "locator": "fixture#/root"}],
+            },
+            {
+                "id": "master.dbo.usp_Child:PROCEDURE",
+                "database": "master",
+                "schema": "dbo",
+                "name": "usp_Child",
+                "objectType": "PROCEDURE",
+                "reviewStatus": "CONFIRMED",
+                "evidenceRefs": [{"objectRef": "dbo.usp_Child", "locator": "fixture#/child"}],
+            },
+            {
+                "id": "OtherDb.dbo.usp_CrossDb:PROCEDURE",
+                "database": "OtherDb",
+                "schema": "dbo",
+                "name": "usp_CrossDb",
+                "objectType": "PROCEDURE",
+                "reviewStatus": "CONFIRMED",
+                "evidenceRefs": [{"objectRef": "dbo.usp_CrossDb", "locator": "fixture#/cross"}],
+            },
+        ],
+        "edges": [
+            {
+                "from": "master.dbo.usp_Root:PROCEDURE",
+                "to": "master.dbo.usp_Child:PROCEDURE",
+                "resolutionStatus": "CONFIRMED",
+                "resolutionStrategy": "CATALOG_OBJECT_ID",
+                "evidenceRefs": [{"objectRef": "dbo.usp_Root", "locator": "fixture#/edge1"}],
+            },
+            {
+                "from": "master.dbo.usp_Root:PROCEDURE",
+                "to": "OtherDb.dbo.usp_CrossDb:PROCEDURE",
+                "resolutionStatus": "CONFIRMED",
+                "resolutionStrategy": "CATALOG_OBJECT_ID",
+                "evidenceRefs": [{"objectRef": "dbo.usp_Root", "locator": "fixture#/edge2"}],
+            },
+        ],
+        "unresolved": [
+            {
+                "dependencyType": "DYNAMIC_SQL",
+                "resolutionStrategy": "DYNAMIC_SQL_PATTERN",
+                "evidenceRefs": [{"objectRef": "dynamic", "locator": "fixture#/dynamic"}],
+            }
+        ],
+    }
+
+    candidates, skipped = dependency_procedure_candidates(
+        evidence,
+        max_depth=2,
+        max_tasks=8,
+    )
+
+    assert [candidate.target_ref for candidate in candidates] == ["dbo.usp_Child"]
+    reasons = {item["reason"] for item in skipped}
+    assert "CROSS_DATABASE_DEFINITION_UNSUPPORTED" in reasons
+    assert "DYNAMIC_SQL_REVIEW_REQUIRED" in reasons
 
 
 def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> None:

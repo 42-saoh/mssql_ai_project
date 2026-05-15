@@ -197,6 +197,12 @@ returned. Source selection is bounded by `LLM_SEMANTIC_INPUT_TOKEN_BUDGET` (defa
 (default `24`). Context-length provider errors retry with reduced spans and then fall back to
 evidence digest only with `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`.
 
+`sourceDependencyMode` defaults to `CONFIRMED_PROCEDURES`. The workflow analyzes confirmed
+same-profile PROCEDURE dependencies as child `LLM_SEMANTIC_ANALYST_DEPENDENCY` runs, bounded by
+`LLM_SP_DEPENDENCY_DEPTH` (default `2`, hard max `3`) and `LLM_SP_MAX_DEPENDENCY_TASKS` (default
+`8`). Child results are stored as sanitized AgentRuns and reduced into the root run's called
+procedure strategy guidance.
+
 `POST /api/v1/requests/sp-analysis` 는 P26 기준 high-quality hybrid LLM semantic analysis 를 기본값으로 사용한다.
 
 - `useLlmAnalysis`: 기본 `true`; deterministic metadata/static analysis 이후 LLM semantic enrichment 실행
