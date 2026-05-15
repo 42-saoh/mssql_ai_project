@@ -915,9 +915,11 @@ components:
           enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
         schema:
           type: string
+          minLength: 1
           examples: [dbo]
         name:
           type: string
+          minLength: 1
           examples: [usp_OrderRequest_Select]
     SPAnalysisRequest:
       type: object
@@ -925,6 +927,7 @@ components:
       properties:
         dbProfileId:
           type: string
+          minLength: 1
           description: Metadata profile identifier, for example plf or master.
         target:
           $ref: "#/components/schemas/TargetObject"
@@ -941,6 +944,7 @@ components:
       properties:
         dbProfileId:
           type: string
+          minLength: 1
           description: Metadata profile identifier, for example plf, ppm, or master.
         targets:
           type: array

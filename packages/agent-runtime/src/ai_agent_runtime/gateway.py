@@ -36,9 +36,16 @@ PGPT_FAST_TEST_DEFAULT_MODEL = "gpt-4o-mini"
 
 
 class ModelGatewayError(RuntimeError):
-    def __init__(self, message: str, *, code: str) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        provider_error: Mapping[str, str] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.provider_error = dict(provider_error or {})
 
 
 class ModelGateway(Protocol):
@@ -352,7 +359,10 @@ def _default_fake_metadata_analysis_output(
     refs = [str(ref) for ref in allowed_refs if str(ref).strip()]
     evidence_refs = refs[:1] or ["metadata.analysis.no_fact"]
     return {
-        "summary": "Fake model gateway가 sanitized 결정론적 MCP evidence로 생성한 초안 메타데이터 분석입니다.",
+        "summary": (
+            "Fake model gateway가 sanitized 결정론적 MCP evidence로 생성한 "
+            "초안 메타데이터 분석입니다."
+        ),
         "objectInsights": [
             {
                 "code": "METADATA_EVIDENCE_SUMMARY",
@@ -386,7 +396,9 @@ def _default_fake_metadata_analysis_output(
                 "objectRef": target_ref or "metadata.analysis",
                 "status": "REVIEW_REQUIRED",
                 "fieldCount": 0,
-                "reviewReasons": ["Fake gateway는 evidence ref 범위를 넘어 DTO shape를 확정할 수 없습니다."],
+                "reviewReasons": [
+                    "Fake gateway는 evidence ref 범위를 넘어 DTO shape를 확정할 수 없습니다."
+                ],
                 "evidenceRefs": evidence_refs,
             }
         ],
@@ -544,6 +556,7 @@ class OpenAIModelGateway:
             raise ModelGatewayError(
                 "OpenAI Responses API returned an error.",
                 code=_http_error_code(exc.response.status_code),
+                provider_error=_provider_error_summary(exc.response),
             ) from exc
         except httpx.TimeoutException as exc:
             raise ModelGatewayError(
@@ -692,6 +705,59 @@ def _pgpt_payload(*, prompt: RenderedPrompt, profile: ModelProfile) -> dict[str,
         "instructions": prompt.system_prompt,
         "input": [{"role": "user", "content": prompt.user_prompt}],
     }
+
+
+def _provider_error_summary(response: httpx.Response) -> dict[str, str]:
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, Mapping):
+        return {}
+    error = payload.get("error")
+    source = error if isinstance(error, Mapping) else payload
+    summary: dict[str, str] = {}
+    for key in ("type", "code", "param", "message"):
+        if key in source and source[key] is not None:
+            value = _sanitize_provider_error_value(source[key], key=key)
+            if value:
+                summary[key] = value
+    return summary
+
+
+def _sanitize_provider_error_value(value: Any, *, key: str) -> str:
+    if isinstance(value, (dict, list, tuple)):
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    else:
+        text = str(value)
+    text = " ".join(text.split())
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if api_key:
+        text = text.replace(api_key, "[REDACTED]")
+    text = re.sub(r"(?i)bearer\s+[a-z0-9._~+/=-]+", "Bearer [REDACTED]", text)
+    text = re.sub(r"\bsk-[A-Za-z0-9_-]{8,}\b", "[REDACTED]", text)
+    text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[REDACTED]", text)
+    text = re.sub(
+        r"(?i)\b(api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*['\"]?[^,'\"\s}]+",
+        r"\1=[REDACTED]",
+        text,
+    )
+    if key == "message" and _looks_like_raw_sql(text):
+        return "[REDACTED_PROVIDER_MESSAGE_WITH_POTENTIAL_SQL]"
+    max_length = 500
+    if len(text) > max_length:
+        text = f"{text[:max_length]}...[truncated]"
+    return text
+
+
+def _looks_like_raw_sql(text: str) -> bool:
+    return bool(
+        re.search(r"(?i)\b(create|alter)\s+(procedure|proc|function|view|trigger)\b", text)
+        or re.search(
+            r"(?i)\b(select|insert|update|delete|merge)\b.{0,120}\b(from|into|set|using)\b",
+            text,
+        )
+    )
 
 
 def _response_payload_and_output_text(response: httpx.Response) -> tuple[dict[str, Any], str]:

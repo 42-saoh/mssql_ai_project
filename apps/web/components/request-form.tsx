@@ -97,7 +97,12 @@ export function RequestForm({
 
         <label>
           <span>Schema</span>
-          <input name="schema" defaultValue={selectedSample?.schema ?? "dbo"} placeholder="dbo" />
+          <input
+            name="schema"
+            defaultValue={selectedSample?.schema ?? "dbo"}
+            placeholder="dbo"
+            required
+          />
         </label>
 
         <label>
@@ -106,6 +111,7 @@ export function RequestForm({
             name="name"
             defaultValue={selectedSample?.name ?? "usp_OrderRequest_Select"}
             placeholder={selectedSample?.name ?? "usp_OrderRequest_Select"}
+            required
           />
         </label>
       </div>
@@ -222,6 +228,7 @@ export function RequestForm({
             name="batchTargets"
             defaultValue={sampleName ? `${sampleName}\n${sampleName}` : "dbo.usp_OrderRequest_Select"}
             rows={5}
+            required
           />
         </label>
       </div>

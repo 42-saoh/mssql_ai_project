@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from ai_agent_domain import (
     ArtifactStatus,
@@ -10,7 +10,9 @@ from ai_agent_domain import (
     RequestedOutputType,
     WorkflowStepType,
 )
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class ApiModel(BaseModel):
@@ -22,8 +24,8 @@ class ApiModel(BaseModel):
 
 class TargetObject(ApiModel):
     type: Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
-    schema_name: str = Field(alias="schema")
-    name: str
+    schema_name: NonBlankString = Field(alias="schema")
+    name: NonBlankString
 
     @property
     def full_name(self) -> str:
@@ -57,14 +59,14 @@ class SPAnalysisOptions(ApiModel):
 
 
 class SPAnalysisRequest(ApiModel):
-    db_profile_id: str = Field(alias="dbProfileId")
+    db_profile_id: NonBlankString = Field(alias="dbProfileId")
     target: TargetObject
     outputs: list[RequestedOutputType] = Field(min_length=1)
     options: SPAnalysisOptions = Field(default_factory=SPAnalysisOptions)
 
 
 class SPAnalysisBatchRequest(ApiModel):
-    db_profile_id: str = Field(alias="dbProfileId")
+    db_profile_id: NonBlankString = Field(alias="dbProfileId")
     targets: list[TargetObject] = Field(min_length=1)
     outputs: list[RequestedOutputType] = Field(min_length=1)
     options: SPAnalysisOptions = Field(default_factory=SPAnalysisOptions)

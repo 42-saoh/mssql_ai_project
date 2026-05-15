@@ -103,6 +103,48 @@ def test_pgpt_exact_responses_url_override(monkeypatch: Any) -> None:
     assert result.provider == "pgpt"
 
 
+def test_http_400_captures_sanitized_provider_error_only(monkeypatch: Any) -> None:
+    _capture_post(
+        monkeypatch,
+        httpx.Response(
+            400,
+            json={
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "context_length_exceeded",
+                    "param": "input",
+                    "message": (
+                        "The request was rejected. Bearer secret-token-123 "
+                        "access_token=very-secret-value"
+                    ),
+                    "raw": "raw_openai_response_text",
+                    "prompt": "CREATE PROCEDURE dbo.Secret AS SELECT * FROM dbo.Customer",
+                }
+            },
+            request=httpx.Request("POST", "http://pgpt.test/v1/responses"),
+        ),
+    )
+    _set_pgpt_env(monkeypatch)
+
+    with pytest.raises(ModelGatewayError) as exc_info:
+        OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+            prompt=_prompt(),
+            profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+        )
+
+    assert exc_info.value.code == "OPENAI_HTTP_400"
+    assert exc_info.value.provider_error == {
+        "type": "invalid_request_error",
+        "code": "context_length_exceeded",
+        "param": "input",
+        "message": "The request was rejected. Bearer [REDACTED] access_token=[REDACTED]",
+    }
+    serialized = json.dumps(exc_info.value.provider_error)
+    assert "raw_openai_response_text" not in serialized
+    assert "CREATE PROCEDURE" not in serialized
+    assert "secret-token-123" not in serialized
+
+
 def test_pgpt_provider_requires_base_or_exact_responses_url(monkeypatch: Any) -> None:
     _capture_post(monkeypatch, _json_response())
     monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")

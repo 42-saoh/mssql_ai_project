@@ -471,6 +471,34 @@ def test_invalid_request_returns_validation_error_shape(client: TestClient) -> N
     }
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", ""),
+        ("name", "   "),
+        ("schema", ""),
+    ],
+)
+def test_blank_sp_analysis_target_fields_return_validation_error_without_job(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+    field: str,
+    value: str,
+) -> None:
+    client, repository = client_and_repository
+    payload = _sp_analysis_payload()
+    payload["target"] = {**payload["target"], field: value}
+
+    response = client.post("/api/v1/requests/sp-analysis", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Request validation failed.",
+        "code": "VALIDATION_ERROR",
+    }
+    assert repository.requests == {}
+    assert repository.jobs == {}
+
+
 def test_approve_without_passed_validation_returns_workflow_conflict(
     client: TestClient,
 ) -> None:

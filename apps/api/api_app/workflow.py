@@ -462,6 +462,7 @@ class WorkflowService:
                 target_ref=object_ref,
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
                 error_code=exc.code,
+                provider_error=exc.provider_error,
             )
             raise
         if tool_component_invocations or (
@@ -493,6 +494,7 @@ class WorkflowService:
         target_ref: str,
         profile_id: str,
         error_code: str,
+        provider_error: dict[str, str] | None = None,
     ) -> None:
         profile = model_profile_from_env(profile_id)
         structured_output = {
@@ -518,6 +520,13 @@ class WorkflowService:
             "modelProfileId": profile.profile_id,
             "errorCode": error_code,
         }
+        component_invocation: dict[str, object] = {
+            "stage": "semantic_analysis",
+            "status": "FAILED",
+            "errorCode": error_code,
+        }
+        if provider_error:
+            component_invocation["providerError"] = dict(provider_error)
         invocation = ModelInvocationRecord(
             provider=str(getattr(self.model_gateway, "provider", "openai")),
             model=profile.model,
@@ -536,13 +545,7 @@ class WorkflowService:
             provider_request_id=None,
             error_code=error_code,
             error_message=None,
-            component_invocations=(
-                {
-                    "stage": "semantic_analysis",
-                    "status": "FAILED",
-                    "errorCode": error_code,
-                },
-            ),
+            component_invocations=(component_invocation,),
         )
         self.repository.save_agent_run(
             job_id=job_id,

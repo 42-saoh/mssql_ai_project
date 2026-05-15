@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -17,6 +18,15 @@ def _web_source() -> str:
         for path in root.rglob("*")
         if path.suffix in {".ts", ".tsx"}
     )
+
+
+def _form_control_block(source: str, name: str) -> str:
+    match = re.search(
+        rf"<(?:input|textarea)\s+[^>]*name=\"{re.escape(name)}\"[\s\S]*?(?:/>|</textarea>)",
+        source,
+    )
+    assert match is not None
+    return match.group(0)
 
 
 def test_p14_sample_names_come_from_live_manifest_not_web_source() -> None:
@@ -89,6 +99,9 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     request_page = (WEB_ROOT / "app" / "requests" / "new" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    request_form = (WEB_ROOT / "components" / "request-form.tsx").read_text(
+        encoding="utf-8"
+    )
     artifact_page = (
         WEB_ROOT / "app" / "artifacts" / "[artifactId]" / "page.tsx"
     ).read_text(encoding="utf-8")
@@ -106,6 +119,8 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "api.createSPAnalysisRequest" in request_page
     assert "api.createSPAnalysisBatchRequest" in request_page
     assert "batchTargets" in source
+    for control_name in ("schema", "name", "batchTargets"):
+        assert "required" in _form_control_block(request_form, control_name)
     assert "useLlmAnalysis" in request_page
     assert "useAiToolOrchestration" in request_page
     assert "usePlatformToolOrchestration" in request_page

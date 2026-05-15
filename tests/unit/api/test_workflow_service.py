@@ -238,6 +238,12 @@ def test_submit_with_llm_records_failed_agent_run_when_gateway_fails() -> None:
             raise ModelGatewayError(
                 "OpenAI response did not match the required structured output schema.",
                 code="OPENAI_STRUCTURED_OUTPUT_INVALID",
+                provider_error={
+                    "type": "invalid_request_error",
+                    "code": "context_length_exceeded",
+                    "param": "input",
+                    "message": "Input exceeded provider limit.",
+                },
             )
 
     repository = MemoryWorkflowRepository()
@@ -256,6 +262,12 @@ def test_submit_with_llm_records_failed_agent_run_when_gateway_fails() -> None:
     assert run.model_invocation["componentInvocations"][0]["errorCode"] == (
         "OPENAI_STRUCTURED_OUTPUT_INVALID"
     )
+    assert run.model_invocation["componentInvocations"][0]["providerError"] == {
+        "type": "invalid_request_error",
+        "code": "context_length_exceeded",
+        "param": "input",
+        "message": "Input exceeded provider limit.",
+    }
     assert "raw_openai_response_text" not in str(run.model_invocation)
     assert any(event.action == "AGENT_RUN_RECORDED" for event in repository.audit_events)
 
