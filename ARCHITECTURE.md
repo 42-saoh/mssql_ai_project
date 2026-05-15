@@ -1,5 +1,19 @@
 # ARCHITECTURE.md
 
+## P35 Source Context Architecture
+
+Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates
+deterministic evidence, local static analysis creates a sanitized `ProcedureSourceMap`, and the
+runtime builds stage-specific `ContextPack` payloads from bounded retrieved spans. Raw selected
+span text is transient model input only; persisted metadata, artifacts, knowledge assets, exports,
+and agent traces keep only source map coverage, span ids, line ranges, risk tags, object refs,
+evidence refs, and budget/review summaries.
+
+The default request behavior is `sourceContextMode=RETRIEVED_SPANS`. Setting
+`sourceContextMode=NONE` leaves semantic analysis with metadata/static evidence digest only.
+Provider context-length failures retry with reduced spans, then fall back to evidence digest only
+with `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`.
+
 ## 목적
 
 이 문서는 저장소의 구현 기준 아키텍처를 정의한다.  

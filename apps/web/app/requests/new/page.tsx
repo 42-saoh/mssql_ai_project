@@ -39,6 +39,9 @@ async function submitRequest(formData: FormData) {
         | "openai_sp_semantic_analysis"
         | "openai_fast_test",
       allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
+      sourceContextMode: String(formData.get("sourceContextMode") ?? "RETRIEVED_SPANS") as
+        | "NONE"
+        | "RETRIEVED_SPANS",
       useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
       usePlatformToolOrchestration:
         formData.get("usePlatformToolOrchestration") === "on",
@@ -56,6 +59,9 @@ function requestOptionsFromForm(formData: FormData) {
       | "openai_sp_semantic_analysis"
       | "openai_fast_test",
     allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
+    sourceContextMode: String(formData.get("sourceContextMode") ?? "RETRIEVED_SPANS") as
+      | "NONE"
+      | "RETRIEVED_SPANS",
     useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
     usePlatformToolOrchestration:
       formData.get("usePlatformToolOrchestration") === "on",

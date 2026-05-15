@@ -166,9 +166,24 @@
   prepared PLF v5 schema. It writes normal PLF workflow/knowledge/export/audit/review records and
   records one non-terminal `REVIEWED` event on a real PPM knowledge version, but never reads row
   data, executes procedures, applies DDL, or treats `REVIEWED` as production approval.
-  For external PLF/PPM targets that complete TCP open but need a longer TDS handshake, run live
-  confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
-  `PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20`.
+For external PLF/PPM targets that complete TCP open but need a longer TDS handshake, run live
+confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
+`PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20`.
+
+## P35 Source Context Runtime
+
+- `sourceContextMode=RETRIEVED_SPANS` is the default SP semantic analysis mode.
+  The workflow builds a sanitized `ProcedureSourceMap`, selects bounded source spans for each
+  semantic stage, and sends only those transient spans to the model when
+  `allowSpDefinitionToModel=true` and `LLM_ALLOW_SP_TEXT=1`.
+- `sourceContextMode=NONE` disables raw source span prompt input and leaves the model with
+  metadata/static evidence digest only.
+- Runtime budget knobs:
+  `LLM_SEMANTIC_INPUT_TOKEN_BUDGET=64000`,
+  `LLM_SEMANTIC_SOURCE_TOKEN_BUDGET=32000`,
+  `LLM_SP_MAX_RETRIEVED_SPANS=24`.
+- Agent run traces may expose sanitized `analysisCoverage` and `sourceContextSummary`, but never
+  raw prompt text, selected span text, full SP definitions, row data, or raw provider responses.
 
 ### OpenAI / LLM runtime
 

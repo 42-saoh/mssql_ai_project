@@ -23,11 +23,15 @@ def test_p22_openapi_declares_llm_options_trace_and_evidence_type() -> None:
         "openai_fast_test",
     ]
     assert options["allowSpDefinitionToModel"]["default"] is True
+    assert options["sourceContextMode"]["default"] == "RETRIEVED_SPANS"
+    assert options["sourceContextMode"]["enum"] == ["NONE", "RETRIEVED_SPANS"]
     assert options["usePlatformToolOrchestration"]["default"] is True
     assert "LLM_INFERENCE" in schemas["EvidenceRef"]["properties"]["type"]["enum"]
     assert "AgentRunSummary" in schemas
     assert "ModelInvocationSummary" in schemas
     assert "componentInvocations" in schemas["ModelInvocationSummary"]["properties"]
+    assert "analysisCoverage" in schemas["ModelInvocationSummary"]["properties"]
+    assert "sourceContextSummary" in schemas["ModelInvocationSummary"]["properties"]
     assert "MODEL" in schemas["RegistryVersion"]["properties"]["registryType"]["enum"]
     assert "SCHEMA" in schemas["RegistryVersion"]["properties"]["registryType"]["enum"]
 
@@ -69,6 +73,9 @@ def test_p22_env_sample_contains_llm_gates_without_secret_values() -> None:
         "LLM_ALLOW_SP_TEXT=0",
         "LLM_LIVE_GATE=0",
         "LLM_SP_CONCURRENCY=2",
+        "LLM_SEMANTIC_INPUT_TOKEN_BUDGET=64000",
+        "LLM_SEMANTIC_SOURCE_TOKEN_BUDGET=32000",
+        "LLM_SP_MAX_RETRIEVED_SPANS=24",
         "PLATFORM_TOOL_MAX_CALLS=3",
     ):
         assert name in env_text

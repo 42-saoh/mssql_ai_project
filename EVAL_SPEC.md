@@ -1,5 +1,21 @@
 # EVAL_SPEC.md
 
+## P35 Source Context Eval Gate
+
+Required checks for Copilot-style SP analysis:
+
+- Source map unit coverage proves `ProcedureSourceMap` extracts signature, parameter, DML,
+  result-set, call, temp-table, transaction/TRY-CATCH, and dynamic SQL spans without storing raw
+  SQL text in serialized payloads.
+- Semantic prompt coverage proves full `procedureDefinition` text is replaced by stage-specific
+  `ContextPack` retrieved spans, and persisted trace summaries expose only sanitized
+  `analysisCoverage` and `sourceContextSummary`.
+- Context overflow coverage proves provider `context_length_exceeded` failures retry with reduced
+  spans and add `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`; evidence-digest fallback remains
+  `REVIEW_REQUIRED`.
+- Integration coverage for long SP fixtures must finish at `VALIDATION_COMPLETE` without raw SP
+  definitions in metadata, artifacts, knowledge assets, exports, or trace summaries.
+
 ## 목적
 
 이 문서는 저장소에서 "완료"를 판단하는 평가 규격을 정의한다.  

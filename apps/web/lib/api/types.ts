@@ -104,6 +104,7 @@ export interface SPAnalysisOptions {
   useLlmAnalysis?: boolean;
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   allowSpDefinitionToModel?: boolean;
+  sourceContextMode?: "NONE" | "RETRIEVED_SPANS";
   useAiToolOrchestration?: boolean;
   usePlatformToolOrchestration?: boolean;
   persistKnowledge?: boolean;
@@ -164,6 +165,8 @@ export interface ModelInvocationSummary {
   status: "SUCCEEDED" | "FAILED" | "SKIPPED";
   tokenUsage?: Record<string, number>;
   latencyMs?: number | null;
+  analysisCoverage?: Record<string, unknown>;
+  sourceContextSummary?: Record<string, unknown>;
   componentInvocations?: Record<string, unknown>[];
 }
 

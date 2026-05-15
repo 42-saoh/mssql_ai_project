@@ -47,6 +47,10 @@ class SPAnalysisOptions(ApiModel):
         default=True,
         alias="allowSpDefinitionToModel",
     )
+    source_context_mode: Literal["NONE", "RETRIEVED_SPANS"] = Field(
+        default="RETRIEVED_SPANS",
+        alias="sourceContextMode",
+    )
     use_ai_tool_orchestration: bool = Field(
         default=True,
         alias="useAiToolOrchestration",
@@ -178,6 +182,11 @@ class ModelInvocationSummary(ApiModel):
     status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
     token_usage: dict[str, int] = Field(default_factory=dict, alias="tokenUsage")
     latency_ms: int | None = Field(default=None, alias="latencyMs")
+    analysis_coverage: dict[str, Any] = Field(default_factory=dict, alias="analysisCoverage")
+    source_context_summary: dict[str, Any] = Field(
+        default_factory=dict,
+        alias="sourceContextSummary",
+    )
     component_invocations: list[dict[str, Any]] = Field(
         default_factory=list,
         alias="componentInvocations",

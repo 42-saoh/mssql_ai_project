@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ai_agent_runtime.localization import KOREAN_OUTPUT_INSTRUCTION
 from ai_agent_runtime.models import (
     METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION,
     METADATA_ANALYSIS_PROMPT_VERSION,
@@ -16,7 +17,6 @@ from ai_agent_runtime.models import (
     stable_json_hash,
     text_hash,
 )
-from ai_agent_runtime.localization import KOREAN_OUTPUT_INSTRUCTION
 
 SYSTEM_PROMPT = f"""You analyze MSSQL stored procedures for a draft-only migration platform.
 Return only schema-valid JSON. Treat deterministic metadata and static analysis as evidence.
@@ -74,6 +74,7 @@ def render_semantic_analysis_prompt(
     metadata: dict[str, Any],
     static_analysis: dict[str, Any] | None,
     procedure_definition: str | None,
+    source_context: dict[str, Any] | None = None,
     stage: str = "semantic_claims",
     allowed_evidence_refs: list[str] | tuple[str, ...] | None = None,
     required_review_markers: list[dict[str, Any]] | tuple[dict[str, Any], ...] | None = None,
@@ -83,13 +84,19 @@ def render_semantic_analysis_prompt(
         {str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()}
     )
     required_markers = list(required_review_markers or ())
+    source_context_payload = _source_context_for_prompt(source_context)
+    source_context_summary = _source_context_summary(source_context_payload)
     input_payload = {
         "targetRef": target_ref,
         "metadata": _metadata_without_raw_definition(metadata),
         "staticAnalysis": static_analysis,
         "procedureDefinitionHash": text_hash(procedure_definition or ""),
         "procedureDefinitionLength": len(procedure_definition or ""),
-        "procedureDefinitionIncluded": procedure_definition is not None,
+        "procedureDefinitionIncluded": (
+            procedure_definition is not None and source_context_payload is None
+        ),
+        "sourceContextIncluded": _source_context_includes_text(source_context_payload),
+        "sourceContextSummary": source_context_summary,
         "stage": stage,
         "task": _stage_task(stage),
         "qualityHints": _quality_hints(metadata, static_analysis, allowed_refs),
@@ -127,7 +134,9 @@ def render_semantic_analysis_prompt(
     }
     if repair_context is not None:
         input_payload["repairContext"] = repair_context
-    if procedure_definition is not None:
+    if source_context_payload is not None:
+        input_payload["sourceContext"] = source_context_payload
+    elif procedure_definition is not None:
         input_payload["procedureDefinition"] = procedure_definition
     user_prompt = json.dumps(input_payload, ensure_ascii=False, sort_keys=True, default=str)
     prompt_hash = text_hash(f"{SYSTEM_PROMPT}\n{user_prompt}")
@@ -141,11 +150,60 @@ def render_semantic_analysis_prompt(
         metadata={
             "targetRef": target_ref,
             "procedureDefinitionHash": input_payload["procedureDefinitionHash"],
-            "procedureDefinitionIncluded": procedure_definition is not None,
+            "procedureDefinitionIncluded": bool(input_payload["procedureDefinitionIncluded"]),
+            "sourceContextIncluded": bool(input_payload["sourceContextIncluded"]),
+            "sourceContextSummary": source_context_summary,
             "stage": stage,
             "allowedEvidenceRefs": allowed_refs,
             "requiredReviewMarkers": required_markers,
         },
+    )
+
+
+def _source_context_for_prompt(source_context: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(source_context, dict):
+        return None
+    payload = dict(source_context)
+    selected = payload.get("selectedSpans")
+    if isinstance(selected, list):
+        payload["selectedSpans"] = [dict(item) for item in selected if isinstance(item, dict)]
+    return payload
+
+
+def _source_context_summary(source_context: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(source_context, dict):
+        return {
+            "mode": "NONE",
+            "budgetStatus": "NO_SOURCE_CONTEXT",
+            "selectedSpanCount": 0,
+            "skippedSpanCount": 0,
+            "reviewMarkers": [],
+        }
+    selected = source_context.get("selectedSpans")
+    selected_count = len(selected) if isinstance(selected, list) else 0
+    return {
+        "version": source_context.get("version"),
+        "targetRef": source_context.get("targetRef"),
+        "stage": source_context.get("stage"),
+        "mode": source_context.get("mode", "NONE"),
+        "budgetStatus": source_context.get("budgetStatus", "UNKNOWN"),
+        "tokenBudget": source_context.get("tokenBudget", 0),
+        "estimatedSourceTokens": source_context.get("estimatedSourceTokens", 0),
+        "selectedSpanCount": selected_count,
+        "skippedSpanCount": int(source_context.get("skippedSpanCount") or 0),
+        "analysisCoverage": dict(source_context.get("analysisCoverage") or {}),
+        "reviewMarkers": [
+            dict(item)
+            for item in source_context.get("reviewMarkers", [])
+            if isinstance(item, dict)
+        ],
+    }
+
+
+def _source_context_includes_text(source_context: dict[str, Any] | None) -> bool:
+    selected = source_context.get("selectedSpans") if isinstance(source_context, dict) else None
+    return isinstance(selected, list) and any(
+        isinstance(item, dict) and bool(item.get("text")) for item in selected
     )
 
 

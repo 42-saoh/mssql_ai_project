@@ -1,5 +1,19 @@
 # POLICY.md
 
+## P35 Source Context Policy
+
+- Full stored procedure definitions must not be sent to the model by default. The semantic runtime
+  uses `ProcedureSourceMap` plus bounded retrieved spans as transient source context.
+- Retrieved span text is allowed only when `allowSpDefinitionToModel=true`,
+  `sourceContextMode=RETRIEVED_SPANS`, `LLM_ENABLE_REMOTE=1`, and `LLM_ALLOW_SP_TEXT=1` are
+  explicitly satisfied for remote model use.
+- Stored platform data, artifacts, knowledge assets, exports, audit logs, and API responses may keep
+  sanitized `analysisCoverage`, `sourceContextSummary`, span ids, line ranges, risk tags, object refs,
+  and evidence refs. They must not keep selected span text, full SP definitions, raw prompt text,
+  provider responses, row data, or snippets derived from source text.
+- Context budget fallback is a review caveat. `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED` is not production
+  approval or automatic conversion evidence.
+
 ## 절대 금지
 
 다음은 저장소와 Codex 운영에서 금지한다.

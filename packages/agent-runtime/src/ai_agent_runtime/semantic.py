@@ -6,7 +6,17 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
-from ai_agent_runtime.gateway import ModelGateway, model_profile_from_env
+from ai_agent_analysis.source_map import (
+    context_pack_summary,
+    shrink_context_pack,
+    without_source_text_context_pack,
+)
+
+from ai_agent_runtime.gateway import (
+    ModelGateway,
+    ModelGatewayError,
+    model_profile_from_env,
+)
 from ai_agent_runtime.localization import (
     append_korean_language_review_marker,
     contains_korean,
@@ -61,6 +71,7 @@ class SemanticAnalysisTask:
     metadata: dict[str, Any]
     static_analysis: dict[str, Any] | None = None
     procedure_definition: str | None = None
+    source_context_packs: dict[str, dict[str, Any]] | None = None
 
 
 def build_semantic_analysis_run(
@@ -69,6 +80,7 @@ def build_semantic_analysis_run(
     metadata: dict[str, Any],
     static_analysis: dict[str, Any] | None,
     procedure_definition: str | None,
+    source_context_packs: dict[str, dict[str, Any]] | None = None,
     model_gateway: ModelGateway,
     profile_id: str | None,
 ) -> AgentRunPayload:
@@ -79,6 +91,7 @@ def build_semantic_analysis_run(
                 metadata=metadata,
                 static_analysis=static_analysis,
                 procedure_definition=procedure_definition,
+                source_context_packs=source_context_packs,
             ),
         ),
         model_gateway=model_gateway,
@@ -140,19 +153,21 @@ def _build_single_semantic_analysis_run(
     )
     invocations: list[tuple[str, ModelInvocationRecord]] = []
     outputs: list[dict[str, Any]] = []
+    source_context_summaries: list[dict[str, Any]] = []
+    context_budget_markers: list[dict[str, Any]] = []
 
     for stage in stages:
-        prompt = render_semantic_analysis_prompt(
-            target_ref=task.target_ref,
-            metadata=task.metadata,
-            static_analysis=task.static_analysis,
-            procedure_definition=task.procedure_definition,
+        invocation, source_summary, budget_markers = _invoke_stage_with_context_fallback(
+            model_gateway=model_gateway,
+            profile=profile,
+            task=task,
             stage=stage,
             allowed_evidence_refs=allowed_evidence_refs,
             required_review_markers=required_review_markers,
         )
-        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
         invocations.append((stage, invocation))
+        source_context_summaries.append(source_summary)
+        context_budget_markers.extend(budget_markers)
         outputs.append(
             LlmSemanticAnalysisOutput.model_validate(
                 invocation.structured_output,
@@ -165,18 +180,18 @@ def _build_single_semantic_analysis_run(
         allowed_evidence_refs=allowed_evidence_refs,
         required_review_markers=required_review_markers,
     ):
-        prompt = render_semantic_analysis_prompt(
-            target_ref=task.target_ref,
-            metadata=task.metadata,
-            static_analysis=task.static_analysis,
-            procedure_definition=task.procedure_definition,
+        invocation, source_summary, budget_markers = _invoke_stage_with_context_fallback(
+            model_gateway=model_gateway,
+            profile=profile,
+            task=task,
             stage="repair",
             allowed_evidence_refs=allowed_evidence_refs,
             required_review_markers=required_review_markers,
             repair_context=_repair_context(combined_output),
         )
-        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
         invocations.append(("repair", invocation))
+        source_context_summaries.append(source_summary)
+        context_budget_markers.extend(budget_markers)
         outputs.append(
             LlmSemanticAnalysisOutput.model_validate(
                 invocation.structured_output,
@@ -197,11 +212,10 @@ def _build_single_semantic_analysis_run(
         )
     language_paths = korean_language_review_paths(repaired_output)
     if language_paths:
-        prompt = render_semantic_analysis_prompt(
-            target_ref=task.target_ref,
-            metadata=task.metadata,
-            static_analysis=task.static_analysis,
-            procedure_definition=task.procedure_definition,
+        invocation, source_summary, budget_markers = _invoke_stage_with_context_fallback(
+            model_gateway=model_gateway,
+            profile=profile,
+            task=task,
             stage="language_repair",
             allowed_evidence_refs=allowed_evidence_refs,
             required_review_markers=required_review_markers,
@@ -211,8 +225,9 @@ def _build_single_semantic_analysis_run(
                 "structuredOutput": _repair_context(repaired_output),
             },
         )
-        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
         invocations.append(("language_repair", invocation))
+        source_context_summaries.append(source_summary)
+        context_budget_markers.extend(budget_markers)
         language_repair_output = LlmSemanticAnalysisOutput.model_validate(
             invocation.structured_output,
         ).to_storage_dict()
@@ -229,7 +244,7 @@ def _build_single_semantic_analysis_run(
                 ),
             )
     storage_safe_output = _sanitize_output_for_storage(
-        repaired_output,
+        _append_context_budget_markers(repaired_output, context_budget_markers),
         procedure_definition=task.procedure_definition or "",
         allowed_evidence_refs=allowed_evidence_refs,
     )
@@ -238,6 +253,7 @@ def _build_single_semantic_analysis_run(
         invocations=invocations,
         structured_output=output.to_storage_dict(),
         profile=profile,
+        source_context_summaries=source_context_summaries,
     )
     return AgentRunPayload(
         agent_type=AGENT_TYPE,
@@ -260,6 +276,195 @@ def merge_llm_semantic_analysis(
     output = LlmSemanticAnalysisOutput.model_validate(llm_output)
     merged["llmSemanticAnalysis"] = output.to_storage_dict()
     return merged
+
+
+def _invoke_stage_with_context_fallback(
+    *,
+    model_gateway: ModelGateway,
+    profile: Any,
+    task: SemanticAnalysisTask,
+    stage: str,
+    allowed_evidence_refs: Sequence[str],
+    required_review_markers: Sequence[Mapping[str, Any]],
+    repair_context: dict[str, Any] | None = None,
+) -> tuple[ModelInvocationRecord, dict[str, Any], list[dict[str, Any]]]:
+    source_context = _source_context_for_stage(task.source_context_packs, stage)
+    prompt = _render_stage_prompt(
+        task=task,
+        stage=stage,
+        source_context=source_context,
+        allowed_evidence_refs=allowed_evidence_refs,
+        required_review_markers=required_review_markers,
+        repair_context=repair_context,
+    )
+    if _estimated_prompt_tokens(prompt) > _semantic_input_token_budget():
+        source_context = shrink_context_pack(source_context, status="PRE_PROVIDER_SHRINK")
+        prompt = _render_stage_prompt(
+            task=task,
+            stage=stage,
+            source_context=source_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+        )
+    try:
+        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
+        return invocation, context_pack_summary(source_context), _context_markers(source_context)
+    except ModelGatewayError as exc:
+        if not _is_context_length_error(exc):
+            raise
+
+    shrunk_context = shrink_context_pack(source_context, status="SHRUNK_RETRY")
+    prompt = _render_stage_prompt(
+        task=task,
+        stage=stage,
+        source_context=shrunk_context,
+        allowed_evidence_refs=allowed_evidence_refs,
+        required_review_markers=required_review_markers,
+        repair_context=repair_context,
+    )
+    try:
+        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
+        markers = _context_markers(shrunk_context) or _context_length_review_markers(
+            allowed_evidence_refs
+        )
+        return invocation, context_pack_summary(shrunk_context), markers
+    except ModelGatewayError as exc:
+        if not _is_context_length_error(exc):
+            raise
+
+    fallback_context = without_source_text_context_pack(
+        source_context,
+        status="FALLBACK_NO_SOURCE",
+    )
+    prompt = _render_stage_prompt(
+        task=task,
+        stage=stage,
+        source_context=fallback_context,
+        allowed_evidence_refs=allowed_evidence_refs,
+        required_review_markers=required_review_markers,
+        repair_context=repair_context,
+    )
+    invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
+    markers = _context_markers(fallback_context) or _context_length_review_markers(
+        allowed_evidence_refs
+    )
+    return invocation, context_pack_summary(fallback_context), markers
+
+
+def _render_stage_prompt(
+    *,
+    task: SemanticAnalysisTask,
+    stage: str,
+    source_context: dict[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+    required_review_markers: Sequence[Mapping[str, Any]],
+    repair_context: dict[str, Any] | None,
+) -> Any:
+    return render_semantic_analysis_prompt(
+        target_ref=task.target_ref,
+        metadata=task.metadata,
+        static_analysis=task.static_analysis,
+        procedure_definition=task.procedure_definition,
+        source_context=source_context,
+        stage=stage,
+        allowed_evidence_refs=list(allowed_evidence_refs),
+        required_review_markers=[dict(marker) for marker in required_review_markers],
+        repair_context=repair_context,
+    )
+
+
+def _source_context_for_stage(
+    source_context_packs: Mapping[str, dict[str, Any]] | None,
+    stage: str,
+) -> dict[str, Any] | None:
+    if not isinstance(source_context_packs, Mapping):
+        return None
+    value = source_context_packs.get(stage)
+    if isinstance(value, Mapping):
+        return dict(value)
+    return None
+
+
+def _is_context_length_error(exc: ModelGatewayError) -> bool:
+    haystack = " ".join(
+        str(value)
+        for value in (
+            exc.code,
+            exc,
+            *exc.provider_error.values(),
+        )
+        if value is not None
+    ).lower()
+    return "context_length" in haystack or "context length" in haystack
+
+
+def _semantic_input_token_budget() -> int:
+    return max(1024, _env_int("LLM_SEMANTIC_INPUT_TOKEN_BUDGET", 64000))
+
+
+def _estimated_prompt_tokens(prompt: Any) -> int:
+    return max(1, (len(prompt.system_prompt) + len(prompt.user_prompt) + 3) // 4)
+
+
+def _context_markers(source_context: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(source_context, Mapping):
+        return []
+    return [
+        dict(item)
+        for item in source_context.get("reviewMarkers", [])
+        if isinstance(item, Mapping)
+    ]
+
+
+def _context_length_review_markers(
+    allowed_evidence_refs: Sequence[str],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "code": "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED",
+            "message": (
+                "Model input exceeded provider context and analysis used reduced source context."
+            ),
+            "status": "REVIEW_REQUIRED",
+            "evidenceRefs": _fallback_evidence_refs(
+                {"code": "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED"},
+                allowed_evidence_refs,
+            ),
+        }
+    ]
+
+
+def _append_context_budget_markers(
+    output: Mapping[str, Any],
+    markers: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if not markers:
+        return dict(output)
+    repaired = LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
+    existing_codes = {
+        str(item.get("code") or "")
+        for item in repaired["reviewMarkers"]
+        if isinstance(item, Mapping)
+    }
+    for marker in markers:
+        code = str(marker.get("code") or "")
+        if not code or code in existing_codes:
+            continue
+        repaired["reviewMarkers"].append(
+            {
+                "code": code,
+                "message": str(marker.get("message") or ""),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": [
+                    str(ref)
+                    for ref in marker.get("evidenceRefs", [])
+                    if str(ref).strip()
+                ],
+            }
+        )
+        existing_codes.add(code)
+    return repaired
 
 
 def _summary(output: LlmSemanticAnalysisOutput) -> str:
@@ -790,7 +995,13 @@ def _apply_deterministic_safety_net(
             },
         )
 
-    dynamic_refs = refs("dynamic_sql", "cross_database", "procedure_call", "result_uncertain", limit=4)
+    dynamic_refs = refs(
+        "dynamic_sql",
+        "cross_database",
+        "procedure_call",
+        "result_uncertain",
+        limit=4,
+    )
     if dynamic_refs:
         _append_claim(
             repaired["modernizationPoints"],
@@ -1012,6 +1223,7 @@ def _aggregate_invocations(
     invocations: Sequence[tuple[str, ModelInvocationRecord]],
     structured_output: dict[str, Any],
     profile: Any,
+    source_context_summaries: Sequence[Mapping[str, Any]] = (),
 ) -> ModelInvocationRecord:
     if not invocations:
         raise ValueError("At least one model invocation is required.")
@@ -1032,10 +1244,15 @@ def _aggregate_invocations(
                 "status": invocation.status.value,
                 "tokenUsage": dict(invocation.token_usage),
                 "latencyMs": invocation.latency_ms,
+                "sourceContextSummary": (
+                    dict(source_context_summaries[index])
+                    if index < len(source_context_summaries)
+                    else {}
+                ),
             },
             nested=invocation.component_invocations,
         )
-        for stage, invocation in invocations
+        for index, (stage, invocation) in enumerate(invocations)
     )
     token_usage = {
         "inputTokens": sum(

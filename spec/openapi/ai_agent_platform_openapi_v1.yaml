@@ -979,6 +979,14 @@ components:
         allowSpDefinitionToModel:
           type: boolean
           default: true
+          description: Backward-compatible gate for transient source context. When true, sourceContextMode defaults to RETRIEVED_SPANS rather than sending the full procedure definition.
+        sourceContextMode:
+          type: string
+          default: RETRIEVED_SPANS
+          enum:
+            - NONE
+            - RETRIEVED_SPANS
+          description: Controls whether bounded retrieved SP spans can be used as transient model input. Stored responses include only sanitized coverage summaries.
         useAiToolOrchestration:
           type: boolean
           default: true
@@ -1282,6 +1290,14 @@ components:
             type: integer
         latencyMs:
           type: integer
+        analysisCoverage:
+          type: object
+          description: Sanitized source-map coverage summary; never includes raw SP text or snippets.
+          additionalProperties: true
+        sourceContextSummary:
+          type: object
+          description: Sanitized retrieved-span context summary; never includes raw SP text, snippets, prompt body, row data, or provider response text.
+          additionalProperties: true
         componentInvocations:
           type: array
           description: Sanitized per-stage model invocation and internal read-only tool summaries.

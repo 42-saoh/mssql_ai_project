@@ -186,6 +186,13 @@ export function RequestForm({
               <option value="openai_fast_test">fast/test - gpt-5-nano</option>
             </select>
           </label>
+          <label>
+            <span>Source context</span>
+            <select name="sourceContextMode" defaultValue="RETRIEVED_SPANS">
+              <option value="RETRIEVED_SPANS">retrieved spans</option>
+              <option value="NONE">metadata only</option>
+            </select>
+          </label>
         </div>
       </fieldset>
 
@@ -291,6 +298,13 @@ export function RequestForm({
             <select name="llmProfileId" defaultValue="openai_sp_semantic_analysis">
               <option value="openai_sp_semantic_analysis">semantic analysis - gpt-5.5</option>
               <option value="openai_fast_test">fast/test - gpt-5-nano</option>
+            </select>
+          </label>
+          <label>
+            <span>Source context</span>
+            <select name="sourceContextMode" defaultValue="RETRIEVED_SPANS">
+              <option value="RETRIEVED_SPANS">retrieved spans</option>
+              <option value="NONE">metadata only</option>
             </select>
           </label>
         </div>

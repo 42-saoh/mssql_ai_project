@@ -17,10 +17,26 @@ from ai_agent_analysis.guide_metrics import (
 )
 from ai_agent_analysis.parser import parse_procedure_signature
 from ai_agent_analysis.result_sets import extract_result_set_hints
+from ai_agent_analysis.source_map import (
+    ContextPack,
+    ProcedureSourceMap,
+    RetrievedSourceSpan,
+    SourceSpanExtractionOutput,
+    build_context_pack,
+    build_context_packs,
+    build_procedure_source_map,
+)
 
 __all__ = [
+    "ContextPack",
+    "ProcedureSourceMap",
+    "RetrievedSourceSpan",
+    "SourceSpanExtractionOutput",
     "analyze_stored_procedure",
     "analyze_stored_procedure_file",
+    "build_context_pack",
+    "build_context_packs",
+    "build_procedure_source_map",
     "canonical_conversion_blockers",
     "complexity_metrics",
     "detect_patterns",

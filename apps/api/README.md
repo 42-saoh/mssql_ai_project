@@ -187,6 +187,16 @@ PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 
 Remote LLM execution defaults to official OpenAI. Set `LLM_REMOTE_PROVIDER=pgpt` to use the private P-GPT `/v1/responses` contract; configure `OPENAI_BASE_URL=http://<host>/gpgpta01-gpt` or exact `OPENAI_RESPONSES_URL`, plus optional `PGPT_MODEL_ANALYSIS` / `PGPT_MODEL_FAST_TEST`.
 
+P35 source context behavior: `sourceContextMode` defaults to `RETRIEVED_SPANS`.
+`allowSpDefinitionToModel=true` remains the backward-compatible source text gate, but semantic
+analysis sends bounded retrieved source spans instead of the full procedure definition. Stored
+agent traces expose sanitized `analysisCoverage` and `sourceContextSummary` only; raw prompt text,
+selected span text, full SP definitions, row data, and provider responses are not stored or
+returned. Source selection is bounded by `LLM_SEMANTIC_INPUT_TOKEN_BUDGET` (default `64000`),
+`LLM_SEMANTIC_SOURCE_TOKEN_BUDGET` (default `32000`), and `LLM_SP_MAX_RETRIEVED_SPANS`
+(default `24`). Context-length provider errors retry with reduced spans and then fall back to
+evidence digest only with `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`.
+
 `POST /api/v1/requests/sp-analysis` 는 P26 기준 high-quality hybrid LLM semantic analysis 를 기본값으로 사용한다.
 
 - `useLlmAnalysis`: 기본 `true`; deterministic metadata/static analysis 이후 LLM semantic enrichment 실행

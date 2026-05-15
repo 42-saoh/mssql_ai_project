@@ -9,11 +9,14 @@ from ai_agent_runtime import (
     build_semantic_analysis_run,
     build_semantic_analysis_runs,
 )
-from ai_agent_runtime.gateway import model_profile_from_env
+from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import (
+    AgentRunStatus,
+    ModelInvocationRecord,
     metadata_analysis_output_schema,
     metadata_tool_planning_output_schema,
     semantic_output_schema,
+    stable_json_hash,
 )
 from ai_agent_runtime.prompts import (
     render_metadata_analysis_prompt,
@@ -81,6 +84,45 @@ def test_semantic_prompt_includes_quality_hints_for_fact_coverage() -> None:
     assert "fixture-specific" in prompt.user_prompt
 
 
+def test_semantic_prompt_uses_source_context_without_full_definition() -> None:
+    prompt = render_semantic_analysis_prompt(
+        target_ref="dbo.usp_Demo",
+        metadata={"procedureDefinition": {"definitionHash": "abc"}},
+        static_analysis=None,
+        procedure_definition="CREATE PROCEDURE dbo.usp_Demo AS SELECT * FROM dbo.SecretOrders",
+        source_context={
+            "version": "procedure_context_pack@0.1.0",
+            "targetRef": "dbo.usp_Demo",
+            "stage": "conversion_readiness",
+            "mode": "RETRIEVED_SPANS",
+            "budgetStatus": "WITHIN_BUDGET",
+            "selectedSpans": [
+                {
+                    "spanId": "spn007",
+                    "kind": "DML",
+                    "startLine": 12,
+                    "endLine": 15,
+                    "referencedObjects": ["dbo.SafeOrders"],
+                    "riskTags": ["DML_WRITE"],
+                    "evidenceRefs": ["source.span.spn007"],
+                    "text": "UPDATE dbo.SafeOrders SET StatusCode = @StatusCode;",
+                }
+            ],
+            "skippedSpanCount": 4,
+            "analysisCoverage": {"spanCount": 10},
+            "reviewMarkers": [],
+        },
+        allowed_evidence_refs=["source.span.spn007"],
+    )
+
+    assert "UPDATE dbo.SafeOrders" in prompt.user_prompt
+    assert "CREATE PROCEDURE dbo.usp_Demo" not in prompt.user_prompt
+    assert "dbo.SecretOrders" not in prompt.user_prompt
+    assert prompt.metadata["procedureDefinitionIncluded"] is False
+    assert prompt.metadata["sourceContextIncluded"] is True
+    assert prompt.metadata["sourceContextSummary"]["selectedSpanCount"] == 1
+
+
 def test_fake_gateway_returns_schema_valid_sanitized_invocation(monkeypatch: Any) -> None:
     monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
     prompt = render_semantic_analysis_prompt(
@@ -98,6 +140,117 @@ def test_fake_gateway_returns_schema_valid_sanitized_invocation(monkeypatch: Any
     assert "businessRules" in result.structured_output
     assert "초안 의미 요약" in result.structured_output["businessRules"][0]["summary"]
     assert "CREATE PROCEDURE" not in str(result.to_storage_dict())
+
+
+def test_context_length_error_retries_with_shrunk_context_marker() -> None:
+    class ContextRetryGateway:
+        provider = "spy"
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.prompt_payloads: list[str] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.calls += 1
+            self.prompt_payloads.append(prompt.user_prompt)
+            if self.calls == 1:
+                raise ModelGatewayError(
+                    "Input exceeded provider limit.",
+                    code="OPENAI_STRUCTURED_OUTPUT_INVALID",
+                    provider_error={"code": "context_length_exceeded"},
+                )
+            evidence_ref = (prompt.metadata.get("allowedEvidenceRefs") or ["source.span.spn001"])[0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "CONTEXT_RETRY_RULE",
+                        "summary": "Reduced context still supports a draft claim.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [evidence_ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return ModelInvocationRecord(
+                provider=self.provider,
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+                token_usage={"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+                latency_ms=1,
+            )
+
+    gateway = ContextRetryGateway()
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.usp_Demo",
+        metadata={
+            "deterministicFacts": [
+                {"id": "source.span.spn001", "fact_type": "SOURCE_SPAN"}
+            ]
+        },
+        static_analysis=None,
+        procedure_definition="CREATE PROCEDURE dbo.usp_Demo AS SELECT 1",
+        source_context_packs={
+            "deterministic_evidence_digest": {
+                "version": "procedure_context_pack@0.1.0",
+                "targetRef": "dbo.usp_Demo",
+                "stage": "deterministic_evidence_digest",
+                "mode": "RETRIEVED_SPANS",
+                "budgetStatus": "WITHIN_BUDGET",
+                "selectedSpans": [
+                    {
+                        "spanId": "spn001",
+                        "kind": "RESULT_SET",
+                        "startLine": 1,
+                        "endLine": 1,
+                        "referencedObjects": [],
+                        "riskTags": ["RESULT_SHAPE"],
+                        "evidenceRefs": ["source.span.spn001"],
+                        "text": "SELECT 1;",
+                    },
+                    {
+                        "spanId": "spn002",
+                        "kind": "DML",
+                        "startLine": 2,
+                        "endLine": 2,
+                        "referencedObjects": ["dbo.T"],
+                        "riskTags": ["DML_WRITE"],
+                        "evidenceRefs": ["source.span.spn001"],
+                        "text": "UPDATE dbo.T SET C = 1;",
+                    },
+                ],
+                "skippedSpanCount": 0,
+                "analysisCoverage": {"spanCount": 2},
+                "reviewMarkers": [],
+            }
+        },
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    storage = payload.model_invocation.to_storage_dict()
+
+    assert gateway.calls >= 2
+    assert '"budgetStatus": "SHRUNK_RETRY"' in gateway.prompt_payloads[1]
+    assert any(
+        marker["code"] == "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED"
+        for marker in payload.structured_output["reviewMarkers"]
+    )
+    assert storage["sourceContextSummary"]["budgetStatus"] == "REVIEW_REQUIRED"
+    assert storage["analysisCoverage"]["spanCount"] == 2
 
 
 def test_fast_test_profile_defaults_to_gpt_5_nano(monkeypatch: Any) -> None:

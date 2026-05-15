@@ -145,7 +145,61 @@ def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
     assert request.options.use_ai_tool_orchestration is True
     assert request.options.use_platform_tool_orchestration is True
     assert request.options.allow_sp_definition_to_model is True
+    assert request.options.source_context_mode == "RETRIEVED_SPANS"
     assert request.options.llm_profile_id == "openai_sp_semantic_analysis"
+
+
+def test_llm_prompt_uses_retrieved_source_context_without_full_definition() -> None:
+    class SourceContextSpyGateway:
+        def __init__(self) -> None:
+            self.prompt_payloads: list[dict] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.prompt_payloads.append(payload)
+            assert "sourceContext" in payload
+            assert payload["sourceContextIncluded"] is True
+            assert payload["procedureDefinitionIncluded"] is False
+            assert "procedureDefinition" not in payload
+            assert "selectedSpans" in payload["sourceContext"]
+            evidence_refs = payload["evidenceRefContract"]["allowedFactIds"]
+            ref = evidence_refs[0] if evidence_refs else "metadata.procedureDefinitionHash"
+            structured_output = {
+                "businessRules": [
+                        {
+                            "category": "SOURCE_CONTEXT_BOUND_RULE",
+                            "summary": "선택된 source span을 transient context로 사용했습니다.",
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": [ref],
+                        }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-source-context",
+                structured_output=structured_output,
+            )
+
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository, model_gateway=SourceContextSpyGateway())
+
+    _request_record, job = service.submit_sp_analysis(_llm_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    run = repository.list_agent_runs(job.job_id)[0]
+    metadata = next(iter(repository.metadata_collections.values()))
+    artifact = next(iter(repository.artifacts.values()))
+
+    assert run.model_invocation["sourceContextSummary"]["mode"] == "RETRIEVED_SPANS"
+    assert run.model_invocation["analysisCoverage"]["spanCount"] > 0
+    assert "CREATE PROCEDURE" not in str(metadata.payload)
+    assert "CREATE PROCEDURE" not in artifact.content
 
 
 def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> None:

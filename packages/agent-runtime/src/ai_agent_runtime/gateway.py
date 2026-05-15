@@ -513,11 +513,14 @@ class OpenAIModelGateway:
                 "OPENAI_API_KEY is required when LLM_ENABLE_REMOTE=1.",
                 code="OPENAI_API_KEY_MISSING",
             )
-        if prompt.metadata.get("procedureDefinitionIncluded") and (
+        if (
+            prompt.metadata.get("procedureDefinitionIncluded")
+            or prompt.metadata.get("sourceContextIncluded")
+        ) and (
             os.getenv("LLM_ALLOW_SP_TEXT", "0").strip() != "1"
         ):
             raise ModelGatewayError(
-                "LLM_ALLOW_SP_TEXT=1 is required before sending SP definition text.",
+                "LLM_ALLOW_SP_TEXT=1 is required before sending SP source text.",
                 code="LLM_SP_TEXT_NOT_ALLOWED",
             )
 

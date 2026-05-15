@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
@@ -226,6 +226,8 @@ class ModelInvocationRecord:
     component_invocations: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     def to_storage_dict(self) -> dict[str, Any]:
+        source_context_summary = _model_source_context_summary(self.component_invocations)
+        analysis_coverage = dict(source_context_summary.get("analysisCoverage") or {})
         payload = {
             "provider": self.provider,
             "model": self.model,
@@ -240,6 +242,8 @@ class ModelInvocationRecord:
             "status": self.status.value,
             "tokenUsage": dict(self.token_usage),
             "latencyMs": self.latency_ms,
+            "analysisCoverage": analysis_coverage,
+            "sourceContextSummary": source_context_summary,
         }
         if self.component_invocations:
             payload["componentInvocations"] = [dict(item) for item in self.component_invocations]
@@ -274,6 +278,62 @@ def stable_json_hash(value: Any) -> str:
 
 def text_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _model_source_context_summary(
+    component_invocations: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    summaries = [
+        dict(item.get("sourceContextSummary") or {})
+        for item in component_invocations
+        if isinstance(item.get("sourceContextSummary"), Mapping)
+    ]
+    if not summaries:
+        return {
+            "mode": "NONE",
+            "budgetStatus": "NO_SOURCE_CONTEXT",
+            "selectedSpanCount": 0,
+            "skippedSpanCount": 0,
+            "reviewMarkers": [],
+        }
+    selected_count = sum(int(item.get("selectedSpanCount") or 0) for item in summaries)
+    skipped_count = sum(int(item.get("skippedSpanCount") or 0) for item in summaries)
+    budget_statuses = [str(item.get("budgetStatus") or "") for item in summaries]
+    budget_status = (
+        "REVIEW_REQUIRED"
+        if any(
+            status in {"PRE_PROVIDER_SHRINK", "SHRUNK_RETRY", "FALLBACK_NO_SOURCE"}
+            for status in budget_statuses
+        )
+        else (
+            "TRUNCATED_TO_BUDGET"
+            if "TRUNCATED_TO_BUDGET" in budget_statuses
+            else "WITHIN_BUDGET"
+        )
+    )
+    coverage = next(
+        (
+            dict(item.get("analysisCoverage") or {})
+            for item in summaries
+            if item.get("analysisCoverage")
+        ),
+        {},
+    )
+    markers: list[dict[str, Any]] = []
+    for item in summaries:
+        for marker in item.get("reviewMarkers", []):
+            if isinstance(marker, Mapping):
+                markers.append(dict(marker))
+    return {
+        "mode": "RETRIEVED_SPANS"
+        if any(item.get("mode") == "RETRIEVED_SPANS" for item in summaries)
+        else "NONE",
+        "budgetStatus": budget_status,
+        "selectedSpanCount": selected_count,
+        "skippedSpanCount": skipped_count,
+        "analysisCoverage": coverage,
+        "reviewMarkers": markers,
+    }
 
 
 def semantic_output_schema(

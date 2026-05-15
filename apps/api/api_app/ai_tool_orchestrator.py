@@ -443,7 +443,8 @@ class AiToolOrchestrator:
                     marker = _review_marker(
                         "AI_TOOL_ORCHESTRATION_SKIPPED",
                         (
-                            "Metadata tool planning이 실패해 baseline metadata로 workflow를 계속했습니다. "
+                            "Metadata tool planning이 실패해 baseline metadata로 "
+                            "workflow를 계속했습니다. "
                             f"code={getattr(exc, 'code', exc.__class__.__name__)}"
                         ),
                         evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
@@ -667,6 +668,8 @@ def _sp_text_gate_will_block_semantic(options: Mapping[str, Any]) -> bool:
     return (
         os.getenv("LLM_ENABLE_REMOTE", "0").strip() == "1"
         and bool(options.get("allowSpDefinitionToModel", False))
+        and str(options.get("sourceContextMode") or "RETRIEVED_SPANS").strip().upper()
+        == "RETRIEVED_SPANS"
         and os.getenv("LLM_ALLOW_SP_TEXT", "0").strip() != "1"
     )
 
@@ -888,9 +891,11 @@ def _fact_summary(tool_name: str, payload: Mapping[str, Any]) -> str:
         return f"Metadata object search가 candidate identity {len(results)}개를 반환했습니다."
     if tool_name == "get_dependency_closure":
         summary = _safe_dict(data.get("summary"))
+        node_count = summary.get("nodeCount", 0)
+        edge_count = summary.get("edgeCount", 0)
         return (
             "의존성 closure metadata입니다. "
-            f"node {summary.get('nodeCount', 0)}개와 edge {summary.get('edgeCount', 0)}개를 포함합니다."
+            f"node {node_count}개와 edge {edge_count}개를 포함합니다."
         )
     return f"{tool_name}이 sanitized read-only MSSQL metadata evidence를 반환했습니다."
 
@@ -936,7 +941,8 @@ def _metadata_with_ai_tool_evidence(
             _dedupe_strings(
                 [
                     *metadata.notes,
-                    "AI tool orchestration은 internal read-only MSSQL MCP registry 경계를 사용했습니다.",
+                    "AI tool orchestration은 internal read-only MSSQL MCP registry "
+                    "경계를 사용했습니다.",
                 ]
             )
         ),

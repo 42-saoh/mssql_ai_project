@@ -5,7 +5,12 @@ import re
 from collections.abc import Iterable
 from dataclasses import replace as dataclass_replace
 
-from ai_agent_analysis import analyze_stored_procedure, migration_guide_static_metrics
+from ai_agent_analysis import (
+    analyze_stored_procedure,
+    build_context_packs,
+    build_procedure_source_map,
+    migration_guide_static_metrics,
+)
 from ai_agent_domain import ArtifactType, JobStatus, RequestedOutputType, WorkflowStepType
 from ai_agent_generation import (
     GenerationContext,
@@ -433,18 +438,24 @@ class WorkflowService:
         target = request_record.target
         object_ref = f"{target['schema']}.{target['name']}"
         definition_text = procedure_definition_text(metadata)
+        source_context_packs = source_context_packs_for_request(
+            definition_text,
+            request_record=request_record,
+            source_name=object_ref,
+        )
         definition_for_model = (
             definition_text
-            if bool(request_record.options.get("allowSpDefinitionToModel", False))
+            if source_context_packs
             else None
         )
         if (
             os.getenv("LLM_ENABLE_REMOTE", "0").strip() == "1"
             and bool(request_record.options.get("allowSpDefinitionToModel", False))
+            and source_context_mode_for_options(request_record.options) == "RETRIEVED_SPANS"
             and os.getenv("LLM_ALLOW_SP_TEXT", "0").strip() != "1"
         ):
             raise ModelGatewayError(
-                "LLM_ALLOW_SP_TEXT=1 is required before high-quality live analysis.",
+                "LLM_ALLOW_SP_TEXT=1 is required before high-quality live source analysis.",
                 code="LLM_SP_TEXT_NOT_ALLOWED",
             )
         try:
@@ -453,6 +464,7 @@ class WorkflowService:
                 metadata=metadata.as_dict(),
                 static_analysis=static_analysis,
                 procedure_definition=definition_for_model,
+                source_context_packs=source_context_packs,
                 model_gateway=self.model_gateway,
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
             )
@@ -1180,6 +1192,7 @@ def static_analysis_payload(
 ) -> dict[str, object] | None:
     if not definition_text:
         return None
+    source_map = build_procedure_source_map(definition_text, source_name=source_name)
     result = analyze_stored_procedure(
         definition_text,
         source_name=source_name,
@@ -1192,11 +1205,41 @@ def static_analysis_payload(
     )
     payload = result.model_dump(mode="json")
     payload.pop("source_name", None)
+    payload["sourceMap"] = source_map.to_storage_dict()
+    payload["analysisCoverage"] = source_map.analysis_coverage
     payload["migrationGuideStaticMetrics"] = migration_guide_static_metrics(
         definition_text,
         source_name=source_name,
     )
     return payload
+
+
+def source_context_mode_for_options(options: dict[str, object]) -> str:
+    if not bool(options.get("allowSpDefinitionToModel", False)):
+        return "NONE"
+    mode = str(options.get("sourceContextMode") or "RETRIEVED_SPANS").strip().upper()
+    return "RETRIEVED_SPANS" if mode == "RETRIEVED_SPANS" else "NONE"
+
+
+def source_context_packs_for_request(
+    definition_text: str | None,
+    *,
+    request_record: WorkRequestRecord,
+    source_name: str,
+) -> dict[str, dict[str, object]] | None:
+    if not definition_text:
+        return None
+    mode = source_context_mode_for_options(request_record.options)
+    if mode != "RETRIEVED_SPANS":
+        return None
+    source_map = build_procedure_source_map(definition_text, source_name=source_name)
+    packs = build_context_packs(
+        sql_text=definition_text,
+        source_map=source_map,
+        target_ref=source_name,
+        mode=mode,
+    )
+    return {stage: pack.to_prompt_dict() for stage, pack in packs.items()}
 
 
 def system_code(db_profile_id: str) -> str:
