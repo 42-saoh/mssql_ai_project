@@ -1,106 +1,52 @@
 # apps/web
 
-중앙 포털 UI 의 시작점이다. P21 기준 runtime/default path 는 no-mock HTTP API mode 이며,
-`PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 app 사용의 필수 조건이다.
+Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock HTTP mode: `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL` are required at runtime.
 
 ## Routes
 
-- `/jobs/[jobId]` also renders sanitized dependency child AgentRun coverage from the root
-  `sourceContextSummary.dependencyAnalysis`; raw prompt, source span, provider response, and SP
-  definition text stay hidden.
+- `/` - dashboard with recent analysis jobs, metadata search summary, and draft artifact links.
+- `/requests/new` - submits single and batch SP analysis requests to the portal API, then links to accepted jobs.
+- `/jobs` - recent analysis history with target/profile/status/output filters and artifact preview links.
+- `/jobs/[jobId]` - workflow status, sanitized LLM trace summary, knowledge assets, and draft artifacts.
+- `/artifacts/[artifactId]` - artifact preview, evidence refs, caveats, sanitized trace, and explicit validation trigger.
+- `/metadata/search` - read-only metadata identity/evidence search plus client-side async metadata analysis.
+- `/metadata/dependencies` - read-only dependency closure and reference resolver diagnostics.
 
-- `/` - 최근 jobs, PPM metadata search, draft artifact 목록 요약
-- `/requests/new` - 단일 API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect, batch mode 는 `POST /api/v1/requests/sp-analysis/batch` accepted/rejected summary 를 표시
-- `/jobs` - recent analysis history timeline with target/profile/status/output filters and artifact preview links
-- `/metadata/search` - read-only metadata identity/evidence search and explicit metadata analyze action
-- `/metadata/dependencies` - safe dependency closure/reference diagnostics
-- `/jobs/[jobId]` - 실제 job 상태, draft artifact 목록, sanitized knowledge asset summary
-- `/artifacts/[artifactId]` - artifact preview 와 latest validation 표시
+## API Boundary
 
-## API boundary
+- `lib/api/portal-api.ts` defines the UI-facing portal API contract.
+- `lib/api/http-client.ts` is the runtime HTTP adapter.
+- `lib/api/client.ts` requires HTTP mode and API base URL; there is no mock adapter or demo id fallback.
+- `lib/api/errors.ts` normalizes API `{code, detail}` blockers for UI display.
+- `lib/pilot-manifest.ts` only reads live sample object identities when the pilot manifest is in `live_metadata` mode.
 
-- `lib/api/portal-api.ts` 는 화면이 기대하는 API client 인터페이스다.
-- `lib/api/http-client.ts` 는 runtime/default API adapter 다.
-- `lib/api/client.ts` 는 `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 을 요구한다.
-- runtime/default path 에 mock adapter 또는 demo id fallback 은 없다.
-- `lib/api/errors.ts` 는 API `{code, detail}` error body 를 보존해 PLF/PPM/config blocker 를
-  화면에 표시한다.
-- `lib/pilot-manifest.ts` 는 PPM manifest 가 `live_metadata` 인 경우에만 sample object
-  identities 를 읽고, `template_only` 일 때는 실제 이름을 노출하지 않는다.
+## Metadata Search And Analysis
 
-## P21 behavior
+- Search stays server-rendered and calls `GET /api/v1/metadata/search`.
+- `Analyze metadata` is a client-side async action. It calls the internal Web route `POST /api/metadata/analyze`, which proxies the existing public `POST /api/v1/metadata/analyze` API. No new public API is introduced for this slice.
+- The action defaults `maxTargets` to `1` and clamps user input to `1-5`.
+- While analysis is running, the page shows a disabled button, `분석 중` elapsed time, and any timeout/API blocker on the same screen instead of holding a full page navigation.
+- The reusable metadata analysis panel renders summary, facts/tool metrics, object profiles, insight groups, dependency graph, DTO readiness, knowledge assets, evidence caveats, and caveats.
 
-- `/` renders several recent analysis jobs instead of only the latest job artifact, and `/jobs`
-  exposes the recent history list with target/status/profile/output filters. Both surfaces use
-  `GET /api/v1/jobs` plus per-job `GET /api/v1/jobs/{jobId}/artifacts` links.
-- `/requests/new` 는 mock draft job 이 아니라 API 가 반환한 job id 로 이동한다.
-- Batch mode 는 한 줄당 하나의 `schema.name` PROCEDURE target 을 제출하고, accepted job links,
-  rejected targets, active limits 만 표시한다.
-- `/artifacts/[artifactId]` 는 page-load 에 validation write 를 만들지 않는다.
-  Latest validation 은 `GET /api/v1/artifacts/{artifactId}/validation/latest` 로 읽고,
-  validation write 는 사용자가 `Run validation` 을 누를 때만 실행한다.
-- PLF/PPM/API prerequisites 가 없으면 dependency blocker 를 렌더링한다.
+## Dependency Diagnostics
 
-## P25 behavior
+- `/metadata/dependencies` defaults to the PPM live-safe profile and sample:
+  - profile `ppm`
+  - closure target `dbo.GetInspItemsCd`, `PROCEDURE`, `maxDepth=2`
+  - resolver source `dbo.GetInspItemsCd`
+  - resolver referenced object `dbo.PEX_INSP_ITEMS`
+- The page invokes only read-only metadata tools: `get_dependency_closure` and `resolve_dependency_reference`.
+- The UI never renders MCP input schemas, raw SQL, row data, procedure execution, raw definition text, DDL/DML apply controls, deploy, publish, or approval actions.
 
-- Draft-only flow 는 publish/deploy/apply action 을 노출하지 않으며 `/review/decision` 직접 접근은 404 로 처리한다.
-- Validation 결과의 `REVIEW_REQUIRED` 는 사람 승인 요청이 아니라 evidence caveat 로 표시한다.
-- Human approval server code 와 Web API client 호출은 제품 표면에서 제거되었다.
+## Draft-Only Behavior
 
-## P29 behavior
+- The product flow is request -> metadata -> analysis -> generation -> validation -> `VALIDATION_COMPLETE`.
+- `REVIEW_REQUIRED` remains a machine status/evidence caveat, not a human review CTA. User-facing copy renders it as `근거 보강 필요` or `Evidence caveat`.
+- `/review/decision` is not implemented in Web.
+- Validation writes only happen when the user explicitly clicks `Run validation`; page load reads the latest validation report.
 
-- `/metadata/dependencies` is a read-only diagnostic surface for
-  `get_dependency_closure` and `resolve_dependency_reference`.
-- The page uses `/api/v1/metadata/tools` only for `invokable` status and never
-  renders MCP input schemas.
-- The forms accept only structured metadata identifiers, `maxDepth`, and
-  `includeReviewRequired`; there are no free-form SQL, row data, procedure
-  execution, DDL/DML, raw definition, or secret fields.
-- Results render the sanitized invocation envelope: `snapshotId`, `collectedAt`,
-  evidence refs, closure nodes/edges/unresolved references, candidates, and
-  selected resolution.
+## Knowledge Asset Behavior
 
-## Metadata analysis behavior
-
-- `/metadata/search` keeps deterministic search as the default page load. The `Analyze metadata`
-  action calls `POST /api/v1/metadata/analyze` explicitly.
-- The analysis panel renders `summary`, `objectInsights`, `objectProfiles`,
-  `insightGroups`, `dependencyGraph`, `dtoReadiness`, deterministic fact count, sanitized
-  tool-call count, planner effectiveness metrics, knowledge asset summaries, evidence caveat markers, and caveats.
-- The Web client does not expose MCP input schemas, raw definition text, row data, procedure
-  execution, DDL/DML controls, or raw provider traces.
-
-## Knowledge asset behavior
-
-- `/jobs/[jobId]` reads `GET /api/v1/jobs/{jobId}/knowledge-assets` and renders asset kind, target,
-  current version, content hash, and safe API links for asset/fact graph JSON.
-- `/metadata/search` renders Metadata Analyze `knowledgeAssets[]` summaries in the analysis panel.
-- The Web client includes `POST /api/v1/knowledge/exports` for sanitized JSONL/GRAPH_JSON exports,
-  but does not render raw fact payloads, raw metadata payloads, provider traces, row data, or raw SQL.
-
-## P22 behavior
-
-- `/jobs/[jobId]` shows dependency coverage, analyzed child targets, capped
-  `REVIEW_REQUIRED` skipped dependency reasons, and child `LLM_SEMANTIC_ANALYST_DEPENDENCY`
-  trace rows from sanitized AgentRun summaries only.
-
-- `/requests/new` now sends `sourceContextMode=RETRIEVED_SPANS` by default. This keeps the
-  high-quality semantic workflow on bounded retrieved SP spans rather than full-procedure prompt
-  input, while the UI still exposes a metadata-only mode for source text suppression.
-
-- `/requests/new` also sends `sourceDependencyMode=CONFIRMED_PROCEDURES` by default so confirmed
-  dependency procedures can be analyzed as bounded child AgentRuns and summarized in the root
-  migration guide.
-
-- `/requests/new` 는 P26 high-quality hybrid 기본값으로 LLM semantic analysis option 을 API
-  `SPAnalysisOptions` 로 전송한다. 기본 선택은 semantic analysis profile, LLM analysis enabled,
-  bounded AI metadata tool orchestration enabled, bounded platform context tool orchestration enabled,
-  transient SP definition input allowed 이며 fast/test profile 은 수동 선택지로만 남긴다.
-- `/jobs/[jobId]` 는 `GET /api/v1/jobs/{jobId}/agent-runs` 로 sanitized LLM trace summary 를 읽어
-  model, prompt/schema version, input/output hash, token usage, latency, status 를 표시한다.
-- `/artifacts/[artifactId]` 는 artifact 의 job id 가 있을 때 같은 sanitized trace summary 를 표시한다.
-- raw prompt, raw SP definition, raw OpenAI response text 는 Web API client type 과 화면에 없다.
-
-현재 화면은 row data 조회, procedure execution, DDL/DML, publish/export, deployment,
-production Auth/RBAC mock header 가장을 제공하지 않는다. P20 Auth/RBAC live IdP wiring 은
-future hardening 으로 남아 있으며 `production_ready: false` 를 유지한다.
+- `/jobs/[jobId]` reads `GET /api/v1/jobs/{jobId}/knowledge-assets` and renders safe summaries plus asset/fact graph API links.
+- `/metadata/search` renders metadata analysis `knowledgeAssets[]` summaries in the reusable analysis panel.
+- The Web client includes sanitized knowledge export support, but does not render raw fact payloads, raw metadata payloads, provider traces, row data, or raw SQL.

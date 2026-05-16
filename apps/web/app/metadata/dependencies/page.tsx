@@ -119,7 +119,7 @@ function invocationFor(
   mode: DependencyMode,
   params: Record<string, string | string[] | undefined>,
 ): { toolName: MetadataToolName; arguments: Record<string, unknown> } {
-  const dbProfileId = cleanParam(params, "dbProfileId", "master");
+  const dbProfileId = cleanParam(params, "dbProfileId", "ppm");
   if (mode === "resolver") {
     return {
       toolName: "resolve_dependency_reference",
@@ -127,11 +127,11 @@ function invocationFor(
         dbProfileId,
         sourceObject: {
           schema: cleanParam(params, "sourceSchema", "dbo"),
-          name: cleanParam(params, "sourceName", "usp_GetOrderSummary"),
+          name: cleanParam(params, "sourceName", "GetInspItemsCd"),
           objectType: sourceObjectTypeParam(params, "sourceObjectType"),
         },
         referencedSchema: optionalParam(params, "referencedSchema") ?? "dbo",
-        referencedName: cleanParam(params, "referencedName", "TB_ORDER"),
+        referencedName: cleanParam(params, "referencedName", "PEX_INSP_ITEMS"),
         referencedDatabase: optionalParam(params, "referencedDatabase"),
         referencedServer: optionalParam(params, "referencedServer"),
       },
@@ -142,7 +142,7 @@ function invocationFor(
     arguments: {
       dbProfileId,
       schema: cleanParam(params, "schema", "dbo"),
-      objectName: cleanParam(params, "objectName", "usp_ProcessOrderBatch"),
+      objectName: cleanParam(params, "objectName", "GetInspItemsCd"),
       objectType: sourceObjectTypeParam(params, "objectType"),
       maxDepth: numberParam(params, "maxDepth", 2),
       includeReviewRequired: booleanParam(params, "includeReviewRequired", false),
@@ -329,7 +329,7 @@ function ClosureForm({
   params: Record<string, string | string[] | undefined>;
   profiles: { id: string; database: string }[];
 }>) {
-  const dbProfileId = cleanParam(params, "dbProfileId", "master");
+  const dbProfileId = cleanParam(params, "dbProfileId", "ppm");
   const includeReviewRequired = booleanParam(params, "includeReviewRequired", false);
   return (
     <form className="metadata-search-form" method="get">
@@ -351,7 +351,7 @@ function ClosureForm({
           <span>Object name</span>
           <input
             name="objectName"
-            defaultValue={cleanParam(params, "objectName", "usp_ProcessOrderBatch")}
+            defaultValue={cleanParam(params, "objectName", "GetInspItemsCd")}
           />
         </label>
         <label>
@@ -393,7 +393,7 @@ function ResolverForm({
   params: Record<string, string | string[] | undefined>;
   profiles: { id: string; database: string }[];
 }>) {
-  const dbProfileId = cleanParam(params, "dbProfileId", "master");
+  const dbProfileId = cleanParam(params, "dbProfileId", "ppm");
   return (
     <form className="metadata-search-form" method="get">
       <input type="hidden" name="mode" value="resolver" />
@@ -417,7 +417,7 @@ function ResolverForm({
           <span>Source name</span>
           <input
             name="sourceName"
-            defaultValue={cleanParam(params, "sourceName", "usp_GetOrderSummary")}
+            defaultValue={cleanParam(params, "sourceName", "GetInspItemsCd")}
           />
         </label>
         <label>
@@ -431,7 +431,7 @@ function ResolverForm({
           <span>Referenced name</span>
           <input
             name="referencedName"
-            defaultValue={cleanParam(params, "referencedName", "TB_ORDER")}
+            defaultValue={cleanParam(params, "referencedName", "PEX_INSP_ITEMS")}
           />
         </label>
         <label>

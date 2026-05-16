@@ -1,0 +1,52 @@
+{
+  "status": "pass",
+  "baseUrl": "http://localhost:3035",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-metadata-smoke-2026-05-16T11-27-57-337Z",
+  "forbiddenRequests": [],
+  "consoleMessages": [],
+  "pageErrors": [],
+  "checks": [
+    {
+      "name": "home reachable",
+      "classification": "pass"
+    },
+    {
+      "name": "metadata search renders results",
+      "classification": "pass",
+      "resultRows": 5,
+      "evidenceRefs": 5
+    },
+    {
+      "name": "metadata analyze shows immediate loading without navigation",
+      "classification": "pass"
+    },
+    {
+      "name": "metadata analyze completes on same page",
+      "classification": "pass",
+      "outcome": "blocker"
+    },
+    {
+      "name": "dependency closure defaults render without P21 blocker",
+      "classification": "pass",
+      "profile": "ppm",
+      "objectName": "GetInspItemsCd"
+    },
+    {
+      "name": "dependency resolver defaults render without P21 blocker",
+      "classification": "pass",
+      "referencedName": "PEX_INSP_ITEMS"
+    },
+    {
+      "name": "mobile metadata routes have no horizontal overflow",
+      "classification": "pass"
+    }
+  ],
+  "screenshots": [
+    "D:\\wt\\p35\\.tmp\\playwright-metadata-smoke-2026-05-16T11-27-57-337Z\\home.png",
+    "D:\\wt\\p35\\.tmp\\playwright-metadata-smoke-2026-05-16T11-27-57-337Z\\metadata-search.png",
+    "D:\\wt\\p35\\.tmp\\playwright-metadata-smoke-2026-05-16T11-27-57-337Z\\metadata-analysis.png",
+    "D:\\wt\\p35\\.tmp\\playwright-metadata-smoke-2026-05-16T11-27-57-337Z\\dependency-closure.png",
+    "D:\\wt\\p35\\.tmp\\playwright-metadata-smoke-2026-05-16T11-27-57-337Z\\dependency-resolver.png",
+    "D:\\wt\\p35\\.tmp\\playwright-metadata-smoke-2026-05-16T11-27-57-337Z\\mobile-final.png"
+  ]
+}

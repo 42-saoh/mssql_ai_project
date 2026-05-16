@@ -32,7 +32,15 @@ def _form_control_block(source: str, name: str) -> str:
 def test_p14_sample_names_come_from_live_manifest_not_web_source() -> None:
     manifest = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     reader_source = (WEB_ROOT / "lib" / "pilot-manifest.ts").read_text(encoding="utf-8")
-    web_source = _web_source()
+    request_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for root in [WEB_ROOT / "app" / "requests"]
+        for path in root.rglob("*")
+        if path.suffix in {".ts", ".tsx"}
+    )
+    request_sources += "\n" + (WEB_ROOT / "components" / "request-form.tsx").read_text(
+        encoding="utf-8"
+    )
 
     assert 'selectionMode !== "live_metadata"' in reader_source
     assert "procedureSamples: []" in reader_source
@@ -45,7 +53,7 @@ def test_p14_sample_names_come_from_live_manifest_not_web_source() -> None:
             "PCS_PY_ManageInvoiceFldSchd_PRC",
         } <= manifest_names
         for name in manifest_names:
-            assert name not in web_source
+            assert name not in request_sources
 
 
 def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
@@ -74,6 +82,15 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     page = (WEB_ROOT / "app" / "metadata" / "dependencies" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    search_page = (WEB_ROOT / "app" / "metadata" / "search" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    analyze_action = (WEB_ROOT / "components" / "metadata-analyze-action.tsx").read_text(
+        encoding="utf-8"
+    )
+    analyze_route = (
+        WEB_ROOT / "app" / "api" / "metadata" / "analyze" / "route.ts"
+    ).read_text(encoding="utf-8")
     portal_api = (WEB_ROOT / "lib" / "api" / "portal-api.ts").read_text(encoding="utf-8")
     http_client = (WEB_ROOT / "lib" / "api" / "http-client.ts").read_text(encoding="utf-8")
     smoke = (WEB_ROOT / "scripts" / "http-adapter-smoke.mjs").read_text(encoding="utf-8")
@@ -85,7 +102,17 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert "resolve_dependency_reference" in page
     assert "api.listMetadataTools()" in page
     assert "api.invokeMetadataTool" in page
-    assert "api.analyzeMetadata" in _web_source()
+    assert 'cleanParam(params, "dbProfileId", "ppm")' in page
+    assert 'cleanParam(params, "objectName", "GetInspItemsCd")' in page
+    assert 'cleanParam(params, "referencedName", "PEX_INSP_ITEMS")' in page
+    assert "MetadataAnalyzeAction" in search_page
+    assert 'defaultMaxTargets={1}' in search_page
+    assert 'fetch("/api/metadata/analyze"' in analyze_action
+    assert "AI_METADATA_ANALYSIS_TIMEOUT" in analyze_action
+    assert "Analysis target limit" in analyze_action
+    assert "api.analyzeMetadata(payload)" in analyze_route
+    assert "evidenceStatusLabel(item.status)" in _web_source()
+    assert "DTO {item.status}" not in _web_source()
     assert "inputSchema" not in page
     assert "input schema" not in page.lower()
     assert "listMetadataTools" in portal_api
@@ -185,10 +212,16 @@ def test_job_page_renders_dependency_child_agent_runs_without_raw_trace_dump() -
 
 def test_web_visible_copy_uses_evidence_caveat_language_not_review_actions() -> None:
     source = _web_source().lower()
+    raw_source = _web_source()
 
     assert "review required" not in source
     assert "review marker" not in source
     assert "manual review" not in source
     assert "approval decision" not in source
     assert "evidence caveat" in source
-    assert "근거 보강 필요" in _web_source()
+    assert "근거 보강 필요" in raw_source
+    assert "분석 중" in raw_source
+    assert "洹쇨굅" not in raw_source
+    assert "遺꾩꽍" not in raw_source
+    assert "쨌" not in raw_source
+    assert "�" not in raw_source
