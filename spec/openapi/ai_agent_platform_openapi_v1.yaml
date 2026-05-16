@@ -132,7 +132,7 @@ paths:
   /api/v1/jobs:
     get:
       tags: [jobs]
-      summary: List recent workflow jobs.
+      summary: List recent workflow jobs with optional request context for history views.
       operationId: listJobs
       parameters:
         - name: limit
@@ -145,7 +145,7 @@ paths:
             default: 20
       responses:
         "200":
-          description: Recent workflow jobs.
+          description: Recent workflow jobs with target/profile/output context when available.
           content:
             application/json:
               schema:
@@ -159,7 +159,7 @@ paths:
   /api/v1/jobs/{jobId}:
     get:
       tags: [jobs]
-      summary: Read workflow job status.
+      summary: Read workflow job status and request context.
       operationId: getJob
       parameters:
         - $ref: "#/components/parameters/JobId"
@@ -971,6 +971,16 @@ components:
           type: string
         status:
           $ref: "#/components/schemas/JobStatus"
+        dbProfileId:
+          type: string
+          description: Metadata profile requested for this analysis job when available.
+        target:
+          $ref: "#/components/schemas/TargetObject"
+        outputs:
+          type: array
+          description: Requested draft output groups for this analysis job when available.
+          items:
+            $ref: "#/components/schemas/RequestedOutputType"
         currentStep:
           oneOf:
             - $ref: "#/components/schemas/WorkflowStepType"

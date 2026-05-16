@@ -40,6 +40,9 @@ class JobRecord:
     status: JobStatus = JobStatus.SUBMITTED
     current_step: WorkflowStepType | None = None
     correlation_id: str | None = None
+    db_profile_id: str | None = None
+    target: dict[str, Any] | None = None
+    outputs: tuple[str, ...] = ()
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
     error_code: str | None = None

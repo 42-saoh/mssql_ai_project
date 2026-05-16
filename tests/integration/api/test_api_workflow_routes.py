@@ -203,10 +203,22 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert job.status_code == 200
     assert job.headers["X-Correlation-ID"].startswith("corr_")
     assert job.json()["currentStep"] == "VALIDATE"
+    assert job.json()["dbProfileId"] == "master"
+    assert job.json()["target"] == {
+        "type": "PROCEDURE",
+        "schema": "dbo",
+        "name": "usp_OrderRequest_Select",
+    }
+    assert "SP_ANALYSIS_DOCUMENT" in job.json()["outputs"]
 
     recent_jobs = client.get("/api/v1/jobs", params={"limit": 10})
     assert recent_jobs.status_code == 200
     assert submitted["jobId"] in {item["jobId"] for item in recent_jobs.json()["jobs"]}
+    recent_job = next(
+        item for item in recent_jobs.json()["jobs"] if item["jobId"] == submitted["jobId"]
+    )
+    assert recent_job["target"]["name"] == "usp_OrderRequest_Select"
+    assert recent_job["dbProfileId"] == "master"
 
     listed = client.get(f"/api/v1/jobs/{submitted['jobId']}/artifacts")
     assert listed.status_code == 200
@@ -378,6 +390,9 @@ def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
     payload = response.json()
     assert set(payload) == {"jobs"}
     assert [item["jobId"] for item in payload["jobs"]] == list(reversed(created_job_ids[-2:]))
+    assert all(item["dbProfileId"] == "master" for item in payload["jobs"])
+    assert all(item["target"]["schema"] == "dbo" for item in payload["jobs"])
+    assert all(item["outputs"] == ["SP_ANALYSIS_DOCUMENT"] for item in payload["jobs"])
 
 
 def test_latest_validation_route_does_not_create_validation_write(

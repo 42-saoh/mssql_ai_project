@@ -268,7 +268,7 @@ class MssqlPlatformRepository:
                 record.updated_at,
             ),
         )
-        return record
+        return self.get_job(record.job_id) or record
 
     def find_job_by_request_id(self, request_id: str) -> JobRecord | None:
         row = self._query_one(
@@ -283,9 +283,17 @@ class MssqlPlatformRepository:
                 j.ERR_CNTNT,
                 j.CRE_DTM,
                 j.UPD_DTM,
-                j.RGST_BINDING_JSON
+                j.RGST_BINDING_JSON,
+                COALESCE(
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    p.DB_PRFL_NM,
+                    CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
+                ),
+                r.TRGT_PAYLD_JSON,
+                r.DESIRED_RSLT_JSON
             FROM dbo.CORE_JOBS j
             JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
+            LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
             WHERE r.TRC_ID = %s OR r.REQ_ID = %s
             ORDER BY j.CRE_DTM DESC
             """,
@@ -610,9 +618,17 @@ class MssqlPlatformRepository:
                 j.ERR_CNTNT,
                 j.CRE_DTM,
                 j.UPD_DTM,
-                j.RGST_BINDING_JSON
+                j.RGST_BINDING_JSON,
+                COALESCE(
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    p.DB_PRFL_NM,
+                    CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
+                ),
+                r.TRGT_PAYLD_JSON,
+                r.DESIRED_RSLT_JSON
             FROM dbo.CORE_JOBS j
             JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
+            LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
             WHERE j.JOB_ID = %s OR j.WRKR_REF_ID = %s
             """,
             (storage_uuid(job_id), job_id),
@@ -633,9 +649,17 @@ class MssqlPlatformRepository:
                 j.ERR_CNTNT,
                 j.CRE_DTM,
                 j.UPD_DTM,
-                j.RGST_BINDING_JSON
+                j.RGST_BINDING_JSON,
+                COALESCE(
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    p.DB_PRFL_NM,
+                    CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
+                ),
+                r.TRGT_PAYLD_JSON,
+                r.DESIRED_RSLT_JSON
             FROM dbo.CORE_JOBS j
             JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
+            LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
             ORDER BY j.CRE_DTM DESC, j.JOB_ID DESC
             """,
             (),
@@ -1908,12 +1932,17 @@ def job_from_row(row: tuple[Any, ...]) -> JobRecord:
     current_step = WorkflowStepType(str(row[4])) if row[4] else None
     binding = parse_json(row[9] if len(row) > 9 else None, {})
     correlation_id = str(binding.get("correlationId") or "") or None
+    target = parse_json(row[11] if len(row) > 11 else None, None)
+    outputs = parse_json(row[12] if len(row) > 12 else None, [])
     return JobRecord(
         job_id=str(row[1]),
         request_id=str(row[2]),
         status=JobStatus(str(row[3])),
         current_step=current_step,
         correlation_id=correlation_id,
+        db_profile_id=str(row[10]) if len(row) > 10 and row[10] else None,
+        target=dict(target) if isinstance(target, dict) else None,
+        outputs=tuple(str(item) for item in outputs) if isinstance(outputs, list) else (),
         error_code=str(row[5]) if row[5] else None,
         error_message=str(row[6]) if row[6] else None,
         created_at=as_datetime(row[7]),

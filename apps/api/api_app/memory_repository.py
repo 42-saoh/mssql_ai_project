@@ -133,10 +133,14 @@ class MemoryWorkflowRepository:
         request.updated_at = utc_now()
 
     def create_job(self, request_id: str, *, correlation_id: str | None = None) -> JobRecord:
+        request = self.requests.get(request_id)
         record = JobRecord(
             job_id=prefixed_id("job"),
             request_id=request_id,
             correlation_id=correlation_id,
+            db_profile_id=request.db_profile_id if request else None,
+            target=dict(request.target) if request else None,
+            outputs=tuple(request.outputs) if request else (),
         )
         self.jobs[record.job_id] = record
         return replace(record)

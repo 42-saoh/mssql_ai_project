@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import pytest
-from ai_agent_domain import ArtifactStatus
+from ai_agent_domain import ArtifactStatus, JobStatus
 from api_app.contracts import (
     registry_storage_type,
     validation_storage_result,
 )
 from api_app.lifecycle import artifact_status_after_validation
+from api_app.presenters import present_job
+from api_app.repositories import JobRecord
 
 
 def test_validation_status_mapping_to_storage_result() -> None:
@@ -32,3 +34,20 @@ def test_unknown_mapping_value_is_explicit_error() -> None:
         validation_storage_result("PASS")
     with pytest.raises(ValueError):
         registry_storage_type("MODEL_POLICY")
+
+
+def test_job_presenter_omits_malformed_optional_history_context() -> None:
+    job = JobRecord(
+        job_id="job_bad_context",
+        request_id="req_bad_context",
+        status=JobStatus.VALIDATION_COMPLETE,
+        db_profile_id="ppm",
+        target={"schema": "dbo", "name": ""},
+        outputs=("SP_ANALYSIS_DOCUMENT", "LEGACY_OUTPUT"),
+    )
+
+    response = present_job(job).to_response()
+
+    assert response["dbProfileId"] == "ppm"
+    assert "target" not in response
+    assert response["outputs"] == ["SP_ANALYSIS_DOCUMENT"]

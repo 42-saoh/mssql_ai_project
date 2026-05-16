@@ -11,6 +11,7 @@
 
 - `/` - 최근 jobs, PPM metadata search, draft artifact 목록 요약
 - `/requests/new` - 단일 API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect, batch mode 는 `POST /api/v1/requests/sp-analysis/batch` accepted/rejected summary 를 표시
+- `/jobs` - recent analysis history timeline with target/profile/status/output filters and artifact preview links
 - `/metadata/search` - read-only metadata identity/evidence search and explicit metadata analyze action
 - `/metadata/dependencies` - safe dependency closure/reference diagnostics
 - `/jobs/[jobId]` - 실제 job 상태, draft artifact 목록, sanitized knowledge asset summary
@@ -29,6 +30,9 @@
 
 ## P21 behavior
 
+- `/` renders several recent analysis jobs instead of only the latest job artifact, and `/jobs`
+  exposes the recent history list with target/status/profile/output filters. Both surfaces use
+  `GET /api/v1/jobs` plus per-job `GET /api/v1/jobs/{jobId}/artifacts` links.
 - `/requests/new` 는 mock draft job 이 아니라 API 가 반환한 job id 로 이동한다.
 - Batch mode 는 한 줄당 하나의 `schema.name` PROCEDURE target 을 제출하고, accepted job links,
   rejected targets, active limits 만 표시한다.

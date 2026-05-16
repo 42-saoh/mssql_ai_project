@@ -1132,7 +1132,8 @@ def test_requested_output_placeholders_use_persisted_artifact_enums() -> None:
         ArtifactType.MODEL_DRAFT,
         ArtifactType.DDL_DRAFT,
     }
-    assert all("REVIEW_REQUIRED" in artifact.content for artifact in repository.artifacts.values())
+    assert all("quality_summary" in artifact.content for artifact in repository.artifacts.values())
+    assert all("evidence caveat" in artifact.content for artifact in repository.artifacts.values())
 
 
 def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> None:

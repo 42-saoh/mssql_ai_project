@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ai_agent_domain import RequestedOutputType
+
 from api_app.repositories import (
     AgentRunRecord,
     ArtifactRecord,
@@ -27,6 +29,9 @@ def present_job(job: JobRecord) -> Job:
         jobId=job.job_id,
         requestId=job.request_id,
         status=job.status,
+        dbProfileId=job.db_profile_id,
+        target=_present_target(job.target),
+        outputs=_present_outputs(job.outputs),
         currentStep=job.current_step,
         createdAt=job.created_at,
         updatedAt=job.updated_at,
@@ -34,6 +39,22 @@ def present_job(job: JobRecord) -> Job:
         caveats=caveats,
         failureReason=job.error_message,
     )
+
+
+def _present_target(target: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(target, dict):
+        return None
+    target_type = str(target.get("type") or "").strip().upper()
+    schema = str(target.get("schema") or "").strip()
+    name = str(target.get("name") or "").strip()
+    if target_type not in {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"} or not schema or not name:
+        return None
+    return {"type": target_type, "schema": schema, "name": name}
+
+
+def _present_outputs(outputs: tuple[str, ...]) -> list[str]:
+    allowed = {item.value for item in RequestedOutputType}
+    return [output for output in outputs if output in allowed]
 
 def present_artifact_summary(artifact: ArtifactRecord) -> ArtifactSummary:
     return ArtifactSummary(

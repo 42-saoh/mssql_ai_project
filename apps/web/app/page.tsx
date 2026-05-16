@@ -1,21 +1,14 @@
 import Link from "next/link";
+import {
+  AnalysisHistoryList,
+  type JobArtifactLookup,
+} from "@/components/analysis-history-list";
 import { DependencyBlocker } from "@/components/dependency-blocker";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
-import type {
-  ArtifactSummary,
-  Job,
-  MetadataSearchResponse,
-  RegistryVersion,
-} from "@/lib/api/types";
-import {
-  artifactStatusLabels,
-  artifactTypeLabels,
-  formatCoverage,
-  jobStatusLabels,
-} from "@/lib/presentation";
+import type { Job, MetadataSearchResponse, RegistryVersion } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +20,30 @@ function rejectedMessage(result: PromiseSettledResult<unknown>): string | null {
   return result.status === "rejected"
     ? formatPortalApiError(result.reason, "Portal API dependency is unavailable.")
     : null;
+}
+
+async function artifactsForJobs(api: PortalApi, jobs: Job[]): Promise<JobArtifactLookup> {
+  const results = await Promise.allSettled(
+    jobs.map(async (job) => ({
+      jobId: job.jobId,
+      response: await api.listJobArtifacts(job.jobId),
+    })),
+  );
+  return Object.fromEntries(
+    results.map((result, index) => {
+      const jobId = jobs[index].jobId;
+      if (result.status === "fulfilled") {
+        return [jobId, { artifacts: result.value.response.artifacts }];
+      }
+      return [
+        jobId,
+        {
+          artifacts: [],
+          error: formatPortalApiError(result.reason, "Artifacts unavailable."),
+        },
+      ];
+    }),
+  ) as JobArtifactLookup;
 }
 
 export default async function HomePage() {
@@ -55,12 +72,7 @@ export default async function HomePage() {
     }),
   ]);
   const jobs = fulfilledValue<{ jobs: Job[] }>(jobsResult)?.jobs ?? [];
-  const job = jobs[0] ?? null;
-  const artifactResult = job ? await Promise.allSettled([api.listJobArtifacts(job.jobId)]) : null;
-  const artifacts =
-    artifactResult && artifactResult[0].status === "fulfilled"
-      ? artifactResult[0].value.artifacts
-      : [];
+  const artifactsByJob = await artifactsForJobs(api, jobs);
   const registryVersions =
     fulfilledValue<{ versions: RegistryVersion[] }>(registryResult)?.versions ?? [];
   const metadataSearch = fulfilledValue<MetadataSearchResponse>(metadataResult);
@@ -68,7 +80,9 @@ export default async function HomePage() {
     rejectedMessage(jobsResult),
     rejectedMessage(registryResult),
     rejectedMessage(metadataResult),
-    artifactResult ? rejectedMessage(artifactResult[0]) : null,
+    ...Object.values(artifactsByJob)
+      .map((item) => item.error)
+      .filter((message): message is string => Boolean(message)),
   ].filter((message): message is string => Boolean(message));
 
   return (
@@ -83,20 +97,18 @@ export default async function HomePage() {
         </div>
         <p className="lede">
           Portal pages call the configured API/BFF for request intake, read-only metadata search,
-          draft artifacts, validation evidence, and blockers.
+          draft artifacts, validation evidence, blockers, and previous analysis history.
         </p>
         <div className="form-actions">
           <Link className="primary-action" href="/requests/new">
             Create PPM request
           </Link>
+          <Link className="secondary-action" href="/jobs">
+            View all analysis history
+          </Link>
           <Link className="secondary-action" href="/metadata/search">
             Search metadata
           </Link>
-          {job ? (
-            <Link className="secondary-action" href={`/jobs/${job.jobId}`}>
-              Inspect latest job
-            </Link>
-          ) : null}
         </div>
       </section>
 
@@ -104,25 +116,15 @@ export default async function HomePage() {
         <div className="panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Recent job</p>
-              <h2>{job?.jobId ?? "No jobs returned"}</h2>
+              <p className="eyebrow">Recent analyses</p>
+              <h2>{jobs.length > 0 ? `${jobs.length} latest jobs` : "No jobs returned"}</h2>
             </div>
-            {job ? <StatusPill value={job.status} label={jobStatusLabels[job.status]} /> : null}
           </div>
-          {job ? (
-            <>
-              <dl className="metric-grid">
-                <div>
-                  <dt>Request</dt>
-                  <dd>{job.requestId}</dd>
-                </div>
-                <div>
-                  <dt>Current gate</dt>
-                  <dd>{job.currentStep ?? "Draft intake"}</dd>
-                </div>
-              </dl>
-              <Link href={`/jobs/${job.jobId}`}>Open job detail</Link>
-            </>
+          {jobs.length > 0 ? (
+            <div className="stack">
+              <AnalysisHistoryList jobs={jobs} artifactsByJob={artifactsByJob} compact />
+              <Link href="/jobs">View all analysis history</Link>
+            </div>
           ) : (
             <>
               <p className="lede">
@@ -200,38 +202,6 @@ export default async function HomePage() {
           )}
           <Link href="/metadata/search">Open metadata search</Link>
         </div>
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Artifact previews</p>
-            <h2>Draft outputs</h2>
-          </div>
-        </div>
-        <div className="artifact-list">
-          {artifacts.map((artifact: ArtifactSummary) => (
-            <article className="artifact-row" key={artifact.artifactId}>
-              <div>
-                <h3>{artifact.title ?? artifactTypeLabels[artifact.type]}</h3>
-                <p>
-                  {artifactTypeLabels[artifact.type]} · evidence coverage{" "}
-                  {formatCoverage(artifact.evidenceCoverage)}
-                </p>
-              </div>
-              <div className="row-actions">
-                <StatusPill
-                  value={artifact.status}
-                  label={artifactStatusLabels[artifact.status]}
-                />
-                <Link href={`/artifacts/${artifact.artifactId}`}>Preview</Link>
-              </div>
-            </article>
-          ))}
-        </div>
-        {artifacts.length === 0 ? (
-          <p className="lede">Draft artifacts are unavailable until the connected API has a job.</p>
-        ) : null}
       </section>
 
       {apiWarnings.length > 0 ? (

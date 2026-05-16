@@ -112,6 +112,9 @@ class Job(ApiModel):
     job_id: str = Field(alias="jobId")
     request_id: str = Field(alias="requestId")
     status: JobStatus
+    db_profile_id: str | None = Field(default=None, alias="dbProfileId")
+    target: TargetObject | None = None
+    outputs: list[RequestedOutputType] = Field(default_factory=list)
     current_step: WorkflowStepType | None = Field(default=None, alias="currentStep")
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")

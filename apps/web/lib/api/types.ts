@@ -131,6 +131,9 @@ export interface Job {
   jobId: string;
   requestId: string;
   status: JobStatus;
+  dbProfileId?: string;
+  target?: TargetObject;
+  outputs?: RequestedOutputType[];
   currentStep?: WorkflowStepType | null;
   createdAt?: string;
   updatedAt?: string;

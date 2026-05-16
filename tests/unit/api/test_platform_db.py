@@ -15,6 +15,7 @@ from api_app.platform_db import (
     PlatformPersistenceError,
     build_platform_repository,
     content_type_for_artifact,
+    job_from_row,
     load_platform_db_settings,
     options_storage_payload,
     storage_uuid,
@@ -137,6 +138,35 @@ def test_platform_db_safe_summary_never_contains_password() -> None:
 
     assert summary["passwordConfigured"] is True
     assert "do-not-echo" not in repr(summary)
+
+
+def test_platform_db_job_row_includes_request_context() -> None:
+    row = (
+        "job-storage-id",
+        "job_public",
+        "req_public",
+        "VALIDATION_COMPLETE",
+        "VALIDATE",
+        None,
+        None,
+        "2026-05-16T00:00:00Z",
+        "2026-05-16T00:01:00Z",
+        '{"correlationId": "corr-job-context"}',
+        "ppm",
+        '{"type": "PROCEDURE", "schema": "dbo", "name": "GetInspItemsCd"}',
+        '["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"]',
+    )
+
+    job = job_from_row(row)
+
+    assert job.job_id == "job_public"
+    assert job.db_profile_id == "ppm"
+    assert job.target == {
+        "type": "PROCEDURE",
+        "schema": "dbo",
+        "name": "GetInspItemsCd",
+    }
+    assert job.outputs == ("SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT")
 
 
 def test_platform_audit_event_persists_trace_id_without_schema_change(

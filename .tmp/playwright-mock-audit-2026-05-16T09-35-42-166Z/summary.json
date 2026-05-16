@@ -1,0 +1,5447 @@
+{
+  "baseUrl": "http://localhost:3035",
+  "screenshotDir": "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z",
+  "startedAt": "2026-05-16T09:35:42.171Z",
+  "auditedControls": [
+    {
+      "route": "/",
+      "kind": "nav link",
+      "name": "New request",
+      "selector": "link[name=\"New request\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/",
+        "bodyHash": "0db83ee251261ba445322508a6d0a949d638f689",
+        "bodyLength": 2161
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/requests/new?_rsc=lquux",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/",
+      "kind": "nav link",
+      "name": "Metadata search",
+      "selector": "link[name=\"Metadata search\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/",
+        "bodyHash": "0db83ee251261ba445322508a6d0a949d638f689",
+        "bodyLength": 2161
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/search",
+        "bodyHash": "f02bec56fa219cf0faca06aa2fa65409db7540aa",
+        "bodyLength": 1989
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 2,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/metadata/search?_rsc=lquux",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/",
+      "kind": "nav link",
+      "name": "Dependency diagnostics",
+      "selector": "link[name=\"Dependency diagnostics\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/",
+        "bodyHash": "0db83ee251261ba445322508a6d0a949d638f689",
+        "bodyLength": 2161
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/dependencies",
+        "bodyHash": "0165f04e7471f0b32efe10d376ca4245fa2a2164",
+        "bodyLength": 659
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/metadata/dependencies?_rsc=lquux",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "sample link",
+      "name": "dbo.PAD_GET_BAT_LIST_PRC sample",
+      "selector": "link[name*=\"dbo.PAD_GET_BAT_LIST_PRC\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC",
+        "bodyHash": "26ba59783c12b50dcabfbb3ef2a06c4ac0ccc0c8",
+        "bodyLength": 2988
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC&_rsc=l99m4",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "text input",
+      "name": "Procedure name",
+      "selector": "input[name=\"name\"]",
+      "classification": "pass",
+      "notes": "Local control value changed.",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "signal": {
+        "stateChanged": true,
+        "beforeValue": "GetInspItemsCd",
+        "afterValue": "GetInspItemsCdAudit"
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "checkbox",
+      "name": "Requested output checkbox",
+      "selector": "input[name=\"outputs\"]",
+      "classification": "pass",
+      "notes": "Local control value changed.",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "signal": {
+        "stateChanged": true,
+        "beforeValue": true,
+        "afterValue": false
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "checkbox",
+      "name": "Include modernization hints",
+      "selector": "input[name=\"includeModernizationHints\"]",
+      "classification": "pass",
+      "notes": "Local control value changed.",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "signal": {
+        "stateChanged": true,
+        "beforeValue": true,
+        "afterValue": false
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "select",
+      "name": "LLM profile",
+      "selector": "select[name=\"llmProfileId\"]",
+      "classification": "pass",
+      "notes": "Local control value changed.",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "signal": {
+        "stateChanged": true,
+        "beforeValue": "openai_sp_semantic_analysis",
+        "afterValue": "openai_fast_test"
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "textarea",
+      "name": "Batch targets",
+      "selector": "textarea[name=\"batchTargets\"]",
+      "classification": "pass",
+      "notes": "Local control value changed.",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "signal": {
+        "stateChanged": true,
+        "beforeValue": "dbo.GetInspItemsCd\ndbo.GetInspItemsCd",
+        "afterValue": "dbo.GetInspItemsCd\ndbo.PAD_GET_BAT_LIST_PRC"
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "form submit",
+      "name": "Submit request",
+      "selector": "button[name=\"Submit request\"]",
+      "classification": "pass",
+      "notes": "MSSQL Agent Portal New request Metadata search Dependency diagnostics WORKFLOW JOB job_9ddd7f2c74 Validation complete Validation is complete for the draft artifacts. No publish, deploy, or apply action is exposed. REQUEST req_7c0e5a3aaf CURRENT STEP Validate UPDATED 2026-05-16T09:38:35.193000 PROGRESS 0% VALIDATION FLOW Draft to validation complete Collect metadata Analyze Generate Validate AGENT RUNTIME LLM trace summary Sanitized MODE CONFIRMED_PROCEDURES REQUESTED DEPTH 2 SELECTED 0 ANALYZED 0 SKIPPED 0 CHILD RUNS 0 LLM_SEMANTIC_ANALYST Root run target dbo.GetInspItemsCd gpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · 비즈니스 규칙 3개, 현대화 포인트 2개, 위험 플래그 2개, 근거 caveat 3개, 전환 가이드 3개, 마이그레이션 가이드 인사이트 17개 Dependency child analysis 0건을 반영했습니다., tool orchestration 근거 caveat 1개 input ab06eed9eb",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+        "bodyHash": "18d6c0b9e26acf6e938d44012103fab3e05a8efb",
+        "bodyLength": 2451
+      },
+      "signal": {
+        "visibleResult": true,
+        "responseOk": true,
+        "jobId": "job_9ddd7f2c74",
+        "outcome": "artifact_available"
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "POST",
+            "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/jobs/[jobId]",
+      "kind": "api link",
+      "name": "Knowledge asset/facts link",
+      "selector": "a[href^=\"/api/v1/knowledge/assets/\"]",
+      "classification": "pass",
+      "notes": "MSSQL Agent Portal New request Metadata search Dependency diagnostics 404 This page could not be found.",
+      "before": {
+        "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+        "bodyHash": "18d6c0b9e26acf6e938d44012103fab3e05a8efb",
+        "bodyLength": 2451
+      },
+      "after": {
+        "url": "http://localhost:3035/api/v1/knowledge/assets/know_ffe49f1ca6",
+        "bodyHash": "677676561f4ae534ac069215a459b5dfb005e5ac",
+        "bodyLength": 103
+      },
+      "signal": {
+        "responseOk": true,
+        "visibleResult": true,
+        "responseStatus": 404
+      },
+      "networkDelta": {
+        "total": 18,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/api/v1/knowledge/assets/know_ffe49f1ca6",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/jobs/[jobId]",
+      "kind": "link",
+      "name": "Artifact Preview",
+      "selector": "link[name=\"Preview\"]",
+      "classification": "pass",
+      "notes": "MSSQL Agent Portal New request Metadata search Dependency diagnostics ARTIFACT PREVIEW GetInspItemsCd SP 분석 초안 Draft ARTIFACT ID art_0cc04d2b9d TYPE SP analysis doc EVIDENCE COVERAGE 100% GENERATOR generation-core-0.1.0 Draft-only boundary This preview is draft-only. The default UI exposes no publish, deploy, SQL execution, DDL/DML apply, or source write action. # GetInspItemsCd SP 분석 초안 ## input_",
+      "before": {
+        "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+        "bodyHash": "18d6c0b9e26acf6e938d44012103fab3e05a8efb",
+        "bodyLength": 2451
+      },
+      "after": {
+        "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+        "bodyHash": "93ea5ea052e3de88fda3d61a777d02c61d9e35de",
+        "bodyLength": 33986
+      },
+      "signal": {
+        "visibleResult": true,
+        "artifactId": "art_0cc04d2b9d"
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/artifacts/art_0cc04d2b9d?_rsc=1yq7h",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/artifacts/[artifactId]",
+      "kind": "form submit",
+      "name": "Run validation",
+      "selector": "button[name=\"Run validation\"]",
+      "classification": "pass",
+      "notes": "MSSQL Agent Portal New request Metadata search Dependency diagnostics ARTIFACT PREVIEW GetInspItemsCd SP 분석 초안 Draft ARTIFACT ID art_0cc04d2b9d TYPE SP analysis doc EVIDENCE COVERAGE 100% GENERATOR generation-core-0.1.0 Draft-only boundary This preview is draft-only. The default UI exposes no publish, deploy, SQL execution, DDL/DML apply, or source write action. # GetInspItemsCd SP 분석 초안 ## input_",
+      "before": {
+        "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+        "bodyHash": "93ea5ea052e3de88fda3d61a777d02c61d9e35de",
+        "bodyLength": 33986
+      },
+      "after": {
+        "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+        "bodyHash": "93ea5ea052e3de88fda3d61a777d02c61d9e35de",
+        "bodyLength": 33986
+      },
+      "signal": {
+        "visibleResult": false,
+        "responseOk": true
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "POST",
+            "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/artifacts/[artifactId]",
+      "kind": "link",
+      "name": "Back to job",
+      "selector": "link[name=\"Back to job\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+        "bodyHash": "93ea5ea052e3de88fda3d61a777d02c61d9e35de",
+        "bodyLength": 33986
+      },
+      "after": {
+        "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+        "bodyHash": "18d6c0b9e26acf6e938d44012103fab3e05a8efb",
+        "bodyLength": 2451
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/jobs/job_9ddd7f2c74?_rsc=15alb",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/requests/new",
+      "kind": "form submit",
+      "name": "Submit batch",
+      "selector": "button[name=\"Submit batch\"]",
+      "classification": "pass",
+      "notes": "MSSQL Agent Portal New request Metadata search Dependency diagnostics REQUEST INTAKE Stored procedure analysis request Draft only Compose the OpenAPI-shaped request payload for one stored procedure target. Submission calls the configured API and redirects to the returned workflow job. BATCH RESULT PARTIAL batch_9403299398 Accepted1 Rejected1 Limits20/2 dbo.GetInspItemsCd · job_76e19f1831 DUPLICATE",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?batchId=batch_9403299398&batchStatus=PARTIAL&batchLimits=20%2F2&batchJobs=job_76e19f1831%3Adbo.GetInspItemsCd&batchRejected=DUPLICATE_TARGET_SKIPPED%3Adbo.GetInspItemsCd",
+        "bodyHash": "5696f0accfe9647c0d353cfdf695d5328fd4e4d0",
+        "bodyLength": 3133
+      },
+      "signal": {
+        "visibleResult": true,
+        "responseOk": true
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "POST",
+            "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/metadata/search",
+      "kind": "text input",
+      "name": "Search query",
+      "selector": "input[name=\"query\"]",
+      "classification": "pass",
+      "notes": "Local control value changed.",
+      "before": {
+        "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+        "bodyHash": "217f04e1c59936782444ace722493e99486fc9cf",
+        "bodyLength": 1389
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+        "bodyHash": "217f04e1c59936782444ace722493e99486fc9cf",
+        "bodyLength": 1389
+      },
+      "signal": {
+        "stateChanged": true,
+        "beforeValue": "P",
+        "afterValue": "PA"
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/metadata/search",
+      "kind": "GET form submit",
+      "name": "Search metadata",
+      "selector": "button[name=\"Search metadata\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+        "bodyHash": "217f04e1c59936782444ace722493e99486fc9cf",
+        "bodyLength": 1389
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+        "bodyHash": "217f04e1c59936782444ace722493e99486fc9cf",
+        "bodyLength": 1389
+      },
+      "signal": {
+        "visibleResult": false
+      },
+      "networkDelta": {
+        "total": 18,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/metadata/search",
+      "kind": "GET form submit",
+      "name": "Analyze metadata",
+      "selector": "button[name=\"Analyze metadata\"]",
+      "classification": "pass",
+      "notes": "MSSQL Agent Portal New request Metadata search Dependency diagnostics READ-ONLY METADATA Metadata search MCP boundary Search object identities, evidence refs, caveats, and blockers through the portal API adapter. Results never include row data, SQL definition text, procedure execution, or DDL/DML controls. Metadata profile plf - PLF master - master ppm - PPM Search query Limit Object types PROCEDU",
+      "before": {
+        "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+        "bodyHash": "217f04e1c59936782444ace722493e99486fc9cf",
+        "bodyLength": 1389
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE&analyze=1",
+        "bodyHash": "92fb09822823ec568b3f87aaf57b31d0402a8b69",
+        "bodyLength": 4601
+      },
+      "signal": {
+        "visibleResult": true,
+        "responseOk": true
+      },
+      "networkDelta": {
+        "total": 18,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE&analyze=1",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/metadata/dependencies",
+      "kind": "checkbox",
+      "name": "Include evidence-caveated graph items",
+      "selector": "input[name=\"includeReviewRequired\"]",
+      "classification": "pass",
+      "notes": "Local control value changed.",
+      "before": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&schema=dbo&objectName=GetInspItemsCd&objectType=PROCEDURE&maxDepth=2",
+        "bodyHash": "63ef140418dcf3dac4791b39558b939190350382",
+        "bodyLength": 806
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&schema=dbo&objectName=GetInspItemsCd&objectType=PROCEDURE&maxDepth=2",
+        "bodyHash": "63ef140418dcf3dac4791b39558b939190350382",
+        "bodyLength": 806
+      },
+      "signal": {
+        "stateChanged": true,
+        "beforeValue": false,
+        "afterValue": true
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/metadata/dependencies",
+      "kind": "GET form submit",
+      "name": "Invoke closure",
+      "selector": "button[name=\"Invoke closure\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&schema=dbo&objectName=GetInspItemsCd&objectType=PROCEDURE&maxDepth=2",
+        "bodyHash": "63ef140418dcf3dac4791b39558b939190350382",
+        "bodyLength": 806
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&objectType=PROCEDURE&schema=dbo&objectName=GetInspItemsCd&maxDepth=2&includeReviewRequired=true",
+        "bodyHash": "a52c1d4a26c560dc2665895de1e1209f46e842e6",
+        "bodyLength": 806
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 18,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&objectType=PROCEDURE&schema=dbo&objectName=GetInspItemsCd&maxDepth=2&includeReviewRequired=true",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/metadata/dependencies",
+      "kind": "tab link",
+      "name": "Resolve reference",
+      "selector": "link[name=\"Resolve reference\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&objectType=PROCEDURE&schema=dbo&objectName=GetInspItemsCd&maxDepth=2&includeReviewRequired=true",
+        "bodyHash": "a52c1d4a26c560dc2665895de1e1209f46e842e6",
+        "bodyLength": 806
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=resolver",
+        "bodyHash": "2a76cfcf03bcb00467e775a61ab1e9fd1ead6d78",
+        "bodyLength": 691
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 1,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/metadata/dependencies?mode=resolver&_rsc=1vchn",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/metadata/dependencies",
+      "kind": "GET form submit",
+      "name": "Invoke resolver",
+      "selector": "button[name=\"Invoke resolver\"]",
+      "classification": "pass",
+      "notes": "",
+      "before": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceSchema=dbo&sourceName=GetInspItemsCd&sourceObjectType=PROCEDURE&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS",
+        "bodyHash": "6ecf7b1553ee2b6369c924f53813a13fc7e0a9a6",
+        "bodyLength": 827
+      },
+      "after": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceObjectType=PROCEDURE&sourceSchema=dbo&sourceName=GetInspItemsCd&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS&referencedDatabase=&referencedServer=",
+        "bodyHash": "6ecf7b1553ee2b6369c924f53813a13fc7e0a9a6",
+        "bodyLength": 827
+      },
+      "signal": {
+        "visibleResult": true
+      },
+      "networkDelta": {
+        "total": 18,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceObjectType=PROCEDURE&sourceSchema=dbo&sourceName=GetInspItemsCd&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS&referencedDatabase=&referencedServer=",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/review/decision",
+      "kind": "removed route",
+      "name": "Review decision route",
+      "selector": "direct URL",
+      "classification": "pass",
+      "notes": "MSSQL Agent Portal New request Metadata search Dependency diagnostics 404 This page could not be found.",
+      "before": {
+        "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceObjectType=PROCEDURE&sourceSchema=dbo&sourceName=GetInspItemsCd&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS&referencedDatabase=&referencedServer=",
+        "bodyHash": "6ecf7b1553ee2b6369c924f53813a13fc7e0a9a6",
+        "bodyLength": 827
+      },
+      "after": {
+        "url": "http://localhost:3035/review/decision",
+        "bodyHash": "677676561f4ae534ac069215a459b5dfb005e5ac",
+        "bodyLength": 103
+      },
+      "signal": {
+        "responseOk": true,
+        "visibleResult": true,
+        "responseStatus": 404
+      },
+      "networkDelta": {
+        "total": 18,
+        "meaningful": 1,
+        "urls": [
+          {
+            "method": "GET",
+            "url": "http://localhost:3035/review/decision",
+            "viewport": "desktop"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/",
+      "kind": "mobile layout",
+      "name": "No horizontal overflow",
+      "selector": "document",
+      "classification": "UI regression",
+      "notes": "{\"innerWidth\":390,\"scrollWidth\":744,\"bodyScrollWidth\":744}",
+      "before": {
+        "url": "http://localhost:3035/",
+        "bodyHash": "e0297589139ef210495628a1324035904c6fea7f",
+        "bodyLength": 2161
+      },
+      "after": {
+        "url": "http://localhost:3035/",
+        "bodyHash": "e0297589139ef210495628a1324035904c6fea7f",
+        "bodyLength": 2161
+      },
+      "signal": {
+        "stateChanged": false,
+        "result": {
+          "innerWidth": 390,
+          "scrollWidth": 744,
+          "bodyScrollWidth": 744
+        }
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "/requests/new?sample=dbo.GetInspItemsCd",
+      "kind": "mobile layout",
+      "name": "No horizontal overflow",
+      "selector": "document",
+      "classification": "pass",
+      "notes": "{\"innerWidth\":390,\"scrollWidth\":390,\"bodyScrollWidth\":390}",
+      "before": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "after": {
+        "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+        "bodyHash": "8a3fdc641e98cfa8c5c16dffdd8e781ea03b369f",
+        "bodyLength": 2982
+      },
+      "signal": {
+        "stateChanged": true,
+        "result": {
+          "innerWidth": 390,
+          "scrollWidth": 390,
+          "bodyScrollWidth": 390
+        }
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "kind": "mobile layout",
+      "name": "No horizontal overflow",
+      "selector": "document",
+      "classification": "UI regression",
+      "notes": "{\"innerWidth\":390,\"scrollWidth\":744,\"bodyScrollWidth\":744}",
+      "before": {
+        "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+        "bodyHash": "18d6c0b9e26acf6e938d44012103fab3e05a8efb",
+        "bodyLength": 2451
+      },
+      "after": {
+        "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+        "bodyHash": "18d6c0b9e26acf6e938d44012103fab3e05a8efb",
+        "bodyLength": 2451
+      },
+      "signal": {
+        "stateChanged": false,
+        "result": {
+          "innerWidth": 390,
+          "scrollWidth": 744,
+          "bodyScrollWidth": 744
+        }
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    },
+    {
+      "route": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+      "kind": "mobile layout",
+      "name": "No horizontal overflow",
+      "selector": "document",
+      "classification": "UI regression",
+      "notes": "{\"innerWidth\":390,\"scrollWidth\":596,\"bodyScrollWidth\":596}",
+      "before": {
+        "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+        "bodyHash": "93ea5ea052e3de88fda3d61a777d02c61d9e35de",
+        "bodyLength": 33986
+      },
+      "after": {
+        "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+        "bodyHash": "93ea5ea052e3de88fda3d61a777d02c61d9e35de",
+        "bodyLength": 33986
+      },
+      "signal": {
+        "stateChanged": false,
+        "result": {
+          "innerWidth": 390,
+          "scrollWidth": 596,
+          "bodyScrollWidth": 596
+        }
+      },
+      "networkDelta": {
+        "total": 0,
+        "meaningful": 0,
+        "urls": []
+      }
+    }
+  ],
+  "inventory": [
+    {
+      "route": "/",
+      "count": 16,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 4,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Create PPM request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Search metadata",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Inspect latest job",
+          "href": "/jobs/job_542a80a5c3",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open job detail",
+          "href": "/jobs/job_542a80a5c3",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_e1763426b7",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_ec8b8aaee7",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_4b4cc1c8f4",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_031b955ba2",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_9492733e9f",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_b967d7f461",
+          "disabled": false
+        },
+        {
+          "index": 15,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/requests/new",
+      "count": 49,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.GetInspItemsCd\nsimple procedure\n1 params · 1 dependency refs",
+          "href": "/requests/new?sample=dbo.GetInspItemsCd",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PAD_GET_BAT_LIST_PRC\nmedium procedure\n6 params · 4 dependency refs",
+          "href": "/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PCS_PY_ManageInvoiceFldSchd_PRC\ncomplex procedure\n10 params · 63 dependency refs",
+          "href": "/requests/new?sample=dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PAD_REG_BAT_HIS_PRC\nmedium procedure\n6 params · 2 dependency refs",
+          "href": "/requests/new?sample=dbo.PAD_REG_BAT_HIS_PRC",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PAD_SAVE_COM_CD_DTL_PRC\nmedium procedure\n18 params · 1 dependency refs",
+          "href": "/requests/new?sample=dbo.PAD_SAVE_COM_CD_DTL_PRC",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC\ncomplex procedure\n0 params · 3 dependency refs",
+          "href": "/requests/new?sample=dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PCO_BAT_CallSendMail_PRC\ncomplex procedure\n0 params · 5 dependency refs",
+          "href": "/requests/new?sample=dbo.PCO_BAT_CallSendMail_PRC",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "select",
+          "type": "",
+          "name": "dbProfileId",
+          "text": "plf - PLF\nmaster - master\nppm - PPM",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "select",
+          "type": "",
+          "name": "targetType",
+          "text": "Stored procedure",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "input",
+          "type": "",
+          "name": "schema",
+          "text": "dbo",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 15,
+          "tag": "input",
+          "type": "",
+          "name": "name",
+          "text": "GetInspItemsCd",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 16,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "SP_ANALYSIS_DOCUMENT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 17,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DEPENDENCY_REPORT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 18,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "JAVA_MYBATIS_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 19,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DTO_MODEL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 20,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DDL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 21,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeEvidenceRefs",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 22,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeModernizationHints",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 23,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useLlmAnalysis",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 24,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useAiToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 25,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "usePlatformToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 26,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "allowSpDefinitionToModel",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 27,
+          "tag": "select",
+          "type": "",
+          "name": "llmProfileId",
+          "text": "semantic analysis - gpt-5.5\nfast/test - gpt-5-nano",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 28,
+          "tag": "select",
+          "type": "",
+          "name": "sourceContextMode",
+          "text": "retrieved spans\nmetadata only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 29,
+          "tag": "select",
+          "type": "",
+          "name": "sourceDependencyMode",
+          "text": "confirmed procedures\nroot procedure only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 30,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Submit request",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 31,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Search metadata",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 33,
+          "tag": "select",
+          "type": "",
+          "name": "dbProfileId",
+          "text": "plf - PLF\nmaster - master\nppm - PPM",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 34,
+          "tag": "textarea",
+          "type": "",
+          "name": "batchTargets",
+          "text": "dbo.GetInspItemsCd\ndbo.GetInspItemsCd",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 35,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "SP_ANALYSIS_DOCUMENT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 36,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DEPENDENCY_REPORT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 37,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "JAVA_MYBATIS_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 38,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DTO_MODEL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 39,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DDL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 40,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeEvidenceRefs",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 41,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeModernizationHints",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 42,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useLlmAnalysis",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 43,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useAiToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 44,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "usePlatformToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 45,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "allowSpDefinitionToModel",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 46,
+          "tag": "select",
+          "type": "",
+          "name": "llmProfileId",
+          "text": "semantic analysis - gpt-5.5\nfast/test - gpt-5-nano",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 47,
+          "tag": "select",
+          "type": "",
+          "name": "sourceContextMode",
+          "text": "retrieved spans\nmetadata only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 48,
+          "tag": "select",
+          "type": "",
+          "name": "sourceDependencyMode",
+          "text": "confirmed procedures\nroot procedure only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 49,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Submit batch",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 50,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/jobs/[jobId]",
+      "count": 21,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 4,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_ffe49f1ca6",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_ffe49f1ca6/versions/knowv_069f23871b/facts",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_2776c71245",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_2776c71245/versions/knowv_f014587e6f/facts",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_80aca49019",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_80aca49019/versions/knowv_3d157f90e3/facts",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_b7d27f287e",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_b7d27f287e/versions/knowv_d17f990b4f/facts",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_5bbf5deace",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_5bbf5deace/versions/knowv_238f685fe6/facts",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_0cc04d2b9d",
+          "disabled": false
+        },
+        {
+          "index": 15,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_9fd4dfd92b",
+          "disabled": false
+        },
+        {
+          "index": 16,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_f5e27c8546",
+          "disabled": false
+        },
+        {
+          "index": 17,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_0ad25dc4e8",
+          "disabled": false
+        },
+        {
+          "index": 18,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_f1f805c31e",
+          "disabled": false
+        },
+        {
+          "index": 19,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_385e49feb8",
+          "disabled": false
+        },
+        {
+          "index": 20,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/artifacts/[artifactId]",
+      "count": 7,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Run validation",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Back to job",
+          "href": "/jobs/job_9ddd7f2c74",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/metadata/search",
+      "count": 15,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 4,
+          "tag": "select",
+          "type": "",
+          "name": "dbProfileId",
+          "text": "plf - PLF\nmaster - master\nppm - PPM",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "input",
+          "type": "",
+          "name": "query",
+          "text": "P",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "input",
+          "type": "number",
+          "name": "limit",
+          "text": "5",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "objectTypes",
+          "text": "PROCEDURE",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "objectTypes",
+          "text": "TABLE",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "objectTypes",
+          "text": "VIEW",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "objectTypes",
+          "text": "FUNCTION",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Search metadata",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "button",
+          "type": "submit",
+          "name": "analyze",
+          "text": "Analyze metadata",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Use in request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/metadata/dependencies?mode=closure",
+      "count": 15,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 4,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Closure",
+          "href": "/metadata/dependencies?mode=closure",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Resolve reference",
+          "href": "/metadata/dependencies?mode=resolver",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "select",
+          "type": "",
+          "name": "dbProfileId",
+          "text": "plf - PLF\nmaster - master\nppm - PPM",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "select",
+          "type": "",
+          "name": "objectType",
+          "text": "PROCEDURE\nVIEW\nFUNCTION",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "input",
+          "type": "",
+          "name": "schema",
+          "text": "dbo",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "input",
+          "type": "",
+          "name": "objectName",
+          "text": "GetInspItemsCd",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "input",
+          "type": "number",
+          "name": "maxDepth",
+          "text": "2",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeReviewRequired",
+          "text": "true",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Invoke closure",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Search metadata",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 15,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/",
+      "count": 16,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 4,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Create PPM request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Search metadata",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Inspect latest job",
+          "href": "/jobs/job_76e19f1831",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open job detail",
+          "href": "/jobs/job_76e19f1831",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_366c7846e5",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_725a373d9e",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_6059cf85e8",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_3e2af33422",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_4d57ee27b2",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_63e6fe8bb1",
+          "disabled": false
+        },
+        {
+          "index": 15,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/requests/new?sample=dbo.GetInspItemsCd",
+      "count": 49,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.GetInspItemsCd\nsimple procedure\n1 params · 1 dependency refs",
+          "href": "/requests/new?sample=dbo.GetInspItemsCd",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PAD_GET_BAT_LIST_PRC\nmedium procedure\n6 params · 4 dependency refs",
+          "href": "/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PCS_PY_ManageInvoiceFldSchd_PRC\ncomplex procedure\n10 params · 63 dependency refs",
+          "href": "/requests/new?sample=dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PAD_REG_BAT_HIS_PRC\nmedium procedure\n6 params · 2 dependency refs",
+          "href": "/requests/new?sample=dbo.PAD_REG_BAT_HIS_PRC",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PAD_SAVE_COM_CD_DTL_PRC\nmedium procedure\n18 params · 1 dependency refs",
+          "href": "/requests/new?sample=dbo.PAD_SAVE_COM_CD_DTL_PRC",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC\ncomplex procedure\n0 params · 3 dependency refs",
+          "href": "/requests/new?sample=dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "dbo.PCO_BAT_CallSendMail_PRC\ncomplex procedure\n0 params · 5 dependency refs",
+          "href": "/requests/new?sample=dbo.PCO_BAT_CallSendMail_PRC",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "select",
+          "type": "",
+          "name": "dbProfileId",
+          "text": "plf - PLF\nmaster - master\nppm - PPM",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "select",
+          "type": "",
+          "name": "targetType",
+          "text": "Stored procedure",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "input",
+          "type": "",
+          "name": "schema",
+          "text": "dbo",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 15,
+          "tag": "input",
+          "type": "",
+          "name": "name",
+          "text": "GetInspItemsCd",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 16,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "SP_ANALYSIS_DOCUMENT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 17,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DEPENDENCY_REPORT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 18,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "JAVA_MYBATIS_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 19,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DTO_MODEL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 20,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DDL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 21,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeEvidenceRefs",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 22,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeModernizationHints",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 23,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useLlmAnalysis",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 24,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useAiToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 25,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "usePlatformToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 26,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "allowSpDefinitionToModel",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 27,
+          "tag": "select",
+          "type": "",
+          "name": "llmProfileId",
+          "text": "semantic analysis - gpt-5.5\nfast/test - gpt-5-nano",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 28,
+          "tag": "select",
+          "type": "",
+          "name": "sourceContextMode",
+          "text": "retrieved spans\nmetadata only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 29,
+          "tag": "select",
+          "type": "",
+          "name": "sourceDependencyMode",
+          "text": "confirmed procedures\nroot procedure only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 30,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Submit request",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 31,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Search metadata",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 33,
+          "tag": "select",
+          "type": "",
+          "name": "dbProfileId",
+          "text": "plf - PLF\nmaster - master\nppm - PPM",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 34,
+          "tag": "textarea",
+          "type": "",
+          "name": "batchTargets",
+          "text": "dbo.GetInspItemsCd\ndbo.GetInspItemsCd",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 35,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "SP_ANALYSIS_DOCUMENT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 36,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DEPENDENCY_REPORT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 37,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "JAVA_MYBATIS_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 38,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DTO_MODEL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 39,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "outputs",
+          "text": "DDL_DRAFT",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 40,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeEvidenceRefs",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 41,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "includeModernizationHints",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 42,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useLlmAnalysis",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 43,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "useAiToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 44,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "usePlatformToolOrchestration",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 45,
+          "tag": "input",
+          "type": "checkbox",
+          "name": "allowSpDefinitionToModel",
+          "text": "on",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 46,
+          "tag": "select",
+          "type": "",
+          "name": "llmProfileId",
+          "text": "semantic analysis - gpt-5.5\nfast/test - gpt-5-nano",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 47,
+          "tag": "select",
+          "type": "",
+          "name": "sourceContextMode",
+          "text": "retrieved spans\nmetadata only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 48,
+          "tag": "select",
+          "type": "",
+          "name": "sourceDependencyMode",
+          "text": "confirmed procedures\nroot procedure only",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 49,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Submit batch",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 50,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "count": 21,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 4,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_ffe49f1ca6",
+          "disabled": false
+        },
+        {
+          "index": 5,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_ffe49f1ca6/versions/knowv_069f23871b/facts",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_2776c71245",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_2776c71245/versions/knowv_f014587e6f/facts",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_80aca49019",
+          "disabled": false
+        },
+        {
+          "index": 9,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_80aca49019/versions/knowv_3d157f90e3/facts",
+          "disabled": false
+        },
+        {
+          "index": 10,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_b7d27f287e",
+          "disabled": false
+        },
+        {
+          "index": 11,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_b7d27f287e/versions/knowv_d17f990b4f/facts",
+          "disabled": false
+        },
+        {
+          "index": 12,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Open",
+          "href": "/api/v1/knowledge/assets/know_5bbf5deace",
+          "disabled": false
+        },
+        {
+          "index": 13,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Facts",
+          "href": "/api/v1/knowledge/assets/know_5bbf5deace/versions/knowv_238f685fe6/facts",
+          "disabled": false
+        },
+        {
+          "index": 14,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_0cc04d2b9d",
+          "disabled": false
+        },
+        {
+          "index": 15,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_9fd4dfd92b",
+          "disabled": false
+        },
+        {
+          "index": 16,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_f5e27c8546",
+          "disabled": false
+        },
+        {
+          "index": 17,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_0ad25dc4e8",
+          "disabled": false
+        },
+        {
+          "index": 18,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_f1f805c31e",
+          "disabled": false
+        },
+        {
+          "index": 19,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Preview",
+          "href": "/artifacts/art_385e49feb8",
+          "disabled": false
+        },
+        {
+          "index": 20,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+      "count": 7,
+      "controls": [
+        {
+          "index": 0,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "MSSQL Agent Portal",
+          "href": "/",
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "New request",
+          "href": "/requests/new",
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Metadata search",
+          "href": "/metadata/search",
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Dependency diagnostics",
+          "href": "/metadata/dependencies",
+          "disabled": false
+        },
+        {
+          "index": 6,
+          "tag": "button",
+          "type": "submit",
+          "name": "",
+          "text": "Run validation",
+          "href": "",
+          "disabled": false
+        },
+        {
+          "index": 7,
+          "tag": "a",
+          "type": "",
+          "name": "",
+          "text": "Back to job",
+          "href": "/jobs/job_9ddd7f2c74",
+          "disabled": false
+        },
+        {
+          "index": 8,
+          "tag": "button",
+          "type": "",
+          "name": "",
+          "text": "Open Next.js Dev Tools",
+          "href": "",
+          "disabled": false
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\00-home-inventory.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\01-request-form-before-submit.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\02-job-detail.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\03-artifact-before-validation.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\04-artifact-after-validation.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\05-metadata-search.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\06-metadata-analysis.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\07-dependency-closure.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\08-dependency-resolver.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\09-mobile-home.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\10-mobile-request.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\11-mobile-job.png",
+    "D:\\wt\\p35\\.tmp\\playwright-mock-audit-2026-05-16T09-35-42-166Z\\12-mobile-artifact.png"
+  ],
+  "observedRequests": [
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?_rsc=lquux",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/search?_rsc=lquux",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?_rsc=lquux",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC&_rsc=l99m4",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/api/v1/knowledge/assets/know_ffe49f1ca6",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/artifacts/art_0cc04d2b9d?_rsc=1yq7h",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74?_rsc=15alb",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE&analyze=1",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&schema=dbo&objectName=GetInspItemsCd&objectType=PROCEDURE&maxDepth=2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&objectType=PROCEDURE&schema=dbo&objectName=GetInspItemsCd&maxDepth=2&includeReviewRequired=true",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?mode=resolver&_rsc=1vchn",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceSchema=dbo&sourceName=GetInspItemsCd&sourceObjectType=PROCEDURE&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceObjectType=PROCEDURE&sourceSchema=dbo&sourceName=GetInspItemsCd&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS&referencedDatabase=&referencedServer=",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/review/decision",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    }
+  ],
+  "observedResponses": [
+    {
+      "status": 200,
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?_rsc=lquux",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/search?_rsc=lquux",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/dependencies?_rsc=lquux",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC&_rsc=l99m4",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "status": 303,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "viewport": "desktop"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3035/api/v1/knowledge/assets/know_ffe49f1ca6",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/artifacts/art_0cc04d2b9d?_rsc=1yq7h",
+      "viewport": "desktop"
+    },
+    {
+      "status": 303,
+      "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74?_rsc=15alb",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "status": 303,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE&analyze=1",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&schema=dbo&objectName=GetInspItemsCd&objectType=PROCEDURE&maxDepth=2",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&objectType=PROCEDURE&schema=dbo&objectName=GetInspItemsCd&maxDepth=2&includeReviewRequired=true",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/dependencies?mode=resolver&_rsc=1vchn",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceSchema=dbo&sourceName=GetInspItemsCd&sourceObjectType=PROCEDURE&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceObjectType=PROCEDURE&sourceSchema=dbo&sourceName=GetInspItemsCd&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS&referencedDatabase=&referencedServer=",
+      "viewport": "desktop"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3035/review/decision",
+      "viewport": "desktop"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/",
+      "viewport": "mobile"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/requests/new?sample=dbo.GetInspItemsCd",
+      "viewport": "mobile"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/jobs/job_9ddd7f2c74",
+      "viewport": "mobile"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+      "viewport": "mobile"
+    }
+  ],
+  "forbiddenRequests": [],
+  "consoleMessages": [],
+  "pageErrors": [],
+  "emptyMocks": [],
+  "expectedStaticSelfLinks": [],
+  "blockers": [],
+  "created": {
+    "jobId": "job_9ddd7f2c74",
+    "jobUrl": "http://localhost:3035/jobs/job_9ddd7f2c74",
+    "jobOutcome": "artifact_available",
+    "jobTarget": "dbo.GetInspItemsCd",
+    "artifactId": "art_0cc04d2b9d",
+    "artifactUrl": "http://localhost:3035/artifacts/art_0cc04d2b9d",
+    "validationVisible": false,
+    "dependencyCandidate": "dbo.PEX_INSP_ITEMS"
+  },
+  "routeStatus": {
+    "/": 200,
+    "/requests/new?sample=dbo.GetInspItemsCd": 200,
+    "http://localhost:3035/jobs/job_9ddd7f2c74": 200,
+    "/api/v1/knowledge/assets/know_ffe49f1ca6": 404,
+    "/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE": 200,
+    "/metadata/dependencies?mode=closure&dbProfileId=ppm&schema=dbo&objectName=GetInspItemsCd&objectType=PROCEDURE&maxDepth=2": 200,
+    "/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceSchema=dbo&sourceName=GetInspItemsCd&sourceObjectType=PROCEDURE&referencedSchema=dbo&referencedName=PEX_INSP_ITEMS": 200,
+    "/review/decision": 404,
+    "http://localhost:3035/artifacts/art_0cc04d2b9d": 200
+  },
+  "mobile": {
+    "checked": true
+  },
+  "acceptancePass": false,
+  "finishedAt": "2026-05-16T09:42:33.482Z"
+}

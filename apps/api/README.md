@@ -63,6 +63,9 @@ knowledge payloads.
   blockers, and workflow/idempotency conflicts.
 - Artifact listing is internally bounded and stable-ordered. A public pagination contract
   remains an OpenAPI coordination item, so no query/body schema was added in P09.
+- `GET /api/v1/jobs` and `GET /api/v1/jobs/{jobId}` include optional request context
+  (`dbProfileId`, `target`, `outputs`) so Web history can show previous analyses without
+  exposing raw SQL, row data, or new storage tables.
 - Default workflow stops at `VALIDATION_COMPLETE` after validation. Artifacts remain
   draft/validated outputs; human decision gates and publish transitions are not exposed.
 

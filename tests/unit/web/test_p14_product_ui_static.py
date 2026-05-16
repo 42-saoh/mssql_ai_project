@@ -79,6 +79,7 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     smoke = (WEB_ROOT / "scripts" / "http-adapter-smoke.mjs").read_text(encoding="utf-8")
 
     assert 'href="/metadata/dependencies"' in layout
+    assert 'href="/jobs"' in layout
     assert "Dependency diagnostics" in page
     assert "get_dependency_closure" in page
     assert "resolve_dependency_reference" in page
@@ -118,6 +119,12 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
 
     assert "api.createSPAnalysisRequest" in request_page
     assert "api.createSPAnalysisBatchRequest" in request_page
+    assert "AnalysisHistoryList" in source
+    assert "api.listJobs(5)" in source
+    assert "api.listJobs(limit)" in source
+    assert 'firstParam(value) ?? "50"' in source
+    assert "api.listJobArtifacts(job.jobId)" in source
+    assert "View all analysis history" in source
     assert "batchTargets" in source
     for control_name in ("schema", "name", "batchTargets"):
         assert "required" in _form_control_block(request_form, control_name)
