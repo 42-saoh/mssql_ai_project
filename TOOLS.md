@@ -184,7 +184,10 @@ confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
   `LLM_SP_MAX_RETRIEVED_SPANS=24`.
 - Confirmed dependency procedure fan-out is controlled by
   `sourceDependencyMode=CONFIRMED_PROCEDURES`, `LLM_SP_DEPENDENCY_DEPTH=2`, and
-  `LLM_SP_MAX_DEPENDENCY_TASKS=8`. Public MCP/API raw definition access is not expanded.
+  `LLM_SP_MAX_DEPENDENCY_TASKS=8`. Same-server cross-database procedures are eligible only when
+  dependency closure already confirmed them with catalog-backed `SAME_SERVER_CROSS_DATABASE_CATALOG`
+  evidence; their definitions are fetched internally through `get_procedure_definition` with
+  `referencedDatabase`. Public MCP/API raw definition access is not expanded.
 - Agent run traces may expose sanitized `analysisCoverage` and `sourceContextSummary`, but never
   raw prompt text, selected span text, full SP definitions, row data, or raw provider responses.
 

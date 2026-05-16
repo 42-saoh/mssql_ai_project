@@ -100,6 +100,7 @@ class MetadataGateway:
         db_profile_id: str,
         schema: str,
         procedure_name: str,
+        referenced_database: str | None = None,
     ) -> dict[str, Any] | None:
         raise NotImplementedError
 
@@ -114,6 +115,7 @@ class McpMetadataGateway(MetadataGateway):
         db_profile_id: str,
         schema: str,
         procedure_name: str,
+        referenced_database: str | None = None,
     ) -> dict[str, Any] | None:
         settings = load_live_metadata_settings()
         try:
@@ -128,14 +130,17 @@ class McpMetadataGateway(MetadataGateway):
         registry = build_tool_registry(repository=repository, profiles=profiles)
         evidence_refs: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
+        arguments: dict[str, Any] = {
+            "dbProfileId": db_profile_id,
+            "schema": schema,
+            "procedureName": procedure_name,
+        }
+        if referenced_database:
+            arguments["referencedDatabase"] = referenced_database
         return self._invoke(
             registry,
             "get_procedure_definition",
-            {
-                "dbProfileId": db_profile_id,
-                "schema": schema,
-                "procedureName": procedure_name,
-            },
+            arguments,
             evidence_refs,
             errors,
         )

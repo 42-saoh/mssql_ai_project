@@ -5,6 +5,10 @@
 
 ## Routes
 
+- `/jobs/[jobId]` also renders sanitized dependency child AgentRun coverage from the root
+  `sourceContextSummary.dependencyAnalysis`; raw prompt, source span, provider response, and SP
+  definition text stay hidden.
+
 - `/` - 최근 jobs, PPM metadata search, draft artifact 목록 요약
 - `/requests/new` - 단일 API `POST /api/v1/requests/sp-analysis` submit 후 실제 job id 로 redirect, batch mode 는 `POST /api/v1/requests/sp-analysis/batch` accepted/rejected summary 를 표시
 - `/metadata/search` - read-only metadata identity/evidence search and explicit metadata analyze action
@@ -72,6 +76,10 @@
   but does not render raw fact payloads, raw metadata payloads, provider traces, row data, or raw SQL.
 
 ## P22 behavior
+
+- `/jobs/[jobId]` shows dependency coverage, analyzed child targets, capped
+  `REVIEW_REQUIRED` skipped dependency reasons, and child `LLM_SEMANTIC_ANALYST_DEPENDENCY`
+  trace rows from sanitized AgentRun summaries only.
 
 - `/requests/new` now sends `sourceContextMode=RETRIEVED_SPANS` by default. This keeps the
   high-quality semantic workflow on bounded retrieved SP spans rather than full-procedure prompt

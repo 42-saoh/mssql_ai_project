@@ -21,6 +21,65 @@ const workflowSteps = [
   "VALIDATE",
 ] as const;
 
+const dependencyAgentType = "LLM_SEMANTIC_ANALYST_DEPENDENCY";
+const skippedDependencyDisplayLimit = 8;
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordsFrom(value: unknown): UnknownRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function textValue(value: unknown, fallback = "n/a") {
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return fallback;
+}
+
+function countValue(value: unknown) {
+  return textValue(value, "0");
+}
+
+function dependencyAnalysisFromRun(run: AgentRunSummary): UnknownRecord | null {
+  const sourceContextSummary = run.modelInvocation.sourceContextSummary;
+  if (!isRecord(sourceContextSummary)) {
+    return null;
+  }
+  const dependencyAnalysis = sourceContextSummary.dependencyAnalysis;
+  return isRecord(dependencyAnalysis) ? dependencyAnalysis : null;
+}
+
+function rootDependencyAnalysis(agentRuns: AgentRunSummary[]): UnknownRecord | null {
+  const rootRun = agentRuns.find(
+    (run) => run.agentType !== dependencyAgentType && dependencyAnalysisFromRun(run),
+  );
+  return rootRun ? dependencyAnalysisFromRun(rootRun) : null;
+}
+
+function sourceContextDigest(value: unknown) {
+  if (!isRecord(value)) {
+    return "source context n/a";
+  }
+  return [
+    `mode ${textValue(value.mode)}`,
+    `budget ${textValue(value.budgetStatus)}`,
+    `selected spans ${countValue(value.selectedSpanCount)}`,
+    `skipped spans ${countValue(value.skippedSpanCount)}`,
+  ].join(" - ");
+}
+
+function dependencyTargetKey(item: UnknownRecord, index: number) {
+  return `${textValue(item.targetRef, "dependency")}-${textValue(item.agentRunId, String(index))}`;
+}
+
 function stepState(job: Job, step: (typeof workflowSteps)[number]) {
   if (
     job.status === "VALIDATION_COMPLETE" ||
@@ -59,6 +118,12 @@ export function JobStatusView({
   agentRuns: AgentRunSummary[];
   knowledgeAssets: KnowledgeAssetSummary[];
 }>) {
+  const dependencyAnalysis = rootDependencyAnalysis(agentRuns);
+  const analyzedTargets = recordsFrom(dependencyAnalysis?.analyzedTargets);
+  const skippedTargets = recordsFrom(dependencyAnalysis?.skippedTargets);
+  const visibleSkippedTargets = skippedTargets.slice(0, skippedDependencyDisplayLimit);
+  const hiddenSkippedCount = Math.max(skippedTargets.length - visibleSkippedTargets.length, 0);
+
   return (
     <div className="stack">
       <section className="panel">
@@ -147,11 +212,89 @@ export function JobStatusView({
         </div>
 
         {agentRuns.length > 0 ? (
-          <div className="validation-list">
+          <>
+            {dependencyAnalysis ? (
+              <div className="dependency-summary">
+                <dl className="metric-grid metric-grid--dense">
+                  <div>
+                    <dt>Mode</dt>
+                    <dd>{textValue(dependencyAnalysis.mode)}</dd>
+                  </div>
+                  <div>
+                    <dt>Requested depth</dt>
+                    <dd>{countValue(dependencyAnalysis.requestedDepth)}</dd>
+                  </div>
+                  <div>
+                    <dt>Selected</dt>
+                    <dd>{countValue(dependencyAnalysis.selectedCount)}</dd>
+                  </div>
+                  <div>
+                    <dt>Analyzed</dt>
+                    <dd>{countValue(dependencyAnalysis.analyzedCount)}</dd>
+                  </div>
+                  <div>
+                    <dt>Skipped</dt>
+                    <dd>{countValue(dependencyAnalysis.skippedCount)}</dd>
+                  </div>
+                  <div>
+                    <dt>Child runs</dt>
+                    <dd>{countValue(dependencyAnalysis.childRunCount)}</dd>
+                  </div>
+                </dl>
+
+                {analyzedTargets.length > 0 ? (
+                  <div className="dependency-target-list">
+                    {analyzedTargets.map((target, index) => (
+                      <article
+                        className="dependency-target-row"
+                        key={dependencyTargetKey(target, index)}
+                      >
+                        <div>
+                          <strong>{textValue(target.targetRef, "dependency target")}</strong>
+                          <span>depth {textValue(target.depth)}</span>
+                        </div>
+                        <div className="dependency-target-meta">
+                          <code>{textValue(target.agentRunId, "child run pending")}</code>
+                          <span>{sourceContextDigest(target.sourceContextSummary)}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+
+                {skippedTargets.length > 0 ? (
+                  <div className="callout callout--warning">
+                    <strong>REVIEW_REQUIRED dependencies</strong>
+                    <p>
+                      {countValue(dependencyAnalysis.skippedCount)} dependency targets require
+                      manual review. Showing {visibleSkippedTargets.length} of{" "}
+                      {skippedTargets.length}
+                      {hiddenSkippedCount > 0 ? `; ${hiddenSkippedCount} more are hidden.` : "."}
+                    </p>
+                    <ul>
+                      {visibleSkippedTargets.map((target, index) => (
+                        <li key={dependencyTargetKey(target, index)}>
+                          {textValue(target.targetRef, "dependency target")} -{" "}
+                          {textValue(target.reason, "REVIEW_REQUIRED")}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="validation-list">
             {agentRuns.map((run) => (
               <article className="validation-row" key={run.agentRunId}>
                 <div>
-                  <h3>{run.agentType}</h3>
+                  <div className="run-title-row">
+                    <h3>{run.agentType}</h3>
+                    <span className="quiet-label">
+                      {run.agentType === dependencyAgentType ? "Dependency child" : "Root run"}
+                    </span>
+                  </div>
+                  <small>target {run.targetRef}</small>
                   <p>
                     {run.modelInvocation.model} · {run.modelInvocation.promptVersion} ·{" "}
                     {run.summary}
@@ -172,7 +315,8 @@ export function JobStatusView({
                 </div>
               </article>
             ))}
-          </div>
+            </div>
+          </>
         ) : (
           <div className="callout">
             <strong>No LLM run recorded</strong>

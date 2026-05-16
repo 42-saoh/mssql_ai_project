@@ -211,6 +211,10 @@ button:hover,
   margin: 0;
 }
 
+.metric-grid--dense {
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+}
+
 .metric-grid div {
   min-width: 0;
   border: 1px solid var(--border);
@@ -578,6 +582,59 @@ legend {
   overflow-wrap: anywhere;
 }
 
+.dependency-summary {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.dependency-target-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dependency-target-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.65fr) minmax(0, 1.35fr);
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  background: #fbfcfc;
+}
+
+.dependency-target-row strong,
+.dependency-target-row span,
+.dependency-target-row code {
+  overflow-wrap: anywhere;
+}
+
+.dependency-target-row span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dependency-target-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.run-title-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
 .compact-heading {
   margin: 0;
   font-size: 17px;
@@ -600,6 +657,7 @@ legend {
 }
 
 .artifact-row small,
+.validation-row small,
 .metadata-result-row small {
   display: block;
   margin-top: 6px;
@@ -683,6 +741,7 @@ legend {
 }
 
 .evidence-row code,
+.dependency-target-meta code,
 .registry-list code,
 .metadata-result-detail code {
   overflow-wrap: anywhere;
@@ -771,8 +830,13 @@ legend {
   }
 
   .evidence-row,
+  .dependency-target-row,
   .blocker-row {
     grid-template-columns: 1fr;
+  }
+
+  .dependency-target-meta {
+    justify-content: flex-start;
   }
 
   .metadata-result-row {

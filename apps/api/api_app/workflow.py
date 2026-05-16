@@ -87,6 +87,8 @@ class DependencyProcedureCandidate:
     schema: str
     name: str
     depth: int
+    database: str | None
+    source_scope: str | None
     node: dict[str, Any]
     edge: dict[str, Any]
     evidence_refs: tuple[str, ...]
@@ -562,6 +564,7 @@ class WorkflowService:
                 db_profile_id=request_record.db_profile_id,
                 schema=candidate.schema,
                 procedure_name=candidate.name,
+                referenced_database=candidate.database,
             )
             definition_payload = dict(payload.get("data") or {}) if payload else {}
             definition_text = str(definition_payload.get("definition") or "")
@@ -570,6 +573,8 @@ class WorkflowService:
                     "targetRef": candidate.target_ref,
                     "reason": "DEFINITION_UNAVAILABLE",
                     "depth": candidate.depth,
+                    "database": candidate.database,
+                    "sourceScope": candidate.source_scope,
                     "evidenceRefs": list(candidate.evidence_refs),
                 }
                 summary["skippedTargets"].append(skipped_item)
@@ -615,6 +620,8 @@ class WorkflowService:
                     "targetRef": candidate.target_ref,
                     "reason": "SEMANTIC_ANALYSIS_FAILED",
                     "depth": candidate.depth,
+                    "database": candidate.database,
+                    "sourceScope": candidate.source_scope,
                     "evidenceRefs": list(candidate.evidence_refs),
                     "errorCode": exc.code,
                 }
@@ -638,6 +645,8 @@ class WorkflowService:
                     "targetRef": candidate.target_ref,
                     "agentRunId": child_run.agent_run_id,
                     "depth": candidate.depth,
+                    "database": candidate.database,
+                    "sourceScope": candidate.source_scope,
                     "evidenceRefs": list(candidate.evidence_refs),
                     "structuredOutput": child_payload.structured_output,
                     "sourceContextSummary": child_payload.model_invocation.to_storage_dict().get(
@@ -1445,9 +1454,11 @@ def dependency_procedure_candidates(
     for unresolved in _mapping_items(dependency_evidence.get("unresolved")):
         skipped.append(
             {
-                "targetRef": _dependency_object_ref(unresolved),
+                "targetRef": _dependency_object_ref(unresolved, root_database=root.get("database")),
                 "reason": _unresolved_dependency_reason(unresolved),
                 "depth": None,
+                "database": _dependency_target_database(unresolved, root),
+                "sourceScope": _dependency_source_scope(unresolved, {}),
                 "evidenceRefs": _dependency_ref_ids(unresolved.get("evidenceRefs")),
             }
         )
@@ -1460,7 +1471,9 @@ def dependency_procedure_candidates(
         if not node or str(node.get("objectType") or "").upper() != "PROCEDURE":
             continue
         depth = depths.get(target_id, max_depth + 1)
-        target_ref = _dependency_object_ref(node)
+        target_ref = _dependency_object_ref(node, root_database=root.get("database"))
+        target_database = _dependency_target_database(node, root)
+        source_scope = _dependency_source_scope(node, edge)
         evidence_refs = tuple(
             _dedupe_string_list(
                 [
@@ -1482,6 +1495,8 @@ def dependency_procedure_candidates(
                     "targetRef": target_ref,
                     "reason": reason,
                     "depth": depth,
+                    "database": target_database,
+                    "sourceScope": source_scope,
                     "evidenceRefs": list(evidence_refs),
                 }
             )
@@ -1492,6 +1507,8 @@ def dependency_procedure_candidates(
                 schema=str(node.get("schema") or ""),
                 name=str(node.get("name") or ""),
                 depth=depth,
+                database=target_database,
+                source_scope=source_scope,
                 node=dict(node),
                 edge=dict(edge),
                 evidence_refs=evidence_refs,
@@ -1507,6 +1524,8 @@ def dependency_procedure_candidates(
                     "targetRef": candidate.target_ref,
                     "reason": "DEPENDENCY_TASK_LIMIT_EXCEEDED",
                     "depth": candidate.depth,
+                    "database": candidate.database,
+                    "sourceScope": candidate.source_scope,
                     "evidenceRefs": list(candidate.evidence_refs),
                 }
             )
@@ -1533,6 +1552,8 @@ def dependency_child_metadata(
     return {
         "dbProfileId": request_record.db_profile_id,
         "objectRef": candidate.target_ref,
+        "database": candidate.database,
+        "sourceScope": candidate.source_scope,
         "snapshotId": metadata.snapshot_id,
         "collectedAt": metadata.collected_at,
         "procedureDefinition": sanitized_definition,
@@ -1699,6 +1720,8 @@ def dependency_analysis_summary(dependency_analysis: Mapping[str, Any]) -> dict[
                 "targetRef": str(item.get("targetRef") or ""),
                 "agentRunId": str(item.get("agentRunId") or ""),
                 "depth": item.get("depth"),
+                "database": item.get("database"),
+                "sourceScope": item.get("sourceScope"),
                 "evidenceRefs": list(item.get("evidenceRefs") or []),
                 "sourceContextSummary": dict(item.get("sourceContextSummary") or {}),
             }
@@ -1710,6 +1733,8 @@ def dependency_analysis_summary(dependency_analysis: Mapping[str, Any]) -> dict[
                 "targetRef": str(item.get("targetRef") or ""),
                 "reason": str(item.get("reason") or ""),
                 "depth": item.get("depth"),
+                "database": item.get("database"),
+                "sourceScope": item.get("sourceScope"),
                 "evidenceRefs": list(item.get("evidenceRefs") or []),
             }
             for item in dependency_analysis.get("skippedTargets", [])
@@ -1782,10 +1807,26 @@ def _confirmed_procedure_skip_reason(
     root_database = root.get("database")
     node_database = node.get("database") or node.get("referencedDatabase")
     if root_database and node_database and not _same_text(root_database, node_database):
-        return "CROSS_DATABASE_DEFINITION_UNSUPPORTED"
+        if not _is_safe_cross_database_procedure(edge=edge, node=node):
+            return "CROSS_DATABASE_DEFINITION_UNSUPPORTED"
     if not node.get("schema") or not node.get("name"):
         return "UNRESOLVED_REFERENCE"
     return None
+
+
+def _is_safe_cross_database_procedure(
+    *,
+    edge: Mapping[str, Any],
+    node: Mapping[str, Any],
+) -> bool:
+    source_scope = (_dependency_source_scope(node, edge) or "").upper()
+    strategy = str(edge.get("resolutionStrategy") or node.get("resolutionStrategy") or "").upper()
+    confidence = str(edge.get("resolutionConfidence") or node.get("resolutionConfidence") or "")
+    return (
+        source_scope == "SAME_SERVER_CROSS_DATABASE"
+        and strategy == "SAME_SERVER_CROSS_DATABASE_CATALOG"
+        and confidence.upper() in {"", "HIGH"}
+    )
 
 
 def _unresolved_dependency_reason(item: Mapping[str, Any]) -> str:
@@ -1804,14 +1845,49 @@ def _unresolved_dependency_reason(item: Mapping[str, Any]) -> str:
     return "UNRESOLVED_REFERENCE"
 
 
-def _dependency_object_ref(item: Mapping[str, Any]) -> str:
+def _dependency_object_ref(
+    item: Mapping[str, Any],
+    *,
+    root_database: Any | None = None,
+) -> str:
     schema = str(item.get("schema") or "").strip()
     name = str(item.get("name") or "").strip()
     if schema and name:
+        database = str(item.get("database") or item.get("referencedDatabase") or "").strip()
+        if database and (
+            root_database is None
+            or not _same_text(database, root_database)
+            or str(item.get("sourceScope") or "").upper() == "SAME_SERVER_CROSS_DATABASE"
+        ):
+            return f"{database}.{schema}.{name}"
         return f"{schema}.{name}"
     if name:
         return name
     return "REVIEW_REQUIRED"
+
+
+def _dependency_target_database(
+    item: Mapping[str, Any],
+    root: Mapping[str, Any],
+) -> str | None:
+    database = str(item.get("database") or item.get("referencedDatabase") or "").strip()
+    if not database:
+        return None
+    root_database = root.get("database")
+    source_scope = str(item.get("sourceScope") or "").upper()
+    if source_scope == "SAME_SERVER_CROSS_DATABASE":
+        return database
+    if root_database and not _same_text(database, root_database):
+        return database
+    return None
+
+
+def _dependency_source_scope(
+    node: Mapping[str, Any],
+    edge: Mapping[str, Any],
+) -> str | None:
+    source_scope = str(node.get("sourceScope") or edge.get("sourceScope") or "").strip()
+    return source_scope or None
 
 
 def _dependency_ref_ids(value: Any) -> list[str]:

@@ -50,6 +50,12 @@ those two tools only. P29 consumes that route from the Web diagnostic UI and the
 workflow dependency-evidence path. The API still does not expose input schemas,
 secrets, persisted artifact type changes, or DB schema changes.
 
+`sourceDependencyMode=CONFIRMED_PROCEDURES` also allows same-server cross-database
+procedure child analysis when dependency closure has already produced confirmed
+catalog evidence. The workflow fetches those definitions only through the internal
+MCP registry path and keeps raw text out of API responses, traces, artifacts, and
+knowledge payloads.
+
 ## P09 workflow hardening notes
 
 - `POST /api/v1/requests/sp-analysis` accepts `Idempotency-Key`. The same key with

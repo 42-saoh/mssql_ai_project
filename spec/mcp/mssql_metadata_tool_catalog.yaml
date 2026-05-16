@@ -265,7 +265,7 @@ tools:
   - name: get_procedure_definition
     active: true
     readOnly: true
-    description: Return stored procedure definition text for direct analysis plus standardized hash, length, pattern, access, caveat, and review metadata.
+    description: Return stored procedure definition text for direct analysis plus standardized hash, length, pattern, access, caveat, and review metadata. Optional referencedDatabase is internal-only for same-server cross-database procedure dependencies already confirmed by catalog evidence.
     input:
       type: object
       required: [dbProfileId, schema, procedureName]
@@ -273,6 +273,7 @@ tools:
         dbProfileId: { type: string }
         schema: { type: string }
         procedureName: { type: string }
+        referencedDatabase: { type: string }
         snapshotMode: { type: string, enum: [LATEST, PINNED] }
         snapshotId: { type: string }
 
@@ -365,6 +366,8 @@ tools:
               name: { type: string }
               objectType: { type: string }
               sourceScope: { type: string, nullable: true }
+              referencedDatabase: { type: string, nullable: true }
+              referencedServer: { type: string, nullable: true }
               reviewStatus: { type: string, enum: [CONFIRMED, REVIEW_REQUIRED] }
               evidenceRefs:
                 type: array

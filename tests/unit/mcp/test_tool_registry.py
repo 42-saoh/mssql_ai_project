@@ -773,8 +773,22 @@ class DefinitionShapeLiveMetadataRepository(LiveMetadataRepository):
                 )
             ],
         )
+        self.queried_databases: list[str] = []
 
-    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+    def _query(  # noqa: ANN001
+        self,
+        database,
+        sql,
+        params,
+        *,
+        tool_name,
+        profile,
+        lock_timeout_ms=None,
+    ):
+        self.queried_databases.append(database)
+        if "FROM sys.databases" in sql:
+            assert lock_timeout_ms == 1000
+            return [{"name": params[0], "state_desc": "ONLINE"}]
         if "sys.sql_expression_dependencies" in sql:
             return []
         if tool_name == "get_procedure_definition":
@@ -857,6 +871,53 @@ def test_live_definition_tools_match_fixture_definition_metadata_shape(
     assert isinstance(live_data["detectedPatterns"], list)
     assert isinstance(fixture_data["hasDefinitionAccess"], bool)
     assert isinstance(live_data["hasDefinitionAccess"], bool)
+
+
+def test_fixture_procedure_definition_supports_confirmed_cross_database_dependency() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    payload = registry.invoke_payload(
+        "get_procedure_definition",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "procedureName": "usp_CrossDbOrderAudit",
+                "referencedDatabase": "OtherDB",
+            }
+        },
+    )
+
+    assert payload["data"]["database"] == "OtherDB"
+    assert payload["data"]["referencedDatabase"] == "OtherDB"
+    assert payload["data"]["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
+    assert payload["data"]["objectIdentity"]["database"] == "OtherDB"
+    assert "CREATE PROCEDURE" in payload["data"]["definition"]
+
+
+def test_live_procedure_definition_queries_confirmed_cross_database_target() -> None:
+    repository = DefinitionShapeLiveMetadataRepository()
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "get_procedure_definition",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "procedureName": "usp_CrossDbOrderAudit",
+                "referencedDatabase": "OtherDB",
+            }
+        },
+    )
+
+    assert payload["data"]["database"] == "OtherDB"
+    assert payload["data"]["referencedDatabase"] == "OtherDB"
+    assert payload["data"]["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
+    assert payload["data"]["objectIdentity"]["database"] == "OtherDB"
+    assert repository.queried_databases == ["master", "OtherDB"]
 
 
 def _dependency_row(**overrides: Any) -> dict[str, Any]:

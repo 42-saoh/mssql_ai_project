@@ -14,9 +14,11 @@
 - Context budget fallback is a review caveat. `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED` is not production
   approval or automatic conversion evidence.
 - Dependency procedure semantic fan-out is allowed only for confirmed same-profile PROCEDURE
-  dependencies selected from MCP dependency closure evidence. Child AgentRuns may store sanitized
-  analysis output and source context summaries, but never raw dependency definitions, selected span
-  text, prompt bodies, provider responses, row data, or snippets.
+  dependencies and confirmed same-server cross-database PROCEDURE dependencies selected from MCP
+  dependency closure evidence with catalog-backed `SAME_SERVER_CROSS_DATABASE_CATALOG` resolution.
+  Child AgentRuns may store sanitized analysis output and source context summaries, but never raw
+  dependency definitions, selected span text, prompt bodies, provider responses, row data, or
+  snippets.
 
 ## 절대 금지
 
@@ -83,7 +85,7 @@
   남긴다.
 - LLM claim 의 `evidenceRefs` 는 deterministic fact id 만 사용할 수 있다. prompt/input/output hash,
   provider response id, raw SQL snippet 같은 trace 값은 claim evidence 로 사용할 수 없다.
-- Dynamic SQL, cross-database, unsupported dependency/table/function/procedure claim 은 LLM 출력에
+- Dynamic SQL, unsafe cross-database, unsupported dependency/table/function/procedure claim 은 LLM 출력에
   marker 가 없더라도 deterministic guard 가 `REVIEW_REQUIRED` 로 보강해야 한다.
 - AI metadata tool orchestration 은 bounded planner 방식만 허용한다. LLM 은 tool request plan 을
   strict schema 로 제안할 수 있지만 실제 MCP 실행은 workflow 의 allowlisted active/read-only catalog,
@@ -122,8 +124,8 @@
 - artifact 는 버전, 생성기 버전, snapshot, registry refs 를 추적 가능해야 한다.
 - P25 기본 product flow 는 validation 이후 `VALIDATION_COMPLETE` 에서 멈추며 review UI 를 노출하지 않는다. Approval API/server code 는 deferred capability 로 남기되 기본 workflow 완료 조건이나 production readiness 근거로 사용하지 않는다.
 - SP migration guide quality gate 는 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 초안 품질 평가로만 해석한다. 통과 결과도 production-ready, 자동 전환 완료, 자동 적용 승인으로 표현하지 않는다.
-- Unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
-- Ambiguous dependency, unresolved synonym target, dynamic SQL marker, cross-server target without catalog confirmation, caller-dependent reference 는 deterministic fact 로 승격하지 않고 `REVIEW_REQUIRED` 로 유지한다.
+- Unsupported dependency/table/function/unsafe cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
+- Ambiguous dependency, unresolved synonym target, dynamic SQL marker, unsafe cross-database target, cross-server target without catalog confirmation, caller-dependent reference 는 deterministic fact 로 승격하지 않고 `REVIEW_REQUIRED` 로 유지한다.
 
 ## 코드 변경 정책
 

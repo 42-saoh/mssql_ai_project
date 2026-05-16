@@ -15,9 +15,10 @@ Required checks for Copilot-style SP analysis:
   `REVIEW_REQUIRED`.
 - Integration coverage for long SP fixtures must finish at `VALIDATION_COMPLETE` without raw SP
   definitions in metadata, artifacts, knowledge assets, exports, or trace summaries.
-- Multi-SP dependency coverage proves confirmed dependency procedures are stored as child
-  `LLM_SEMANTIC_ANALYST_DEPENDENCY` AgentRuns, only sanitized guidance is reduced into the root run,
-  and dynamic/unresolved/cross-db/cross-server/caller-dependent items remain `REVIEW_REQUIRED`.
+- Multi-SP dependency coverage proves confirmed same-profile and same-server cross-database
+  dependency procedures are stored as child `LLM_SEMANTIC_ANALYST_DEPENDENCY` AgentRuns, only
+  sanitized guidance is reduced into the root run, and dynamic/unresolved/unsafe cross-db/
+  cross-server/caller-dependent items remain `REVIEW_REQUIRED`.
 
 ## 목적
 
@@ -237,7 +238,7 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 - LLM 보강 필드는 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 로 제한한다
 - runtime 은 SP별 `SemanticAnalysisTask` 로 fan-out 가능하며 `LLM_SP_CONCURRENCY=2` 를 기본 병렬도 한계로 둔다
 - live structured schema 는 deterministic fact id 를 `evidenceRefs` enum 으로 제한하고, runtime 은 invalid/trace evidence refs 를 deterministic fact id 로 repair 한다
-- dynamic SQL, cross-DB, unsupported dependency/table/function/procedure claim 의 필수 `REVIEW_REQUIRED` marker 는 deterministic guard 가 보강한다
+- dynamic SQL, unsafe cross-DB, unsupported dependency/table/function/procedure claim 의 필수 `REVIEW_REQUIRED` marker 는 deterministic guard 가 보강한다
 - `LLM_INFERENCE` evidence 와 unsupported dependency/table/function claim 의 `REVIEW_REQUIRED` 처리 기준을 둔다
 - scoring runner 는 semantic recall, evidence discipline, overclaim control, storage safety 를 검증하며 raw prompt/SP/provider response text 를 저장하지 않는다
 - storage safety 는 adversarial raw SQL/provider-trace echo payload 를 실패로 판정하며, runtime 은 저장 전 sanitizer 와 `LLM_OUTPUT_STORAGE_SANITIZED` review marker 로 이를 차단한다
@@ -283,7 +284,7 @@ response storage, and `production_ready: false`.
 - P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 를 재사용하고 새 persisted artifact type, API/Web/DB schema 변경, live DB access 를 만들지 않는다
 - fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
 - fixture 와 expected report 는 raw prompt, raw SP definition, raw OpenAI response text, row data, secret, 사용자 제공 guide 본문, 실제 운영 SP 원문을 저장하지 않는다
-- unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 모두 `REVIEW_REQUIRED` 로 남긴다
+- unsupported dependency/table/function/unsafe cross-DB claim 과 low-evidence business-rule claim 은 모두 `REVIEW_REQUIRED` 로 남긴다
 - PPM 접근 실패 시 PLF fallback 은 금지하고 `production_ready: false` 를 유지한다
 - Java/MyBatis 는 `draft_only_readiness_notes` 로만 다루며 generated source application 은 수행하지 않는다
 

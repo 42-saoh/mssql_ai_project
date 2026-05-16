@@ -361,7 +361,27 @@ class FixtureMetadataRepository:
         return self._result(data=data, evidence_refs=[evidence])
 
     def _handle_get_procedure_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
-        procedure, index = self._find_procedure(arguments["schema"], arguments["procedureName"])
+        referenced_database = arguments.get("referencedDatabase")
+        source_database = source_database_for_profile(
+            arguments["dbProfileId"],
+            payload=self.payload,
+        )
+        lookup_database = (
+            referenced_database
+            if referenced_database and not _same(referenced_database, source_database)
+            else None
+        )
+        procedure, index = self._find_procedure(
+            arguments["schema"],
+            arguments["procedureName"],
+            database=lookup_database,
+        )
+        definition_database = procedure.get("database") or referenced_database or source_database
+        source_scope = (
+            "SAME_SERVER_CROSS_DATABASE"
+            if referenced_database and not _same(referenced_database, source_database)
+            else "SAME_DATABASE"
+        )
         definition = procedure.get("definition")
         definition_info = definition_metadata(
             definition,
@@ -376,8 +396,11 @@ class FixtureMetadataRepository:
             f"/procedures/{index}/definition",
         )
         data = {
+            "database": definition_database,
             "schema": procedure["schema"],
             "procedureName": procedure["name"],
+            "referencedDatabase": referenced_database,
+            "sourceScope": source_scope,
             "definition": definition,
             "definitionHash": definition_info["hash"],
             "definitionLength": definition_info["length"],
@@ -747,8 +770,14 @@ class FixtureMetadataRepository:
         }
         return self._result(data=data, evidence_refs=[evidence])
 
-    def _find_procedure(self, schema: str, name: str) -> tuple[dict[str, Any], int]:
-        return self._find_in_collection("procedures", schema, name, "PROCEDURE")
+    def _find_procedure(
+        self,
+        schema: str,
+        name: str,
+        *,
+        database: str | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        return self._find_in_collection("procedures", schema, name, "PROCEDURE", database=database)
 
     def _find_table(self, schema: str, name: str) -> tuple[dict[str, Any], int]:
         return self._find_in_collection("tables", schema, name, "TABLE")
@@ -783,14 +812,23 @@ class FixtureMetadataRepository:
         schema: str,
         name: str,
         object_type: str,
+        *,
+        database: str | None = None,
     ) -> tuple[dict[str, Any], int]:
         for index, item in enumerate(self.payload.get(collection, [])):
+            if database and not _same(item.get("database"), database):
+                continue
             if _same(item.get("schema"), schema) and _same(item.get("name"), name):
                 return item, index
         raise MetadataToolError(
             OBJECT_NOT_FOUND,
             "Requested metadata object was not found in the active repository.",
-            {"objectType": object_type, "schema": schema, "name": name},
+            {
+                "objectType": object_type,
+                "database": database,
+                "schema": schema,
+                "name": name,
+            },
         )
 
     def _find_object_with_extended_properties(
@@ -1353,9 +1391,23 @@ class LiveMetadataRepository:
         arguments: dict[str, Any],
     ) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
+        referenced_database = arguments.get("referencedDatabase")
+        query_database = profile.database
+        if referenced_database and not _same(referenced_database, profile.database):
+            database_result = self._catalog_database(
+                str(referenced_database),
+                profile=profile,
+                tool_name="get_procedure_definition",
+            )
+            query_database = str(database_result["external_database_name"])
+        source_scope = (
+            "SAME_SERVER_CROSS_DATABASE"
+            if referenced_database and not _same(referenced_database, profile.database)
+            else "SAME_DATABASE"
+        )
         row = self._single_row(
             self._query(
-                profile.database,
+                query_database,
                 """
                 SELECT
                     s.name AS schema_name,
@@ -1393,8 +1445,11 @@ class LiveMetadataRepository:
         return self._live_result(
             arguments,
             data={
+                "database": query_database,
                 "schema": row["schema_name"],
                 "procedureName": row["object_name"],
+                "referencedDatabase": referenced_database,
+                "sourceScope": source_scope,
                 "definition": definition,
                 "definitionHash": definition_info["hash"],
                 "definitionLength": definition_info["length"],
@@ -3764,6 +3819,8 @@ def _dependency_node(
         "name": source.get("name"),
         "objectType": source.get("objectType"),
         "sourceScope": source.get("sourceScope"),
+        "referencedDatabase": source.get("referencedDatabase"),
+        "referencedServer": source.get("referencedServer"),
         "reviewStatus": review_status,
         "evidenceRefs": evidence_refs,
     }

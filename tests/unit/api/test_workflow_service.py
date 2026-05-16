@@ -270,14 +270,21 @@ def test_confirmed_dependency_procedure_creates_child_agent_run_and_reduces_root
     assert runs is not None
     child_runs = [run for run in runs if run.agent_type == "LLM_SEMANTIC_ANALYST_DEPENDENCY"]
     root_runs = [run for run in runs if run.agent_type == "LLM_SEMANTIC_ANALYST"]
-    assert [run.target_ref for run in child_runs] == ["dbo.usp_GetOrderSummary"]
+    assert {run.target_ref for run in child_runs} == {
+        "OtherDB.dbo.usp_CrossDbOrderAudit",
+        "dbo.usp_GetOrderSummary",
+    }
     root_run = root_runs[0]
     dependency_summary = root_run.model_invocation["sourceContextSummary"]["dependencyAnalysis"]
-    assert dependency_summary["analyzedCount"] == 1
-    assert dependency_summary["childRunCount"] == 1
+    assert dependency_summary["analyzedCount"] == 2
+    assert dependency_summary["childRunCount"] == 2
     assert dependency_summary["skippedCount"] >= 1
     assert any(
         item["code"] == "CALLED_PROCEDURE_STRATEGY_DBO_USP_GETORDERSUMMARY"
+        for item in root_run.structured_output["conversionGuidance"]
+    )
+    assert any(
+        item["code"] == "CALLED_PROCEDURE_STRATEGY_OTHERDB_DBO_USP_CROSSDBORDERAUDIT"
         for item in root_run.structured_output["conversionGuidance"]
     )
     combined_storage = (
@@ -289,6 +296,10 @@ def test_confirmed_dependency_procedure_creates_child_agent_run_and_reduces_root
     assert "procedureDefinition" not in str(root_run.model_invocation)
     assert any(
         payload["targetRef"] == "dbo.usp_GetOrderSummary"
+        for payload in spy_gateway.prompt_payloads
+    )
+    assert any(
+        payload["targetRef"] == "OtherDB.dbo.usp_CrossDbOrderAudit"
         for payload in spy_gateway.prompt_payloads
     )
 
@@ -364,7 +375,7 @@ def test_dependency_child_context_error_records_failed_child_and_keeps_root_comp
     )
 
 
-def test_dependency_selector_keeps_only_confirmed_same_profile_procedures() -> None:
+def test_dependency_selector_keeps_confirmed_same_profile_and_safe_cross_db_procedures() -> None:
     evidence = {
         "rootObject": {
             "database": "master",
@@ -397,8 +408,20 @@ def test_dependency_selector_keeps_only_confirmed_same_profile_procedures() -> N
                 "schema": "dbo",
                 "name": "usp_CrossDb",
                 "objectType": "PROCEDURE",
+                "sourceScope": "SAME_SERVER_CROSS_DATABASE",
                 "reviewStatus": "CONFIRMED",
                 "evidenceRefs": [{"objectRef": "dbo.usp_CrossDb", "locator": "fixture#/cross"}],
+            },
+            {
+                "id": "UnsafeDb.dbo.usp_UnsafeCrossDb:PROCEDURE",
+                "database": "UnsafeDb",
+                "schema": "dbo",
+                "name": "usp_UnsafeCrossDb",
+                "objectType": "PROCEDURE",
+                "reviewStatus": "CONFIRMED",
+                "evidenceRefs": [
+                    {"objectRef": "dbo.usp_UnsafeCrossDb", "locator": "fixture#/unsafe"}
+                ],
             },
         ],
         "edges": [
@@ -413,8 +436,16 @@ def test_dependency_selector_keeps_only_confirmed_same_profile_procedures() -> N
                 "from": "master.dbo.usp_Root:PROCEDURE",
                 "to": "OtherDb.dbo.usp_CrossDb:PROCEDURE",
                 "resolutionStatus": "CONFIRMED",
-                "resolutionStrategy": "CATALOG_OBJECT_ID",
+                "resolutionStrategy": "SAME_SERVER_CROSS_DATABASE_CATALOG",
+                "resolutionConfidence": "HIGH",
                 "evidenceRefs": [{"objectRef": "dbo.usp_Root", "locator": "fixture#/edge2"}],
+            },
+            {
+                "from": "master.dbo.usp_Root:PROCEDURE",
+                "to": "UnsafeDb.dbo.usp_UnsafeCrossDb:PROCEDURE",
+                "resolutionStatus": "CONFIRMED",
+                "resolutionStrategy": "CATALOG_OBJECT_ID",
+                "evidenceRefs": [{"objectRef": "dbo.usp_Root", "locator": "fixture#/edge3"}],
             },
         ],
         "unresolved": [
@@ -432,7 +463,15 @@ def test_dependency_selector_keeps_only_confirmed_same_profile_procedures() -> N
         max_tasks=8,
     )
 
-    assert [candidate.target_ref for candidate in candidates] == ["dbo.usp_Child"]
+    assert [candidate.target_ref for candidate in candidates] == [
+        "OtherDb.dbo.usp_CrossDb",
+        "dbo.usp_Child",
+    ]
+    cross_db = next(
+        candidate for candidate in candidates if candidate.target_ref == "OtherDb.dbo.usp_CrossDb"
+    )
+    assert cross_db.database == "OtherDb"
+    assert cross_db.source_scope == "SAME_SERVER_CROSS_DATABASE"
     reasons = {item["reason"] for item in skipped}
     assert "CROSS_DATABASE_DEFINITION_UNSUPPORTED" in reasons
     assert "DYNAMIC_SQL_REVIEW_REQUIRED" in reasons

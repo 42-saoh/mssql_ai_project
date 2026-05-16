@@ -295,6 +295,13 @@ def _object_identity_for_tool(
             schema=arguments.get("schema"),
             name="functions",
         )
+    if tool_name == "get_procedure_definition":
+        return _identity(
+            source_database=arguments.get("referencedDatabase") or source_database,
+            object_type="PROCEDURE",
+            schema=arguments.get("schema"),
+            name=arguments.get("procedureName"),
+        )
     if tool_name.startswith("get_procedure_"):
         return _identity(
             source_database=source_database,

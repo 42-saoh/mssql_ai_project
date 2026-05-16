@@ -557,6 +557,66 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     assert "CREATE PROCEDURE" not in str(payload)
 
 
+def test_multi_sp_llm_request_exposes_dependency_child_agent_runs_sanitized(
+    client: TestClient,
+) -> None:
+    request_payload = _sp_analysis_llm_payload(
+        ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT", "JAVA_MYBATIS_DRAFT"]
+    )
+    request_payload["target"] = {
+        "type": "PROCEDURE",
+        "schema": "dbo",
+        "name": "usp_ProcessOrderBatch",
+    }
+
+    submit = client.post("/api/v1/requests/sp-analysis", json=request_payload)
+
+    assert submit.status_code == 202
+    job_id = submit.json()["jobId"]
+    response = client.get(f"/api/v1/jobs/{job_id}/agent-runs")
+
+    assert response.status_code == 200
+    payload = response.json()
+    runs = payload["agentRuns"]
+    root_runs = [run for run in runs if run["agentType"] == "LLM_SEMANTIC_ANALYST"]
+    child_runs = [
+        run for run in runs if run["agentType"] == "LLM_SEMANTIC_ANALYST_DEPENDENCY"
+    ]
+    assert len(root_runs) == 1
+    assert {run["targetRef"] for run in child_runs} == {
+        "OtherDB.dbo.usp_CrossDbOrderAudit",
+        "dbo.usp_GetOrderSummary",
+    }
+
+    dependency_summary = root_runs[0]["modelInvocation"]["sourceContextSummary"][
+        "dependencyAnalysis"
+    ]
+    assert dependency_summary["mode"] == "CONFIRMED_PROCEDURES"
+    assert dependency_summary["requestedDepth"] == 2
+    assert dependency_summary["analyzedCount"] == len(child_runs)
+    assert dependency_summary["childRunCount"] == len(child_runs)
+    assert dependency_summary["skippedCount"] >= 1
+    analyzed_refs = {item["targetRef"] for item in dependency_summary["analyzedTargets"]}
+    assert analyzed_refs == {
+        "OtherDB.dbo.usp_CrossDbOrderAudit",
+        "dbo.usp_GetOrderSummary",
+    }
+    assert "sourceContextSummary" in dependency_summary["analyzedTargets"][0]
+    cross_db_target = next(
+        item
+        for item in dependency_summary["analyzedTargets"]
+        if item["targetRef"] == "OtherDB.dbo.usp_CrossDbOrderAudit"
+    )
+    assert cross_db_target["database"] == "OtherDB"
+    assert cross_db_target["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
+    assert dependency_summary["skippedTargets"]
+    assert "CREATE PROCEDURE" not in str(payload)
+    normalized_keys = _normalized_response_keys(payload)
+    assert "proceduredefinition" not in normalized_keys
+    assert "selectedspans" not in normalized_keys
+    assert "providerresponse" not in normalized_keys
+
+
 def test_approval_route_records_enriched_audit_payload_for_passed_validation(
     client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
 ) -> None:

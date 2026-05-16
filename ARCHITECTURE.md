@@ -14,13 +14,15 @@ The default request behavior is `sourceContextMode=RETRIEVED_SPANS`. Setting
 Provider context-length failures retry with reduced spans, then fall back to evidence digest only
 with `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`.
 
-Confirmed same-profile procedure dependencies can also receive bounded child semantic analysis when
-`sourceDependencyMode=CONFIRMED_PROCEDURES` (default). The workflow selects only
+Confirmed same-profile procedure dependencies and same-server cross-database procedure dependencies
+with `SAME_SERVER_CROSS_DATABASE_CATALOG` evidence can also receive bounded child semantic analysis
+when `sourceDependencyMode=CONFIRMED_PROCEDURES` (default). The workflow selects only
 `resolutionStatus=CONFIRMED` PROCEDURE dependencies from sanitized dependency closure evidence,
 collects their definitions internally through the existing read-only MCP registry path, stores each
 dependency result as a child `LLM_SEMANTIC_ANALYST_DEPENDENCY` AgentRun, and reduces sanitized
 called-procedure strategy guidance back into the root AgentRun. Dynamic SQL, unresolved,
-caller-dependent, cross-server, and v1 cross-database dependencies remain `REVIEW_REQUIRED`.
+caller-dependent, cross-server, and unsafe or unconfirmed cross-database dependencies remain
+`REVIEW_REQUIRED`.
 
 ## 목적
 

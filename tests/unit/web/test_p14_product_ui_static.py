@@ -157,3 +157,20 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "api.createApprovalDecision" not in source
     assert "formatPortalApiError" in source
     assert "portalApiErrorCode" in source
+
+
+def test_job_page_renders_dependency_child_agent_runs_without_raw_trace_dump() -> None:
+    job_status_view = (WEB_ROOT / "components" / "job-status-view.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "dependencyAnalysis" in job_status_view
+    assert "LLM_SEMANTIC_ANALYST_DEPENDENCY" in job_status_view
+    assert "Dependency child" in job_status_view
+    assert "Root run" in job_status_view
+    assert "REVIEW_REQUIRED dependencies" in job_status_view
+    assert "skippedDependencyDisplayLimit = 8" in job_status_view
+    assert "sourceContextDigest" in job_status_view
+    assert "target {run.targetRef}" in job_status_view
+    assert "run.structuredOutput" not in job_status_view
+    assert "componentInvocations" not in job_status_view

@@ -85,6 +85,9 @@ dependency summary, caveats, and review flags without returning definition text.
 Direct definition tools (`get_procedure_definition`, `get_view_definition`,
 `get_function_definition`) may return definition text for downstream analysis and
 also return the same standardized hash/length/pattern/access/caveat fields.
+`get_procedure_definition` accepts optional internal `referencedDatabase` only for
+same-server cross-database procedure dependencies that were already confirmed by
+catalog evidence; this does not expand the public API allowlist.
 
 `get_procedure_dependencies` exposes structured dependency resolution evidence
 and is contractually extended for P27 with optional `resolutionConfidence`,
