@@ -13,6 +13,7 @@ from ai_agent_generation import (
     evaluate_p24_migration_guide_quality,
     render_artifact,
 )
+from ai_agent_generation.migration_guide import P24_SECTION_TITLES
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "fixtures" / "eval" / "sp_migration_guide_quality_p24_v1.yaml"
@@ -23,7 +24,12 @@ def test_p24_analysis_doc_emits_required_sections_and_evidence_refs() -> None:
     artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, _context_from_scenario(scenario))
 
     for section_id in P24_REQUIRED_SECTION_IDS:
-        assert f"## {section_id}" in artifact.content
+        assert f"<!-- section:{section_id} -->" in artifact.content
+        assert f"## {P24_SECTION_TITLES[section_id]}" not in artifact.content
+    assert "## 1. SP 개요 및 기본 정보" in artifact.content
+    assert "## sp_overview" not in artifact.content
+    assert "| 항목 | 값 | 상태 | 근거 |" in artifact.content
+    assert "| 기능/분기 | 조건/트리거 | 상태 | 요약 | 근거 |" in artifact.content
     assert "ev_p24_complex_dynamic_sql" in artifact.content
     assert "ev_p24_complex_cross_db" in artifact.content
     assert "UNSUPPORTED_CROSS_DB_CLAIM_REVIEW" in artifact.content
@@ -63,14 +69,42 @@ def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None
     assert "generated_source_application: `not_performed`" in artifact.content
 
 
+def test_p24_llm_guide_insights_are_placed_in_matching_sections() -> None:
+    scenario = _scenario("p24_complex_dynamic_cross_db_extract")
+    context = _context_from_scenario(
+        scenario,
+        llm_analysis={
+            "migrationGuideInsights": [
+                {
+                    "section": "dependency_inventory",
+                    "summary": "dynamic SQL 의존성은 확정 dependency가 아니라 검토 항목입니다.",
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": ["ev_p24_complex_dynamic_sql"],
+                    "whatToExtractNext": "dependency closure evidence를 확인합니다.",
+                }
+            ],
+        },
+    )
+    artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, context)
+    dependency_section = artifact.content.split("<!-- section:dependency_inventory -->", 1)[1]
+    dependency_section = dependency_section.split("<!-- section:dml_impact_matrix -->", 1)[0]
+
+    assert "llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`" in dependency_section
+    assert "llmMigrationGuideInsight: dependency_inventory" in dependency_section
+    assert "dependency closure evidence를 확인합니다." in dependency_section
+
+
 def test_p24_dependency_report_includes_dml_call_flow_and_readiness_note() -> None:
     scenario = _scenario("p24_medium_transactional_branching_dml")
     artifact = render_artifact(ArtifactType.DEPENDENCY_REPORT, _context_from_scenario(scenario))
 
     assert "## dependency_table" in artifact.content
-    assert "## p24_dependency_inventory" in artifact.content
-    assert "## p24_dml_impact_matrix" in artifact.content
-    assert "## p24_branch_call_flow" in artifact.content
+    assert "<!-- section:dependency_inventory -->" in artifact.content
+    assert "## 의존성 상세 목록" in artifact.content
+    assert "<!-- section:dml_impact_matrix -->" in artifact.content
+    assert "## 테이블별 DML 영향" in artifact.content
+    assert "<!-- section:call_flow -->" in artifact.content
+    assert "## 분기별 호출 흐름" in artifact.content
     assert "PPM.dbo.P24_ShipmentDecisionAudit" in artifact.content
     assert "TRANSACTIONAL_DML_REVIEW_REQUIRED" in artifact.content
     assert "generated_source_application: `not_performed`" not in artifact.content
@@ -84,9 +118,11 @@ def test_p24_renderer_emits_confirmed_needs_verification_metrics_and_manual_quer
     assert "### 검증 필요" in artifact.content
     assert "다음 추출 항목" in artifact.content
     assert "| 테이블 | SELECT | INSERT | UPDATE | DELETE | MERGE |" in artifact.content
+    assert "| Phase | 주요 읽기 | 주요 쓰기 | 위험/검토점 | 상태 | 근거 |" in artifact.content
     assert "DYNAMIC_SQL_SIGNAL" in artifact.content
     assert "CROSS_DB_REFERENCE" in artifact.content
-    assert "## metadata_extraction_appendix" in artifact.content
+    assert "<!-- section:metadata_extraction_appendix -->" in artifact.content
+    assert "## 10. 수동 메타데이터 추출 부록" in artifact.content
     assert "definition_hash_length" in artifact.content
     assert "sys.dm_sql_referenced_entities" in artifact.content
     assert "CREATE PROCEDURE" not in artifact.content

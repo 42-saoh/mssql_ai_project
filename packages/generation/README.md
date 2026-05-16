@@ -1,8 +1,10 @@
 # packages/generation
 
-P24C status: `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` render fixture-first SP
+P24C/P24 v0.3 status: `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` render fixture-first SP
 migration guide sections from `GenerationContext.request["migrationGuide"]`
-sanitized facts and evidence refs. `evaluate_p24_migration_guide_quality` scores
+sanitized facts and evidence refs. The user-facing guide uses Korean headings,
+stable hidden section anchors, and overview/feature/dependency/DML/phase tables.
+`evaluate_p24_migration_guide_quality` scores
 the rendered artifact pair and returns only the P24 report fields while keeping
 `productionReady: false`.
 

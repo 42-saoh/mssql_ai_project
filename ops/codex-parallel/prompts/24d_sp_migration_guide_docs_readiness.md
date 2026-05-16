@@ -56,6 +56,7 @@ P24 SP migration guide quality gate 가 어떤 조건에서 통과/보류/실패
 ## 구현 범위
 
 - P24 contract, fixture, tests, prompt pack 의 상태를 문서화한다.
+- P24 v0.3 은 새 artifact type 없이 기존 `SP_ANALYSIS_DOC` / `DEPENDENCY_REPORT`에 한국어 heading, 숨김 section anchor, guide-style 표를 보강한 상태로 문서화한다.
 - P24 guide quality thresholds 와 pass/hold/fail interpretation 을 EVAL_SPEC 와 integration eval status 에 반영한다.
 - Unsupported dependency/table/function/cross-DB claim 의 `REVIEW_REQUIRED` 처리 기준이 문서에 남아 있는지 확인한다.
 - Existing artifact type reuse 와 draft-only Java/MyBatis readiness boundary 를 문서화한다.

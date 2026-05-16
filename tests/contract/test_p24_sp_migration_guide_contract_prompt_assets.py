@@ -60,7 +60,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 def test_p24_contract_declares_migration_guide_quality_boundaries() -> None:
     contract = _load_yaml(CONTRACT)
 
-    assert contract["contract_id"] == "p24_sp_migration_guide_quality@0.2.0"
+    assert contract["contract_id"] == "p24_sp_migration_guide_quality@0.3.0"
     assert contract["phase"] == "P24"
     assert contract["production_ready"] is False
     assert contract["status"] == "contract_ready"
@@ -78,6 +78,16 @@ def test_p24_contract_declares_migration_guide_quality_boundaries() -> None:
     ]
     assert contract["scope"]["new_persisted_artifact_types_allowed"] is False
     assert contract["scope"]["java_mybatis_output_policy"] == "draft_only_readiness_notes"
+    style = contract["guide_style_requirements"]
+    assert style["user_facing_headings"] == "korean_titles_with_stable_section_anchors"
+    assert style["stable_section_anchor_format"] == "<!-- section:{section_id} -->"
+    assert style["internal_section_ids_visible_as_headings"] is False
+    assert "overview_table" in style["required_rendered_elements"]
+    assert "critical_phase_table" in style["required_rendered_elements"]
+    assert style["llm_insight_policy"]["required_boundary_marker"] == (
+        "LLM_INFERENCE_REVIEW_REQUIRED"
+    )
+    assert style["llm_insight_policy"]["can_confirm_new_dependency_facts"] is False
 
 
 def test_p24_contract_required_sections_and_thresholds_match_plan() -> None:
@@ -201,7 +211,7 @@ def test_p24b_fixture_asset_records_fixture_only_boundaries() -> None:
     fixture = _load_yaml(P24_FIXTURE)
 
     assert fixture["fixture_suite_id"] == "sp_migration_guide_quality_p24_v1"
-    assert fixture["contract_ref"] == "p24_sp_migration_guide_quality@0.2.0"
+    assert fixture["contract_ref"] == "p24_sp_migration_guide_quality@0.3.0"
     assert fixture["phase"] == "P24"
     assert fixture["status"] == "authored_p24b"
     assert fixture["production_ready"] is False
@@ -214,6 +224,11 @@ def test_p24b_fixture_asset_records_fixture_only_boundaries() -> None:
         "DEPENDENCY_REPORT",
     ]
     assert fixture["artifact_scope"]["new_persisted_artifact_types_allowed"] is False
+    quality = fixture["reference_quality_expectations"]
+    assert quality["heading_policy"] == "korean_titles_with_stable_section_anchors"
+    assert quality["internal_section_ids_visible_as_headings"] is False
+    assert "overview_table" in quality["required_rendered_elements"]
+    assert quality["llm_insight_boundary"] == "LLM_INFERENCE_REVIEW_REQUIRED"
     assert [scenario["complexity"] for scenario in fixture["scenarios"]] == [
         "simple",
         "medium",

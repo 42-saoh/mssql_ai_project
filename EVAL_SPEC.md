@@ -265,9 +265,11 @@ LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 make test PYTEST_ARGS="t
 
 ### 11. P24 SP Migration Guide Quality Eval Contract
 
-P24C implementation status: fixture-first renderer/evaluator coverage is now
+P24C/P24 v0.3 implementation status: fixture-first renderer/evaluator coverage is now
 implemented for the existing `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifact
-types. The evaluator scores the rendered artifact pair with no new persisted
+types. The renderer uses Korean user-facing headings with stable hidden section
+anchors and guide-style overview, feature/branch, dependency, DML, and critical
+phase tables. The evaluator scores the rendered artifact pair with no new persisted
 artifact type, no API/schema changes, no live DB access, no raw prompt/SP/provider
 response storage, and `production_ready: false`.
 
@@ -282,6 +284,7 @@ response storage, and `production_ready: false`.
 - simple/medium/complex synthetic scenarios 가 required section taxonomy, internal `Confirmed`/`Needs verification` status 를 유지한 dependency inventory, table-level DML matrix, branch call flow, critical phase/risk metrics, appendix mappings, manual metadata extraction appendix, evidence refs 를 포함한다. 렌더링된 작업자-facing 표제와 설명은 한국어로 표시한다.
 - manual metadata extraction appendix 는 SSMS 수동 실행용 metadata-only query/result paste template 만 포함하며 row data 조회, procedure execution, DDL/DML, raw definition output 을 금지한다
 - P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 를 재사용하고 새 persisted artifact type, API/Web/DB schema 변경, live DB access 를 만들지 않는다
+- P24 v0.3 출력은 `## sp_overview` 같은 내부 section id 를 사용자-facing heading 으로 노출하지 않고, `<!-- section:{section_id} -->` 안정 anchor 와 한국어 heading/표 기반 문서를 사용한다
 - fast/test profile 기본값은 `gpt-5-nano` 이며 optional live confidence 에서는 `OPENAI_MODEL_FAST_TEST` 로 모델을 바꿀 수 있다
 - fixture 와 expected report 는 raw prompt, raw SP definition, raw OpenAI response text, row data, secret, 사용자 제공 guide 본문, 실제 운영 SP 원문을 저장하지 않는다
 - unsupported dependency/table/function/unsafe cross-DB claim 과 low-evidence business-rule claim 은 모두 `REVIEW_REQUIRED` 로 남긴다

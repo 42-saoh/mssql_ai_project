@@ -53,6 +53,9 @@
 ## 구현 범위
 
 - Existing `SP_ANALYSIS_DOC` renderer 에 P24 required sections 를 반영한다.
+- 사용자-facing heading 은 한국어 제목으로 렌더링하고, 평가 안정성은 `<!-- section:{section_id} -->` 숨김 anchor 로 유지한다.
+- Overview, feature/branch taxonomy, critical phase analysis 는 표 형태로 렌더링한다.
+- `llmAnalysis.migrationGuideInsights` 는 section 값이 맞는 위치에 배치하되 `LLM_INFERENCE_REVIEW_REQUIRED` 경계를 항상 남긴다.
 - Dependency/DML/call-flow/phase/risk/appended mapping 섹션은 deterministic facts 와 evidence refs 에서만 구성한다.
 - Dependency inventory 는 `Confirmed` 와 `Needs verification` 을 분리하고, 불확실한 행에는 추가 추출할 metadata-only evidence 를 적는다.
 - Manual metadata extraction appendix 는 SSMS 수동 실행용 metadata-only query/result paste template 만 포함하며 row data/procedure execution/DDL/DML/raw definition output 을 금지한다.

@@ -1,5 +1,5 @@
 fixture_suite_id: sp_migration_guide_quality_p24_v1
-contract_ref: p24_sp_migration_guide_quality@0.2.0
+contract_ref: p24_sp_migration_guide_quality@0.3.0
 phase: P24
 status: authored_p24b
 production_ready: false
@@ -51,6 +51,22 @@ report_contract:
     - sectionCoverage
     - reviewRequiredFindings
     - storageSafetyFindings
+reference_quality_expectations:
+  heading_policy: korean_titles_with_stable_section_anchors
+  stable_section_anchor_format: "<!-- section:{section_id} -->"
+  internal_section_ids_visible_as_headings: false
+  required_rendered_elements:
+    - overview_table
+    - feature_branch_taxonomy_table
+    - confirmed_dependency_table
+    - needs_verification_dependency_table
+    - table_level_dml_matrix
+    - branch_call_flow
+    - critical_phase_table
+    - complexity_metric_table
+    - manual_metadata_query_appendix
+    - evidence_and_review_marker_list
+  llm_insight_boundary: LLM_INFERENCE_REVIEW_REQUIRED
 quality_thresholds:
   required_section_coverage_min: 1.0
   evidence_linked_claim_coverage_min: 0.9

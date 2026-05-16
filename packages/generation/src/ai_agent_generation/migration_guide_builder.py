@@ -54,11 +54,24 @@ def build_migration_guide_payload(
         },
         "artifacts_under_test": ["SP_ANALYSIS_DOC", "DEPENDENCY_REPORT"],
         "evidence_refs": evidence_refs,
+        "overview_rows": _overview_rows(
+            target_ref=target_ref,
+            db_profile_id=db_profile_id,
+            input_params=input_params,
+            result_shape=result_shape,
+            primary_ref=primary_ref,
+            static_ref=static_ref,
+        ),
         "sanitized_facts": _sanitized_facts(
             target_ref=target_ref,
             input_params=input_params,
             result_shape=result_shape,
             primary_ref=primary_ref,
+            static_ref=static_ref,
+        ),
+        "feature_branch_rows": _feature_branch_rows(
+            static_analysis=static_payload,
+            llm_analysis=llm_analysis or {},
             static_ref=static_ref,
         ),
         "section_expectations": _section_expectations(primary_ref, static_ref),
@@ -78,6 +91,11 @@ def build_migration_guide_payload(
         "dml_matrix": dml_matrix,
         "table_dml_matrix": table_dml_matrix,
         "call_flow": _call_flow(dml_matrix, static_ref=static_ref),
+        "critical_phase_rows": _critical_phase_rows(
+            dml_matrix=dml_matrix,
+            risk_flags=risk_flags,
+            static_ref=static_ref,
+        ),
         "phase_risk_metrics": {
             "branch_count": max(1, len(dml_matrix)),
             "dml_operation_count": len(dml_matrix),
@@ -105,6 +123,43 @@ def build_migration_guide_payload(
             static_ref=static_ref,
         ),
     }
+
+
+def _overview_rows(
+    *,
+    target_ref: str,
+    db_profile_id: str,
+    input_params: Sequence[Mapping[str, Any]],
+    result_shape: Sequence[str],
+    primary_ref: str,
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "label": "대상 SP",
+            "value": target_ref,
+            "status": "Confirmed",
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "메타데이터 프로필",
+            "value": db_profile_id,
+            "status": "Confirmed",
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "입력 파라미터 수",
+            "value": str(len(input_params)),
+            "status": "Confirmed",
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "결과 필드 후보 수",
+            "value": str(len(result_shape)),
+            "status": "REVIEW_REQUIRED",
+            "evidence_refs": [static_ref],
+        },
+    ]
 
 
 def _evidence_refs(metadata: Mapping[str, Any], *, target_ref: str) -> list[dict[str, str]]:
@@ -187,6 +242,58 @@ def _section_expectations(primary_ref: str, static_ref: str) -> list[dict[str, A
             }
         )
     return sections
+
+
+def _feature_branch_rows(
+    *,
+    static_analysis: Mapping[str, Any],
+    llm_analysis: Mapping[str, Any],
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    dml_operations = _sequence(
+        _mapping(static_analysis.get("migrationGuideStaticMetrics")).get("dmlOperations")
+    )
+    for item in dml_operations:
+        if not isinstance(item, Mapping):
+            continue
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        target = str(item.get("targetRef") or "REVIEW_REQUIRED")
+        rows.append(
+            {
+                "feature": f"{operation} 영향",
+                "condition": "static DML scan",
+                "status": "Confirmed",
+                "summary": f"{target}에 대한 {operation} 영향이 감지되었습니다.",
+                "evidence_refs": [str(item.get("evidenceRef") or static_ref)],
+            }
+        )
+    for insight in _sequence(llm_analysis.get("migrationGuideInsights")):
+        if not isinstance(insight, Mapping):
+            continue
+        rows.append(
+            {
+                "feature": str(insight.get("section") or "LLM guide insight"),
+                "condition": "LLM_INFERENCE_REVIEW_REQUIRED",
+                "status": "REVIEW_REQUIRED",
+                "summary": str(insight.get("summary") or ""),
+                "evidence_refs": [
+                    str(ref) for ref in _sequence(insight.get("evidenceRefs"))
+                ]
+                or [static_ref],
+            }
+        )
+    if rows:
+        return rows
+    return [
+        {
+            "feature": "분기/기능 분류",
+            "condition": "결정론적 DML 또는 LLM guide insight 없음",
+            "status": "REVIEW_REQUIRED",
+            "summary": "업무 기능 분류는 추가 metadata 또는 검토자 확인이 필요합니다.",
+            "evidence_refs": [static_ref],
+        }
+    ]
 
 
 def _dependency_inventory(
@@ -509,6 +616,44 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
         "results": ["결과 shape 후보는 appendix mappings에 렌더링됩니다."],
         "error_handling": "REVIEW_REQUIRED: 정상/예외/resource cleanup 분기를 확인합니다.",
     }
+
+
+def _critical_phase_rows(
+    *,
+    dml_matrix: Sequence[Mapping[str, Any]],
+    risk_flags: Sequence[Mapping[str, Any]],
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    risk_text = ", ".join(str(item.get("code")) for item in risk_flags if item.get("code"))
+    rows = []
+    for item in dml_matrix:
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        target = str(item.get("target_ref") or "REVIEW_REQUIRED")
+        rows.append(
+            {
+                "phase": str(item.get("phase") or "static_dml_scan"),
+                "reads": [target] if operation == "SELECT" else [],
+                "writes": [target] if operation in {"INSERT", "UPDATE", "DELETE", "MERGE"} else [],
+                "risk": risk_text or "REVIEW_REQUIRED: 업무 의미와 트랜잭션 영향을 확인합니다.",
+                "status": str(item.get("status") or "REVIEW_REQUIRED"),
+                "evidence_refs": [
+                    str(ref) for ref in _sequence(item.get("evidence_refs"))
+                ]
+                or [static_ref],
+            }
+        )
+    if rows:
+        return rows
+    return [
+        {
+            "phase": "review_required",
+            "reads": [],
+            "writes": [],
+            "risk": "REVIEW_REQUIRED: 결정론적 phase 추출 정보가 부족합니다.",
+            "status": "REVIEW_REQUIRED",
+            "evidence_refs": [static_ref],
+        }
+    ]
 
 
 def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
