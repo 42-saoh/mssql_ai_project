@@ -6,7 +6,7 @@ templates:
     version: 0.2.0
     requestedOutputType: JAVA_MYBATIS_DRAFT
     description: Java/MyBatis 저장 프로시저 wrapper 초안 bundle.
-    reviewChecklistPolicyRef: reviewChecklist
+    draftQualityPolicyRef: draftQualityChecks
     outputRoles:
       dto:
         artifactType: DTO_DRAFT
@@ -33,15 +33,15 @@ templates:
       - code: PARAMETER_BINDING_REVIEW_REQUIRED
         status: REVIEW_REQUIRED
         description: 적용 전 procedure metadata 기준으로 parameter binding을 확인해야 한다.
-    manualReviewChecklist:
-      - sql_risk_markers_reviewed
-      - unconfirmed_areas_reviewed
-      - generated_diff_reviewed_before_apply
+    draftQualityCaveats:
+      - sql_risk_markers_explained
+      - unconfirmed_areas_listed
+      - generated_diff_is_preview_only
   java_mybatis_dto_model_bundle:
     version: 0.1.0
     requestedOutputType: DTO_MODEL_DRAFT
     description: metadata-only field evidence 기반 DTO/VO/Model 초안 bundle.
-    reviewChecklistPolicyRef: reviewChecklist
+    draftQualityPolicyRef: draftQualityChecks
     outputRoles:
       dto:
         artifactType: DTO_DRAFT
@@ -62,7 +62,7 @@ templates:
       - code: FIELD_MAPPING_REVIEW_REQUIRED
         status: REVIEW_REQUIRED
         description: field name과 Java type은 검토 전까지 초안 mapping으로 유지한다.
-    manualReviewChecklist:
-      - dto_vo_model_final_choice_reviewed
-      - field_mapping_reviewed
-      - generated_diff_reviewed_before_apply
+    draftQualityCaveats:
+      - dto_vo_model_final_choice_flagged
+      - field_mapping_evidence_linked
+      - generated_diff_is_preview_only

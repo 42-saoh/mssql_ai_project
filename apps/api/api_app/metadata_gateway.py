@@ -289,7 +289,7 @@ class McpMetadataGateway(MetadataGateway):
         if errors:
             notes.append(
                 "Some metadata tool calls returned documented errors; "
-                "manual review remains required."
+                "draft quality caveats remain."
             )
 
         return MetadataCollectionResult(

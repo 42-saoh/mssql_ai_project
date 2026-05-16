@@ -17,7 +17,6 @@ from api_app.repositories import (
     KnowledgeFactRecord,
     KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
-    KnowledgeReviewRecord,
     WorkflowRepository,
     KNOWLEDGE_LIFECYCLE_STATUSES,
     prefixed_id,
@@ -31,7 +30,6 @@ from api_app.schemas import (
     KnowledgeFact,
     KnowledgeFactGraph,
     KnowledgeFactSearchResult,
-    KnowledgeReview,
 )
 
 KNOWLEDGE_ASSET_KINDS = {
@@ -351,9 +349,6 @@ def present_knowledge_asset(record: KnowledgeAssetRecord) -> KnowledgeAssetSumma
         contentHash=record.content_hash,
         sourceJobId=record.source_job_id,
         lifecycleStatus=lifecycle_status,
-        reviewReasonCode=record.review_reason_code,
-        reviewer=record.reviewer,
-        reviewedAt=record.reviewed_at,
         archivedAt=record.archived_at,
         createdAt=record.created_at,
         updatedAt=record.updated_at,
@@ -372,9 +367,6 @@ def present_knowledge_version(record) -> KnowledgeAssetVersion:
         edgeCount=len(record.edges),
         sourceJobId=record.source_job_id,
         lifecycleStatus=lifecycle_status,
-        reviewReasonCode=record.review_reason_code,
-        reviewer=record.reviewer,
-        reviewedAt=record.reviewed_at,
         archivedAt=record.archived_at,
         createdAt=record.created_at,
     )
@@ -431,20 +423,6 @@ def present_fact_graph(
     )
 
 
-def present_knowledge_review(record: KnowledgeReviewRecord) -> KnowledgeReview:
-    return KnowledgeReview(
-        reviewId=record.review_id,
-        assetId=record.asset_id,
-        versionId=record.version_id,
-        fromStatus=record.from_status,
-        toStatus=record.to_status,
-        reasonCode=record.reason_code,
-        note=record.note,
-        reviewer=record.reviewer,
-        createdAt=record.created_at,
-    )
-
-
 def present_fact_search_result(record: KnowledgeFactSearchRecord) -> KnowledgeFactSearchResult:
     return KnowledgeFactSearchResult(
         assetId=record.asset_id,
@@ -463,16 +441,6 @@ def ensure_knowledge_search_filter(**filters: str | None) -> None:
         code=KNOWLEDGE_SEARCH_FILTER_REQUIRED,
         status_code=422,
     )
-
-
-def sanitize_knowledge_review_note(comment: str | None) -> dict[str, Any]:
-    if comment is None or not comment.strip():
-        return {}
-    stripped = comment.strip()
-    if _unsafe_free_text(stripped):
-        return {"comment": _redacted_value(stripped)}
-    sanitized, _markers = sanitize_knowledge_payload({"comment": stripped})
-    return dict(sanitized)
 
 
 def _persist_specs(

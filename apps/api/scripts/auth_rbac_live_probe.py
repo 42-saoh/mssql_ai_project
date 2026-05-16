@@ -13,7 +13,6 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from api_app.auth import (  # noqa: E402
-    ARTIFACT_REVIEW_ROLES,
     AuthConfigurationError,
     AuthenticationRequiredError,
     OidcJwtVerifier,
@@ -33,7 +32,6 @@ REQUIRED_ENV = (
     "OIDC_ISSUER",
     "OIDC_AUDIENCE",
     "OIDC_JWKS_URL",
-    "OIDC_REVIEWER_BEARER_TOKEN",
     "OIDC_USER_BEARER_TOKEN",
     "PLATFORM_DB_HOST",
     "PLATFORM_DB_PORT",
@@ -104,8 +102,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
     verifier = OidcJwtVerifier(load_auth_settings())
     repository = MssqlPlatformRepository(load_platform_db_settings())
     checks = [
-        _verify_reviewer(verifier, repository),
-        _verify_user_without_review_role(verifier, repository),
+        _verify_authenticated_user(verifier, repository),
         _verify_missing_token_semantics(verifier),
         _verify_invalid_token_semantics(verifier),
     ]
@@ -146,36 +143,7 @@ def load_root_dotenv(path: Path | None = None) -> None:
         os.environ[key] = _unquote_env_value(value.strip())
 
 
-def _verify_reviewer(
-    verifier: OidcJwtVerifier,
-    repository: MssqlPlatformRepository,
-) -> dict[str, Any]:
-    actor_result = _verified_actor(
-        verifier,
-        repository,
-        os.environ["OIDC_REVIEWER_BEARER_TOKEN"],
-        token_label="reviewer",
-    )
-    if actor_result["status"] != "pass":
-        return actor_result
-    roles = actor_result.pop("_roles")
-    if not roles.intersection(ARTIFACT_REVIEW_ROLES):
-        return _check(
-            "reviewer_token_plf_role",
-            "fail",
-            role_category=_role_category(roles),
-            blocker_code="AUTH_RBAC_LIVE_REVIEWER_ROLE_MISMATCH",
-            summary="Reviewer token mapped to PLF actor without REVIEWER or ADMIN membership.",
-        )
-    return _check(
-        "reviewer_token_plf_role",
-        "pass",
-        role_category="REVIEWER_OR_ADMIN",
-        summary="Reviewer token verified by JWKS and mapped to PLF review-capable role.",
-    )
-
-
-def _verify_user_without_review_role(
+def _verify_authenticated_user(
     verifier: OidcJwtVerifier,
     repository: MssqlPlatformRepository,
 ) -> dict[str, Any]:
@@ -188,19 +156,11 @@ def _verify_user_without_review_role(
     if actor_result["status"] != "pass":
         return actor_result
     roles = actor_result.pop("_roles")
-    if roles.intersection(ARTIFACT_REVIEW_ROLES):
-        return _check(
-            "user_token_role_separation",
-            "fail",
-            role_category=_role_category(roles),
-            blocker_code="AUTH_RBAC_LIVE_USER_ROLE_SEPARATION_FAILED",
-            summary="User token mapped to a validation/deferred approval-capable PLF role.",
-        )
     return _check(
-        "user_token_role_separation",
+        "user_token_plf_role",
         "pass",
-        role_category="NO_VALIDATION_APPROVAL_ROLE",
-        summary="User token verified by JWKS and mapped to PLF actor without review role.",
+        role_category=_role_category(roles),
+        summary="User token verified by JWKS and mapped to an active PLF actor.",
     )
 
 
@@ -312,12 +272,10 @@ def _flag_enabled(name: str) -> bool:
 
 
 def _role_category(roles: frozenset[str]) -> str:
-    if roles.intersection(ARTIFACT_REVIEW_ROLES):
-        return "REVIEWER_OR_ADMIN"
     if roles == frozenset({"USER"}):
         return "USER_ONLY"
     if roles:
-        return "NON_REVIEW_ACTOR"
+        return "PLF_ACTOR"
     return "NO_CANONICAL_ROLE"
 
 

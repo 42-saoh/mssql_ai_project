@@ -15,10 +15,6 @@ export type JobStatus =
   | "GENERATING"
   | "VALIDATING"
   | "VALIDATION_COMPLETE"
-  | "REVIEW_PENDING"
-  | "APPROVED"
-  | "REJECTED"
-  | "PUBLISHED"
   | "FAILED"
   | "CANCELED";
 
@@ -26,9 +22,7 @@ export type WorkflowStepType =
   | "COLLECT_METADATA"
   | "ANALYZE"
   | "GENERATE"
-  | "VALIDATE"
-  | "REVIEW"
-  | "PUBLISH";
+  | "VALIDATE";
 
 export type ArtifactType =
   | "SP_ANALYSIS_DOC"
@@ -42,16 +36,11 @@ export type ArtifactType =
   | "VO_DRAFT"
   | "MODEL_DRAFT"
   | "DDL_DRAFT"
-  | "VALIDATION_REPORT"
-  | "APPROVAL_LOG";
+  | "VALIDATION_REPORT";
 
 export type ArtifactStatus =
   | "DRAFT"
   | "VALIDATED"
-  | "REVIEW_PENDING"
-  | "APPROVED"
-  | "REJECTED"
-  | "PUBLISHED"
   | "ARCHIVED";
 
 export type EvidenceRefType =
@@ -65,7 +54,6 @@ export type EvidenceRefType =
 export type ValidationStatus = "PASSED" | "FAILED" | "REVIEW_REQUIRED";
 export type ValidationSeverity = "INFO" | "WARNING" | "ERROR" | "BLOCKER";
 export type ValidationResult = "PASS" | "FAIL" | "REVIEW_REQUIRED";
-export type ApprovalDecision = "APPROVE" | "REJECT" | "REQUEST_CHANGES";
 
 export type RegistryType =
   | "PROMPT"
@@ -224,7 +212,7 @@ export interface ValidationReport {
   status: ValidationStatus;
   checks: ValidationCheck[];
   missingEvidence?: string[];
-  manualReviewPoints?: string[];
+  qualityCaveats?: string[];
 }
 
 export interface MetadataProfile {
@@ -545,20 +533,4 @@ export interface RegistryVersion {
   registryType: RegistryType;
   version: string;
   active?: boolean;
-}
-
-export interface ApprovalDecisionRequest {
-  decision: ApprovalDecision;
-  reviewer: string;
-  comment: string;
-  validationReportId?: string;
-}
-
-export interface ApprovalRecord {
-  approvalId: string;
-  artifactId: string;
-  decision: ApprovalDecision;
-  reviewer: string;
-  comment?: string;
-  decidedAt: string;
 }

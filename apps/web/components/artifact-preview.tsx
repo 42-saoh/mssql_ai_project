@@ -55,7 +55,7 @@ export function ArtifactPreview({
           <strong>Draft-only boundary</strong>
           <p>
             This preview is not published or deployed. Validation remains required, while the
-            default P25 UI exposes no review decision, SQL execution, DDL apply, source write, or
+            default UI exposes no approval decision, SQL execution, DDL apply, source write, or
             publish action.
           </p>
         </div>
@@ -198,12 +198,12 @@ export function ArtifactPreview({
             </div>
           </div>
 
-          {(validation?.manualReviewPoints?.length ?? 0) > 0 ? (
+          {(validation?.qualityCaveats?.length ?? 0) > 0 ? (
             <div className="callout">
-              <strong>Validation caveats</strong>
+              <strong>Quality caveats</strong>
               <ul>
-                {validation?.manualReviewPoints?.map((item, index) => (
-                  <li key={listItemKey("manual-review-point", index)}>{item}</li>
+                {validation?.qualityCaveats?.map((item, index) => (
+                  <li key={listItemKey("quality-caveat", index)}>{item}</li>
                 ))}
               </ul>
             </div>
@@ -222,7 +222,7 @@ export function ArtifactPreview({
 
           {(artifact.todos?.length ?? 0) > 0 ? (
             <div className="callout callout--warning">
-              <strong>TODO / REVIEW_REQUIRED caveats</strong>
+              <strong>근거 보강 필요</strong>
               <ul>
                 {artifact.todos?.map((item, index) => (
                   <li key={listItemKey("artifact-todo", index)}>{item}</li>

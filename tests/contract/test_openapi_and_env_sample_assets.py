@@ -316,12 +316,8 @@ def test_openapi_knowledge_assetization_contract_matches_p35_surface() -> None:
     assert paths["/api/v1/knowledge/facts/search"]["get"]["operationId"] == (
         "searchKnowledgeFacts"
     )
-    assert paths["/api/v1/knowledge/assets/{assetId}/versions/{versionId}/review"][
-        "post"
-    ]["operationId"] == "reviewKnowledgeAssetVersion"
-    assert paths["/api/v1/knowledge/assets/{assetId}/reviews"]["get"]["operationId"] == (
-        "listKnowledgeAssetReviews"
-    )
+    assert "/api/v1/knowledge/assets/{assetId}/versions/{versionId}/review" not in paths
+    assert "/api/v1/knowledge/assets/{assetId}/reviews" not in paths
     assert schemas["SPAnalysisOptions"]["properties"]["persistKnowledge"]["default"] is True
     assert (
         schemas["SPAnalysisOptions"]["properties"]["usePlatformToolOrchestration"][
@@ -347,11 +343,11 @@ def test_openapi_knowledge_assetization_contract_matches_p35_surface() -> None:
     assert schemas["KnowledgeLifecycleStatus"]["enum"] == [
         "DRAFT",
         "REVIEW_REQUIRED",
-        "REVIEWED",
         "ARCHIVED",
     ]
     assert "lifecycleStatus" in schemas["KnowledgeAssetSummary"]["properties"]
-    assert "KnowledgeReviewRequest" in schemas
+    assert "KnowledgeReviewRequest" not in schemas
+    assert "KnowledgeReview" not in schemas
     assert "KnowledgeFactSearchResult" in schemas
     assert "one-to-one" in schemas["KnowledgeExportRequest"]["properties"]["versionIds"][
         "description"
@@ -368,9 +364,9 @@ def test_openapi_knowledge_assetization_contract_matches_p35_surface() -> None:
     }
 
 
-def test_v5_knowledge_asset_schema_has_job_links_and_fact_edge_integrity() -> None:
+def test_v6_knowledge_asset_schema_has_job_links_and_fact_edge_integrity_without_reviews() -> None:
     ddl_text = (
-        ROOT / "db" / "schema" / "ai_agent_platform_schema_v5_knowledge_assets.sql"
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v6_draft_quality_no_review.sql"
     ).read_text(encoding="utf-8")
 
     assert "CREATE TABLE dbo.KNOWLEDGE_ASSET_JOB_LINKS" in ddl_text
@@ -383,15 +379,19 @@ def test_v5_knowledge_asset_schema_has_job_links_and_fact_edge_integrity() -> No
     assert "REFERENCES dbo.KNOWLEDGE_FACTS(ASST_VER_ID, FACT_ID)" in ddl_text
     assert "IX_KNOWLEDGE_ASSET_JOB_LINKS_JOB" in ddl_text
     assert "LIFECYCLE_STAT_CD NVARCHAR(30) NOT NULL DEFAULT 'DRAFT'" in ddl_text
-    assert "CREATE TABLE dbo.KNOWLEDGE_ASSET_REVIEWS" in ddl_text
+    assert "LIFECYCLE_NOTE_JSON NVARCHAR(MAX) NOT NULL DEFAULT '{}'" in ddl_text
+    assert "ARCHV_DTM DATETIME2(3) NULL" in ddl_text
+    assert "CREATE TABLE dbo.KNOWLEDGE_ASSET_REVIEWS" not in ddl_text
+    assert "REVIEWER_REF_TXT" not in ddl_text
+    assert "REVIEWED" not in ddl_text
     assert "CHK_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE" in ddl_text
-    assert "CHK_KNOWLEDGE_ASSET_REVIEWS_TO_STATUS" in ddl_text
+    assert "CHK_KNOWLEDGE_ASSET_REVIEWS_TO_STATUS" not in ddl_text
     assert "IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE" in ddl_text
-    assert "IX_KNOWLEDGE_ASSET_REVIEWS_VERSION" in ddl_text
+    assert "IX_KNOWLEDGE_ASSET_REVIEWS_VERSION" not in ddl_text
     assert "IX_KNOWLEDGE_FACTS_SEARCH" in ddl_text
 
 
-def test_platform_repository_checks_all_v5_knowledge_tables() -> None:
+def test_platform_repository_checks_all_v6_knowledge_tables() -> None:
     source = (ROOT / "apps" / "api" / "api_app" / "platform_db.py").read_text(
         encoding="utf-8"
     )
@@ -402,20 +402,24 @@ def test_platform_repository_checks_all_v5_knowledge_tables() -> None:
         "KNOWLEDGE_FACTS",
         "KNOWLEDGE_FACT_EDGES",
         "KNOWLEDGE_ASSET_JOB_LINKS",
-        "KNOWLEDGE_ASSET_REVIEWS",
         "KNOWLEDGE_EXPORTS",
     ):
         assert table_name in source
     for schema_object in (
         "LIFECYCLE_STAT_CD",
-        "FROM_STAT_CD",
-        "TO_STAT_CD",
-        "NOTE_JSON",
+        "LIFECYCLE_NOTE_JSON",
+        "ARCHV_DTM",
         "IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE",
-        "IX_KNOWLEDGE_ASSET_REVIEWS_VERSION",
         "IX_KNOWLEDGE_FACTS_SEARCH",
     ):
         assert schema_object in source
+    for removed_schema_object in (
+        "KNOWLEDGE_ASSET_REVIEWS",
+        "FROM_STAT_CD",
+        "TO_STAT_CD",
+        "IX_KNOWLEDGE_ASSET_REVIEWS_VERSION",
+    ):
+        assert removed_schema_object not in source
     assert "KNOWLEDGE_SCHEMA_REQUIRED" in source
 
 
@@ -433,10 +437,30 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
         ROOT / "db" / "schema" / "ai_agent_platform_schema_v4_validation_complete_status.sql"
     ).read_text(encoding="utf-8")
 
-    assert schemas["JobStatus"]["enum"] == _enum_values(JobStatus)
-    assert schemas["WorkflowStepType"]["enum"] == _enum_values(WorkflowStepType)
-    assert schemas["ArtifactType"]["enum"] == _enum_values(ArtifactType)
-    assert schemas["ArtifactStatus"]["enum"] == _enum_values(ArtifactStatus)
+    active_job_statuses = [
+        "SUBMITTED",
+        "COLLECTING_METADATA",
+        "ANALYZING",
+        "GENERATING",
+        "VALIDATING",
+        "VALIDATION_COMPLETE",
+        "FAILED",
+        "CANCELED",
+    ]
+    active_workflow_steps = ["COLLECT_METADATA", "ANALYZE", "GENERATE", "VALIDATE"]
+    active_artifact_types = [
+        value for value in _enum_values(ArtifactType) if value != "APPROVAL_LOG"
+    ]
+    active_artifact_statuses = ["DRAFT", "VALIDATED", "ARCHIVED"]
+
+    assert schemas["JobStatus"]["enum"] == active_job_statuses
+    assert set(active_job_statuses) <= set(_enum_values(JobStatus))
+    assert schemas["WorkflowStepType"]["enum"] == active_workflow_steps
+    assert set(active_workflow_steps) <= set(_enum_values(WorkflowStepType))
+    assert schemas["ArtifactType"]["enum"] == active_artifact_types
+    assert set(active_artifact_types) <= set(_enum_values(ArtifactType))
+    assert schemas["ArtifactStatus"]["enum"] == active_artifact_statuses
+    assert set(active_artifact_statuses) <= set(_enum_values(ArtifactStatus))
     assert schemas["RequestedOutputType"]["enum"] == _enum_values(RequestedOutputType)
     p29b_deferred_dependency_storage_names = {
         "DEPENDENCY_EVIDENCE",
@@ -481,7 +505,7 @@ def test_validation_rules_reference_known_artifact_types() -> None:
         (ROOT / "spec" / "validation" / "validation_rules.yaml").read_text(encoding="utf-8")
     )
 
-    known_artifacts = set(_enum_values(ArtifactType))
+    known_artifacts = set(_enum_values(ArtifactType)) | set(_enum_values(RequestedOutputType))
     non_artifact_scopes = {"artifact-workflow", "mssql-mcp", "repository-workflow"}
     for rule in payload["rules"]:
         for target in rule["appliesTo"]:

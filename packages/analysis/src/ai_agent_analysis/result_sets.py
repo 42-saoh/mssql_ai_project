@@ -123,7 +123,7 @@ def _derive_column_name(expression: str) -> tuple[str | None, EvidenceStatus, li
     return (
         None,
         EvidenceStatus.REVIEW_REQUIRED,
-        ["복합 result expression은 alias 또는 수동 검토가 필요합니다."],
+        ["복합 result expression은 alias 또는 근거 보강이 필요합니다."],
     )
 
 

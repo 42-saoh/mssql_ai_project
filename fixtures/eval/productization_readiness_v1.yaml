@@ -42,28 +42,28 @@ milestones:
       - ppm_metadata_permission_missing
       - row_data_or_procedure_execution_required
   P11:
-    readiness_gate: sp_analysis_marks_incomplete_dependencies_review_required
+    readiness_gate: sp_analysis_marks_incomplete_dependencies_as_evidence_caveats
     verification:
       - make test PYTEST_ARGS="tests/unit/analysis"
     blocker_if:
       - canonical_contract_change_required
       - dependency_metadata_incomplete_but_confirmed_link_required
   P12:
-    readiness_gate: generated_artifacts_are_draft_only_with_evidence_and_review_checklist
+    readiness_gate: generated_artifacts_are_draft_only_with_evidence_and_quality_caveats
     verification:
       - make test PYTEST_ARGS="tests/unit/generation tests/contract/test_generation_goldens_and_repro_assets.py"
     blocker_if:
       - generation_policy_change_required
       - generated_source_auto_apply_requested
   P13:
-    readiness_gate: validation_approval_audit_blocks_publish_without_passed_validation_and_approval
+    readiness_gate: validation_audit_blocks_publish_from_draft
     verification:
       - make test PYTEST_ARGS="tests/unit/validation tests/unit/api tests/integration/api"
     blocker_if:
       - db_schema_change_required
-      - publish_without_approval_possible
+      - publish_from_draft_possible
   P14:
-    readiness_gate: web_demo_shows_draft_evidence_review_and_blocker_states
+    readiness_gate: web_demo_shows_draft_evidence_caveat_and_blocker_states
     verification:
       - make test-web-smoke
     blocker_if:
@@ -91,7 +91,7 @@ milestones:
       - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval tests/contract"
     blocker_if:
       - live_pilot_artifact_validation_not_passed
-      - manual_approval_audit_binding_missing
+      - validation_audit_binding_missing
       - hard_live_gate_not_reproducible
   P18:
     readiness_gate: productization_gaps_require_canonical_contract_and_http_auth_evidence
@@ -100,6 +100,6 @@ milestones:
       - make test PYTEST_ARGS="tests/integration/api tests/e2e tests/eval"
       - make test-web-smoke
     blocker_if:
-      - canonical_analysis_model_review_required
+      - canonical_analysis_model_evidence_caveated
       - web_http_release_smoke_missing
       - auth_rbac_production_source_unresolved

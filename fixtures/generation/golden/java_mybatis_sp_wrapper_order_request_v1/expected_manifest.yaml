@@ -14,6 +14,10 @@ checks:
 - input_snapshot_hash_present
 - evidence_summary_present
 - assumptions_and_todo_present
-- review_checklist_present
+- quality_summary_present
+- evidence_map_present
+- known_caveats_present
+- next_evidence_to_collect_present
+- draft_readiness_present
 - sql_risk_markers_present
-- diff_review_summary_present
+- draft_change_summary_present

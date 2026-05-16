@@ -23,7 +23,7 @@ MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, �
 - Java/MyBatis Mapper XML, Mapper Interface, Service 초안 생성
 - DDL 초안 생성
 - 검증, caveat, 버전 관리, 감사로그
-- 추후 재활성화를 위한 deferred approval API/server capability
+- 초안 품질 요약, 근거 map, caveat, 다음 근거 수집 항목
 
 ### 제외
 
@@ -49,7 +49,7 @@ MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, �
 - **Tool-grounded AI-heavy hybrid**: metadata, dependency, static facts, evidence refs 는 툴/결정론 계층이 책임지고, SP 의미 해석과 migration/Java/MyBatis 전환 판단은 high-quality LLM 보강을 기본 사용한다.
 - **Dependency evidence before inference**: dependency closure/reference resolution 은 raw SQL 이 아니라 MCP metadata evidence digest 로 LLM 과 guide renderer 에 전달하며, 불확실한 대상은 `REVIEW_REQUIRED` 로 유지한다.
 - **Deterministic guardrails**: 파싱, 규칙, 검증, forbidden behavior 차단은 결정론적으로 구현한다.
-- **Validation-gated**: P25 이후 기본 제품 플로우는 Draft → Validate → `VALIDATION_COMPLETE` 에서 멈춘다. Review/approval API 는 deferred capability 로 보존하지만 기본 Web/UI 완료 조건이 아니다.
+- **Validation-gated**: 기본 제품 플로우는 Draft → Validate → `VALIDATION_COMPLETE` 에서 멈춘다. 사용자 review/approval 흐름 없이 초안 품질과 근거 caveat 를 제공한다.
 - **Read-only metadata access**: DB 접근은 메타데이터 조회 전용이며 쓰기를 금지한다.
 - **Docs-as-code**: 설계, 정책, 평가 규칙은 저장소 안에서 버전 관리한다.
 - **Small reversible changes**: 초기 구현은 작은 기능 슬라이스와 빠른 검증을 우선한다.
@@ -76,7 +76,7 @@ repo/
 │  └─ skills/
 ├─ apps/
 │  ├─ web/                 # 중앙 포털 UI
-│  └─ api/                 # API/BFF, workflow, approval
+│  └─ api/                 # API/BFF, workflow, validation
 ├─ services/
 │  └─ mssql-mcp/           # MSSQL Metadata MCP 서버
 ├─ packages/
@@ -113,13 +113,13 @@ repo/
 - MSSQL Metadata MCP 서버
 - CanonicalAnalysisModel
 - SP 분석 문서 / 의존성 결과 생성
-- ValidationReport 저장과 deferred ApprovalRecord capability 보존
+- ValidationReport 저장과 draft-quality caveat 추적
 
 ### P2. Generation MVP
 - Java/MyBatis / DTO/VO/Model / DDL 초안 생성
 - Artifact versioning
 - Preview / validation-complete workflow
-- Deferred approval workflow compatibility
+- Draft-quality validation workflow
 
 ### P3. 운영 고도화
 - Prompt / model / template / profile registry
@@ -159,10 +159,9 @@ repo/
 
 이 파일들은 현재 병렬 개발의 공유 기준선이다. Wave 0 이후 worker 는 `packages/domain`, `spec/openapi`, `db/schema`, `spec/policy`, `docker/test`, 루트 문서를 읽기 전용 기준으로 사용하고, 변경이 필요하면 코디네이터에게 blocker 로 올린다.
 
-P25 기준 기본 product flow 는 request → metadata → analysis → generation → validation →
-`VALIDATION_COMPLETE` 로 종료한다. 사용자 review/approval 화면은 비활성화되며, approval API 와
-저장 코드는 추후 재활성화를 위한 deferred capability 로만 유지한다. `REVIEW_REQUIRED` 는 사용자
-승인 요구가 아니라 분석 불확실성/evidence caveat 로 해석한다.
+기본 product flow 는 request → metadata → analysis → generation → validation →
+`VALIDATION_COMPLETE` 로 종료한다. 사용자 review/approval 화면과 approval API 는 제품 표면에서
+제거한다. `REVIEW_REQUIRED` 는 사용자 승인 요구가 아니라 분석 불확실성/evidence caveat 로 해석한다.
 
 ## 병합 starter 추가 디렉터리
 

@@ -39,10 +39,9 @@
 
 ## P25 behavior
 
-- `/review/decision` 화면과 approval CTA 는 기본 Web UI 에서 제거되었고 직접 접근은 404 로 처리한다.
+- `/review/decision` 화면과 approval CTA 는 Web UI 에서 제거되었고 직접 접근은 404 로 처리한다.
 - Validation 결과의 `REVIEW_REQUIRED` 는 사람 승인 요청이 아니라 evidence caveat 로 표시한다.
-- Approval API/server code 는 추후 재활성화를 위한 deferred capability 로 남지만 Web API client 와
-  smoke path 는 호출하지 않는다.
+- Approval API/server code 와 Web API client 호출은 제품 표면에서 제거되었다.
 
 ## P29 behavior
 
@@ -63,7 +62,7 @@
   action calls `POST /api/v1/metadata/analyze` explicitly.
 - The analysis panel renders `summary`, `objectInsights`, `objectProfiles`,
   `insightGroups`, `dependencyGraph`, `dtoReadiness`, deterministic fact count, sanitized
-  tool-call count, planner effectiveness metrics, knowledge asset summaries, review markers, and caveats.
+  tool-call count, planner effectiveness metrics, knowledge asset summaries, evidence caveat markers, and caveats.
 - The Web client does not expose MCP input schemas, raw definition text, row data, procedure
   execution, DDL/DML controls, or raw provider traces.
 

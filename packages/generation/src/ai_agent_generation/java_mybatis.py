@@ -224,11 +224,15 @@ class JavaMyBatisDraftRendererBase:
             sort_keys=True,
         ).splitlines()
         risk_lines = self._sql_risk_marker_lines()
-        checklist_lines = self._review_checklist_lines()
         todo_lines = self._todo_lines(context)
         llm_conversion_lines = self._llm_conversion_lines(context)
+        quality_summary_lines = self._quality_summary_lines(context)
+        evidence_map_lines = self._evidence_map_lines(context, files)
+        known_caveat_lines = self._known_caveat_lines(context)
+        next_evidence_lines = self._next_evidence_lines(context)
+        draft_readiness_lines = self._draft_readiness_lines(context)
         unconfirmed_lines = [
-            f"- REVIEW_REQUIRED: `{marker}` 항목은 근거 확정 전까지 미확정으로 유지합니다."
+            f"- REVIEW_REQUIRED: `{marker}` 항목은 추가 근거 확보 전까지 caveat로 유지합니다."
             for marker in self.assets.todo_markers()
         ]
 
@@ -256,9 +260,8 @@ class JavaMyBatisDraftRendererBase:
             f"- generatorVersion: `{GENERATOR_VERSION}`",
             f"- requestedOutputType: `{self.requested_output_type}`",
             f"- artifactStatus: `{ArtifactStatus.DRAFT.value}`",
-            "- reviewRequired: `true`",
-            "- approvalRequired: `true`",
-            "- publishBoundary: `blocked_until_validation_review_approval`",
+            "- evidenceCaveat: `true`",
+            "- draftQualityGate: `validation_only`",
             "",
             "## input_snapshot",
             f"- sanitizedSnapshotHash: `{context.input_snapshot_hash}`",
@@ -270,7 +273,7 @@ class JavaMyBatisDraftRendererBase:
             "",
             "## generation_mode",
             f"- `{context.generation_mode}`",
-            "- 사유: 생성 모드는 policy asset 의 generationModes 기준을 따른다.",
+            "- 이유: 생성 모드는 policy asset의 generationModes 기준을 따릅니다.",
             "",
             "## evidence_summary",
             *evidence_lines,
@@ -290,12 +293,12 @@ class JavaMyBatisDraftRendererBase:
             "## code_draft",
             f"- {code_draft_summary}",
             "- generated_source_application: `not_performed`",
-            "- target_application_write: `forbidden_without_human_review`",
+            "- target_application_write: `not_performed`",
             "",
-            "## diff_review_summary",
-            "- 모든 파일은 artifact preview/diff 대상으로만 생성한다.",
-            "- 실제 프로젝트 소스 반영, DDL/DML 실행, procedure 실행은 수행하지 않는다.",
-            "- 검토자는 생성 diff 와 policy checklist 를 확인한 뒤 수동 적용 여부를 결정한다.",
+            "## draft_change_summary",
+            "- 모든 파일은 artifact preview/diff 대상으로만 생성되었습니다.",
+            "- 실제 프로젝트 소스 반영, DDL/DML 실행, procedure 실행은 수행하지 않습니다.",
+            "- 초안은 evidence map과 caveat를 함께 제공해 최초 설계 업무의 출발점을 줄입니다.",
             "",
             "## sql_risk_markers",
             *risk_lines,
@@ -320,8 +323,20 @@ class JavaMyBatisDraftRendererBase:
             "## assumptions_and_todo",
             *todo_lines,
             "",
-            "## review_checklist",
-            *checklist_lines,
+            "## quality_summary",
+            *quality_summary_lines,
+            "",
+            "## evidence_map",
+            *evidence_map_lines,
+            "",
+            "## known_caveats",
+            *known_caveat_lines,
+            "",
+            "## next_evidence_to_collect",
+            *next_evidence_lines,
+            "",
+            "## draft_readiness",
+            *draft_readiness_lines,
         ]
         return ensure_trailing_newline("\n".join(lines))
 
@@ -549,17 +564,60 @@ class JavaMyBatisDraftRendererBase:
             for marker in self.assets.sql_risk_markers(self.template_id)
         ]
 
-    def _review_checklist_lines(self) -> list[str]:
-        policy_items = [f"- [x] {item}" for item in self.assets.review_checklist()]
-        manual_items = [
-            f"- [ ] {item}"
-            for item in self.assets.manual_review_checklist(self.template_id)
+    def _quality_summary_lines(self, context: GenerationContext) -> list[str]:
+        source_count = len(context.evidence_sources)
+        return [
+            f"- evidenceSources: `{source_count}`",
+            "- raw SQL text, row data, secrets, DDL/DML execution output은 포함하지 않습니다.",
+            "- Java/MyBatis 코드는 설계 초안이며 validation 결과와 caveat를 함께 읽어야 합니다.",
         ]
-        return [*policy_items, *manual_items]
+
+    def _evidence_map_lines(
+        self,
+        context: GenerationContext,
+        files: tuple[DraftFile, ...],
+    ) -> list[str]:
+        evidence_refs = ", ".join(ref.locator for ref in context.evidence_refs[:5])
+        if not evidence_refs:
+            evidence_refs = "REVIEW_REQUIRED:evidenceRefs 없음"
+        return [
+            f"- generatedFiles: `{len(files)}`",
+            f"- primaryEvidence: {evidence_refs}",
+            "- DTO/model fields: metadata columns and result shape evidence",
+            "- Mapper/service shape: stored procedure signature and dependency/call-flow evidence",
+        ]
+
+    def _known_caveat_lines(self, context: GenerationContext) -> list[str]:
+        lines = [
+            "- REVIEW_REQUIRED는 근거 보강 필요 상태를 의미합니다.",
+        ]
+        lines.extend(
+            f"- TODO(input): {assumption}"
+            for assumption in context.evidence_assumptions
+        )
+        lines.extend(
+            f"- TODO(policy.mustMarkUnknown): {marker}"
+            for marker in self.assets.todo_markers()
+        )
+        return lines
+
+    def _next_evidence_lines(self, context: GenerationContext) -> list[str]:
+        return [
+            f"- `{context.sp_name}`의 confirmed dependency procedure별 input/output, DML, transaction boundary를 보강합니다.",
+            "- MyBatis resultMap이 필요한 nested/nullable/collection result shape evidence를 보강합니다.",
+            "- 호출부에서 기대하는 service method contract, message key, paging/sorting semantics를 보강합니다.",
+        ]
+
+    def _draft_readiness_lines(self, context: GenerationContext) -> list[str]:
+        return [
+            "- Java/MyBatis package, class, mapper id, message key는 registry naming rule을 따릅니다.",
+            "- DML/call-flow caveat가 남은 경우 구현 깊이는 mapper/service skeleton 수준으로 제한합니다.",
+            f"- `{context.entity_name}` 초안은 최초 설계 리드타임 단축용이며 자동 적용 경로가 없습니다.",
+        ]
 
     def _todo_lines(self, context: GenerationContext) -> list[str]:
         lines = [
-            "- REVIEW_REQUIRED: 모든 파일은 draft-only 이며 수동 검토 전 실제 프로젝트 반영 금지"
+            "- REVIEW_REQUIRED: 모든 파일은 draft-only 이며 추가 근거 확보 전 자동 반영하지 않습니다."
         ]
         lines.extend(f"- TODO(input): {assumption}" for assumption in context.evidence_assumptions)
         lines.extend(

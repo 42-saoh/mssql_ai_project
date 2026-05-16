@@ -1,4 +1,4 @@
-version: manual_approval_audit_p17_v1
+version: draft_quality_audit_p17_v1
 track: P17C
 source_p17b_validation_package: fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
 source_p17_blocker_closure: fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
@@ -8,16 +8,15 @@ source_db: PPM
 platform_db_context: PLF
 selection_mode: live_metadata
 generated_at: '2026-05-10T13:15:00+09:00'
-approvalDecision: APPROVE
-approval_status: HUMAN_APPROVED
-human_approval_recorded: true
+draftQualityDecision: ACCEPT_DRAFT
+draft_quality_status: EVIDENCE_BOUND
 active_blockers_after_p17c: []
 closed_blockers_after_p17c:
   - DEPENDENCY_METADATA_INCOMPLETE
-  - MANUAL_APPROVAL_EVIDENCE_MISSING
+  - DRAFT_QUALITY_EVIDENCE_MISSING
 live_release_decision_after_p17c:
   decision: NO_GO
-  reason: P17C approval/audit evidence is bound, but P17D hard-live verification and final release decision have not run.
+  reason: P17C draft-quality audit evidence is bound, but P17D hard-live verification and final release decision have not run.
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -86,26 +85,25 @@ binding_targets:
     evidence_refs:
       - p17b-selected-table-view-function-metadata
       - p17b-selected-object-manifest
-approval_record:
+draft_quality_record:
   current_status: BOUND
-  approval_ref: p17c-human-approval-saoh-20260510
-  decision: APPROVE
-  storage_decision: APPROVED
+  quality_ref: p17c-draft-quality-saoh-20260510
+  decision: ACCEPT_DRAFT
+  storage_decision: VALIDATION_EVIDENCE_BOUND
   actor: saoh
-  reviewer: saoh
   timestamp: '2026-05-10T13:15:00+09:00'
-  correlation_id: corr-p17c-human-approval-20260510
+  correlation_id: corr-p17c-draft-quality-20260510
   not_synthesized: true
-  source: user_provided_human_approval_message
-  comment: I approve the P17B passed validation package as draft-only live pilot approval evidence. This does not authorize publish, export, DDL/DML execution, production deployment, row data access, or PLF fallback.
-  approved_artifact_set:
+  source: validation_quality_gate
+  comment: P17B passed validation package is accepted as a draft-quality evidence package. This does not authorize publish, export, DDL/DML execution, production deployment, row data access, or PLF fallback.
+  bound_artifact_set:
     artifactSetId: p17b-live-pilot-artifact-set
     artifactSetVersion: 2026-05-06.p17b.v1
     validationReportId: p17b-live-pilot-artifact-validation-report
-  required_human_input_fields:
+  required_quality_fields:
     - actor
     - decision
-    - comment
+    - evidenceSummary
     - timestamp
     - correlationId
   bound_to:
@@ -116,11 +114,11 @@ approval_record:
     - evidenceRefs
 audit_event_binding:
   current_status: BOUND
-  action: APPROVAL_DECISION_RECORDED
+  action: DRAFT_QUALITY_EVIDENCE_RECORDED
   actor: saoh
   timestamp: '2026-05-10T13:15:00+09:00'
-  correlation_id: corr-p17c-human-approval-20260510
-  approval_ref: p17c-human-approval-saoh-20260510
+  correlation_id: corr-p17c-draft-quality-20260510
+  quality_ref: p17c-draft-quality-saoh-20260510
   validation_ref: p17b-live-pilot-artifact-validation-report
   artifact_set_ref: p17b-live-pilot-artifact-set@2026-05-06.p17b.v1
   artifact_refs:
@@ -130,13 +128,13 @@ audit_event_binding:
   selected_object_refs_source: binding_targets.selected_object_refs
   evidence_refs_source: binding_targets.evidence_refs
   audit_trail:
-    - audit_id: p17c-audit-human-approval-saoh-20260510
-      action: APPROVAL_DECISION_RECORDED
+    - audit_id: p17c-audit-draft-quality-saoh-20260510
+      action: DRAFT_QUALITY_EVIDENCE_RECORDED
       actor: saoh
-      approval_ref: p17c-human-approval-saoh-20260510
+      quality_ref: p17c-draft-quality-saoh-20260510
       validation_ref: p17b-live-pilot-artifact-validation-report
       artifact_set_ref: p17b-live-pilot-artifact-set@2026-05-06.p17b.v1
-      correlation_id: corr-p17c-human-approval-20260510
+      correlation_id: corr-p17c-draft-quality-20260510
       timestamp: '2026-05-10T13:15:00+09:00'
       selected_object_refs_source: binding_targets.selected_object_refs
       evidence_refs_source: binding_targets.evidence_refs
@@ -146,13 +144,13 @@ audit_event_binding:
     - artifactRef
     - artifactVersion
     - validationRef
-    - approvalRef
+    - qualityRef
     - selectedObjectRefs
     - evidenceRefs
     - timestamp
     - correlationId
 completion_status:
-  p17c_status: PASSED_HUMAN_APPROVAL_BOUND
+  p17c_status: PASSED_DRAFT_QUALITY_BOUND
   blocker_closed: true
   no_go_preserved: true
   publish_or_export_endpoint_added: false
@@ -165,8 +163,7 @@ forbidden_evidence:
   - committed_secret
   - auto_ddl_or_dml
   - plf_fallback_for_ppm
-  - synthetic_human_approval
-  - unapproved_publish_or_export
+  - publish_or_export_path
 known_limitations:
   - code: P17D_RELEASE_DECISION_PENDING
-    impact: P17C approval/audit evidence is bound, but final live release decision still requires P17D hard-live verification.
+    impact: P17C draft-quality audit evidence is bound, but final live release decision still requires P17D hard-live verification.

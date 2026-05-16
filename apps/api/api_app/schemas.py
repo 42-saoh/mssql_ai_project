@@ -166,9 +166,9 @@ class ValidationReport(ApiModel):
     status: Literal["PASSED", "FAILED", "REVIEW_REQUIRED"]
     checks: list[ValidationCheck]
     missing_evidence: list[str] = Field(default_factory=list, alias="missingEvidence")
-    manual_review_points: list[str] = Field(
+    quality_caveats: list[str] = Field(
         default_factory=list,
-        alias="manualReviewPoints",
+        alias="qualityCaveats",
     )
 
 
@@ -207,22 +207,6 @@ class AgentRunSummary(ApiModel):
     structured_output: dict[str, Any] = Field(alias="structuredOutput")
     model_invocation: ModelInvocationSummary = Field(alias="modelInvocation")
     created_at: datetime | None = Field(default=None, alias="createdAt")
-
-
-class ApprovalDecisionRequest(ApiModel):
-    decision: Literal["APPROVE", "REJECT", "REQUEST_CHANGES"]
-    reviewer: str
-    comment: str
-    validation_report_id: str | None = Field(default=None, alias="validationReportId")
-
-
-class ApprovalRecord(ApiModel):
-    approval_id: str = Field(alias="approvalId")
-    artifact_id: str = Field(alias="artifactId")
-    decision: Literal["APPROVE", "REJECT", "REQUEST_CHANGES"]
-    reviewer: str
-    comment: str | None = None
-    decided_at: datetime = Field(alias="decidedAt")
 
 
 class MetadataProfile(ApiModel):
@@ -425,12 +409,8 @@ class KnowledgeAssetSummary(ApiModel):
     lifecycle_status: Literal[
         "DRAFT",
         "REVIEW_REQUIRED",
-        "REVIEWED",
         "ARCHIVED",
     ] = Field(default="DRAFT", alias="lifecycleStatus")
-    review_reason_code: str | None = Field(default=None, alias="reviewReasonCode")
-    reviewer: str | None = None
-    reviewed_at: datetime | None = Field(default=None, alias="reviewedAt")
     archived_at: datetime | None = Field(default=None, alias="archivedAt")
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
@@ -485,12 +465,8 @@ class KnowledgeAssetVersion(ApiModel):
     lifecycle_status: Literal[
         "DRAFT",
         "REVIEW_REQUIRED",
-        "REVIEWED",
         "ARCHIVED",
     ] = Field(default="DRAFT", alias="lifecycleStatus")
-    review_reason_code: str | None = Field(default=None, alias="reviewReasonCode")
-    reviewer: str | None = None
-    reviewed_at: datetime | None = Field(default=None, alias="reviewedAt")
     archived_at: datetime | None = Field(default=None, alias="archivedAt")
     created_at: datetime | None = Field(default=None, alias="createdAt")
 
@@ -502,25 +478,6 @@ class KnowledgeFactGraph(ApiModel):
     edges: list[KnowledgeEdge] = Field(default_factory=list)
 
 
-class KnowledgeReviewRequest(ApiModel):
-    status: Literal["REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"]
-    reason_code: str = Field(alias="reasonCode", min_length=1, max_length=80)
-    reviewer: str = Field(min_length=1, max_length=200)
-    comment: str | None = Field(default=None, max_length=2000)
-
-
-class KnowledgeReview(ApiModel):
-    review_id: str = Field(alias="reviewId")
-    asset_id: str = Field(alias="assetId")
-    version_id: str = Field(alias="versionId")
-    from_status: str = Field(alias="fromStatus")
-    to_status: str = Field(alias="toStatus")
-    reason_code: str = Field(alias="reasonCode")
-    note: dict[str, Any] = Field(default_factory=dict)
-    reviewer: str
-    created_at: datetime | None = Field(default=None, alias="createdAt")
-
-
 class KnowledgeFactSearchResult(ApiModel):
     asset_id: str = Field(alias="assetId")
     asset_kind: str = Field(alias="assetKind")
@@ -528,7 +485,6 @@ class KnowledgeFactSearchResult(ApiModel):
     lifecycle_status: Literal[
         "DRAFT",
         "REVIEW_REQUIRED",
-        "REVIEWED",
         "ARCHIVED",
     ] = Field(alias="lifecycleStatus")
     fact: KnowledgeFact

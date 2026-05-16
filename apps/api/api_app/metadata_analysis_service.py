@@ -1356,7 +1356,7 @@ def _merge_dependency_closure(
                     "의존성 closure에 "
                     f"노드 {summary.get('nodeCount', 0)}개, "
                     f"엣지 {summary.get('edgeCount', 0)}개, "
-                    f"검토 필요 항목 {summary.get('reviewRequiredCount', 0)}개가 있습니다."
+                    f"근거 보강 필요 항목 {summary.get('reviewRequiredCount', 0)}개가 있습니다."
                 ),
                 status=(
                     "REVIEW_REQUIRED"

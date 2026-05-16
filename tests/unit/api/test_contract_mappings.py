@@ -3,22 +3,10 @@ from __future__ import annotations
 import pytest
 from ai_agent_domain import ArtifactStatus
 from api_app.contracts import (
-    approval_decision_mapping,
     registry_storage_type,
     validation_storage_result,
 )
 from api_app.lifecycle import artifact_status_after_validation
-
-
-def test_approval_decision_mapping_preserves_openapi_and_storage_values() -> None:
-    assert approval_decision_mapping("APPROVE").storage_decision == "APPROVED"
-    assert approval_decision_mapping("REJECT").storage_decision == "REJECTED"
-
-    request_changes = approval_decision_mapping("REQUEST_CHANGES")
-
-    assert request_changes.api_decision == "REQUEST_CHANGES"
-    assert request_changes.storage_decision == "REJECTED"
-    assert request_changes.artifact_status == "REVIEW_PENDING"
 
 
 def test_validation_status_mapping_to_storage_result() -> None:
@@ -40,8 +28,6 @@ def test_registry_type_mapping_to_storage_contract() -> None:
 
 
 def test_unknown_mapping_value_is_explicit_error() -> None:
-    with pytest.raises(ValueError):
-        approval_decision_mapping("APPROVED")
     with pytest.raises(ValueError):
         validation_storage_result("PASS")
     with pytest.raises(ValueError):

@@ -52,7 +52,7 @@ P19의 fixture-backed auth/RBAC enforcement 이후 남은 `AUTH_RBAC_LIVE_IDP_PL
 - `config/mssql/local_docker_profiles.yaml`
 - `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml`
 - 실제 token/secret/raw JWT claims/PLF row data 저장
-- validation/approval route 호출로 운영 workflow write 또는 audit write 생성
+- validation route 호출로 운영 workflow write 또는 audit write 생성
 - publish/export, deployment, DDL/DML, row data, procedure execution, PLF fallback
 
 ## 구현 범위
@@ -62,20 +62,18 @@ P19의 fixture-backed auth/RBAC enforcement 이후 남은 `AUTH_RBAC_LIVE_IDP_PL
   - `AUTH_RBAC_LIVE_GATE=1` 인데 필수 env 가 없으면 skip 이 아니라 blocker failure 로 처리한다.
 - `apps/api/scripts/auth_rbac_live_probe.py` 또는 동등한 read-only helper 를 추가한다.
   - `OidcJwtVerifier` 와 `MssqlPlatformRepository.resolve_actor_roles()` 만 사용한다.
-  - API validation/approval route 를 호출하지 않는다.
-  - workflow write, approval write, validation write, audit write 를 만들지 않는다.
+  - API validation route 를 호출하지 않는다.
+  - workflow write, validation write, audit write 를 만들지 않는다.
 - 필수 env name 은 아래로 고정한다.
   - `AUTH_RBAC_LIVE_GATE=1`
   - `AUTH_RBAC_ENFORCEMENT=1`
   - `OIDC_ISSUER`
   - `OIDC_AUDIENCE`
   - `OIDC_JWKS_URL`
-  - `OIDC_REVIEWER_BEARER_TOKEN`
   - `OIDC_USER_BEARER_TOKEN`
   - 기존 `PLATFORM_DB_*`
 - 기대 검증은 아래로 제한한다.
-  - reviewer token 이 JWKS 로 검증되고 PLF `REVIEWER` 또는 `ADMIN` membership 으로 매핑된다.
-  - user token 이 JWKS 로 검증되고 PLF actor 로 매핑되지만 validation/approval role 은 없다.
+  - user token 이 JWKS 로 검증되고 PLF actor 로 매핑된다.
   - missing/invalid token 은 401 semantics 를 유지한다.
   - mapped actor with insufficient role 은 403 semantics 를 유지한다.
   - 출력은 pass/fail, role category, blocker code, redacted summary 만 포함한다.
@@ -93,8 +91,7 @@ P19의 fixture-backed auth/RBAC enforcement 이후 남은 `AUTH_RBAC_LIVE_IDP_PL
 ## Blocker 보고 기준
 
 - 승인된 IdP/JWKS endpoint 가 없거나 `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL` 이 불일치함
-- reviewer/user live token 을 안전한 local environment 또는 secret manager 로 주입할 수 없음
-- reviewer token 이 PLF `REVIEWER` 또는 `ADMIN` membership 으로 매핑되지 않음
-- user token 이 PLF actor 로 매핑되지 않거나 validation/approval role 분리가 검증되지 않음
+- user live token 을 안전한 local environment 또는 secret manager 로 주입할 수 없음
+- user token 이 PLF actor 로 매핑되지 않음
 - PLF `AUTH_USERS`, `AUTH_ROLES`, `AUTH_USER_ROLES` lookup 이 실패하거나 canonical role name 과 불일치함
 - GO 판정을 위해 token/secret/raw claims/PLF row dump 저장, row data, procedure execution, DDL/DML, workflow write, audit write, PLF fallback, auto publish/export 가 필요함

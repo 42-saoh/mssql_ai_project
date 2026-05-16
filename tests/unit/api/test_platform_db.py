@@ -227,19 +227,11 @@ def test_workflow_repository_contract_records_state_changes() -> None:
         missing_evidence=[],
         manual_review_points=[],
     )
-    approval = repository.add_approval(
-        artifact_id=artifact.artifact_id,
-        decision="APPROVE",
-        reviewer="reviewer@example.com",
-        comment="ok",
-        validation_report_id=validation.validation_report_id,
-    )
-
     assert repository.requests[request.request_id].status == JobStatus.COLLECTING_METADATA
     assert repository.jobs[job.job_id].status == JobStatus.COLLECTING_METADATA
-    assert repository.artifacts[artifact.artifact_id].status == ArtifactStatus.APPROVED
+    assert repository.artifacts[artifact.artifact_id].status == ArtifactStatus.VALIDATED
     assert repository.validation_reports[validation.validation_report_id].status == "PASSED"
-    assert repository.approvals[approval.approval_id].storage_decision == "APPROVED"
+    assert not any(event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events)
     assert repository.audit_events[0].correlation_id == "corr-platform-contract"
 
 

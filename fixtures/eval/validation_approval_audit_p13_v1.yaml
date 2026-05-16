@@ -10,15 +10,15 @@ active_blockers: []
 closed_blockers:
   - DEPENDENCY_METADATA_INCOMPLETE
 public_api_contract:
-  approval_checklist_exposed_as_response_fields: false
+  draft_quality_caveats_exposed_as_response_fields: true
   audit_events_exposed_as_response_fields: false
   validation_shape_uses_existing_fields:
     - checks
     - missingEvidence
-    - manualReviewPoints
+    - qualityCaveats
 storage_contract:
-  approval_checklist_location: ARTIFACT_APPROVAL_RECORDS.CHKLST_RSLT_JSON
-  validation_summary_location: ARTIFACT_APPROVAL_RECORDS.CHKLST_RSLT_JSON
+  decision_records_present: false
+  validation_summary_location: ARTIFACT_VALIDATION_REPORTS
   audit_trace_location: AUDIT_EVENTS.TRC_ID
   schema_change_required: false
 forbidden_evidence:
@@ -28,9 +28,9 @@ forbidden_evidence:
   - committed_secret
   - auto_ddl_or_dml
   - plf_fallback_for_ppm
-  - unapproved_publish_or_export
+  - unvalidated_publish_or_export
 sample_scenarios:
-  - sample_id: p13-validation-approval-audit-simple-procedure
+  - sample_id: p13-validation-evidence-audit-simple-procedure
     readiness_label: optional_live_metadata_evidence
     request:
       dbProfileId: ppm
@@ -44,7 +44,7 @@ sample_scenarios:
       options:
         includeEvidenceRefs: true
     expected:
-      job_status: REVIEW_PENDING
+      job_status: VALIDATION_COMPLETE
       current_step: VALIDATE
       validation_report:
         required_check_fields:
@@ -56,17 +56,15 @@ sample_scenarios:
           - status
           - checks
           - missingEvidence
-          - manualReviewPoints
-      approval_decision_log:
-        decision: REQUEST_CHANGES
-        validation_report_binding: auto_fill_latest_validation_report_id
+          - qualityCaveats
+      draft_quality_gate:
+        validation_report_binding: latest_validation_report_id
         checklist_items:
-          - validation.latest_report_bound
-          - validation.status_passed_for_approval
+          - validation.latest_report_persisted
+          - validation.status_passed_or_caveated
           - validation.no_failed_checks
           - evidence.no_missing_refs
-          - review.manual_points_acknowledged
-          - approval.human_actor_recorded
+          - caveats.quality_caveats_visible
       audit_event_shape:
         required_fields:
           - stage
@@ -80,9 +78,8 @@ sample_scenarios:
           - METADATA
           - ARTIFACT
           - VALIDATION
-          - APPROVAL
       forbidden_artifact_statuses:
         - PUBLISHED
       forbidden_actions:
-        - publish_without_passed_validation_and_approval
-        - export_without_passed_validation_and_approval
+        - publish_from_draft
+        - export_from_unvalidated_draft

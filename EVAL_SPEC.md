@@ -96,18 +96,18 @@ Required checks for Copilot-style SP analysis:
 - required section presence 100%
 - naming/package rule violations 0
 
-### 4. Validation / Approval Workflow
+### 4. Draft Validation Workflow
 대상:
 - validation reports
 - preview
-- deferred approval records
-- publish gating
+- draft-quality caveats
+- publish/apply absence
 
 필수 체크:
 - validation 없이 publish 불가
-- P25 기본 workflow 는 approval decision 없이 `VALIDATION_COMPLETE` 에서 멈춤
-- deferred approval decision trace 저장 경로는 서버 호환성 테스트로만 유지
-- reject 후 재검증 없이 publish 불가
+- 기본 workflow 는 approval decision 없이 `VALIDATION_COMPLETE` 에서 멈춤
+- approval/review route, review write, reviewer identity write 없음
+- validation 결과는 `qualityCaveats` 로 근거 caveat 를 노출
 
 통과 기준:
 - 상태 전이 규칙 위반 0
@@ -126,7 +126,7 @@ Required checks for Copilot-style SP analysis:
 - 민감 환경값 log/fixture 유출 없음
 - 정책 문서와 구현이 모순되지 않음
 - production identity source 가 verified OIDC/JWT 로 문서화되어 있고 role source 가 PLF auth table 로 연결됨
-- validation/deferred approval enforcement 구현 시 unauthorized negative test 가 존재함
+- validation enforcement 구현 시 unauthorized negative test 가 존재함
 - live IdP/JWKS 와 PLF role membership 검증이 없으면 production-grade enterprise Auth/RBAC claim 을 금지하고 deferred future hardening 으로 유지함
 
 통과 기준:
@@ -158,7 +158,7 @@ Required checks for Copilot-style SP analysis:
 - job 은 `VALIDATION_COMPLETE`, current step 은 `VALIDATE`
 - persisted artifact type 이 OpenAPI requested output group 과 구분됨
 - validation `REVIEW_REQUIRED` 는 user review flow 가 아니라 evidence caveat 로 유지됨
-- approval decision API 는 deferred compatibility 로 남지만 기본 happy path, Web UI, smoke path 에 포함하지 않음
+- approval decision API 는 제품/API surface 에 없음
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/e2e tests/eval"` 통과
@@ -175,7 +175,7 @@ Required checks for Copilot-style SP analysis:
 - `requirements/lock/py314-dev.txt`, `python:3.14-slim`, `requires-python >=3.14`, Ruff `py314` target 이 현재 기준임
 - Web functional pages 는 mock adapter 나 demo ids 에 의존하지 않음
 - `/artifacts/[artifactId]` page-load 는 validation write 를 만들지 않고 latest validation GET 만 수행함
-- P25 기준 `/review/decision` 화면과 approval CTA 는 기본 Web UI 에서 제거되며 직접 접근은 404 로 처리됨
+- `/review/decision` 화면과 approval CTA 는 기본 Web UI 에서 제거되며 직접 접근은 404 로 처리됨
 - `P21_LIVE_PORTAL_GATE=1` 에서 PLF/PPM env 가 없으면 skip 이 아니라 blocker failure 로 보고함
 
 통과 기준:
@@ -445,23 +445,19 @@ sanitized versioned knowledge asset, fact graph, export 로 승격한다. v5 DDL
 - JSONL export 는 fact one-line-per-record, GRAPH_JSON export 는 nodes/edges/contentHash 를 포함한다
 - raw SP definition, SQL text, row data, secret, raw prompt/provider response text 와 raw-derived
   redaction hash/length 는 storage, API, export, Web summary 에 남지 않는다
-- Platform DB adapter 는 v5 필수 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고,
+- Platform DB adapter 는 v6 필수 table 이 없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패하고,
   Metadata Analyze API 는 503 JSON error 로 반환하며, API 가 DDL 을 자동 적용하지 않는다
-- P35 extends this same v5 manual-apply draft with lifecycle readiness: `KNOWLEDGE_ASSET_VERSIONS`
-  carries `DRAFT`, `REVIEW_REQUIRED`, `REVIEWED`, `ARCHIVED` state, and
-  `KNOWLEDGE_ASSET_REVIEWS` stores append-only review events.
+- P35 uses the v6 manual-apply draft with lifecycle readiness: `KNOWLEDGE_ASSET_VERSIONS`
+  carries `DRAFT`, `REVIEW_REQUIRED`, `ARCHIVED` state.
 - New content versions start `DRAFT`; same `contentHash` reuse preserves lifecycle; changed
-  content creates a new `DRAFT` version even when the previous version was `REVIEWED`.
-- Review API transitions only to `REVIEW_REQUIRED`, `REVIEWED`, or `ARCHIVED`; `ARCHIVED` is
-  terminal and returns `KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID` on re-review.
+  content creates a new `DRAFT` version even when the previous version had evidence caveats.
+- Human review API transitions are absent. `ARCHIVED` is terminal and returns
+  `KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID` on invalid lifecycle mutation.
 - Asset search and fact search default to excluding `ARCHIVED`; explicit
   `lifecycleStatus=ARCHIVED` includes archived versions. Fact search without a meaningful filter
   returns `KNOWLEDGE_SEARCH_FILTER_REQUIRED`.
-- Review writes require `REVIEWER`/`ADMIN` when RBAC is enabled, reject reviewer spoofing, sanitize
-  comments without raw SQL/SP text, row data, secret, hash, length, or snippet storage, and emit
-  `KNOWLEDGE_ASSET_REVIEW_RECORDED`.
-- `REVIEWED` remains draft/reviewable organizational knowledge and is not production-ready,
-  publish approval, deployment approval, or automatic conversion approval evidence.
+- `REVIEW_REQUIRED` remains an evidence caveat and is not production-ready, publish approval,
+  deployment approval, human review request, or automatic conversion approval evidence.
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/integration/api/test_api_auth_rbac.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"` 통과
@@ -471,7 +467,7 @@ sanitized versioned knowledge asset, fact graph, export 로 승격한다. v5 DDL
 
 P35 live confidence is explicit and disabled by default. `P35_KNOWLEDGE_LIVE_GATE=1`
 combines live OpenAI, read-only `ppm`/`PPM` metadata, and live PLF knowledge persistence after
-operators manually apply v5 DDL. Missing env, missing `ppm -> PPM` profile mapping, or missing v5
+operators manually apply v6 DDL. Missing env, missing `ppm -> PPM` profile mapping, or missing v6
 knowledge schema objects are blocker failures, not skips.
 
 Required checks:
@@ -483,11 +479,10 @@ Required checks:
 - Fact graph edges must reference persisted fact ids in the same version; asset/fact search and
   GRAPH_JSON export must return sanitized knowledge without raw SQL/SP text, row data, secrets,
   raw prompt, or raw provider response text.
-- The gate records one real non-terminal `REVIEWED` event with reason
-  `P35_LIVE_CONFIDENCE_REVIEW`. It must not archive real PPM knowledge; archived terminal behavior
-  remains fixture/unit coverage.
-- If `AUTH_RBAC_ENFORCEMENT=1`, live review requires `OIDC_REVIEWER_BEARER_TOKEN` and the token
-  must resolve to a PLF `REVIEWER` or `ADMIN`; otherwise fixture/local reviewer mode is used.
+- The gate verifies search/export confidence without writing human review records. It must not
+  archive real PPM knowledge; archived terminal behavior remains fixture/unit coverage.
+- If `AUTH_RBAC_ENFORCEMENT=1`, live auth confidence uses `OIDC_USER_BEARER_TOKEN` and verifies
+  the token resolves to an active PLF actor; no reviewer token or review write is required.
 - Passing this gate is confidence evidence only. It does not make knowledge production-ready,
   authorize publish/deploy, or approve automatic conversion.
 
@@ -580,7 +575,7 @@ P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT
 | parser/analysis 변경 | fixture 기반 analysis eval |
 | generator 변경 | artifact format eval + evidence coverage |
 | 작업자-facing 언어 변경 | `artifact.localized_human_text.ko_kr` validation + generator/API unit |
-| policy/approval 변경 | workflow state test + reviewer checklist |
+| policy/draft validation 변경 | workflow state test + quality caveat assertions |
 | auth/RBAC source 변경 | ADR/admin guide sync + role matrix contract test |
 | auth/RBAC enforcement 변경 | 401/403 negative route test + audit actor binding test |
 | OpenAI/LLM runtime 변경 | fake gateway unit + no-raw-trace contract + optional live gate 문서화 |

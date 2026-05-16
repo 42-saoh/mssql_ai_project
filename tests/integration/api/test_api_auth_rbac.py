@@ -54,12 +54,6 @@ def auth_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[AuthHarness]:
         email="user@example.com",
         roles=("USER",),
     )
-    repository.add_auth_actor(
-        subject="subject-reviewer",
-        login="reviewer@example.com",
-        email="reviewer@example.com",
-        roles=("REVIEWER",),
-    )
     service = WorkflowService(repository)
     app.dependency_overrides[get_repository] = lambda: repository
     app.dependency_overrides[get_workflow_service] = lambda: service
@@ -74,7 +68,7 @@ def auth_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[AuthHarness]:
         reset_application_state()
 
 
-def test_validation_and_approval_require_verified_identity(
+def test_validation_requires_verified_identity_and_approval_route_is_absent(
     auth_client: AuthHarness,
 ) -> None:
     artifact_id = _create_artifact(auth_client.client)
@@ -82,20 +76,15 @@ def test_validation_and_approval_require_verified_identity(
     validation = auth_client.client.post(f"/api/v1/artifacts/{artifact_id}/validation")
     approval = auth_client.client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
-        json={
-            "decision": "REQUEST_CHANGES",
-            "reviewer": "reviewer@example.com",
-            "comment": "missing verified identity",
-        },
+        json={"decision": "REQUEST_CHANGES"},
     )
 
     assert validation.status_code == 401
     assert validation.json()["code"] == "UNAUTHORIZED"
-    assert approval.status_code == 401
-    assert approval.json()["code"] == "UNAUTHORIZED"
+    assert approval.status_code == 404
 
 
-def test_validation_and_approval_reject_user_role(
+def test_user_role_can_validate_without_reviewer_permission(
     auth_client: AuthHarness,
 ) -> None:
     artifact_id = _create_artifact(auth_client.client)
@@ -108,135 +97,41 @@ def test_validation_and_approval_reject_user_role(
     approval = auth_client.client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
         headers=headers,
-        json={
-            "decision": "REQUEST_CHANGES",
-            "reviewer": "user@example.com",
-            "comment": "USER role cannot record decisions",
-        },
-    )
-
-    assert validation.status_code == 403
-    assert validation.json()["code"] == "FORBIDDEN"
-    assert approval.status_code == 403
-    assert approval.json()["code"] == "FORBIDDEN"
-
-
-def test_reviewer_role_can_validate_and_record_matching_approval(
-    auth_client: AuthHarness,
-) -> None:
-    artifact_id = _create_artifact(auth_client.client)
-    headers = _auth_header(auth_client.token_for("subject-reviewer"))
-
-    validation = auth_client.client.post(
-        f"/api/v1/artifacts/{artifact_id}/validation",
-        headers=headers,
-    )
-    approval = auth_client.client.post(
-        f"/api/v1/artifacts/{artifact_id}/approval-decisions",
-        headers=headers,
-        json={
-            "decision": "REQUEST_CHANGES",
-            "reviewer": "reviewer@example.com",
-            "comment": "verified reviewer decision",
-        },
+        json={"decision": "REQUEST_CHANGES"},
     )
 
     assert validation.status_code == 200
     assert validation.json()["artifactId"] == artifact_id
-    assert approval.status_code == 201
-    assert approval.json()["reviewer"] == "reviewer@example.com"
+    assert approval.status_code == 404
     validation_audit = [
         event
         for event in auth_client.repository.audit_events
         if event.action == "ARTIFACT_VALIDATED"
     ][-1]
-    approval_audit = [
-        event
-        for event in auth_client.repository.audit_events
-        if event.action == "APPROVAL_DECISION_RECORDED"
-    ][-1]
-    assert validation_audit.actor == "reviewer@example.com"
-    assert approval_audit.actor == "reviewer@example.com"
+    assert validation_audit.actor == "user@example.com"
 
 
-def test_approval_rejects_reviewer_spoofing(
-    auth_client: AuthHarness,
-) -> None:
-    artifact_id = _create_artifact(auth_client.client)
-    headers = _auth_header(auth_client.token_for("subject-reviewer"))
-
-    approval = auth_client.client.post(
-        f"/api/v1/artifacts/{artifact_id}/approval-decisions",
-        headers=headers,
-        json={
-            "decision": "REQUEST_CHANGES",
-            "reviewer": "other-reviewer@example.com",
-            "comment": "body reviewer must not spoof identity",
-        },
-    )
-
-    assert approval.status_code == 403
-    assert approval.json()["code"] == "FORBIDDEN"
-    assert "verified actor" in approval.json()["detail"]
-
-
-def test_knowledge_review_requires_reviewer_role_and_prevents_spoofing(
+def test_knowledge_review_routes_are_absent(
     auth_client: AuthHarness,
 ) -> None:
     asset = _create_knowledge_asset_version(auth_client.client)
     user_headers = _auth_header(auth_client.token_for("subject-user"))
-    reviewer_headers = _auth_header(auth_client.token_for("subject-reviewer"))
 
-    denied = auth_client.client.post(
+    posted = auth_client.client.post(
         (
             "/api/v1/knowledge/assets/"
             f"{asset['assetId']}/versions/{asset['currentVersionId']}/review"
         ),
         headers=user_headers,
-        json={
-            "status": "REVIEWED",
-            "reasonCode": "USER_CANNOT_REVIEW",
-            "reviewer": "user@example.com",
-        },
+        json={"status": "REVIEW_REQUIRED"},
     )
-    reviewed = auth_client.client.post(
-        (
-            "/api/v1/knowledge/assets/"
-            f"{asset['assetId']}/versions/{asset['currentVersionId']}/review"
-        ),
-        headers=reviewer_headers,
-        json={
-            "status": "REVIEWED",
-            "reasonCode": "VERIFIED_REVIEWER",
-            "reviewer": "reviewer@example.com",
-            "comment": "reviewed sanitized knowledge",
-        },
-    )
-    spoofed = auth_client.client.post(
-        (
-            "/api/v1/knowledge/assets/"
-            f"{asset['assetId']}/versions/{asset['currentVersionId']}/review"
-        ),
-        headers=reviewer_headers,
-        json={
-            "status": "ARCHIVED",
-            "reasonCode": "SPOOF_REJECTED",
-            "reviewer": "other-reviewer@example.com",
-        },
+    listed = auth_client.client.get(
+        f"/api/v1/knowledge/assets/{asset['assetId']}/reviews",
+        headers=user_headers,
     )
 
-    assert denied.status_code == 403
-    assert denied.json()["code"] == "FORBIDDEN"
-    assert reviewed.status_code == 200
-    assert reviewed.json()["reviewer"] == "reviewer@example.com"
-    assert spoofed.status_code == 403
-    assert spoofed.json()["code"] == "FORBIDDEN"
-    review_audit = [
-        event
-        for event in auth_client.repository.audit_events
-        if event.action == "KNOWLEDGE_ASSET_REVIEW_RECORDED"
-    ][-1]
-    assert review_audit.actor == "reviewer@example.com"
+    assert posted.status_code == 404
+    assert listed.status_code == 404
 
 
 def _create_artifact(client: TestClient) -> str:

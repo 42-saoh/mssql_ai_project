@@ -48,8 +48,8 @@ caller-dependent, cross-server, and unsafe or unconfirmed cross-database depende
    문서, 코드, DDL 초안은 모두 `CanonicalAnalysisModel` 같은 공통 계약을 기준으로 생성한다.
 
 5. **검증 게이트 내장**
-   P25 기본 제품 플로우는 Draft → Validate → `VALIDATION_COMPLETE` 에서 멈추며,
-   review/approval 은 deferred capability 로만 남긴다. Publish/deploy/apply 흐름은 여전히 금지한다.
+   기본 제품 플로우는 Draft → Validate → `VALIDATION_COMPLETE` 에서 멈추며,
+   human review/approval 흐름은 노출하지 않는다. Publish/deploy/apply 흐름은 여전히 금지한다.
 
 6. **작업자-facing 결과 한국어, machine contract 영어 유지**
    작업자가 읽는 `title`, `summary`, `message`, artifact 본문, validation 설명,
@@ -95,12 +95,12 @@ flowchart LR
 - 사용자 요청 등록
 - 결과 미리보기
 - validation evidence 확인
-- deferred approval compatibility 상태 확인
+- draft-quality caveat 상태 확인
 - 관리자 설정
 
 ### API / BFF
 - 입력 검증
-- 인증/인가 연계: production identity 는 verified OIDC/JWT, role source 는 PLF `AUTH_USERS` / `AUTH_ROLES` / `AUTH_USER_ROLES`, validation/deferred approval write action 은 `REVIEWER`/`ADMIN`
+- 인증/인가 연계: production identity 는 verified OIDC/JWT, role source 는 PLF `AUTH_USERS` / `AUTH_ROLES` / `AUTH_USER_ROLES`, validation write action 은 authenticated `USER`/`ADMIN`
 - job/artifact 응답 조합
 
 ### Workflow Orchestrator
@@ -155,18 +155,17 @@ flowchart LR
 - 사람이 읽는 문서 본문과 표 헤더는 한국어로 렌더링하되 section id, artifact type,
   registry ref, SQL/Java 식별자는 번역하지 않음
 
-### Validation / Approval
+### Validation
 - 규칙 검증
 - evidence coverage
-- manual review points
+- quality/evidence caveats
 - preview
-- approval record
 - 생성 artifact 의 작업자-facing 본문에 한국어 설명이 포함되는지
   `artifact.localized_human_text.ko_kr` 규칙으로 점검
 
 ### Artifact Service
 - 버전 관리
-- draft/approved/published 상태 관리
+- draft/validated 상태 관리
 - 파일 보관
 - export
 
@@ -177,16 +176,15 @@ flowchart LR
 - `mcp.*`, `metadata.profile.*`, `canonical.*` fact id 와 제한된 edge type 으로 fact graph 구성
 - fact graph edge 는 같은 asset version 안의 실제 fact id 만 참조하며, unresolved endpoint 는 `REVIEW_REQUIRED` fact 로 보존
 - JSONL / GRAPH_JSON export 제공
-- P35 keeps v5 DDL as the manual-apply draft and adds version lifecycle state:
-  `DRAFT`, `REVIEW_REQUIRED`, `REVIEWED`, `ARCHIVED`.
-- `REVIEWED` is a curation marker only. It is not production-ready evidence,
+- v6 DDL is the current manual-apply draft and keeps version lifecycle state:
+  `DRAFT`, `REVIEW_REQUIRED`, `ARCHIVED`.
+- `REVIEW_REQUIRED` is a machine evidence caveat. It is not a human review request,
   publish approval, deployment approval, or automatic conversion approval.
 - Public knowledge search is read-only: `GET /api/v1/knowledge/assets` and
   `GET /api/v1/knowledge/facts/search` default to excluding `ARCHIVED` versions
   unless `lifecycleStatus=ARCHIVED` is requested.
-- Review events are append-only in `KNOWLEDGE_ASSET_REVIEWS`; review writes
-  require `REVIEWER`/`ADMIN` when RBAC is enabled and emit
-  `KNOWLEDGE_ASSET_REVIEW_RECORDED`.
+- Human review events and reviewer identity writes are absent from the current
+  knowledge API and v6 DB contract.
 - Platform DB readiness checks cover v5 tables, lifecycle columns, and critical
   indexes. Missing objects surface as `503 KNOWLEDGE_SCHEMA_REQUIRED` with the
   missing item list; API code never auto-applies DDL.
@@ -246,14 +244,7 @@ flowchart LR
 - severity
 - pass/fail
 - missing evidence
-- manual review points
-
-### ApprovalRecord
-- reviewer
-- decision
-- comments
-- timestamp
-- approved version
+- quality/evidence caveats
 
 ## 구현 모듈과 저장소 매핑
 
@@ -261,12 +252,12 @@ flowchart LR
 apps/web
   - request UI
   - artifact preview
-  - approval screens
+  - draft-quality caveat UI
 
 apps/api
   - request/job APIs
   - workflow orchestration
-  - approval endpoints
+  - validation endpoints
   - registry/admin endpoints
   - knowledge asset persistence / fact graph / export endpoints
 
@@ -311,8 +302,8 @@ packages/templates
 
 ## 현재 통합 구현 상태
 
-- `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/latest-validation/validation happy path 를 제공한다. P25 기본 workflow 는 validation 이후 `VALIDATION_COMPLETE` 에서 종료하며, approval decision API 는 추후 재활성화 가능한 deferred capability 로 유지한다.
-- `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다. P25 기준 review decision 화면과 CTA 는 기본 UI 에서 제거되었다.
+- `apps/api` 는 OpenAPI skeleton 에 맞춘 route surface 와 request/job/artifact/latest-validation/validation happy path 를 제공한다. 기본 workflow 는 validation 이후 `VALIDATION_COMPLETE` 에서 종료하며, approval decision API 는 등록하지 않는다.
+- `apps/web` 는 P21 기준 runtime/default path 에서 HTTP API client 만 사용한다. `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 이 없으면 dependency blocker 를 렌더링하며, mock adapter 를 production 또는 default runtime 으로 사용하지 않는다. review decision 화면과 approval CTA 는 기본 UI 에 없다.
 - `services/mssql-mcp` 는 read-only catalog, profile registry, fixture-backed tests, optional live readiness boundary 를 제공한다. `P21_LIVE_PORTAL_GATE=1` 에서는 live PPM metadata access 가 필수이고 fixture fallback 또는 PLF fallback 은 blocker 다. P27 기준 `get_procedure_dependencies` 계약은 resolution confidence/evidence kind/unresolved reason/chain 을 optional evidence 로 확장하고, `get_dependency_closure` 와 `resolve_dependency_reference` 는 active read-only fixture-first hardened MCP tool 로 구현된다. `P27_HARD_LIVE_GATE=1` 은 PPM selected objects 대상으로 closure/resolver evidence 를 검증하며, 활성화 후 missing PPM prerequisite, inaccessible PPM, template-only selection, PLF fallback 은 blocker failure 다. P28 기준 전용 API invocation endpoint 는 두 P27 dependency evidence tool 만 public allowlist 로 호출한다. P29 기준 `/metadata/dependencies` Web diagnostic UI 는 이 route 를 수동 진단용으로 사용하고, workflow orchestration 은 PROCEDURE target 에 대해 `get_dependency_closure` evidence digest 와 evidence refs 만 병합한다. P29B 기준 DB migration, persisted artifact type, workflow state transition 은 새로 만들지 않고 deferred 로 확정했으며, 기존 metadata collection payload 의 sanitized `dependencyEvidence` 와 기존 draft artifact evidence refs 만 사용한다. P33 기준 active/read-only successful MCP tool result 는 process-local TTL/LRU cache 로 재사용할 수 있고, cache trace 는 `cacheStatus`, `cacheKeyHash`, `cacheAgeMs` 만 남긴다.
 - `packages/analysis`, `packages/generation`, `packages/validation` 은 deterministic parser/renderer/validator slice 를 제공하되 full CanonicalAnalysisModel 은 `REVIEW_REQUIRED` candidate 로 남긴다.
 - `packages/agent-runtime` 은 P22 기준 OpenAI Responses API adapter 와 fake adapter 를 제공한다. P26 기준 API/Web 기본값은 high-quality hybrid 분석이며 semantic analysis profile `gpt-5.5`, transient SP definition input, guide/conversion insight schema 를 사용한다. fast/test profile 기본 모델은 `gpt-5-nano` 이며 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. 기본 테스트는 remote API 를 호출하지 않는다.
@@ -325,12 +316,12 @@ packages/templates
   catalog 전체를 후보로 보되 내부 registry 로만 실행하며, public invoke API allowlist 는 계속
   `get_dependency_closure`, `resolve_dependency_reference` 두 개로 제한한다. 결과는 sanitized
   `aiToolEvidence`, `deterministicFacts`, `mcp.<toolName>.<hash>` fact id, metadata insights,
-  object profiles, category insight groups, dependency graph, DTO readiness, review markers,
+  object profiles, category insight groups, dependency graph, DTO readiness, evidence caveat markers,
   knowledge asset summaries 를 반환한다. P34 기준 기본 `persistKnowledge=true` 로 sanitized
   metadata profile/dependency/dto readiness knowledge asset 도 축적하지만, persisted artifact 또는
   workflow state transition 은 추가하지 않는다.
 - `tests/e2e` 와 `tests/eval` 은 `master` metadata profile 과 fixture snapshot 을 기준으로 최소 happy path 를 검증한다. P08A 이후에는 `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` 이 PPM 대표 오브젝트 선정 상태를 나타내며, live metadata 불가 시 `template_only` 상태로 유지한다.
-- P19 기준 production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation/approval route enforcement 와 401/403 negative tests 는 구현되어 있으나 P25 기본 product path 는 approval UI 를 노출하지 않는다. Live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
+- Production auth/RBAC source of truth 는 `docs/admin-guide/auth-rbac-production-source.md` 와 ADR-0006 에 정의한다. Verified OIDC/JWT 가 actor identity source 이고, PLF auth table membership 이 role source 다. Validation route enforcement 와 401/403 negative tests 는 구현되어 있으며 approval UI/API 는 노출하지 않는다. Live IdP/JWKS 와 운영 PLF role membership wiring 은 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태다. 현재 opening posture 는 controlled `CONDITIONAL_GO` 이며 `production_ready: false` 는 유지한다.
 - P21 은 Python 3.14 host+Docker baseline 과 no-mock functional portal contract 를 추가한다. Controlled open 은 PLF platform DB 와 PPM read-only metadata prerequisites 가 충족될 때만 유효하며, full production-ready 선언은 여전히 금지한다.
 
 ## 저장소 경계 규칙
@@ -342,7 +333,7 @@ packages/templates
 - agent run trace 는 model/profile/prompt/schema version, input/prompt/output hash,
   token usage, latency, status, schema-valid structured output 만 노출한다.
 - validation 결과 없이 artifact 를 publish 하지 않는다.
-- registry version 이 고정되지 않은 생성 결과는 승인 대상이 아니다.
+- registry version 이 고정되지 않은 생성 결과는 validation-complete 대상이 아니다.
 - production auth/RBAC 는 mock header, hardcoded actor, fixture token 으로 대체하지 않는다.
 
 ## 현재 기준 파일
@@ -350,10 +341,10 @@ packages/templates
 - OpenAPI 초안: `spec/openapi/ai_agent_platform_openapi_v1.yaml`
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
 - Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
-- Knowledge asset DDL 초안: `db/schema/ai_agent_platform_schema_v5_knowledge_assets.sql`
-- v5 knowledge DDL 은 `KNOWLEDGE_ASSET_JOB_LINKS`, fact-edge FK,
-  lifecycle columns, `KNOWLEDGE_ASSET_REVIEWS`, lifecycle/search indexes 를
-  포함하는 manual-apply 초안이며, adapter 는 필수 v5 table/column/index 가
+- Knowledge asset DDL 초안: `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql`
+- v6 knowledge DDL 은 `KNOWLEDGE_ASSET_JOB_LINKS`, fact-edge FK,
+  lifecycle/archive columns, lifecycle/search indexes 를
+  포함하는 manual-apply 초안이며, adapter 는 필수 v6 table/column/index 가
   없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패한다.
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
@@ -373,7 +364,7 @@ DDL v2 의 persisted enum 이름을 storage 기준으로 삼고, OpenAPI 의 요
 - API contract
 - CanonicalAnalysisModel 구조
 - artifact lifecycle
-- approval / validation 흐름
+- draft validation 흐름
 - DB / object storage / index 전략
 - MCP tool surface
 

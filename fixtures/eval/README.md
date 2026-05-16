@@ -9,9 +9,9 @@
 - `rubric.yaml` — pass/fail thresholds and forbidden boundary checks
 - `productization_readiness_v1.yaml` — P08A PPM manifest 를 P09~P16 eval/demo/release gate 에 연결하는 metadata-only readiness fixture
 - `api_productization_ppm_workflow_v1.yaml` — P09 API workflow 의 idempotency/correlation 기대값과 PPM metadata-only request 예시
-- `validation_approval_audit_p13_v1.yaml` — P13 validation report, approval checklist, audit trace, publish/export gate 기대값
+- `validation_approval_audit_p13_v1.yaml` — P13 validation report, quality caveat checklist, audit trace, publish/export absence 기대값
 - `eval_observability_security_ops_p15_v1.yaml` — P15 hard-live eval/ops gate. `ppm` → `PPM` live metadata, quality metrics, latency budgets, correlation id, audit stage, redaction, read-only permission check 기대값을 정의한다.
-- `pilot_release_readiness_p16_v1.yaml` — P16/P17D pilot release readiness gate. scoped live pilot release CONDITIONAL_GO, fixture-first/demo handoff GO WITH LIMITATIONS, selected PPM object evidence summary, P17A dependency closure, P17B validation, P17C approval/audit, P17D hard-live checklist 를 정의한다.
+- `pilot_release_readiness_p16_v1.yaml` — P16/P17D pilot release readiness gate. scoped live pilot release CONDITIONAL_GO, fixture-first/demo handoff GO WITH LIMITATIONS, selected PPM object evidence summary, P17A dependency closure, P17B validation, P17C draft-quality audit, P17D hard-live checklist 를 정의한다.
 - `live_pilot_blocker_closure_p17_v1.yaml` — P17 blocker closure 와 scoped CONDITIONAL_GO 조건을 정의한다.
 - `productization_gap_closure_p18_v1.yaml` — P18 CanonicalAnalysisModel, Web HTTP adapter, production auth/RBAC source/enforcement closure 와 live wiring future hardening item 을 정의한다.
 - `live_portal_no_mock_p21_v1.yaml` — P21 no-mock functional portal and Python 3.14 contract. HTTP-only Web runtime, required pages, PLF/PPM prerequisites, no fallback policy, and `production_ready: false` 를 정의한다.

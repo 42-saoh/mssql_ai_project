@@ -87,7 +87,6 @@ class ArtifactRecord:
     updated_at: datetime = field(default_factory=utc_now)
     latest_validation_report_id: str | None = None
     latest_validation_status: str | None = None
-    latest_approval_id: str | None = None
 
     @property
     def evidence_coverage(self) -> float:
@@ -121,21 +120,6 @@ class ValidationReportRecord:
 
 
 @dataclass
-class ApprovalRecordData:
-    approval_id: str
-    artifact_id: str
-    decision: str
-    reviewer: str
-    comment: str
-    validation_report_id: str | None
-    storage_decision: str
-    persistence_note: str
-    reviewer_checklist: list[dict[str, Any]] = field(default_factory=list)
-    validation_summary: dict[str, Any] = field(default_factory=dict)
-    decided_at: datetime = field(default_factory=utc_now)
-
-
-@dataclass
 class AuditEventRecord:
     audit_id: str
     action: str
@@ -160,12 +144,7 @@ class KnowledgePersistenceError(RuntimeError):
         self.status_code = status_code
 
 
-KNOWLEDGE_LIFECYCLE_STATUSES = frozenset(
-    {"DRAFT", "REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"}
-)
-KNOWLEDGE_REVIEW_TARGET_STATUSES = frozenset(
-    {"REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"}
-)
+KNOWLEDGE_LIFECYCLE_STATUSES = frozenset({"DRAFT", "REVIEW_REQUIRED", "ARCHIVED"})
 
 
 @dataclass
@@ -182,9 +161,6 @@ class KnowledgeAssetRecord:
     content_hash: str | None = None
     source_job_id: str | None = None
     lifecycle_status: str = "DRAFT"
-    review_reason_code: str | None = None
-    reviewer: str | None = None
-    reviewed_at: datetime | None = None
     archived_at: datetime | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -229,24 +205,7 @@ class KnowledgeAssetVersionRecord:
     edges: list[KnowledgeEdgeRecord]
     source_job_id: str | None = None
     lifecycle_status: str = "DRAFT"
-    review_reason_code: str | None = None
-    review_note: dict[str, Any] = field(default_factory=dict)
-    reviewer: str | None = None
-    reviewed_at: datetime | None = None
     archived_at: datetime | None = None
-    created_at: datetime = field(default_factory=utc_now)
-
-
-@dataclass
-class KnowledgeReviewRecord:
-    review_id: str
-    asset_id: str
-    version_id: str
-    from_status: str
-    to_status: str
-    reason_code: str
-    note: dict[str, Any]
-    reviewer: str
     created_at: datetime = field(default_factory=utc_now)
 
 
@@ -395,23 +354,6 @@ class WorkflowRepository(Protocol):
     def has_validation_report(self, validation_report_id: str) -> bool:
         ...
 
-    def add_approval(
-        self,
-        *,
-        artifact_id: str,
-        decision: str,
-        reviewer: str,
-        comment: str,
-        validation_report_id: str | None,
-        reviewer_checklist: list[dict[str, Any]] | None = None,
-        validation_summary: dict[str, Any] | None = None,
-        correlation_id: str | None = None,
-    ) -> ApprovalRecordData:
-        ...
-
-    def latest_approval_for(self, artifact_id: str) -> ApprovalRecordData | None:
-        ...
-
     def record_audit_event(
         self,
         *,
@@ -490,27 +432,6 @@ class WorkflowRepository(Protocol):
     ) -> list[KnowledgeFactSearchRecord]:
         ...
 
-    def review_knowledge_asset_version(
-        self,
-        *,
-        asset_id: str,
-        version_id: str,
-        status: str,
-        reason_code: str,
-        note: dict[str, Any],
-        reviewer: str,
-        actor: str = "api-system",
-    ) -> KnowledgeReviewRecord | None:
-        ...
-
-    def list_knowledge_reviews(
-        self,
-        asset_id: str,
-        *,
-        version_id: str | None = None,
-    ) -> list[KnowledgeReviewRecord] | None:
-        ...
-
     def save_knowledge_export(
         self,
         *,
@@ -548,10 +469,7 @@ AUDIT_STAGE_BY_ACTION: dict[str, str] = {
     "AGENT_RUN_RECORDED": "AGENT_RUNTIME",
     "ARTIFACT_CREATED": "ARTIFACT",
     "ARTIFACT_VALIDATED": "VALIDATION",
-    "APPROVAL_DECISION_RECORDED": "APPROVAL",
-    "PUBLISH_GATE_EVALUATED": "APPROVAL_GATE",
     "KNOWLEDGE_ASSET_VERSIONED": "KNOWLEDGE",
-    "KNOWLEDGE_ASSET_REVIEW_RECORDED": "KNOWLEDGE",
     "KNOWLEDGE_EXPORTED": "KNOWLEDGE",
 }
 
@@ -587,7 +505,6 @@ def standardized_audit_payload(
         "metadataId",
         "artifactId",
         "validationReportId",
-        "approvalId",
     ):
         value = audit_payload.get(key)
         if value is not None:
@@ -595,58 +512,6 @@ def standardized_audit_payload(
     if refs:
         audit_payload["refs"] = refs
     return audit_payload
-
-
-def approval_audit_payload(
-    *,
-    artifact: ArtifactRecord,
-    approval: ApprovalRecordData,
-    validation_report_id: str | None,
-    correlation_id: str | None,
-) -> dict[str, Any]:
-    artifact_version = artifact_version_ref(artifact)
-    selected_object_refs = selected_object_refs_for_artifact(artifact)
-    refs = {
-        "artifactId": artifact.artifact_id,
-        "artifactVersion": artifact_version,
-        "approvalId": approval.approval_id,
-    }
-    if validation_report_id:
-        refs["validationReportId"] = validation_report_id
-    payload: dict[str, Any] = {
-        "decision": approval.decision,
-        "storageDecision": approval.storage_decision,
-        "artifactId": artifact.artifact_id,
-        "artifactVersion": artifact_version,
-        "artifactRef": {
-            "artifactId": artifact.artifact_id,
-            "artifactVersion": artifact_version,
-            "artifactType": artifact.type.value,
-        },
-        "validationReportId": validation_report_id,
-        "validationRef": {
-            "validationReportId": validation_report_id,
-            "artifactId": artifact.artifact_id,
-            "artifactVersion": artifact_version,
-            "validationStatus": approval.validation_summary.get("status"),
-        },
-        "approvalId": approval.approval_id,
-        "approvalRef": {
-            "approvalId": approval.approval_id,
-            "decision": approval.decision,
-            "storageDecision": approval.storage_decision,
-        },
-        "selectedObjectRefs": selected_object_refs,
-        "evidenceRefs": list(artifact.evidence_refs),
-        "timestamp": approval.decided_at.isoformat(),
-        "actor": approval.reviewer,
-        "reviewerChecklist": approval.reviewer_checklist,
-        "refs": refs,
-    }
-    if correlation_id:
-        payload["correlationId"] = correlation_id
-    return payload
-
 
 def artifact_version_ref(artifact: ArtifactRecord) -> str:
     for key in ("artifactVersion", "artifact_version", "version"):

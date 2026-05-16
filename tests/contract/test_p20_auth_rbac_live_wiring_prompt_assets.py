@@ -40,7 +40,6 @@ def test_p20_prompt_preserves_auth_live_wiring_safety_contract() -> None:
         "OIDC_ISSUER",
         "OIDC_AUDIENCE",
         "OIDC_JWKS_URL",
-        "OIDC_REVIEWER_BEARER_TOKEN",
         "OIDC_USER_BEARER_TOKEN",
         "PLATFORM_DB_*",
         "OidcJwtVerifier",
@@ -68,7 +67,7 @@ def test_p20_prompt_preserves_auth_live_wiring_safety_contract() -> None:
 
     assert "PFL" not in text
     assert "production-ready: true" not in text
-    assert "OIDC_REVIEWER_BEARER_TOKEN=" not in text
+    assert "OIDC_REVIEWER_BEARER_TOKEN" not in text
     assert "OIDC_USER_BEARER_TOKEN=" not in text
 
 

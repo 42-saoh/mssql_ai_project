@@ -11,7 +11,7 @@
   sanitized `analysisCoverage`, `sourceContextSummary`, span ids, line ranges, risk tags, object refs,
   and evidence refs. They must not keep selected span text, full SP definitions, raw prompt text,
   provider responses, row data, or snippets derived from source text.
-- Context budget fallback is a review caveat. `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED` is not production
+- Context budget fallback is an evidence caveat. `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED` is not production
   approval or automatic conversion evidence.
 - Dependency procedure semantic fan-out is allowed only for confirmed same-profile PROCEDURE
   dependencies and confirmed same-server cross-database PROCEDURE dependencies selected from MCP
@@ -104,15 +104,14 @@
   `platform.<toolName>.<hash>` fact, component summary 로 제한하며 artifact full content, raw SQL/SP
   definition, row data, procedure execution, DDL/DML, approval/review write, export creation, secrets,
   raw prompt/provider response text 는 금지한다.
-- Knowledge assetization 은 조직 지식 축적 경로이지만 draft/reviewable knowledge 로만 해석한다.
+- Knowledge assetization 은 조직 지식 축적 경로이지만 draft/evidence-caveated knowledge 로만 해석한다.
   `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`,
   `CANONICAL_ANALYSIS` asset 과 JSONL/GRAPH_JSON export 는 sanitized facts/edges 만 포함해야 하며,
   자동 전환 승인, production readiness, publish/deploy/apply 근거로 사용할 수 없다.
-- Knowledge lifecycle `REVIEWED` is a human curation marker only. It does not approve publish,
-  deploy, DDL apply, production readiness, or automatic conversion. `ARCHIVED` is terminal, and
-  lifecycle review events must be append-only audit/curation records.
-- Knowledge review comments must be sanitized before storage; raw SQL/SP text, row data, secrets,
-  and raw-derived hash, length, or snippet values are forbidden in review payloads.
+- Knowledge lifecycle uses `DRAFT`, `REVIEW_REQUIRED`, and `ARCHIVED`. `REVIEW_REQUIRED` is an
+  evidence caveat, not a human review workflow. `ARCHIVED` is terminal.
+- Human knowledge review comments, reviewer identity writes, and approval decisions are absent
+  from the current product/API/DB surface.
 - Knowledge redaction marker 는 원문에서 파생된 hash, length, snippet 을 남기지 않으며,
   fact graph edge 는 같은 asset version 의 fact id 를 참조하거나 `REVIEW_REQUIRED` endpoint fact 로 남긴다.
 

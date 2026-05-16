@@ -121,7 +121,7 @@ export function RequestForm({
           <strong>Selected manifest sample</strong>
           <p>
             {sampleName} uses dbProfileId <code>ppm</code>. It is metadata-only and remains
-            review-required while dependency evidence is incomplete.
+            evidence-caveated while dependency evidence is incomplete.
           </p>
         </div>
       ) : null}

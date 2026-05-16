@@ -6,7 +6,6 @@ from typing import Annotated, cast
 from fastapi import Depends, Request
 
 from api_app.auth import (
-    ARTIFACT_REVIEW_ROLES,
     Actor,
     AuthConfigurationError,
     AuthenticationRequiredError,
@@ -97,9 +96,6 @@ def require_roles(*allowed_roles: str):
         return actor
 
     return dependency
-
-
-require_artifact_review_actor = require_roles(*ARTIFACT_REVIEW_ROLES)
 
 
 def reset_application_state() -> None:

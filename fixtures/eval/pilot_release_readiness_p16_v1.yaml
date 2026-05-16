@@ -19,10 +19,10 @@ mode_policy:
 release_recommendation:
   live_pilot_release:
     decision: CONDITIONAL_GO
-    reason: p17a_dependency_p17b_validation_p17c_approval_and_p17d_hard_live_gates_passed_for_scoped_draft_only_candidate
+    reason: p17a_dependency_p17b_validation_p17c_draft_quality_and_p17d_hard_live_gates_passed_for_scoped_draft_only_candidate
   fixture_first_demo_handoff:
     decision: GO_WITH_LIMITATIONS
-    reason: dockerized_fixture_first_workflow_and_demo_docs_are_ready_for_review
+    reason: dockerized_fixture_first_workflow_and_demo_docs_are_ready_for_draft_use
 profile_policy:
   analysis_db_profile_id: ppm
   source_database: PPM
@@ -40,7 +40,7 @@ forbidden_evidence:
   - committed_secret
   - auto_ddl_or_dml
   - plf_fallback_for_ppm
-  - unapproved_publish_or_export
+  - publish_or_export_path
 representative_objects:
   stored_procedures:
     - schema: dbo
@@ -112,17 +112,17 @@ quality_report:
   review_required:
     stored_procedure_review_required_ratio: 0.0
     selected_object_review_required_ratio: 0.25
-    reason: selected table description caveats remain open; complex SP residual review is recorded as a non-blocking sentinel caveat
+    reason: selected table description caveats remain open; complex SP residual caveat is recorded as a non-blocking sentinel caveat
   validation:
     fixture_workflow_status: REVIEW_REQUIRED
     live_release_validation_status: PASSED
     passed_validation_for_live_release: true
     validation_package_ref: fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
-  approval_audit:
-    manual_approval_status: HUMAN_APPROVED_BOUND
-    approval_recording_status: p17c_human_approval_bound_to_p17b_passed_validation
+  draft_quality_audit:
+    draft_quality_status: EVIDENCE_BOUND
+    quality_recording_status: p17c_draft_quality_bound_to_p17b_passed_validation
     audit_status: BOUND
-    approval_audit_ref: fixtures/eval/manual_approval_audit_p17_v1.yaml
+    draft_quality_audit_ref: fixtures/eval/draft_quality_audit_p17_v1.yaml
     publish_status: no_publish_export_draft_only_conditional_go
   reproducibility:
     fixture_first_workflow_reproducible: true
@@ -157,24 +157,24 @@ release_checklist:
   - id: validation_result
     status: PASS
     evidence: P17B live pilot artifact validation package PASSED with no release-critical REVIEW_REQUIRED items
-  - id: manual_approval
+  - id: draft_quality_evidence
     status: PASS
-    evidence: P17C human APPROVE is bound to the P17B artifact set/version and validation report
+    evidence: P17C draft-quality evidence is bound to the P17B artifact set/version and validation report
   - id: audit_trace
     status: PASS
-    evidence: P17C audit binding links correlation id, actor, approval ref, validation ref, artifact refs, selected object refs, and evidence refs
+    evidence: P17C audit binding links correlation id, actor, quality ref, validation ref, artifact refs, selected object refs, and evidence refs
   - id: hard_live_verification
     status: PASS
     evidence: P17D hard-live commands passed for tests/e2e tests/eval and tests/e2e tests/eval tests/contract
   - id: policy_forbidden_actions
     status: PASS
-    evidence: no row data, procedure execution, auto DDL/DML, PLF fallback, or unapproved publish path
+    evidence: no row data, procedure execution, auto DDL/DML, PLF fallback, or publish/export path
   - id: docs_status_taxonomy
     status: PASS
     evidence: docs distinguish implemented, skeleton, stub, fixture-first, optional-live, and not production-ready
 known_limitations:
   - code: COMPLEX_SENTINEL_RESIDUAL_REVIEW
-    impact: dbo.PCS_PY_ManageInvoiceFldSchd_PRC keeps two ambiguous function references as non-blocking residual review
+    impact: dbo.PCS_PY_ManageInvoiceFldSchd_PRC keeps two ambiguous function references as non-blocking residual caveats
   - code: FULL_CANONICAL_MODEL_NOT_IMPLEMENTED
     impact: canonical candidate remains review-required
   - code: WEB_PORTAL_MOCK_FIRST

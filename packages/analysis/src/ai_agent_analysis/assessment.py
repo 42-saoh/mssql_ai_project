@@ -89,7 +89,7 @@ def summarize_business_rules(
             )
     for result_set in result_sets:
         column_names = [column.name for column in result_set.columns if column.name]
-        column_summary = ", ".join(column_names) if column_names else "검토 필요한 컬럼"
+        column_summary = ", ".join(column_names) if column_names else "근거 보강 필요한 컬럼"
         summaries.append(
             BusinessRuleSummary(
                 category="RESULT_SET",
@@ -113,7 +113,7 @@ def summarize_modernization_points(
         points.append(
             ModernizationPoint(
                 code="DYNAMIC_SQL_MODERNIZATION_REVIEW",
-                summary="Dynamic SQL 전환 전략은 수동 검토가 필요합니다.",
+                summary="Dynamic SQL 전환 전략은 근거 보강이 필요합니다.",
                 status=EvidenceStatus.REVIEW_REQUIRED,
                 evidence=patterns.dynamic_sql.evidence,
                 inferred_from=["dynamic_sql"],
@@ -210,7 +210,7 @@ def calculate_overall_confidence(
     factors = ["procedure signature와 static SQL token을 결정론적으로 파싱했습니다."]
     if patterns.dynamic_sql.detected:
         score -= 0.25
-        factors.append("dynamic SQL 의존성은 수동 검토가 필요합니다.")
+        factors.append("dynamic SQL 의존성은 근거 보강이 필요합니다.")
     if patterns.multi_result_set.detected:
         score -= 0.05
         factors.append("여러 result set은 consumer 검토가 필요합니다.")

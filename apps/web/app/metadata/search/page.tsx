@@ -192,7 +192,7 @@ export default async function MetadataSearchPage({
           </div>
           <StatusPill
             value={response.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-            label={response.reviewRequired ? "Review required" : "Evidence only"}
+            label={response.reviewRequired ? "근거 보강 필요" : "Evidence only"}
           />
         </div>
 
@@ -251,7 +251,7 @@ export default async function MetadataSearchPage({
                 <div className="metadata-result-detail">
                   <StatusPill
                     value={result.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-                    label={result.reviewRequired ? "Review required" : "Evidence only"}
+                    label={result.reviewRequired ? "근거 보강 필요" : "Evidence only"}
                   />
                   {result.evidenceRefs.map((evidence) => (
                     <code key={`${fullName}-${evidence.locator}`}>{evidence.locator}</code>
@@ -294,7 +294,7 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
         </div>
         <StatusPill
           value={analysis.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-          label={analysis.reviewRequired ? "Review required" : "Evidence linked"}
+          label={analysis.reviewRequired ? "근거 보강 필요" : "Evidence linked"}
         />
       </div>
 

@@ -6,18 +6,15 @@ from typing import Any
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
 from api_app.auth import Actor, VerifiedIdentity, canonical_role_set
-from api_app.contracts import approval_decision_mapping, validation_storage_result
+from api_app.contracts import validation_storage_result
 from api_app.lifecycle import (
-    artifact_status_after_approval,
     artifact_status_after_validation,
     bounded_artifact_records,
     ensure_artifact_can_change,
     ensure_job_transition,
 )
 from api_app.repositories import (
-    KNOWLEDGE_REVIEW_TARGET_STATUSES,
     AgentRunRecord,
-    ApprovalRecordData,
     ArtifactRecord,
     AuditEventRecord,
     JobRecord,
@@ -28,11 +25,9 @@ from api_app.repositories import (
     KnowledgeFactRecord,
     KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
-    KnowledgeReviewRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkRequestRecord,
-    approval_audit_payload,
     prefixed_id,
     standardized_audit_payload,
     utc_now,
@@ -49,10 +44,8 @@ class MemoryWorkflowRepository:
         self.agent_runs: dict[str, AgentRunRecord] = {}
         self.artifacts: dict[str, ArtifactRecord] = {}
         self.validation_reports: dict[str, ValidationReportRecord] = {}
-        self.approvals: dict[str, ApprovalRecordData] = {}
         self.knowledge_assets: dict[str, KnowledgeAssetRecord] = {}
         self.knowledge_versions: dict[str, KnowledgeAssetVersionRecord] = {}
-        self.knowledge_reviews: dict[str, KnowledgeReviewRecord] = {}
         self.knowledge_exports: dict[str, KnowledgeExportRecord] = {}
         self.knowledge_job_links: set[tuple[str, str, str]] = set()
         self.audit_events: list[AuditEventRecord] = []
@@ -407,67 +400,6 @@ class MemoryWorkflowRepository:
     def has_validation_report(self, validation_report_id: str) -> bool:
         return validation_report_id in self.validation_reports
 
-    def add_approval(
-        self,
-        *,
-        artifact_id: str,
-        decision: str,
-        reviewer: str,
-        comment: str,
-        validation_report_id: str | None,
-        reviewer_checklist: list[dict[str, Any]] | None = None,
-        validation_summary: dict[str, Any] | None = None,
-        correlation_id: str | None = None,
-    ) -> ApprovalRecordData:
-        mapping = approval_decision_mapping(decision)
-        artifact = self.artifacts[artifact_id]
-        next_status = artifact_status_after_approval(decision)
-        ensure_artifact_can_change(artifact.status, next_status)
-        record = ApprovalRecordData(
-            approval_id=prefixed_id("aprv"),
-            artifact_id=artifact_id,
-            decision=decision,
-            reviewer=reviewer,
-            comment=comment,
-            validation_report_id=validation_report_id,
-            storage_decision=mapping.storage_decision,
-            persistence_note=mapping.persistence_note,
-            reviewer_checklist=reviewer_checklist or [],
-            validation_summary=validation_summary or {},
-        )
-        self.approvals[record.approval_id] = record
-        artifact.latest_approval_id = record.approval_id
-        artifact.updated_at = utc_now()
-        artifact.status = next_status
-        resolved_correlation_id = (
-            correlation_id
-            or (
-                self.jobs[artifact.job_id].correlation_id
-                if artifact.job_id in self.jobs
-                else None
-            )
-        )
-        self.record_audit_event(
-            action="APPROVAL_DECISION_RECORDED",
-            target_type="ARTIFACT",
-            target_ref_id=artifact_id,
-            payload=approval_audit_payload(
-                artifact=artifact,
-                approval=record,
-                validation_report_id=validation_report_id,
-                correlation_id=resolved_correlation_id,
-            ),
-            actor=reviewer,
-            correlation_id=resolved_correlation_id,
-        )
-        return record
-
-    def latest_approval_for(self, artifact_id: str) -> ApprovalRecordData | None:
-        artifact = self.artifacts.get(artifact_id)
-        if artifact is None or artifact.latest_approval_id is None:
-            return None
-        return self.approvals.get(artifact.latest_approval_id)
-
     def record_audit_event(
         self,
         *,
@@ -759,75 +691,6 @@ class MemoryWorkflowRepository:
                 )
         return results[: max(1, min(int(limit), 200))]
 
-    def review_knowledge_asset_version(
-        self,
-        *,
-        asset_id: str,
-        version_id: str,
-        status: str,
-        reason_code: str,
-        note: dict[str, Any],
-        reviewer: str,
-        actor: str = "api-system",
-    ) -> KnowledgeReviewRecord | None:
-        version = self.knowledge_versions.get(version_id)
-        if version is None or version.asset_id != asset_id:
-            return None
-        if version.lifecycle_status == "ARCHIVED" or status not in KNOWLEDGE_REVIEW_TARGET_STATUSES:
-            raise KnowledgePersistenceError(
-                "Knowledge asset lifecycle transition is not allowed.",
-                code="KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID",
-                status_code=409,
-            )
-        now = utc_now()
-        review = KnowledgeReviewRecord(
-            review_id=prefixed_id("krvw"),
-            asset_id=asset_id,
-            version_id=version_id,
-            from_status=version.lifecycle_status,
-            to_status=status,
-            reason_code=reason_code,
-            note=dict(note),
-            reviewer=reviewer,
-            created_at=now,
-        )
-        self.knowledge_reviews[review.review_id] = review
-        version.lifecycle_status = status
-        version.review_reason_code = reason_code
-        version.review_note = dict(note)
-        version.reviewer = reviewer
-        version.reviewed_at = now
-        version.archived_at = now if status == "ARCHIVED" else None
-        self.record_audit_event(
-            action="KNOWLEDGE_ASSET_REVIEW_RECORDED",
-            target_type="KNOWLEDGE_ASSET_VERSION",
-            target_ref_id=version_id,
-            payload={
-                "assetId": asset_id,
-                "fromStatus": review.from_status,
-                "toStatus": status,
-                "reasonCode": reason_code,
-            },
-            actor=actor,
-        )
-        return replace(review)
-
-    def list_knowledge_reviews(
-        self,
-        asset_id: str,
-        *,
-        version_id: str | None = None,
-    ) -> list[KnowledgeReviewRecord] | None:
-        if asset_id not in self.knowledge_assets:
-            return None
-        reviews = [
-            replace(review)
-            for review in self.knowledge_reviews.values()
-            if review.asset_id == asset_id
-            and (version_id is None or review.version_id == version_id)
-        ]
-        return sorted(reviews, key=lambda review: review.created_at, reverse=True)
-
     def save_knowledge_export(
         self,
         *,
@@ -881,9 +744,6 @@ class MemoryWorkflowRepository:
             current_version_no=version.version_no,
             content_hash=version.content_hash,
             lifecycle_status=version.lifecycle_status,
-            review_reason_code=version.review_reason_code,
-            reviewer=version.reviewer,
-            reviewed_at=version.reviewed_at,
             archived_at=version.archived_at,
         )
 

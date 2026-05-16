@@ -19,9 +19,6 @@ def test_p20_auth_rbac_live_gate() -> None:
         pytest.fail(json.dumps(result, ensure_ascii=True, sort_keys=True))
 
     checks = {check["name"]: check for check in result["checks"]}
-    assert checks["reviewer_token_plf_role"]["roleCategory"] == "REVIEWER_OR_ADMIN"
-    assert checks["user_token_role_separation"]["roleCategory"] == (
-        "NO_VALIDATION_APPROVAL_ROLE"
-    )
+    assert checks["user_token_plf_role"]["roleCategory"] in {"USER_ONLY", "PLF_ACTOR"}
     assert checks["missing_token_401_semantics"]["status"] == "pass"
     assert checks["invalid_token_401_semantics"]["status"] == "pass"

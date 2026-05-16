@@ -17,9 +17,8 @@ info:
     - worker-facing analysis text is Korean (ko-KR), while JSON keys, enum/status/code values,
       artifact types, rule ids, section ids, evidence refs, and SQL/Java identifiers remain the
       stable English machine contract;
-    - default P25 workflows stop at validation-complete draft output without user review UI;
-    - deferred publish-like actions still require validation evidence and retained approval capability;
-    - live row-data queries, automatic DDL execution, and unreviewed code application are out of scope.
+    - workflows stop at validation-complete draft output without user review or approval flows;
+    - live row-data queries, automatic DDL execution, and unvalidated code application are out of scope.
 servers:
   - url: http://localhost:{port}
     description: Local API/BFF server
@@ -36,8 +35,6 @@ tags:
     description: Workflow job status endpoints.
   - name: artifacts
     description: Draft artifact preview and validation endpoints.
-  - name: approvals
-    description: Deferred human review and approval endpoints retained outside the default P25 UI flow.
   - name: registry
     description: Prompt, template, profile, and policy registry endpoints.
   - name: metadata
@@ -279,7 +276,7 @@ paths:
   /api/v1/artifacts/{artifactId}/validation:
     post:
       tags: [artifacts]
-      summary: Validate a draft artifact before review or approval.
+      summary: Validate a draft artifact quality gate.
       operationId: validateArtifact
       parameters:
         - $ref: "#/components/parameters/ArtifactId"
@@ -306,33 +303,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ValidationReport"
-        "404":
-          $ref: "#/components/responses/NotFound"
-  /api/v1/artifacts/{artifactId}/approval-decisions:
-    post:
-      tags: [approvals]
-      summary: Record a human approval decision for a draft artifact.
-      operationId: createApprovalDecision
-      description: |
-        Records a reviewer decision. This endpoint only records review state; it does not
-        deploy code, execute DDL, or mutate MSSQL business data.
-      parameters:
-        - $ref: "#/components/parameters/ArtifactId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApprovalDecisionRequest"
-      responses:
-        "201":
-          description: Approval decision recorded.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApprovalRecord"
-        "400":
-          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/metadata/db-profiles:
@@ -430,7 +400,7 @@ paths:
       description: |
         Searches metadata object identities through the MSSQL Metadata MCP read-only boundary.
         The response is limited to object identity, profile/database context, snapshot/evidence
-        references, caveats, review-required markers, and blocker codes. It never returns row
+        references, evidence caveats, machine caveat markers, and blocker codes. It never returns row
         data, executes stored procedures, exposes SQL definition text, or performs DDL/DML.
         PPM search must not fall back to PLF when PPM is unavailable.
       parameters:
@@ -501,7 +471,7 @@ paths:
         active/read-only MCP metadata tool calls. Tool execution stays internal to the API
         registry boundary; the public metadata tool invocation allowlist is not expanded.
         Responses contain sanitized evidence digests, deterministic fact ids, LLM insights,
-        review markers, and caveats. They never include row data, raw SQL definition text,
+        machine caveat markers and caveats. They never include row data, raw SQL definition text,
         procedure execution output, DDL/DML controls, secrets, or raw provider traces.
       requestBody:
         required: true
@@ -533,7 +503,7 @@ paths:
   /api/v1/knowledge/assets:
     get:
       tags: [knowledge]
-      summary: Search reviewable knowledge assets.
+      summary: Search draft knowledge assets.
       operationId: listKnowledgeAssets
       parameters:
         - name: assetKind
@@ -585,7 +555,7 @@ paths:
   /api/v1/knowledge/facts/search:
     get:
       tags: [knowledge]
-      summary: Search facts across reviewable knowledge asset versions.
+      summary: Search facts across draft knowledge asset versions.
       operationId: searchKnowledgeFacts
       parameters:
         - name: objectRef
@@ -689,40 +659,6 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
-  /api/v1/knowledge/assets/{assetId}/reviews:
-    get:
-      tags: [knowledge]
-      summary: List append-only knowledge asset review events.
-      operationId: listKnowledgeAssetReviews
-      parameters:
-        - name: assetId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: versionId
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Knowledge review history.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [assetId, reviews]
-                properties:
-                  assetId:
-                    type: string
-                  reviews:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/KnowledgeReview"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "503":
-          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts:
     get:
       tags: [knowledge]
@@ -748,45 +684,6 @@ paths:
                 $ref: "#/components/schemas/KnowledgeFactGraph"
         "404":
           $ref: "#/components/responses/NotFound"
-        "503":
-          $ref: "#/components/responses/DependencyBlocked"
-  /api/v1/knowledge/assets/{assetId}/versions/{versionId}/review:
-    post:
-      tags: [knowledge]
-      summary: Record a reviewable lifecycle transition for a knowledge asset version.
-      operationId: reviewKnowledgeAssetVersion
-      parameters:
-        - name: assetId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: versionId
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/KnowledgeReviewRequest"
-      responses:
-        "200":
-          description: Recorded knowledge review event.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KnowledgeReview"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/ValidationError"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/exports:
@@ -1100,7 +997,7 @@ components:
           type: string
     JobStatus:
       type: string
-      description: VALIDATION_COMPLETE is the default P25 terminal draft status after validation; review and approval statuses remain for deferred compatibility.
+      description: VALIDATION_COMPLETE is the terminal draft status after validation.
       enum:
         - SUBMITTED
         - COLLECTING_METADATA
@@ -1108,10 +1005,6 @@ components:
         - GENERATING
         - VALIDATING
         - VALIDATION_COMPLETE
-        - REVIEW_PENDING
-        - APPROVED
-        - REJECTED
-        - PUBLISHED
         - FAILED
         - CANCELED
     WorkflowStepType:
@@ -1121,8 +1014,6 @@ components:
         - ANALYZE
         - GENERATE
         - VALIDATE
-        - REVIEW
-        - PUBLISH
     ArtifactSummary:
       type: object
       required: [artifactId, type, status]
@@ -1167,6 +1058,7 @@ components:
             reviewRequired:
               type: boolean
               default: true
+              description: Machine uncertainty/evidence caveat flag; not a decision request.
     ArtifactType:
       type: string
       description: Persisted draft artifact type. Request output groups map to one or more of these values.
@@ -1183,7 +1075,6 @@ components:
         - MODEL_DRAFT
         - DDL_DRAFT
         - VALIDATION_REPORT
-        - APPROVAL_LOG
     RequestedOutputType:
       type: string
       description: User-facing output group requested at submission time.
@@ -1199,10 +1090,6 @@ components:
       enum:
         - DRAFT
         - VALIDATED
-        - REVIEW_PENDING
-        - APPROVED
-        - REJECTED
-        - PUBLISHED
         - ARCHIVED
     EvidenceRef:
       type: object
@@ -1237,8 +1124,9 @@ components:
           type: array
           items:
             type: string
-        manualReviewPoints:
+        qualityCaveats:
           type: array
+          description: Evidence and draft-quality caveats surfaced by validation.
           items:
             type: string
     ValidationCheck:
@@ -1342,37 +1230,6 @@ components:
         modelInvocation:
           $ref: "#/components/schemas/ModelInvocationSummary"
         createdAt:
-          type: string
-          format: date-time
-    ApprovalDecisionRequest:
-      type: object
-      required: [decision, reviewer, comment]
-      properties:
-        decision:
-          type: string
-          enum: [APPROVE, REJECT, REQUEST_CHANGES]
-        reviewer:
-          type: string
-        comment:
-          type: string
-        validationReportId:
-          type: string
-    ApprovalRecord:
-      type: object
-      required: [approvalId, artifactId, decision, reviewer, decidedAt]
-      properties:
-        approvalId:
-          type: string
-        artifactId:
-          type: string
-        decision:
-          type: string
-          enum: [APPROVE, REJECT, REQUEST_CHANGES]
-        reviewer:
-          type: string
-        comment:
-          type: string
-        decidedAt:
           type: string
           format: date-time
     MetadataProfile:
@@ -1884,7 +1741,8 @@ components:
         - CANONICAL_ANALYSIS
     KnowledgeLifecycleStatus:
       type: string
-      enum: [DRAFT, REVIEW_REQUIRED, REVIEWED, ARCHIVED]
+      description: REVIEW_REQUIRED is a machine evidence caveat, not a decision workflow state.
+      enum: [DRAFT, REVIEW_REQUIRED, ARCHIVED]
     KnowledgeAssetSummary:
       type: object
       required:
@@ -1922,13 +1780,6 @@ components:
           type: string
         lifecycleStatus:
           $ref: "#/components/schemas/KnowledgeLifecycleStatus"
-        reviewReasonCode:
-          type: string
-        reviewer:
-          type: string
-        reviewedAt:
-          type: string
-          format: date-time
         archivedAt:
           type: string
           format: date-time
@@ -1964,13 +1815,6 @@ components:
           type: string
         lifecycleStatus:
           $ref: "#/components/schemas/KnowledgeLifecycleStatus"
-        reviewReasonCode:
-          type: string
-        reviewer:
-          type: string
-        reviewedAt:
-          type: string
-          format: date-time
         archivedAt:
           type: string
           format: date-time
@@ -2069,52 +1913,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/KnowledgeEdge"
-    KnowledgeReviewRequest:
-      type: object
-      required: [status, reasonCode, reviewer]
-      properties:
-        status:
-          type: string
-          enum: [REVIEW_REQUIRED, REVIEWED, ARCHIVED]
-        reasonCode:
-          type: string
-        reviewer:
-          type: string
-        comment:
-          type: string
-    KnowledgeReview:
-      type: object
-      required:
-        - reviewId
-        - assetId
-        - versionId
-        - fromStatus
-        - toStatus
-        - reasonCode
-        - note
-        - reviewer
-      properties:
-        reviewId:
-          type: string
-        assetId:
-          type: string
-        versionId:
-          type: string
-        fromStatus:
-          $ref: "#/components/schemas/KnowledgeLifecycleStatus"
-        toStatus:
-          type: string
-          enum: [REVIEW_REQUIRED, REVIEWED, ARCHIVED]
-        reasonCode:
-          type: string
-        note:
-          type: object
-          additionalProperties: true
-        reviewer:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
     KnowledgeFactSearchResult:
       type: object
       required: [assetId, assetKind, versionId, lifecycleStatus, fact]

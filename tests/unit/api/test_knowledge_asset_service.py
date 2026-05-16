@@ -6,7 +6,6 @@ import pytest
 from api_app.knowledge_service import (
     export_knowledge,
     persist_sp_workflow_knowledge,
-    sanitize_knowledge_review_note,
     sanitize_knowledge_payload,
 )
 from api_app.metadata_gateway import MetadataCollectionResult
@@ -261,19 +260,10 @@ def test_same_content_version_reuse_still_links_each_job() -> None:
     assert job1_sp.current_version_id == job2_sp.current_version_id
     assert job1_sp.current_version_no == job2_sp.current_version_no == 1
     assert job2_sp.source_job_id == job1.job_id
-    review = repository.review_knowledge_asset_version(
-        asset_id=job1_sp.asset_id,
-        version_id=job1_sp.current_version_id or "",
-        status="REVIEWED",
-        reason_code="CURATED_FOR_REUSE",
-        note={"comment": "reviewed fixture knowledge"},
-        reviewer="reviewer@example.com",
-    )
-    assert review is not None
     reused = repository.list_job_knowledge_assets(job2.job_id)
     assert reused is not None
     reused_sp = next(asset for asset in reused if asset.asset_kind == "SP_ANALYSIS")
-    assert reused_sp.lifecycle_status == "REVIEWED"
+    assert reused_sp.lifecycle_status == "DRAFT"
 
 
 def test_changed_content_creates_new_knowledge_version() -> None:
@@ -289,19 +279,12 @@ def test_changed_content_creates_new_knowledge_version() -> None:
         static_analysis={"patterns": {"dynamicSql": False}},
         agent_run=agent_run,
     )
-    reviewed_asset = next(
+    first_asset = next(
         asset
         for asset in repository.list_job_knowledge_assets(job.job_id) or []
         if asset.asset_kind == "SP_ANALYSIS"
     )
-    repository.review_knowledge_asset_version(
-        asset_id=reviewed_asset.asset_id,
-        version_id=reviewed_asset.current_version_id or "",
-        status="REVIEWED",
-        reason_code="FIRST_REVIEW",
-        note={},
-        reviewer="reviewer@example.com",
-    )
+    assert first_asset.lifecycle_status == "DRAFT"
     persist_sp_workflow_knowledge(
         repository=repository,
         job_id=job.job_id,
@@ -318,7 +301,7 @@ def test_changed_content_creates_new_knowledge_version() -> None:
     assert sp_asset.lifecycle_status == "DRAFT"
 
 
-def test_knowledge_review_history_archived_terminal_and_sanitized_note() -> None:
+def test_knowledge_archive_filter_uses_lifecycle_state_without_review_events() -> None:
     repository = MemoryWorkflowRepository()
     request, job = _request_and_job(repository)
     persist_sp_workflow_knowledge(
@@ -334,40 +317,18 @@ def test_knowledge_review_history_archived_terminal_and_sanitized_note() -> None
         for item in repository.list_job_knowledge_assets(job.job_id) or []
         if item.asset_kind == "SP_ANALYSIS"
     )
-    note = sanitize_knowledge_review_note(
-        "CREATE PROCEDURE dbo.leak AS SELECT secret-value FROM dbo.Secret"
+    version = repository.knowledge_versions[asset.current_version_id or ""]
+    version.lifecycle_status = "ARCHIVED"
+    version.archived_at = version.created_at
+
+    active_assets = repository.list_knowledge_assets(asset_kind="SP_ANALYSIS")
+    archived_assets = repository.list_knowledge_assets(
+        asset_kind="SP_ANALYSIS",
+        lifecycle_status="ARCHIVED",
     )
 
-    review = repository.review_knowledge_asset_version(
-        asset_id=asset.asset_id,
-        version_id=asset.current_version_id or "",
-        status="ARCHIVED",
-        reason_code="STALE_DRAFT",
-        note=note,
-        reviewer="reviewer@example.com",
-    )
-
-    assert review is not None
-    reviews = repository.list_knowledge_reviews(asset.asset_id)
-    assert reviews is not None
-    assert reviews[0].to_status == "ARCHIVED"
-    serialized = json.dumps(reviews[0].note, sort_keys=True)
-    assert "CREATE PROCEDURE" not in serialized
-    assert "secret-value" not in serialized
-    assert "contentHash" not in serialized
-    assert "length" not in serialized
-    assert "snippet" not in serialized
-    with pytest.raises(KnowledgePersistenceError) as exc_info:
-        repository.review_knowledge_asset_version(
-            asset_id=asset.asset_id,
-            version_id=asset.current_version_id or "",
-            status="REVIEWED",
-            reason_code="REOPEN_NOT_ALLOWED",
-            note={},
-            reviewer="reviewer@example.com",
-        )
-    assert exc_info.value.code == "KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID"
-    assert exc_info.value.status_code == 409
+    assert asset.asset_id not in {item.asset_id for item in active_assets}
+    assert asset.asset_id in {item.asset_id for item in archived_assets}
 
 
 def test_knowledge_asset_and_fact_search_filters_and_excludes_archived_by_default() -> None:
@@ -386,14 +347,9 @@ def test_knowledge_asset_and_fact_search_filters_and_excludes_archived_by_defaul
         for item in repository.list_job_knowledge_assets(job.job_id) or []
         if item.asset_kind == "SP_ANALYSIS"
     )
-    repository.review_knowledge_asset_version(
-        asset_id=sp_asset.asset_id,
-        version_id=sp_asset.current_version_id or "",
-        status="ARCHIVED",
-        reason_code="SEARCH_EXCLUSION",
-        note={},
-        reviewer="reviewer@example.com",
-    )
+    version = repository.knowledge_versions[sp_asset.current_version_id or ""]
+    version.lifecycle_status = "ARCHIVED"
+    version.archived_at = version.created_at
 
     active_assets = repository.list_knowledge_assets(asset_kind="SP_ANALYSIS")
     archived_assets = repository.list_knowledge_assets(

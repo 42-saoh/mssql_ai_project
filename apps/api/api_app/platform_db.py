@@ -11,9 +11,8 @@ from uuid import UUID, uuid5
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
 from api_app.auth import Actor, VerifiedIdentity, canonical_role_set
-from api_app.contracts import approval_decision_mapping, validation_storage_result
+from api_app.contracts import validation_storage_result
 from api_app.lifecycle import (
-    artifact_status_after_approval,
     artifact_status_after_validation,
     bounded_artifact_records,
     ensure_artifact_can_change,
@@ -25,9 +24,7 @@ from api_app.live_gate import (
     p21_live_portal_enabled,
 )
 from api_app.repositories import (
-    KNOWLEDGE_REVIEW_TARGET_STATUSES,
     AgentRunRecord,
-    ApprovalRecordData,
     ArtifactRecord,
     AuditEventRecord,
     JobRecord,
@@ -38,12 +35,10 @@ from api_app.repositories import (
     KnowledgeFactRecord,
     KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
-    KnowledgeReviewRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkflowRepository,
     WorkRequestRecord,
-    approval_audit_payload,
     audit_correlation_id,
     prefixed_id,
     standardized_audit_payload,
@@ -776,103 +771,6 @@ class MssqlPlatformRepository:
             )
         )
 
-    def add_approval(
-        self,
-        *,
-        artifact_id: str,
-        decision: str,
-        reviewer: str,
-        comment: str,
-        validation_report_id: str | None,
-        reviewer_checklist: list[dict[str, Any]] | None = None,
-        validation_summary: dict[str, Any] | None = None,
-        correlation_id: str | None = None,
-    ) -> ApprovalRecordData:
-        artifact = self.get_artifact(artifact_id)
-        if artifact is None:
-            raise KeyError(artifact_id)
-        mapping = approval_decision_mapping(decision)
-        next_status = artifact_status_after_approval(decision)
-        ensure_artifact_can_change(artifact.status, next_status)
-        record = ApprovalRecordData(
-            approval_id=prefixed_id("aprv"),
-            artifact_id=artifact_id,
-            decision=decision,
-            reviewer=reviewer,
-            comment=comment,
-            validation_report_id=validation_report_id,
-            storage_decision=mapping.storage_decision,
-            persistence_note=mapping.persistence_note,
-            reviewer_checklist=reviewer_checklist or [],
-            validation_summary=validation_summary or {},
-        )
-        self._execute(
-            """
-            INSERT INTO dbo.ARTIFACT_APPROVAL_RECORDS(
-                APRV_ID, ARTF_VER_ID, RVWR_USR_ID, DCISN_CD, RVWR_CNTNT,
-                CHKLST_RSLT_JSON, APRV_DTM
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                storage_uuid(record.approval_id),
-                storage_uuid(f"{artifact_id}:v1"),
-                self._resolve_user_id(reviewer),
-                record.storage_decision,
-                comment,
-                json_text(
-                    {
-                        "approvalId": record.approval_id,
-                        "artifactId": artifact_id,
-                        "apiDecision": decision,
-                        "validationReportId": validation_report_id,
-                        "persistenceNote": record.persistence_note,
-                        "reviewerChecklist": record.reviewer_checklist,
-                        "validationSummary": record.validation_summary,
-                    }
-                ),
-                record.decided_at,
-            ),
-        )
-        artifact.latest_approval_id = record.approval_id
-        artifact.updated_at = utc_now()
-        artifact.status = next_status
-        self._save_artifact(artifact)
-        resolved_correlation_id = correlation_id or self._correlation_for_artifact(artifact)
-        self.record_audit_event(
-            action="APPROVAL_DECISION_RECORDED",
-            target_type="ARTIFACT",
-            target_ref_id=artifact_id,
-            payload=approval_audit_payload(
-                artifact=artifact,
-                approval=record,
-                validation_report_id=validation_report_id,
-                correlation_id=resolved_correlation_id,
-            ),
-            actor=reviewer,
-            correlation_id=resolved_correlation_id,
-        )
-        return record
-
-    def latest_approval_for(self, artifact_id: str) -> ApprovalRecordData | None:
-        row = self._query_one(
-            """
-            SELECT TOP (1)
-                CONVERT(NVARCHAR(36), a.APRV_ID),
-                a.DCISN_CD,
-                a.RVWR_CNTNT,
-                a.CHKLST_RSLT_JSON,
-                a.APRV_DTM,
-                COALESCE(u.EML_ADR, u.LGN_ID)
-            FROM dbo.ARTIFACT_APPROVAL_RECORDS a
-            JOIN dbo.AUTH_USERS u ON u.USR_ID = a.RVWR_USR_ID
-            WHERE a.ARTF_VER_ID = %s
-            ORDER BY a.APRV_DTM DESC
-            """,
-            (storage_uuid(f"{artifact_id}:v1"),),
-        )
-        return approval_from_row(row, artifact_id) if row else None
-
     def record_audit_event(
         self,
         *,
@@ -1127,8 +1025,7 @@ class MssqlPlatformRepository:
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM,
-                   LIFECYCLE_STAT_CD, LIFECYCLE_RSN_CD, REVIEWER_REF_TXT,
-                   REVIEW_DTM, ARCHV_DTM
+                   LIFECYCLE_STAT_CD, ARCHV_DTM
             FROM (
                 SELECT
                     a.ASST_ID,
@@ -1142,9 +1039,6 @@ class MssqlPlatformRepository:
                     v.VER_SEQ_NO AS CUR_VER_NO,
                     v.CNTNT_HASH_SHA256_VAL,
                     v.LIFECYCLE_STAT_CD,
-                    v.LIFECYCLE_RSN_CD,
-                    v.REVIEWER_REF_TXT,
-                    v.REVIEW_DTM,
                     v.ARCHV_DTM,
                     a.SRC_JOB_ID,
                     a.CRE_DTM,
@@ -1209,8 +1103,7 @@ class MssqlPlatformRepository:
                    a.ASST_ID, a.ASST_KIND_CD, a.DB_PRFL_REF_TXT, a.TRGT_TP_CD,
                    a.TRGT_SCHM_NM, a.TRGT_OBJ_NM, a.LOGICAL_KEY_TXT, a.CUR_VER_ID,
                    a.CUR_VER_NO, a.CNTNT_HASH_SHA256_VAL, a.SRC_JOB_ID, a.CRE_DTM, a.UPD_DTM,
-                   v.LIFECYCLE_STAT_CD, v.LIFECYCLE_RSN_CD, v.REVIEWER_REF_TXT,
-                   v.REVIEW_DTM, v.ARCHV_DTM
+                   v.LIFECYCLE_STAT_CD, v.ARCHV_DTM
             FROM dbo.KNOWLEDGE_ASSETS a
             LEFT JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
               ON v.ASST_VER_ID = a.CUR_VER_ID
@@ -1228,8 +1121,7 @@ class MssqlPlatformRepository:
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM,
-                   LIFECYCLE_STAT_CD, LIFECYCLE_RSN_CD, REVIEWER_REF_TXT,
-                   REVIEW_DTM, ARCHV_DTM
+                   LIFECYCLE_STAT_CD, ARCHV_DTM
             FROM (
                 SELECT
                     a.ASST_ID,
@@ -1246,9 +1138,6 @@ class MssqlPlatformRepository:
                     a.CRE_DTM,
                     a.UPD_DTM,
                     v.LIFECYCLE_STAT_CD,
-                    v.LIFECYCLE_RSN_CD,
-                    v.REVIEWER_REF_TXT,
-                    v.REVIEW_DTM,
                     v.ARCHV_DTM
                 FROM dbo.KNOWLEDGE_ASSETS a
                 LEFT JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
@@ -1271,8 +1160,7 @@ class MssqlPlatformRepository:
             """
             SELECT ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
                    PAYLD_JSON, SRC_JOB_ID, CRE_DTM, LIFECYCLE_STAT_CD,
-                   LIFECYCLE_RSN_CD, LIFECYCLE_NOTE_JSON, REVIEWER_REF_TXT,
-                   REVIEW_DTM, ARCHV_DTM
+                   ARCHV_DTM
             FROM dbo.KNOWLEDGE_ASSET_VERSIONS
             WHERE ASST_ID = %s
             ORDER BY VER_SEQ_NO DESC
@@ -1291,8 +1179,7 @@ class MssqlPlatformRepository:
             """
             SELECT ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
                    PAYLD_JSON, SRC_JOB_ID, CRE_DTM, LIFECYCLE_STAT_CD,
-                   LIFECYCLE_RSN_CD, LIFECYCLE_NOTE_JSON, REVIEWER_REF_TXT,
-                   REVIEW_DTM, ARCHV_DTM
+                   ARCHV_DTM
             FROM dbo.KNOWLEDGE_ASSET_VERSIONS
             WHERE ASST_ID = %s AND ASST_VER_ID = %s
             """,
@@ -1387,122 +1274,6 @@ class MssqlPlatformRepository:
             )
             for row in rows
         ]
-
-    def review_knowledge_asset_version(
-        self,
-        *,
-        asset_id: str,
-        version_id: str,
-        status: str,
-        reason_code: str,
-        note: dict[str, Any],
-        reviewer: str,
-        actor: str = "api-system",
-    ) -> KnowledgeReviewRecord | None:
-        self._require_knowledge_schema()
-        version = self.get_knowledge_asset_version(asset_id, version_id)
-        if version is None:
-            return None
-        if version.lifecycle_status == "ARCHIVED" or status not in KNOWLEDGE_REVIEW_TARGET_STATUSES:
-            raise KnowledgePersistenceError(
-                "Knowledge asset lifecycle transition is not allowed.",
-                code="KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID",
-                status_code=409,
-            )
-        now = utc_now()
-        review = KnowledgeReviewRecord(
-            review_id=prefixed_id("krvw"),
-            asset_id=asset_id,
-            version_id=version_id,
-            from_status=version.lifecycle_status,
-            to_status=status,
-            reason_code=reason_code,
-            note=dict(note),
-            reviewer=reviewer,
-            created_at=now,
-        )
-        archived_at = now if status == "ARCHIVED" else None
-        self._execute(
-            """
-            UPDATE dbo.KNOWLEDGE_ASSET_VERSIONS
-            SET LIFECYCLE_STAT_CD = %s,
-                LIFECYCLE_RSN_CD = %s,
-                LIFECYCLE_NOTE_JSON = %s,
-                REVIEWER_REF_TXT = %s,
-                REVIEW_DTM = %s,
-                ARCHV_DTM = %s
-            WHERE ASST_ID = %s AND ASST_VER_ID = %s
-            """,
-            (
-                status,
-                reason_code,
-                json_text(note),
-                reviewer,
-                now,
-                archived_at,
-                asset_id,
-                version_id,
-            ),
-        )
-        self._execute(
-            """
-            INSERT INTO dbo.KNOWLEDGE_ASSET_REVIEWS(
-                RVW_ID, ASST_ID, ASST_VER_ID, FROM_STAT_CD, TO_STAT_CD,
-                RSN_CD, NOTE_JSON, REVIEWER_REF_TXT, CRE_DTM
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                review.review_id,
-                asset_id,
-                version_id,
-                review.from_status,
-                status,
-                reason_code,
-                json_text(note),
-                reviewer,
-                now,
-            ),
-        )
-        self.record_audit_event(
-            action="KNOWLEDGE_ASSET_REVIEW_RECORDED",
-            target_type="KNOWLEDGE_ASSET_VERSION",
-            target_ref_id=version_id,
-            payload={
-                "assetId": asset_id,
-                "fromStatus": review.from_status,
-                "toStatus": status,
-                "reasonCode": reason_code,
-            },
-            actor=actor,
-        )
-        return review
-
-    def list_knowledge_reviews(
-        self,
-        asset_id: str,
-        *,
-        version_id: str | None = None,
-    ) -> list[KnowledgeReviewRecord] | None:
-        self._require_knowledge_schema()
-        if self.get_knowledge_asset(asset_id) is None:
-            return None
-        conditions = ["ASST_ID = %s"]
-        params: list[Any] = [asset_id]
-        if version_id:
-            conditions.append("ASST_VER_ID = %s")
-            params.append(version_id)
-        rows = self._query_all(
-            f"""
-            SELECT RVW_ID, ASST_ID, ASST_VER_ID, FROM_STAT_CD, TO_STAT_CD,
-                   RSN_CD, NOTE_JSON, REVIEWER_REF_TXT, CRE_DTM
-            FROM dbo.KNOWLEDGE_ASSET_REVIEWS
-            WHERE {' AND '.join(conditions)}
-            ORDER BY CRE_DTM DESC, RVW_ID DESC
-            """,
-            tuple(params),
-        )
-        return [knowledge_review_from_row(row) for row in rows]
 
     def save_knowledge_export(
         self,
@@ -1668,7 +1439,6 @@ class MssqlPlatformRepository:
         public_artifact_id = str(binding.get("publicArtifactId") or row[0])
         public_job_id = str(binding.get("publicJobId") or row[10] or row[1])
         latest_validation = self.latest_validation_for(public_artifact_id)
-        latest_approval = self.latest_approval_for(public_artifact_id)
         return ArtifactRecord(
             artifact_id=public_artifact_id,
             job_id=public_job_id,
@@ -1688,7 +1458,6 @@ class MssqlPlatformRepository:
                 latest_validation.validation_report_id if latest_validation else None
             ),
             latest_validation_status=latest_validation.status if latest_validation else None,
-            latest_approval_id=latest_approval.approval_id if latest_approval else None,
         )
 
     def _insert_job_step(
@@ -1770,7 +1539,6 @@ class MssqlPlatformRepository:
             "KNOWLEDGE_FACTS",
             "KNOWLEDGE_FACT_EDGES",
             "KNOWLEDGE_ASSET_JOB_LINKS",
-            "KNOWLEDGE_ASSET_REVIEWS",
             "KNOWLEDGE_EXPORTS",
         }
         rows = self._query_all(
@@ -1784,7 +1552,6 @@ class MssqlPlatformRepository:
                 'KNOWLEDGE_FACTS',
                 'KNOWLEDGE_FACT_EDGES',
                 'KNOWLEDGE_ASSET_JOB_LINKS',
-                'KNOWLEDGE_ASSET_REVIEWS',
                 'KNOWLEDGE_EXPORTS'
               )
             """,
@@ -1795,22 +1562,8 @@ class MssqlPlatformRepository:
         required_columns_by_table = {
             "KNOWLEDGE_ASSET_VERSIONS": {
                 "LIFECYCLE_STAT_CD",
-                "LIFECYCLE_RSN_CD",
                 "LIFECYCLE_NOTE_JSON",
-                "REVIEWER_REF_TXT",
-                "REVIEW_DTM",
                 "ARCHV_DTM",
-            },
-            "KNOWLEDGE_ASSET_REVIEWS": {
-                "RVW_ID",
-                "ASST_ID",
-                "ASST_VER_ID",
-                "FROM_STAT_CD",
-                "TO_STAT_CD",
-                "RSN_CD",
-                "NOTE_JSON",
-                "REVIEWER_REF_TXT",
-                "CRE_DTM",
             },
         }
         column_rows = self._query_all(
@@ -1818,21 +1571,10 @@ class MssqlPlatformRepository:
             SELECT TABLE_NAME, COLUMN_NAME
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME IN ('KNOWLEDGE_ASSET_VERSIONS', 'KNOWLEDGE_ASSET_REVIEWS')
+              AND TABLE_NAME IN ('KNOWLEDGE_ASSET_VERSIONS')
               AND COLUMN_NAME IN (
-                'RVW_ID',
-                'ASST_ID',
-                'ASST_VER_ID',
-                'FROM_STAT_CD',
-                'TO_STAT_CD',
-                'RSN_CD',
-                'NOTE_JSON',
-                'CRE_DTM',
                 'LIFECYCLE_STAT_CD',
-                'LIFECYCLE_RSN_CD',
                 'LIFECYCLE_NOTE_JSON',
-                'REVIEWER_REF_TXT',
-                'REVIEW_DTM',
                 'ARCHV_DTM'
               )
             """,
@@ -1850,7 +1592,6 @@ class MssqlPlatformRepository:
             )
         required_indexes_by_table = {
             "KNOWLEDGE_ASSET_VERSIONS": {"IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE"},
-            "KNOWLEDGE_ASSET_REVIEWS": {"IX_KNOWLEDGE_ASSET_REVIEWS_VERSION"},
             "KNOWLEDGE_FACTS": {"IX_KNOWLEDGE_FACTS_SEARCH"},
         }
         index_rows = self._query_all(
@@ -1862,7 +1603,6 @@ class MssqlPlatformRepository:
             WHERE s.name = 'dbo'
               AND i.name IN (
                 'IX_KNOWLEDGE_ASSET_VERSIONS_LIFECYCLE',
-                'IX_KNOWLEDGE_ASSET_REVIEWS_VERSION',
                 'IX_KNOWLEDGE_FACTS_SEARCH'
               )
             """,
@@ -1948,11 +1688,7 @@ class MssqlPlatformRepository:
             source_job_id=str(row[5]) if row[5] else None,
             created_at=as_datetime(row[6]),
             lifecycle_status=str(row[7] or "DRAFT") if len(row) > 7 else "DRAFT",
-            review_reason_code=str(row[8]) if len(row) > 8 and row[8] else None,
-            review_note=dict(parse_json(row[9], {})) if len(row) > 9 else {},
-            reviewer=str(row[10]) if len(row) > 10 and row[10] else None,
-            reviewed_at=as_datetime(row[11]) if len(row) > 11 and row[11] else None,
-            archived_at=as_datetime(row[12]) if len(row) > 12 and row[12] else None,
+            archived_at=as_datetime(row[8]) if len(row) > 8 and row[8] else None,
         )
 
     def _knowledge_facts(
@@ -2141,27 +1877,6 @@ def validation_from_row(
     )
 
 
-def approval_from_row(
-    row: tuple[Any, ...],
-    artifact_id: str,
-) -> ApprovalRecordData:
-    payload = parse_json(row[3], {})
-    decision = str(payload.get("apiDecision") or storage_approval_to_api(str(row[1])))
-    return ApprovalRecordData(
-        approval_id=str(payload.get("approvalId") or row[0]),
-        artifact_id=str(payload.get("artifactId") or artifact_id),
-        decision=decision,
-        reviewer=str(row[5] or ""),
-        comment=str(row[2] or ""),
-        validation_report_id=payload.get("validationReportId"),
-        storage_decision=str(row[1]),
-        persistence_note=str(payload.get("persistenceNote") or ""),
-        reviewer_checklist=list(payload.get("reviewerChecklist") or []),
-        validation_summary=dict(payload.get("validationSummary") or {}),
-        decided_at=as_datetime(row[4]),
-    )
-
-
 def agent_run_from_row(row: tuple[Any, ...], job_id: str) -> AgentRunRecord:
     return AgentRunRecord(
         agent_run_id=str(row[0]),
@@ -2192,24 +1907,7 @@ def knowledge_asset_from_row(row: tuple[Any, ...]) -> KnowledgeAssetRecord:
         created_at=as_datetime(row[11]),
         updated_at=as_datetime(row[12]),
         lifecycle_status=str(row[13] or "DRAFT") if len(row) > 13 else "DRAFT",
-        review_reason_code=str(row[14]) if len(row) > 14 and row[14] else None,
-        reviewer=str(row[15]) if len(row) > 15 and row[15] else None,
-        reviewed_at=as_datetime(row[16]) if len(row) > 16 and row[16] else None,
-        archived_at=as_datetime(row[17]) if len(row) > 17 and row[17] else None,
-    )
-
-
-def knowledge_review_from_row(row: tuple[Any, ...]) -> KnowledgeReviewRecord:
-    return KnowledgeReviewRecord(
-        review_id=str(row[0]),
-        asset_id=str(row[1]),
-        version_id=str(row[2]),
-        from_status=str(row[3] or "DRAFT"),
-        to_status=str(row[4] or "REVIEW_REQUIRED"),
-        reason_code=str(row[5] or ""),
-        note=dict(parse_json(row[6], {})),
-        reviewer=str(row[7] or ""),
-        created_at=as_datetime(row[8]),
+        archived_at=as_datetime(row[14]) if len(row) > 14 and row[14] else None,
     )
 
 
@@ -2279,10 +1977,6 @@ def content_type_for_artifact(record: ArtifactRecord) -> str:
 
 def storage_validation_to_api(value: str) -> str:
     return "PASSED" if value == "PASS" else "FAILED"
-
-
-def storage_approval_to_api(value: str) -> str:
-    return "APPROVE" if value == "APPROVED" else "REJECT"
 
 
 def normalize_list_limit(limit: int | None, *, default: int = 20) -> int:

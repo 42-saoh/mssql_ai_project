@@ -14,11 +14,11 @@ rules:
       - DDL_DRAFT
     description: 모든 생성 artifact에는 evidence ref 또는 명시적인 review-required marker가 있어야 한다.
 
-  - id: workflow.approval.before_publish
+  - id: workflow.validation.before_publish
     severity: error
     appliesTo:
       - artifact-workflow
-    description: artifact에 passed validation report와 approval record가 없으면 publish를 허용하지 않는다.
+    description: artifact에 passed validation report가 없으면 publish를 허용하지 않으며 현재 publish endpoint도 노출하지 않는다.
 
   - id: mcp.read_only.boundary
     severity: error

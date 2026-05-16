@@ -154,18 +154,17 @@
   Responses API 입력으로 보낼 수 있다.
 - Knowledge assetization 은 기본 `KNOWLEDGE_ASSETIZATION_ENABLED=1` 이며, SP workflow 와
   metadata analyze 의 `persistKnowledge=true` 기본값으로 sanitized versioned knowledge asset 을
-  축적한다. rollout 중 꺼야 하면 env 를 `0` 으로 두고 skip marker 를 확인한다. v5 schema 는
+  축적한다. rollout 중 꺼야 하면 env 를 `0` 으로 두고 skip marker 를 확인한다. v6 schema 는
   manual-apply only 이며, 필수 table 누락은 `KNOWLEDGE_SCHEMA_REQUIRED` 로 반환된다.
-- P35 knowledge lifecycle/search/review uses the same v5 manual-apply DDL. Readiness checks
-  require lifecycle columns, `KNOWLEDGE_ASSET_REVIEWS`, and critical search/review indexes in
-  addition to the P34 tables. Missing objects return `KNOWLEDGE_SCHEMA_REQUIRED`; Codex/API do
-  not auto-apply DDL. `REVIEWED` remains draft/reviewable knowledge, not production-ready or
-  automatic conversion approval evidence.
+- Knowledge lifecycle/search uses `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql`.
+  Readiness checks require lifecycle/archive columns and critical search indexes in addition to the
+  P34 tables. Missing objects return `KNOWLEDGE_SCHEMA_REQUIRED`; Codex/API do not auto-apply DDL.
+  `REVIEW_REQUIRED` remains an evidence caveat, not a human review or conversion approval.
 - `P35_KNOWLEDGE_LIVE_GATE=1` is an explicit confidence-only live gate for recent P34/P35
   knowledge behavior. It requires live OpenAI, read-only `ppm`/`PPM` metadata, and a manually
-  prepared PLF v5 schema. It writes normal PLF workflow/knowledge/export/audit/review records and
-  records one non-terminal `REVIEWED` event on a real PPM knowledge version, but never reads row
-  data, executes procedures, applies DDL, or treats `REVIEWED` as production approval.
+  prepared PLF v6 schema. It writes normal PLF workflow/knowledge/export/audit records, but never
+  writes review records, reads row data, executes procedures, applies DDL, or treats caveats as
+  production approval.
 For external PLF/PPM targets that complete TCP open but need a longer TDS handshake, run live
 confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
 `PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20`.
@@ -212,7 +211,7 @@ confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
 ## 로그와 추적
 
 - 모든 장시간 작업은 `request_id`, `job_id`, `artifact_id` 를 로그 문맥에 포함한다.
-- validation / approval / publish 이벤트는 감사 로그 대상이다.
+- request / job / validation / knowledge export 이벤트는 감사 로그 대상이다.
 - 생성 결과에는 `snapshot_id`, `registry_version_refs`, `generator_version` 을 남긴다.
 - LLM trace 에는 raw prompt, raw SP definition, raw provider response text 를 남기지 않는다.
 - LLM trace summary 는 hash/token/latency/status 중심으로 노출한다. AI MCP/platform tool orchestration

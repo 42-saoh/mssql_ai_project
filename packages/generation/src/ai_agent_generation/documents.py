@@ -60,10 +60,25 @@ class SPAnalysisDocumentRenderer:
             "- TODO: transaction boundary 확인",
             "- TODO: dynamic SQL/temp table 여부는 analysis engine 결과로 확정",
             "",
-            "## review_checklist",
-            "- [x] evidence_included",
-            "- [x] draft_only_boundary_marked",
-            "- [ ] reviewer_confirms_business_rules",
+            "## quality_summary",
+            "- evidence_included: true",
+            "- draft_only_boundary_marked: true",
+            "- business rules are draft caveats when not evidence-linked",
+            "",
+            "## evidence_map",
+            *[
+                f"- {source.display_type}: `{source.name}` - {source.reason}"
+                for source in context.evidence_sources
+            ],
+            "",
+            "## known_caveats",
+            "- REVIEW_REQUIRED items mean evidence needs to be strengthened.",
+            "",
+            "## next_evidence_to_collect",
+            "- Confirm transaction boundary, branch conditions, DML targets, and call-flow depth.",
+            "",
+            "## draft_readiness",
+            "- Ready as a draft analysis input; no execution or apply path is included.",
         ]
         return RenderedArtifact(
             artifact_type=self.artifact_type,
@@ -117,10 +132,25 @@ class DependencyReportRenderer:
                 "- TODO: nested procedure/function/view dependencies 확인",
                 "- TODO: read/write dependency direction 확정",
                 "",
-                "## review_checklist",
-                "- [x] evidence_included",
-                "- [x] draft_only_boundary_marked",
-                "- [ ] reviewer_confirms_dependency_direction",
+                "## quality_summary",
+                "- evidence_included: true",
+                "- draft_only_boundary_marked: true",
+                "- dependency direction remains a caveat when resolver evidence is incomplete",
+                "",
+                "## evidence_map",
+                *[
+                    f"- {source.display_type}: `{source.name}`"
+                    for source in context.evidence_sources
+                ],
+                "",
+                "## known_caveats",
+                "- REVIEW_REQUIRED items mean evidence needs to be strengthened.",
+                "",
+                "## next_evidence_to_collect",
+                "- Confirm nested procedure/function/view dependencies and read/write direction.",
+                "",
+                "## draft_readiness",
+                "- Ready as a draft dependency input; no execution or apply path is included.",
             ]
         )
         return RenderedArtifact(
@@ -203,7 +233,7 @@ def _table_text(value: object) -> str:
 def _llm_semantic_lines(payload: dict) -> list[str]:
     if not payload:
         return ["- 상태: 요청하지 않음(`NOT_REQUESTED`)"]
-    lines = ["- 상태: 검토 필요(`REVIEW_REQUIRED`)"]
+    lines = ["- 상태: 근거 보강 필요(`REVIEW_REQUIRED`)"]
     for rule in payload.get("businessRules", []) or []:
         lines.append(f"- 비즈니스 규칙({rule.get('category')}): {rule.get('summary')}")
     for point in payload.get("modernizationPoints", []) or []:

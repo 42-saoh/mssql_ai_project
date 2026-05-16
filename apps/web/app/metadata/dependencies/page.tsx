@@ -111,6 +111,10 @@ function statusValue(value: unknown): "PASSED" | "REVIEW_REQUIRED" {
   return text(value) === "CONFIRMED" ? "PASSED" : "REVIEW_REQUIRED";
 }
 
+function statusLabel(value: unknown, fallback = "근거 보강 필요"): string {
+  return text(value) === "CONFIRMED" ? "Confirmed" : fallback;
+}
+
 function invocationFor(
   mode: DependencyMode,
   params: Record<string, string | string[] | undefined>,
@@ -369,7 +373,7 @@ function ClosureForm({
             value="true"
             defaultChecked={includeReviewRequired}
           />
-          Include review-required graph items
+          Include evidence-caveated graph items
         </label>
       </div>
       <div className="form-actions">
@@ -464,7 +468,7 @@ function InvocationResult({
         </div>
         <StatusPill
           value={data.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-          label={data.reviewRequired ? "Review required" : "Evidence only"}
+          label={data.reviewRequired ? "근거 보강 필요" : "Evidence only"}
         />
       </div>
       <dl className="metric-grid">
@@ -531,7 +535,7 @@ function ClosureResult({
             </div>
             <StatusPill
               value={statusValue(node.reviewStatus)}
-              label={text(node.reviewStatus, "REVIEW_REQUIRED")}
+              label={statusLabel(node.reviewStatus)}
             />
           </article>
         ))}
@@ -546,7 +550,7 @@ function ClosureResult({
             </div>
             <StatusPill
               value={statusValue(edge.resolutionStatus)}
-              label={text(edge.resolutionStatus, "REVIEW_REQUIRED")}
+              label={statusLabel(edge.resolutionStatus)}
             />
           </article>
         ))}
@@ -561,7 +565,7 @@ function ClosureResult({
             </div>
             <StatusPill
               value={statusValue(item.resolutionStatus)}
-              label={text(item.resolutionStatus, "REVIEW_REQUIRED")}
+              label={statusLabel(item.resolutionStatus)}
             />
           </article>
         ))}
@@ -587,7 +591,7 @@ function ResolverResult({
         <p>
           {selected
             ? `${objectLabel(selected)} - ${text(selected.resolutionStrategy, "CONFIRMED")}`
-            : text(data.resolutionStrategy, "REVIEW_REQUIRED")}
+            : statusLabel(data.resolutionStrategy)}
         </p>
       </div>
       <ResultList title="Candidates">

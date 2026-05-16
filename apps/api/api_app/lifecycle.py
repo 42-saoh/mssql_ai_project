@@ -18,7 +18,6 @@ ALLOWED_JOB_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.ANALYZING: {JobStatus.GENERATING},
     JobStatus.GENERATING: {JobStatus.VALIDATING},
     JobStatus.VALIDATING: {JobStatus.VALIDATION_COMPLETE, JobStatus.FAILED},
-    JobStatus.REVIEW_PENDING: {JobStatus.CANCELED},
 }
 
 TERMINAL_JOB_STATUSES = {
@@ -61,14 +60,6 @@ def artifact_status_after_validation(status: str, current: ArtifactStatus) -> Ar
     if status == "REVIEW_REQUIRED":
         return current
     return current
-
-
-def artifact_status_after_approval(decision: str) -> ArtifactStatus:
-    if decision == "APPROVE":
-        return ArtifactStatus.APPROVED
-    if decision == "REJECT":
-        return ArtifactStatus.REJECTED
-    return ArtifactStatus.REVIEW_PENDING
 
 
 def normalize_page_limit(limit: int | None) -> int:

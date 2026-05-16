@@ -69,10 +69,13 @@ def test_java_mybatis_sp_wrapper_matches_golden_manifest_and_files() -> None:
     assert "## generator_metadata" in content
     assert "- generatorVersion: `generation-core-0.1.0`" in content
     assert "- artifactStatus: `DRAFT`" in content
-    assert "- publishBoundary: `blocked_until_validation_review_approval`" in content
+    assert "- evidenceCaveat: `true`" in content
+    assert "- draftQualityGate: `validation_only`" in content
     assert "## input_snapshot" in content
     assert "## sql_risk_markers" in content
-    assert "## diff_review_summary" in content
+    assert "## draft_change_summary" in content
+    assert "## evidence_map" in content
+    assert "## known_caveats" in content
     assert "template:java_mybatis_sp_wrapper@0.2.0" in bundle.manifest.registry_refs
     assert bundle.manifest.extra["inputSnapshotHash"] == context.input_snapshot_hash
 

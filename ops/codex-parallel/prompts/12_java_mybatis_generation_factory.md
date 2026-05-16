@@ -4,7 +4,7 @@
 ## 공통 운영 철학
 
 - 현재 대화 요청과 첨부 ZIP의 실제 파일 구조를 최우선 기준으로 삼는다.
-- P00~P07의 worktree 병렬 개발, Docker 테스트 격리, read-only metadata, draft-only generation, validation/approval/audit 원칙을 유지한다.
+- P00~P07의 worktree 병렬 개발, Docker 테스트 격리, read-only metadata, draft-only generation, validation/evidence/audit 원칙을 유지한다.
 - `PLF` 는 platform DB, `PPM` 은 pilot analysis target DB 이다. PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않고 blocker 로 보고한다.
 - 실제 row data 조회, procedure 실행, 자동 DDL/DML, 운영 DB 직접 변경, 승인 없는 배포 자동화는 금지한다.
 - 비밀값, 실제 비밀번호, 토큰, 실데이터는 코드/문서/fixture/test snapshot 에 넣지 않는다.
@@ -59,7 +59,7 @@ PI 3기 표준에 맞춘 Java/MyBatis 초안 생성 factory를 template registry
 - package/class/method/path/namespace naming은 policy asset에서 읽고, 조용한 새 규칙을 만들지 않는다.
 - generation manifest에는 input snapshot, template version, policy version, evidence refs, TODO/review checklist를 기록한다.
 - golden sample을 확장하되 PPM manifest가 template-only이면 실제 object name 기반 golden을 만들지 않는다.
-- 생성물 diff/review checklist에는 수동 검토 항목, 확정 불가 영역, SQL 위험 marker를 포함한다.
+- 생성물 diff/quality checklist에는 근거 보강 항목, 확정 불가 영역, SQL 위험 marker를 포함한다.
 - 실제 프로젝트 소스에 생성물을 자동 반영하지 않는다.
 
 ## 검증 명령

@@ -54,13 +54,6 @@ class KnowledgeSchemaRequiredRepository(MemoryWorkflowRepository):
             status_code=503,
         )
 
-    def review_knowledge_asset_version(self, **_kwargs: Any):
-        raise KnowledgePersistenceError(
-            "Knowledge assetization requires v5 platform schema objects.",
-            code="KNOWLEDGE_SCHEMA_REQUIRED",
-            status_code=503,
-        )
-
 
 @pytest.fixture
 def client_and_repository(
@@ -188,12 +181,7 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
             "/api/v1/knowledge/assets/"
             f"{sp_knowledge['assetId']}/versions/{sp_knowledge['currentVersionId']}/review"
         ),
-        json={
-            "status": "REVIEWED",
-            "reasonCode": "ROUTE_FIXTURE_REVIEW",
-            "reviewer": "reviewer@example.com",
-            "comment": "reviewed sanitized fixture knowledge",
-        },
+        json={"status": "REVIEW_REQUIRED"},
     )
     reviews = client.get(
         f"/api/v1/knowledge/assets/{sp_knowledge['assetId']}/reviews",
@@ -208,10 +196,8 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert empty_fact_search.json()["code"] == "KNOWLEDGE_SEARCH_FILTER_REQUIRED"
     assert fact_search.status_code == 200
     assert fact_search.json()["facts"]
-    assert review.status_code == 200
-    assert review.json()["toStatus"] == "REVIEWED"
-    assert reviews.status_code == 200
-    assert reviews.json()["reviews"][0]["reasonCode"] == "ROUTE_FIXTURE_REVIEW"
+    assert review.status_code == 404
+    assert reviews.status_code == 404
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
@@ -499,7 +485,7 @@ def test_blank_sp_analysis_target_fields_return_validation_error_without_job(
     assert repository.jobs == {}
 
 
-def test_approve_without_passed_validation_returns_workflow_conflict(
+def test_approval_route_is_absent(
     client: TestClient,
 ) -> None:
     headers = {"X-Correlation-ID": "corr-approve-conflict"}
@@ -514,20 +500,13 @@ def test_approve_without_passed_validation_returns_workflow_conflict(
     ]
     artifact_id = artifacts[0]["artifactId"]
 
-    approval = client.post(
+    response = client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
         headers=headers,
-        json={
-            "decision": "APPROVE",
-            "reviewer": "reviewer@example.com",
-            "comment": "approval must wait for passed validation",
-        },
+        json={"decision": "APPROVE"},
     )
 
-    assert approval.status_code == 400
-    assert approval.headers["X-Correlation-ID"] == "corr-approve-conflict"
-    assert approval.json()["code"] == "WORKFLOW_STATE_CONFLICT"
-    assert "PASSED" in approval.json()["detail"]
+    assert response.status_code == 404
 
     preview = client.get(f"/api/v1/artifacts/{artifact_id}", headers=headers)
     assert preview.status_code == 200
@@ -654,8 +633,20 @@ def test_approval_route_records_enriched_audit_payload_for_passed_validation(
                 "## assumptions_and_todo",
                 "None.",
                 "",
-                "## review_checklist",
-                "- [x] validation package passed.",
+                "## quality_summary",
+                "- validation package passed.",
+                "",
+                "## evidence_map",
+                "- MSSQL_METADATA fixture evidence bound",
+                "",
+                "## known_caveats",
+                "- none",
+                "",
+                "## next_evidence_to_collect",
+                "- none",
+                "",
+                "## draft_readiness",
+                "- draft only",
                 "",
             ]
         ),
@@ -695,41 +686,11 @@ def test_approval_route_records_enriched_audit_payload_for_passed_validation(
     approval = client.post(
         f"/api/v1/artifacts/{artifact.artifact_id}/approval-decisions",
         headers={"X-Correlation-ID": "corr-route-p17c-approval"},
-        json={
-            "decision": "APPROVE",
-            "reviewer": "human.reviewer@example.com",
-            "comment": "route-level approval binding coverage",
-            "validationReportId": validation.validation_report_id,
-        },
+        json={"decision": "APPROVE", "validationReportId": validation.validation_report_id},
     )
 
-    assert approval.status_code == 201
-    assert approval.headers["X-Correlation-ID"] == "corr-route-p17c-approval"
-    assert approval.json()["decision"] == "APPROVE"
-    assert set(approval.json()) == {
-        "approvalId",
-        "artifactId",
-        "decision",
-        "reviewer",
-        "comment",
-        "decidedAt",
-    }
-
-    audit = [
-        event
-        for event in repository.audit_events
-        if event.action == "APPROVAL_DECISION_RECORDED"
-    ][-1]
-    assert audit.correlation_id == "corr-route-p17c-approval"
-    assert audit.payload["correlationId"] == "corr-route-p17c-approval"
-    assert audit.payload["artifactVersion"] == "2026-05-06.p17b.v1"
-    assert audit.payload["artifactRef"]["artifactId"] == artifact.artifact_id
-    assert audit.payload["validationRef"]["validationReportId"] == (
-        validation.validation_report_id
-    )
-    assert audit.payload["approvalRef"]["approvalId"] == approval.json()["approvalId"]
-    assert audit.payload["selectedObjectRefs"] == ["PROCEDURE:dbo.GetInspItemsCd"]
-    assert audit.payload["evidenceRefs"] == artifact.evidence_refs
+    assert approval.status_code == 404
+    assert not any(event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events)
 
 
 def test_publish_and_export_routes_are_not_exposed(client: TestClient) -> None:
@@ -1111,7 +1072,7 @@ def test_sp_workflow_preserves_knowledge_schema_required_failure_code(
     assert job.error_code == "KNOWLEDGE_SCHEMA_REQUIRED"
 
 
-def test_knowledge_lifecycle_routes_map_schema_required_to_503(
+def test_knowledge_routes_map_schema_required_to_503_and_review_route_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
@@ -1127,11 +1088,7 @@ def test_knowledge_lifecycle_routes_map_schema_required_to_503(
         facts = client.get("/api/v1/knowledge/facts/search", params={"objectRef": "dbo"})
         review = client.post(
             "/api/v1/knowledge/assets/know_1/versions/knowv_1/review",
-            json={
-                "status": "REVIEWED",
-                "reasonCode": "SCHEMA_REQUIRED",
-                "reviewer": "reviewer@example.com",
-            },
+            json={"status": "REVIEW_REQUIRED"},
         )
     finally:
         app.dependency_overrides.clear()
@@ -1141,8 +1098,7 @@ def test_knowledge_lifecycle_routes_map_schema_required_to_503(
     assert assets.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
     assert facts.status_code == 503
     assert facts.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
-    assert review.status_code == 503
-    assert review.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert review.status_code == 404
 
 
 def test_unknown_resources_return_not_found(client: TestClient) -> None:

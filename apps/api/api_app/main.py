@@ -4,7 +4,6 @@ from fastapi.responses import JSONResponse
 
 from api_app.errors import ERROR_CODE_HEADER, error_payload, normalized_http_error_content
 from api_app.platform_db import PlatformPersistenceError
-from api_app.routes.approvals import router as approvals_router
 from api_app.routes.artifacts import router as artifacts_router
 from api_app.routes.health import router as health_router
 from api_app.routes.jobs import router as jobs_router
@@ -38,7 +37,6 @@ app.include_router(health_router)
 app.include_router(jobs_router)
 app.include_router(requests_router)
 app.include_router(artifacts_router)
-app.include_router(approvals_router)
 app.include_router(metadata_router)
 app.include_router(knowledge_router)
 app.include_router(registry_router)

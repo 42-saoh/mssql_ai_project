@@ -19,8 +19,9 @@ def test_java_mybatis_policy_exists_and_parses() -> None:
     assert data["policyName"] == "project-ai-java-mybatis-draft-generation"
     assert data["mode"]["generation"] == "draft_only"
     assert data["mode"]["evidence_required"] is True
-    assert data["mode"]["review_required"] is True
-    assert data["mode"]["approval_required"] is True
+    assert data["mode"]["quality_caveats_enabled"] is True
+    assert "review_required" not in data["mode"]
+    assert "approval_required" not in data["mode"]
     assert "metadataCrud" in data["generationModes"]
     assert "spWrapper" in data["generationModes"]
     assert "spRebuild" in data["generationModes"]

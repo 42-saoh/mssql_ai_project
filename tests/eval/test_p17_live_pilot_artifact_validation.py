@@ -12,7 +12,7 @@ from ai_agent_validation import (
 
 ROOT = Path(__file__).resolve().parents[2]
 P17B_FIXTURE = ROOT / "fixtures" / "eval" / "live_pilot_artifact_validation_p17_v1.yaml"
-P17C_FIXTURE = ROOT / "fixtures" / "eval" / "manual_approval_audit_p17_v1.yaml"
+P17C_FIXTURE = ROOT / "fixtures" / "eval" / "draft_quality_audit_p17_v1.yaml"
 P17_BLOCKER_FIXTURE = (
     ROOT / "fixtures" / "eval" / "live_pilot_blocker_closure_p17_v1.yaml"
 )
@@ -117,40 +117,39 @@ def test_p17b_release_critical_validation_items_all_pass_without_overclaim() -> 
     assert fixture["quality_report"]["release_critical_failed_count"] == 0
     assert fixture["quality_report"]["release_critical_review_required_count"] == 0
     assert fixture["live_release_decision_after_p17b"]["decision"] == "NO_GO"
-    assert fixture["active_blockers_after_p17b"] == ["MANUAL_APPROVAL_EVIDENCE_MISSING"]
+    assert fixture["active_blockers_after_p17b"] == ["DRAFT_QUALITY_EVIDENCE_MISSING"]
     assert "production-ready: true" not in P17B_FIXTURE.read_text(encoding="utf-8")
     assert "PUBLISHED" not in P17B_FIXTURE.read_text(encoding="utf-8")
 
 
-def test_p17c_human_approval_binds_p17b_targets_and_closes_blocker() -> None:
+def test_p17c_draft_quality_binds_p17b_targets_and_closes_blocker() -> None:
     fixture = _yaml(P17C_FIXTURE)
     p17b = _yaml(P17B_FIXTURE)
 
-    assert fixture["version"] == "manual_approval_audit_p17_v1"
+    assert fixture["version"] == "draft_quality_audit_p17_v1"
     assert fixture["track"] == "P17C"
     assert fixture["source_p17b_validation_package"] == (
         "fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml"
     )
     assert fixture["source_db"] == "PPM"
     assert fixture["platform_db_context"] == "PLF"
-    assert fixture["approvalDecision"] == "APPROVE"
-    assert fixture["approval_status"] == "HUMAN_APPROVED"
-    assert fixture["human_approval_recorded"] is True
+    assert fixture["draftQualityDecision"] == "ACCEPT_DRAFT"
+    assert fixture["draft_quality_status"] == "EVIDENCE_BOUND"
     assert fixture["active_blockers_after_p17c"] == []
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in fixture["closed_blockers_after_p17c"]
+    assert "DRAFT_QUALITY_EVIDENCE_MISSING" in fixture["closed_blockers_after_p17c"]
     assert fixture["completion_status"]["blocker_closed"] is True
     assert fixture["completion_status"]["no_go_preserved"] is True
     assert fixture["live_release_decision_after_p17c"]["decision"] == "NO_GO"
     assert fixture["known_limitations"][0]["code"] == "P17D_RELEASE_DECISION_PENDING"
 
-    approval = fixture["approval_record"]
-    assert approval["approval_ref"] == "p17c-human-approval-saoh-20260510"
-    assert approval["decision"] == "APPROVE"
-    assert approval["actor"] == "saoh"
-    assert approval["timestamp"] == "2026-05-10T13:15:00+09:00"
-    assert approval["correlation_id"] == "corr-p17c-human-approval-20260510"
-    assert approval["not_synthesized"] is True
-    assert approval["approved_artifact_set"] == {
+    quality = fixture["draft_quality_record"]
+    assert quality["quality_ref"] == "p17c-draft-quality-saoh-20260510"
+    assert quality["decision"] == "ACCEPT_DRAFT"
+    assert quality["actor"] == "saoh"
+    assert quality["timestamp"] == "2026-05-10T13:15:00+09:00"
+    assert quality["correlation_id"] == "corr-p17c-draft-quality-20260510"
+    assert quality["not_synthesized"] is True
+    assert quality["bound_artifact_set"] == {
         "artifactSetId": "p17b-live-pilot-artifact-set",
         "artifactSetVersion": "2026-05-06.p17b.v1",
         "validationReportId": "p17b-live-pilot-artifact-validation-report",
@@ -186,11 +185,11 @@ def test_p17c_human_approval_binds_p17b_targets_and_closes_blocker() -> None:
         }
 
     audit = fixture["audit_event_binding"]
-    assert audit["action"] == "APPROVAL_DECISION_RECORDED"
+    assert audit["action"] == "DRAFT_QUALITY_EVIDENCE_RECORDED"
     assert audit["actor"] == "saoh"
-    assert audit["approval_ref"] == approval["approval_ref"]
+    assert audit["quality_ref"] == quality["quality_ref"]
     assert audit["validation_ref"] == p17b["artifact_set"]["validation_report_id"]
-    assert audit["correlation_id"] == approval["correlation_id"]
+    assert audit["correlation_id"] == quality["correlation_id"]
     assert set(audit["artifact_refs"]) == {
         f"{target['artifact_id']}@{target['artifact_version']}"
         for target in fixture["binding_targets"]
@@ -205,7 +204,7 @@ def test_p17c_human_approval_binds_p17b_targets_and_closes_blocker() -> None:
         "artifactRef",
         "artifactVersion",
         "validationRef",
-        "approvalRef",
+        "qualityRef",
         "selectedObjectRefs",
         "evidenceRefs",
         "timestamp",
@@ -217,21 +216,19 @@ def test_p17c_human_approval_binds_p17b_targets_and_closes_blocker() -> None:
     assert "PUBLISHED" not in text
 
 
-def test_p17_blocker_fixture_references_p17c_human_approval_binding() -> None:
+def test_p17_blocker_fixture_references_p17c_draft_quality_binding() -> None:
     fixture = _yaml(P17_BLOCKER_FIXTURE)
 
-    assert fixture["current_state"]["p17c_manual_approval_audit_fixture"] == (
-        "fixtures/eval/manual_approval_audit_p17_v1.yaml"
+    assert fixture["current_state"]["p17c_draft_quality_audit_fixture"] == (
+        "fixtures/eval/draft_quality_audit_p17_v1.yaml"
     )
-    assert fixture["current_state"]["p17c_manual_approval_status"] == (
-        "HUMAN_APPROVED"
-    )
+    assert fixture["current_state"]["p17c_draft_quality_status"] == "EVIDENCE_BOUND"
     assert fixture["current_state"]["p17c_blocker_closed"] is True
     assert fixture["current_state"]["p17d_release_decision_pending"] is False
     assert fixture["current_state"]["p17d_release_decision_completed"] is True
     assert fixture["current_state"]["p17d_final_decision"] == "CONDITIONAL_GO"
     assert fixture["current_state"]["active_blockers_to_close"] == []
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in fixture["current_state"][
+    assert "DRAFT_QUALITY_EVIDENCE_MISSING" in fixture["current_state"][
         "blockers_closed"
     ]
 
@@ -253,9 +250,8 @@ def test_p17d_conditional_go_requires_all_bound_evidence_and_hard_live_gates() -
     ]
     assert p17b["validation_status"] == requirements["validation"]["required_status"]
     assert requirements["validation"]["release_critical_review_required_allowed"] is False
-    assert p17c["approvalDecision"] == requirements["approval"]["required_decision"]
-    assert p17c["human_approval_recorded"] is True
-    assert p17c["approval_record"]["not_synthesized"] is True
+    assert p17c["draftQualityDecision"] == requirements["draft_quality"]["required_decision"]
+    assert p17c["draft_quality_record"]["not_synthesized"] is True
     assert p17c["validation_package_binding"]["validation_ref"][
         "validation_report_id"
     ] == p17b["artifact_set"]["validation_report_id"]

@@ -11,14 +11,14 @@ selection_mode: live_metadata
 generated_at: '2026-05-06T22:20:00+09:00'
 validation_status: PASSED
 active_blockers_after_p17b:
-  - MANUAL_APPROVAL_EVIDENCE_MISSING
+  - DRAFT_QUALITY_EVIDENCE_MISSING
 closed_blockers:
   - DEPENDENCY_METADATA_INCOMPLETE
 closed_gaps:
   - live_release_validation_missing
 live_release_decision_after_p17b:
   decision: NO_GO
-  reason: P17B artifact validation passed, but P17C human approval and audit binding are still missing.
+  reason: P17B artifact validation passed, but P17C draft-quality evidence and audit binding are still missing.
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -192,12 +192,12 @@ quality_report:
   generated_java_mybatis_files_added: false
   live_release_decision: NO_GO
 known_limitations:
-  - code: MANUAL_APPROVAL_EVIDENCE_MISSING
-    impact: P17B passed artifact validation, but P17C must still bind human approval and audit evidence before any GO transition.
+  - code: DRAFT_QUALITY_EVIDENCE_MISSING
+    impact: P17B passed artifact validation, but P17C must still bind draft-quality evidence and audit evidence before any GO transition.
   - code: JAVA_MYBATIS_GOLDENS_NOT_ADDED
     impact: Java/MyBatis source files are not fixed as golden samples because safe parameter, column, and result-shape metadata is not available in the selected PPM fixture.
   - code: COMPLEX_SENTINEL_RESIDUAL_REVIEW
-    impact: dbo.PCS_PY_ManageInvoiceFldSchd_PRC keeps two residual dependency review refs as a P17A caveat, not a P17B artifact validation failure.
+    impact: dbo.PCS_PY_ManageInvoiceFldSchd_PRC keeps two residual dependency caveat refs as a P17A caveat, not a P17B artifact validation failure.
 forbidden_evidence:
   - row_data
   - sample_rows
@@ -206,4 +206,4 @@ forbidden_evidence:
   - committed_secret
   - auto_ddl_or_dml
   - plf_fallback_for_ppm
-  - unapproved_publish_or_export
+  - publish_or_export_path

@@ -31,7 +31,7 @@ P24_SECTION_TITLES = {
     "migration_strategy": "전환 전략 및 Java/MyBatis 초안 준비도",
     "appendix_mappings": "파라미터 및 코드 매핑 부록",
     "metadata_extraction_appendix": "수동 메타데이터 추출 부록",
-    "evidence_assumptions_review": "근거, 가정, REVIEW_REQUIRED 마커",
+    "evidence_assumptions_review": "근거, 가정, 품질 caveat",
 }
 
 P24_SECTION_NUMBERS = {
@@ -152,7 +152,7 @@ def render_p24_dependency_report_sections(context: GenerationContext) -> list[st
         [
             "",
             "<!-- section:evidence_assumptions_review -->",
-            "## 근거 및 검토 필요 항목",
+            "## 근거 및 품질 caveat",
         ]
     )
     _append_evidence_and_review(lines, context, guide)
@@ -410,7 +410,7 @@ def _fallback_feature_branch_rows(guide: Mapping[str, Any]) -> list[dict[str, An
                 "feature": str(branch.get("id") or "branch_review_required"),
                 "condition": str(branch.get("condition_summary") or "REVIEW_REQUIRED"),
                 "status": "REVIEW_REQUIRED",
-                "summary": "분기 의미는 검토자 확인이 필요합니다.",
+                "summary": "분기 의미는 추가 근거 확인이 필요합니다.",
                 "evidence_refs": _evidence_refs(branch),
             }
         )
@@ -462,13 +462,13 @@ def _append_dependency_inventory(lines: list[str], guide: Mapping[str, Any]) -> 
     lines.extend(
         [
             "",
-            "### 검증 필요",
+            "### 근거 보강 필요",
             "| 유형 | 이름/후보 | 불확실한 이유 | 다음 추출 항목 | 비고 |",
             "|---|---|---|---|---|",
         ]
     )
     if not needs_verification:
-        lines.append("| 없음 | 없음 | 없음 | 없음 | 검토 필요한 의존성 후보가 없습니다. |")
+        lines.append("| 없음 | 없음 | 없음 | 없음 | 근거 보강이 필요한 의존성 후보가 없습니다. |")
     for item in needs_verification:
         if not isinstance(item, Mapping):
             continue
@@ -604,7 +604,7 @@ def _append_critical_phase(lines: list[str], guide: Mapping[str, Any]) -> None:
                 f"{row.get('status', 'REVIEW_REQUIRED')} | "
                 f"{_refs_text(_evidence_refs(row))} |"
             )
-    lines.append("- REVIEW_REQUIRED: 단계 순서와 트랜잭션 의미는 검토자 확인이 필요합니다.")
+    lines.append("- REVIEW_REQUIRED: 단계 순서와 트랜잭션 의미는 추가 근거 확인이 필요합니다.")
 
 
 def _fallback_critical_phase_rows(guide: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -616,7 +616,7 @@ def _fallback_critical_phase_rows(guide: Mapping[str, Any]) -> list[dict[str, An
     risk_text = (
         ", ".join(risk_flags)
         if risk_flags
-        else "REVIEW_REQUIRED: 업무 의미와 트랜잭션 영향은 검토자 확인이 필요합니다."
+        else "REVIEW_REQUIRED: 업무 의미와 트랜잭션 영향은 추가 근거 확인이 필요합니다."
     )
     rows: list[dict[str, Any]] = []
     for item in _sequence(guide.get("dml_matrix")):
@@ -698,9 +698,9 @@ def _append_migration_strategy(lines: list[str], context: GenerationContext) -> 
             "- javaMyBatisReadiness: `draft_notes_only`",
             "- generated_source_application: `not_performed`",
             "- automatic_conversion_completion: `not_claimed`",
-            "- target_application_write: `forbidden_without_human_review`",
+            "- target_application_write: `not_performed`",
             (
-                "- REVIEW_REQUIRED: Java/MyBatis 적용 전 근거와 위험을 수동 검토해야 합니다."
+                "- REVIEW_REQUIRED: Java/MyBatis 초안에는 근거 보강과 위험 caveat가 남아 있습니다."
             ),
         ]
     )
@@ -812,7 +812,7 @@ def _append_metadata_extraction_appendix(lines: list[str], guide: Mapping[str, A
     if not appendix:
         lines.append("- REVIEW_REQUIRED: 수동 메타데이터 추출 부록을 사용할 수 없습니다.")
         return
-    lines.append(f"- 정책: {appendix.get('policy', 'metadata-only 수동 검토 보조')}")
+    lines.append(f"- 정책: {appendix.get('policy', 'metadata-only evidence aid')}")
     for query in _sequence(appendix.get("queries")):
         if not isinstance(query, Mapping):
             continue
@@ -857,7 +857,7 @@ def _append_evidence_and_review(
                 "  - "
                 f"type={ref.type} objectRef={ref.object_ref} locator={ref.locator}"
             )
-    lines.append("- reviewRequiredFindings:")
+    lines.append("- knownCaveats:")
     unsupported_claims = _sequence(guide.get("unsupported_claim_expectations"))
     if unsupported_claims:
         for claim in unsupported_claims:
@@ -872,9 +872,29 @@ def _append_evidence_and_review(
                 f"evidenceRefs={_refs_text(_evidence_refs(claim))}"
             )
     else:
-        lines.append("  - REVIEW_REQUIRED: 미지원 claim 검토 목록을 사용할 수 없습니다.")
+        lines.append("  - REVIEW_REQUIRED: 미지원 claim caveat 목록을 사용할 수 없습니다.")
     for assumption in context.evidence_assumptions:
         lines.append(f"- 가정: REVIEW_REQUIRED {assumption}")
+    lines.extend(
+        [
+            "",
+            "## quality_summary",
+            "- status: draft-quality evidence caveats tracked",
+            "- raw SQL text, row data, secrets, execution output은 포함하지 않습니다.",
+            "",
+            "## evidence_map",
+            "- claims are tied to evidenceRefs or REVIEW_REQUIRED caveats.",
+            "",
+            "## known_caveats",
+            "- REVIEW_REQUIRED는 근거 보강 필요 상태를 의미합니다.",
+            "",
+            "## next_evidence_to_collect",
+            "- DML matrix, branch call-flow, transaction boundary, Java/MyBatis mapping evidence를 보강합니다.",
+            "",
+            "## draft_readiness",
+            "- Ready as a migration-guide draft; no publish, deploy, DDL, DML, or source apply path is included.",
+        ]
+    )
 
 
 def _render_placeholder_sections(context: GenerationContext) -> list[str]:

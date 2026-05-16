@@ -100,8 +100,20 @@ def _passed_sp_analysis_content() -> str:
             "## assumptions_and_todo",
             "없음.",
             "",
-            "## review_checklist",
-            "- [x] Evidence ref 확인 완료.",
+            "## quality_summary",
+            "- evidence ref confirmed.",
+            "",
+            "## evidence_map",
+            "- dbo.usp_demo",
+            "",
+            "## known_caveats",
+            "- none",
+            "",
+            "## next_evidence_to_collect",
+            "- none",
+            "",
+            "## draft_readiness",
+            "- draft only",
             "",
         ]
     )
@@ -1096,7 +1108,7 @@ def test_memory_repository_fail_job_persists_error_state_and_request_status() ->
     assert audit.payload["code"] == "TEST_FAILURE"
 
 
-def test_artifact_publish_state_blocks_validation_and_approval_mutation() -> None:
+def test_artifact_publish_state_blocks_validation_mutation() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
@@ -1105,15 +1117,6 @@ def test_artifact_publish_state_blocks_validation_and_approval_mutation() -> Non
 
     with pytest.raises(WorkflowStateError, match="publish transitions are blocked"):
         service.validate_artifact(artifact.artifact_id)
-
-    with pytest.raises(WorkflowStateError, match="publish transitions are blocked"):
-        service.record_approval_decision(
-            artifact_id=artifact.artifact_id,
-            decision="REQUEST_CHANGES",
-            reviewer="reviewer@example.com",
-            comment="must stay draft gated",
-            validation_report_id=artifact.latest_validation_report_id,
-        )
 
 
 def test_requested_output_placeholders_use_persisted_artifact_enums() -> None:
@@ -1173,11 +1176,10 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     assert "Order identifier" in contents
     assert "OrderId" in contents
     assert "dependency_closure_evidence" in contents
-    assert "## metadata_extraction_appendix" in contents
-    assert "definition_hash_length" in contents
-    assert "### 확인됨" in contents
-    assert "### 검증 필요" in contents
-    assert "| 테이블 | SELECT | INSERT | UPDATE | DELETE | MERGE |" in contents
+    assert "quality_summary" in contents
+    assert "evidence_map" in contents
+    assert "known_caveats" in contents
+    assert "draft_readiness" in contents
     assert "DYNAMIC_SQL_SIGNAL" in contents
     assert "FIXTURE_AMBIGUOUS" in contents
     assert "resolve_dependency_reference" not in contents
@@ -1188,238 +1190,11 @@ def test_fixture_metadata_shapes_generation_context_and_metadata_artifact() -> N
     )
 
 
-def test_approve_requires_latest_passed_validation_report() -> None:
+
+def test_validation_only_workflow_has_no_approval_audit_events() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
     service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
-    artifact = next(iter(repository.artifacts.values()))
 
-    with pytest.raises(ValueError, match="PASSED"):
-        service.record_approval_decision(
-            artifact_id=artifact.artifact_id,
-            decision="APPROVE",
-            reviewer="reviewer@example.com",
-            comment="record only",
-            validation_report_id=artifact.latest_validation_report_id,
-        )
-
-    gate_report = service.evaluate_publish_gate(artifact.artifact_id)
-
-    assert repository.artifacts[artifact.artifact_id].status.value == "DRAFT"
-    assert gate_report.status == "FAILED"
-    assert gate_report.storage_result == "FAIL"
-    assert gate_report.checks[0]["ruleId"] == "workflow.approval.before_publish"
-
-
-def test_approve_after_passed_validation_satisfies_gate_without_publishing() -> None:
-    repository = MemoryWorkflowRepository()
-    service = WorkflowService(repository)
-    request = repository.create_request(
-        db_profile_id="master",
-        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
-        outputs=("SP_ANALYSIS_DOCUMENT",),
-        options={},
-        request_hash="hash-approve-pass",
-        correlation_id="corr-approve-pass",
-        idempotency_key=None,
-    )
-    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
-    artifact = repository.add_artifact(
-        job_id=job.job_id,
-        artifact_type=ArtifactType.SP_ANALYSIS_DOC,
-        title="Passed Analysis",
-        content=_passed_sp_analysis_content(),
-        evidence_refs=[
-            {
-                "type": "MSSQL_METADATA",
-                "objectRef": "dbo.usp_demo",
-                "locator": "fixture.metadata",
-            }
-        ],
-        generator_version="test",
-        registry_refs=("prompt@test",),
-        assumptions=(),
-        review_required=False,
-    )
-
-    validation = service.validate_artifact(
-        artifact.artifact_id,
-        correlation_id="corr-approve-pass",
-    )
-    approval = service.record_approval_decision(
-        artifact_id=artifact.artifact_id,
-        decision="APPROVE",
-        reviewer="reviewer@example.com",
-        comment="validated and approved",
-        validation_report_id=validation.validation_report_id,
-        correlation_id="corr-approve-pass",
-    )
-    gate_report = service.evaluate_publish_gate(artifact.artifact_id)
-
-    stored = repository.artifacts[artifact.artifact_id]
-    assert validation.status == "PASSED"
-    assert approval.decision == "APPROVE"
-    assert approval.storage_decision == "APPROVED"
-    assert gate_report.status == "PASSED"
-    assert gate_report.storage_result == "PASS"
-    assert stored.status == ArtifactStatus.APPROVED
-    assert stored.status != ArtifactStatus.PUBLISHED
-    assert "PUBLISHED" not in {item.status.value for item in repository.artifacts.values()}
-    assert repository.audit_events[-1].action == "PUBLISH_GATE_EVALUATED"
-
-
-def test_approval_audit_payload_binds_artifact_version_refs_and_correlation() -> None:
-    repository = MemoryWorkflowRepository()
-    service = WorkflowService(repository)
-    request = repository.create_request(
-        db_profile_id="ppm",
-        target={"type": "PROCEDURE", "schema": "dbo", "name": "GetInspItemsCd"},
-        outputs=("SP_ANALYSIS_DOCUMENT",),
-        options={},
-        request_hash="hash-p17c-approval-audit",
-        correlation_id="corr-p17c-approval-audit",
-        idempotency_key=None,
-    )
-    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
-    artifact = repository.add_artifact(
-        job_id=job.job_id,
-        artifact_type=ArtifactType.SP_ANALYSIS_DOC,
-        title="Passed P17B Analysis",
-        content=_passed_sp_analysis_content(),
-        evidence_refs=[
-            {
-                "type": "MSSQL_METADATA",
-                "objectRef": "dbo.usp_demo",
-                "locator": "fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml",
-                "snapshotId": "live:ppm:2026-05-06T12:52:24Z",
-            }
-        ],
-        generator_version="live-pilot-artifact-manifest-0.1.0",
-        registry_refs=("fixture:live_pilot_artifacts_p17_v1",),
-        assumptions=(),
-        review_required=False,
-        extra={
-            "artifactVersion": "2026-05-06.p17b.v1",
-            "selectedObjectRefs": ["PROCEDURE:dbo.GetInspItemsCd"],
-        },
-    )
-    validation = service.validate_artifact(
-        artifact.artifact_id,
-        correlation_id="corr-p17c-approval-audit",
-    )
-
-    approval = service.record_approval_decision(
-        artifact_id=artifact.artifact_id,
-        decision="APPROVE",
-        reviewer="human.reviewer@example.com",
-        comment="human approval evidence supplied outside P17C missing-template mode",
-        validation_report_id=validation.validation_report_id,
-        correlation_id="corr-p17c-approval-audit",
-    )
-
-    audit = [
-        event
-        for event in repository.audit_events
-        if event.action == "APPROVAL_DECISION_RECORDED"
-    ][-1]
-    assert approval.decision == "APPROVE"
-    assert audit.correlation_id == "corr-p17c-approval-audit"
-    assert audit.payload["actor"] == "human.reviewer@example.com"
-    assert audit.payload["correlationId"] == "corr-p17c-approval-audit"
-    assert audit.payload["artifactId"] == artifact.artifact_id
-    assert audit.payload["artifactVersion"] == "2026-05-06.p17b.v1"
-    assert audit.payload["artifactRef"] == {
-        "artifactId": artifact.artifact_id,
-        "artifactVersion": "2026-05-06.p17b.v1",
-        "artifactType": "SP_ANALYSIS_DOC",
-    }
-    assert audit.payload["validationRef"]["validationReportId"] == (
-        validation.validation_report_id
-    )
-    assert audit.payload["validationRef"]["validationStatus"] == "PASSED"
-    assert audit.payload["approvalRef"]["approvalId"] == approval.approval_id
-    assert audit.payload["approvalRef"]["decision"] == "APPROVE"
-    assert audit.payload["selectedObjectRefs"] == ["PROCEDURE:dbo.GetInspItemsCd"]
-    assert audit.payload["evidenceRefs"] == artifact.evidence_refs
-    assert audit.payload["refs"]["artifactVersion"] == "2026-05-06.p17b.v1"
-    assert audit.payload["refs"]["validationReportId"] == validation.validation_report_id
-    assert audit.payload["refs"]["approvalId"] == approval.approval_id
-    assert audit.payload["timestamp"]
-
-
-def test_approval_decision_requires_latest_validation_context() -> None:
-    repository = MemoryWorkflowRepository()
-    service = WorkflowService(repository)
-    request = repository.create_request(
-        db_profile_id="master",
-        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
-        outputs=("SP_ANALYSIS_DOCUMENT",),
-        options={},
-        request_hash="hash-no-validation",
-        correlation_id="corr-no-validation",
-        idempotency_key=None,
-    )
-    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
-    artifact = repository.add_artifact(
-        job_id=job.job_id,
-        artifact_type=ArtifactType.SP_ANALYSIS_DOC,
-        title="Analysis",
-        content="# Analysis",
-        evidence_refs=[],
-        generator_version="test",
-        registry_refs=(),
-        assumptions=(),
-        review_required=True,
-    )
-
-    with pytest.raises(ValueError, match="latest artifact validation"):
-        service.record_approval_decision(
-            artifact_id=artifact.artifact_id,
-            decision="REQUEST_CHANGES",
-            reviewer="reviewer@example.com",
-            comment="needs validation first",
-            validation_report_id=None,
-        )
-
-
-def test_approve_rejects_non_latest_validation_report_id() -> None:
-    repository = MemoryWorkflowRepository()
-    service = WorkflowService(repository)
-    service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"]))
-    artifacts = list(repository.artifacts.values())
-
-    with pytest.raises(ValueError, match="latest artifact validation"):
-        service.record_approval_decision(
-            artifact_id=artifacts[0].artifact_id,
-            decision="APPROVE",
-            reviewer="reviewer@example.com",
-            comment="wrong validation id",
-            validation_report_id=artifacts[1].latest_validation_report_id,
-        )
-
-
-def test_request_changes_decision_maps_to_storage_rejected_without_closing_review() -> None:
-    repository = MemoryWorkflowRepository()
-    service = WorkflowService(repository)
-    service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
-    artifact = next(iter(repository.artifacts.values()))
-
-    approval = service.record_approval_decision(
-        artifact_id=artifact.artifact_id,
-        decision="REQUEST_CHANGES",
-        reviewer="reviewer@example.com",
-        comment="please revise",
-        validation_report_id=None,
-    )
-
-    assert approval.decision == "REQUEST_CHANGES"
-    assert approval.storage_decision == "REJECTED"
-    assert approval.validation_report_id == artifact.latest_validation_report_id
-    assert approval.reviewer_checklist
-    assert approval.validation_summary["artifactId"] == artifact.artifact_id
-    assert repository.artifacts[artifact.artifact_id].status.value == "REVIEW_PENDING"
-    audit = repository.audit_events[-1]
-    assert audit.action == "APPROVAL_DECISION_RECORDED"
-    assert audit.payload["stage"] == "APPROVAL"
-    assert audit.payload["actor"] == "reviewer@example.com"
-    assert audit.payload["refs"]["validationReportId"] == artifact.latest_validation_report_id
+    assert not any(event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events)
+    assert all(artifact.status != ArtifactStatus.PUBLISHED for artifact in repository.artifacts.values())

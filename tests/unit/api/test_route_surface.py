@@ -23,7 +23,7 @@ def test_openapi_skeleton_routes_are_registered() -> None:
     assert "/api/v1/artifacts/{artifactId}" in routes
     assert "/api/v1/artifacts/{artifactId}/validation" in routes
     assert "/api/v1/artifacts/{artifactId}/validation/latest" in routes
-    assert "/api/v1/artifacts/{artifactId}/approval-decisions" in routes
+    assert "/api/v1/artifacts/{artifactId}/approval-decisions" not in routes
     assert "/api/v1/metadata/db-profiles" in routes
     assert "/api/v1/metadata/tools" in routes
     assert "/api/v1/metadata/tools/{toolName}/invoke" in routes
@@ -32,6 +32,8 @@ def test_openapi_skeleton_routes_are_registered() -> None:
     assert "/api/v1/knowledge/assets/{assetId}" in routes
     assert "/api/v1/knowledge/assets/{assetId}/versions" in routes
     assert "/api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts" in routes
+    assert "/api/v1/knowledge/assets/{assetId}/reviews" not in routes
+    assert "/api/v1/knowledge/assets/{assetId}/versions/{versionId}/review" not in routes
     assert "/api/v1/knowledge/exports" in routes
     assert "/api/v1/registry/versions" in routes
 

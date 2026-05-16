@@ -164,7 +164,7 @@ export default async function HomePage() {
             {metadataSearch ? (
               <StatusPill
                 value={metadataSearch.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-                label={metadataSearch.reviewRequired ? "Review required" : "Evidence only"}
+                label={metadataSearch.reviewRequired ? "근거 보강 필요" : "Evidence only"}
               />
             ) : null}
           </div>

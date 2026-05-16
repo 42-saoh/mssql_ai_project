@@ -579,15 +579,15 @@ waves:
           - make test PYTEST_ARGS="tests/unit/analysis tests/unit/generation tests/unit/validation tests/eval"
           - python3.14 -m compileall packages/analysis packages/generation packages/validation tests
       - id: P17C
-        branch: feat/p17c-approval-audit-binding
-        worktree: ../wt/p17c-approval-audit-binding
-        prompt: prompts/17c_manual_approval_audit_binding.md
+        branch: feat/p17c-draft-quality-audit-binding
+        worktree: ../wt/p17c-draft-quality-audit-binding
+        prompt: prompts/17c_draft_quality_audit_binding.md
         role: platform_worker
         skills: [contract-to-code, quality-gate-review, eval-fixture-authoring]
         depends_on: [P17B]
         target_paths:
           - apps/api/
-          - fixtures/eval/manual_approval_audit_p17_v1.yaml
+          - fixtures/eval/draft_quality_audit_p17_v1.yaml
           - fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
           - tests/unit/api/
           - tests/integration/api/

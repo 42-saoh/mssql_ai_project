@@ -12,13 +12,12 @@ priority:
 mode:
   generation: draft_only
   evidence_required: true
-  review_required: true
-  approval_required: true
+  quality_caveats_enabled: true
 
 forbidden:
   - auto_ddl_execution
   - direct_deployment_automation
-  - unreviewed_auto_apply
+  - unvalidated_auto_apply
   - actual_data_read_write
   - unsupported_framework_assumptions
   - inventing_columns_joins_business_rules
@@ -36,7 +35,7 @@ scope:
   exclude:
     - auto_ddl_execution
     - direct_deployment_automation
-    - unreviewed_auto_apply
+    - unvalidated_auto_apply
     - actual_data_access_execution
 
 generationModes:
@@ -324,7 +323,11 @@ outputStructure:
   - code_draft
   - message_and_config_examples
   - assumptions_and_todo
-  - review_checklist
+  - quality_summary
+  - evidence_map
+  - known_caveats
+  - next_evidence_to_collect
+  - draft_readiness
 
 todoRules:
   mustMarkUnknown:
@@ -337,7 +340,7 @@ todoRules:
     - dto_vo_model_final_choice
     - sp_rebuild_feasibility
 
-reviewChecklist:
+draftQualityChecks:
   - naming_rules_applied
   - package_pattern_applied
   - mapper_xml_namespace_matches_interface

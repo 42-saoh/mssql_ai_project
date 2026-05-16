@@ -19,10 +19,10 @@ export const outputLabels: Record<RequestedOutputType, string> = {
 export const outputDescriptions: Record<RequestedOutputType, string> = {
   SP_ANALYSIS_DOCUMENT: "Procedure summary, behavior notes, assumptions, and evidence references.",
   DEPENDENCY_REPORT: "Procedure, table, view, function, and call relationship preview.",
-  TABLE_COLUMN_METADATA: "Read-only metadata shape needed for field and result set review.",
+  TABLE_COLUMN_METADATA: "Read-only metadata shape needed for field and result set caveats.",
   JAVA_MYBATIS_DRAFT: "Mapper XML, mapper interface, and service draft grouping.",
-  DTO_MODEL_DRAFT: "DTO/VO/model draft grouping for reviewer inspection.",
-  DDL_DRAFT: "Draft SQL file for manual review only; no execution path is exposed.",
+  DTO_MODEL_DRAFT: "DTO/VO/model draft grouping with evidence caveats.",
+  DDL_DRAFT: "Draft SQL file; no execution path is exposed.",
 };
 
 export const requestedOutputOptions: RequestedOutputType[] = [
@@ -40,10 +40,6 @@ export const jobStatusLabels: Record<JobStatus, string> = {
   GENERATING: "Generating",
   VALIDATING: "Validating",
   VALIDATION_COMPLETE: "Validation complete",
-  REVIEW_PENDING: "Review pending",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  PUBLISHED: "Published",
   FAILED: "Failed",
   CANCELED: "Canceled",
 };
@@ -53,8 +49,6 @@ export const workflowStepLabels: Record<WorkflowStepType, string> = {
   ANALYZE: "Analyze",
   GENERATE: "Generate",
   VALIDATE: "Validate",
-  REVIEW: "Review",
-  PUBLISH: "Publish",
 };
 
 export const artifactTypeLabels: Record<ArtifactType, string> = {
@@ -70,23 +64,18 @@ export const artifactTypeLabels: Record<ArtifactType, string> = {
   MODEL_DRAFT: "Model draft",
   DDL_DRAFT: "DDL draft",
   VALIDATION_REPORT: "Validation report",
-  APPROVAL_LOG: "Approval log",
 };
 
 export const artifactStatusLabels: Record<ArtifactStatus, string> = {
   DRAFT: "Draft",
   VALIDATED: "Validated",
-  REVIEW_PENDING: "Review pending",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  PUBLISHED: "Published",
   ARCHIVED: "Archived",
 };
 
 export const validationStatusLabels: Record<ValidationStatus, string> = {
   PASSED: "Passed",
   FAILED: "Failed",
-  REVIEW_REQUIRED: "Review required",
+  REVIEW_REQUIRED: "Evidence caveat",
 };
 
 export function formatCoverage(value?: number): string {
@@ -107,15 +96,7 @@ export function jobStatusSummary(status: JobStatus): string {
     case "VALIDATING":
       return "Generated drafts are passing through evidence and policy checks.";
     case "VALIDATION_COMPLETE":
-      return "Validation is complete for the draft artifacts. Review UI is disabled in the default P25 flow.";
-    case "REVIEW_PENDING":
-      return "Deferred approval state retained for compatibility. The default P25 flow stops at validation complete.";
-    case "APPROVED":
-      return "Deferred approval evidence exists for this draft artifact version. The portal shell still exposes no publish action.";
-    case "REJECTED":
-      return "Deferred approval evidence rejected this draft before downstream use.";
-    case "PUBLISHED":
-      return "Published status is part of the API contract, but publishing is not available in this shell.";
+      return "Validation is complete for the draft artifacts. No approval or publish action is exposed.";
     case "FAILED":
       return "The workflow failed and requires operator inspection.";
     case "CANCELED":

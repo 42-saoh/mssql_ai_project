@@ -23,7 +23,7 @@ database_boundaries:
     acronym: PLF
     required: true
     env_prefix: PLATFORM_DB_
-    purpose: platform workflow, artifact, validation, approval, audit, and Auth/RBAC role source
+    purpose: platform workflow, artifact, validation, knowledge, audit, and Auth/RBAC role source
   metadata_target_db:
     acronym: PPM
     required: true
@@ -43,7 +43,6 @@ web_contract:
   forbidden_demo_id_patterns:
     - job_demo_
     - art_demo_
-    - approval_preview_
   required_functional_pages:
     - /
     - /requests/new
@@ -66,7 +65,6 @@ api_contract:
     - GET /api/v1/artifacts/{artifactId}
     - GET /api/v1/artifacts/{artifactId}/validation/latest
     - POST /api/v1/artifacts/{artifactId}/validation
-    - POST /api/v1/artifacts/{artifactId}/approval-decisions
     - GET /api/v1/metadata/db-profiles
     - GET /api/v1/metadata/search
 live_gate:

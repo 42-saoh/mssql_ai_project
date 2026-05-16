@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from api_app.repositories import (
     AgentRunRecord,
-    ApprovalRecordData,
     ArtifactRecord,
     JobRecord,
     ValidationReportRecord,
 )
 from api_app.schemas import (
     AgentRunSummary,
-    ApprovalRecord,
     Artifact,
     ArtifactSummary,
     EvidenceRef,
@@ -36,7 +34,6 @@ def present_job(job: JobRecord) -> Job:
         caveats=caveats,
         failureReason=job.error_message,
     )
-
 
 def present_artifact_summary(artifact: ArtifactRecord) -> ArtifactSummary:
     return ArtifactSummary(
@@ -68,7 +65,7 @@ def present_validation_report(report: ValidationReportRecord) -> ValidationRepor
         status=report.status,
         checks=[ValidationCheck(**check) for check in report.checks],
         missingEvidence=report.missing_evidence,
-        manualReviewPoints=report.manual_review_points,
+        qualityCaveats=report.manual_review_points,
     )
 
 
@@ -83,15 +80,4 @@ def present_agent_run(record: AgentRunRecord) -> AgentRunSummary:
         structuredOutput=record.structured_output,
         modelInvocation=record.model_invocation,
         createdAt=record.created_at,
-    )
-
-
-def present_approval_record(record: ApprovalRecordData) -> ApprovalRecord:
-    return ApprovalRecord(
-        approvalId=record.approval_id,
-        artifactId=record.artifact_id,
-        decision=record.decision,
-        reviewer=record.reviewer,
-        comment=record.comment,
-        decidedAt=record.decided_at,
     )

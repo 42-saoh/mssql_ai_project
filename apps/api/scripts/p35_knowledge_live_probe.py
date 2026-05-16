@@ -16,20 +16,8 @@ for import_root in (API_ROOT, MCP_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from api_app.auth import (  # noqa: E402
-    ARTIFACT_REVIEW_ROLES,
-    AuthConfigurationError,
-    AuthenticationRequiredError,
-    OidcJwtVerifier,
-    load_auth_settings,
-)
 from api_app.dependencies import reset_application_state  # noqa: E402
 from api_app.main import app  # noqa: E402
-from api_app.platform_db import (  # noqa: E402
-    MssqlPlatformRepository,
-    PlatformPersistenceError,
-    load_platform_db_settings,
-)
 from fastapi.testclient import TestClient  # noqa: E402
 from mssql_mcp_app.profiles import load_db_profiles  # noqa: E402
 from mssql_mcp_app.settings import load_live_metadata_settings  # noqa: E402
@@ -62,12 +50,6 @@ REQUIRED_ENV = (
     "LLM_ENABLE_REMOTE",
     "LLM_ALLOW_SP_TEXT",
     "OPENAI_API_KEY",
-)
-AUTH_REVIEW_ENV = (
-    "OIDC_ISSUER",
-    "OIDC_AUDIENCE",
-    "OIDC_JWKS_URL",
-    "OIDC_REVIEWER_BEARER_TOKEN",
 )
 REDACTION = {
     "tokens": "not_returned",
@@ -133,7 +115,6 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
     try:
         manifest = _pilot_manifest()
         _require_live_manifest_and_profile(manifest)
-        reviewer = _reviewer_context()
         reset_application_state()
         client = TestClient(app)
         schema_result = _preflight_knowledge_schema(client)
@@ -144,7 +125,6 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
         graph = _verify_fact_graph(client, knowledge["dependencyAsset"])
         search = _verify_search(client, target, knowledge["spAsset"])
         export = _verify_export(client, knowledge["dependencyAsset"])
-        review = _review_real_ppm_asset(client, knowledge["spAsset"], reviewer)
         for payload, check_name in (
             (workflow, "workflow_submit"),
             (agent_run, "openai_agent_run"),
@@ -152,7 +132,6 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
             (graph, "fact_graph"),
             (search, "knowledge_search"),
             (export, "knowledge_export"),
-            (review, "knowledge_review"),
         ):
             _assert_safe_payload(payload, check_name)
     except ProbeFailure as exc:
@@ -168,18 +147,17 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
         blocker_code=None,
         summary=(
             "P35 live knowledge confidence gate passed with live PPM metadata, "
-            "OpenAI semantic analysis, PLF v5 knowledge persistence, search/export, "
-            "and one non-terminal REVIEWED curation event."
+            "OpenAI semantic analysis, and PLF v6 draft-quality knowledge persistence, "
+            "search/export confidence evidence."
         ),
         checks=[
-            _check("v5_schema_readiness", "pass", summary=schema_result["summary"]),
+            _check("v6_schema_readiness", "pass", summary=schema_result["summary"]),
             _check("workflow_submit", "pass", summary=workflow["summary"]),
             _check("openai_agent_run", "pass", summary=agent_run["summary"]),
             _check("knowledge_assets", "pass", summary=knowledge["summary"]),
             _check("fact_graph", "pass", summary=graph["summary"]),
             _check("knowledge_search", "pass", summary=search["summary"]),
             _check("knowledge_export", "pass", summary=export["summary"]),
-            _check("knowledge_review", "pass", summary=review["summary"]),
         ],
     )
 
@@ -190,9 +168,9 @@ def _preflight_knowledge_schema(client: TestClient) -> dict[str, str]:
         raise ProbeFailure.from_response(
             response,
             fallback_blocker=SCHEMA_BLOCKER,
-            check_name="v5_schema_readiness",
+            check_name="v6_schema_readiness",
         )
-    return {"summary": "PLF v5 knowledge schema readiness check returned a safe response."}
+    return {"summary": "PLF v6 knowledge schema readiness check returned a safe response."}
 
 
 def _submit_live_workflow(client: TestClient, target: dict[str, str]) -> dict[str, Any]:
@@ -554,139 +532,6 @@ def _verify_export(client: TestClient, asset: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _review_real_ppm_asset(
-    client: TestClient,
-    asset: dict[str, Any],
-    reviewer: dict[str, Any],
-) -> dict[str, Any]:
-    asset_id = str(asset.get("assetId") or "")
-    version_id = str(asset.get("currentVersionId") or "")
-    response = client.post(
-        f"/api/v1/knowledge/assets/{asset_id}/versions/{version_id}/review",
-        headers=reviewer["headers"],
-        json={
-            "status": "REVIEWED",
-            "reasonCode": "P35_LIVE_CONFIDENCE_REVIEW",
-            "reviewer": reviewer["reviewer"],
-            "comment": "P35 live confidence review of sanitized knowledge.",
-        },
-    )
-    if response.status_code != 200:
-        raise ProbeFailure.from_response(
-            response,
-            fallback_blocker=SCHEMA_BLOCKER,
-            check_name="knowledge_review",
-        )
-    payload = response.json()
-    _assert_safe_payload(payload, "knowledge_review")
-    if payload.get("toStatus") != "REVIEWED":
-        raise ProbeFailure(
-            blocker_code="P35_LIVE_REVIEW_STATUS_MISMATCH",
-            summary="Knowledge review transition did not record REVIEWED.",
-            checks=[
-                _check(
-                    "knowledge_review",
-                    "fail",
-                    blocker_code="P35_LIVE_REVIEW_STATUS_MISMATCH",
-                    summary="Expected a non-terminal REVIEWED curation event.",
-                )
-            ],
-        )
-    history = client.get(
-        f"/api/v1/knowledge/assets/{asset_id}/reviews",
-        params={"versionId": version_id},
-    )
-    if history.status_code != 200:
-        raise ProbeFailure.from_response(
-            history,
-            fallback_blocker=SCHEMA_BLOCKER,
-            check_name="knowledge_review_history",
-        )
-    reviews = history.json().get("reviews") or []
-    _assert_safe_payload({"reviews": reviews}, "knowledge_review_history")
-    if not any(item.get("reasonCode") == "P35_LIVE_CONFIDENCE_REVIEW" for item in reviews):
-        raise ProbeFailure(
-            blocker_code="P35_LIVE_REVIEW_HISTORY_MISSING",
-            summary="Knowledge review history did not include the live review event.",
-            checks=[
-                _check(
-                    "knowledge_review_history",
-                    "fail",
-                    blocker_code="P35_LIVE_REVIEW_HISTORY_MISSING",
-                    summary="Append-only review history must expose the live curation event.",
-                )
-            ],
-        )
-    return {
-        "reviewId": payload.get("reviewId"),
-        "reviewer": payload.get("reviewer"),
-        "summary": "A real PPM knowledge version recorded one non-terminal REVIEWED event.",
-    }
-
-
-def _reviewer_context() -> dict[str, Any]:
-    if os.getenv("AUTH_RBAC_ENFORCEMENT", "").strip() != "1":
-        return {"headers": {}, "reviewer": "p35-live-reviewer@example.com"}
-    token = os.getenv("OIDC_REVIEWER_BEARER_TOKEN", "").strip()
-    try:
-        identity = OidcJwtVerifier(load_auth_settings()).verify(token)
-        actor = MssqlPlatformRepository(load_platform_db_settings()).resolve_actor_roles(identity)
-    except AuthConfigurationError as exc:
-        raise ProbeFailure(
-            blocker_code="P35_LIVE_AUTH_CONFIGURATION_INVALID",
-            summary="Live auth/RBAC reviewer configuration is invalid.",
-            checks=[
-                _check(
-                    "reviewer_auth",
-                    "fail",
-                    blocker_code="P35_LIVE_AUTH_CONFIGURATION_INVALID",
-                    summary=str(exc),
-                )
-            ],
-        ) from exc
-    except AuthenticationRequiredError as exc:
-        raise ProbeFailure(
-            blocker_code="P35_LIVE_REVIEWER_TOKEN_INVALID",
-            summary="Live reviewer token could not be verified.",
-            checks=[
-                _check(
-                    "reviewer_auth",
-                    "fail",
-                    blocker_code="P35_LIVE_REVIEWER_TOKEN_INVALID",
-                    summary="OIDC/JWKS verification rejected the reviewer token.",
-                )
-            ],
-        ) from exc
-    except PlatformPersistenceError as exc:
-        raise ProbeFailure(
-            blocker_code=exc.code,
-            summary="PLF reviewer role lookup failed.",
-            checks=[
-                _check(
-                    "reviewer_auth",
-                    "fail",
-                    blocker_code=exc.code,
-                    summary="PLF AUTH role lookup did not return safe reviewer evidence.",
-                )
-            ],
-        ) from exc
-    if actor is None or not actor.roles.intersection(ARTIFACT_REVIEW_ROLES):
-        raise ProbeFailure(
-            blocker_code="P35_LIVE_REVIEWER_ROLE_REQUIRED",
-            summary="Verified reviewer token did not map to a PLF REVIEWER or ADMIN actor.",
-            checks=[
-                _check(
-                    "reviewer_auth",
-                    "fail",
-                    blocker_code="P35_LIVE_REVIEWER_ROLE_REQUIRED",
-                    summary="A REVIEWER or ADMIN actor is required for live review writes.",
-                )
-            ],
-        )
-    return {
-        "headers": {"Authorization": f"Bearer {token}"},
-        "reviewer": actor.reviewer_id,
-    }
 
 
 def _require_live_manifest_and_profile(manifest: dict[str, Any]) -> None:
@@ -858,8 +703,6 @@ def _check(
 
 def _missing_required_env() -> list[str]:
     required = list(REQUIRED_ENV)
-    if os.getenv("AUTH_RBAC_ENFORCEMENT", "").strip() == "1":
-        required.extend(AUTH_REVIEW_ENV)
     missing = [name for name in required if not os.getenv(name, "").strip()]
     for enabled_name in (
         "P35_KNOWLEDGE_LIVE_GATE",

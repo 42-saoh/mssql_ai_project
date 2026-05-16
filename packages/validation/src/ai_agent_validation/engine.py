@@ -5,7 +5,6 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ai_agent_validation.models import (
-    ReviewerChecklistItem,
     ValidationCheck,
     ValidationCheckResult,
     ValidationReport,
@@ -21,7 +20,11 @@ REQUIRED_SECTIONS_BY_ARTIFACT: dict[str, tuple[str, ...]] = {
         "procedure_signature",
         "evidence_summary",
         "assumptions_and_todo",
-        "review_checklist",
+        "quality_summary",
+        "evidence_map",
+        "known_caveats",
+        "next_evidence_to_collect",
+        "draft_readiness",
     ),
     "SP_ANALYSIS_DOCUMENT": (
         "input_interpretation",
@@ -29,14 +32,22 @@ REQUIRED_SECTIONS_BY_ARTIFACT: dict[str, tuple[str, ...]] = {
         "procedure_signature",
         "evidence_summary",
         "assumptions_and_todo",
-        "review_checklist",
+        "quality_summary",
+        "evidence_map",
+        "known_caveats",
+        "next_evidence_to_collect",
+        "draft_readiness",
     ),
     "DEPENDENCY_REPORT": (
         "dependency_summary",
         "dependency_table",
         "evidence_summary",
         "assumptions_and_todo",
-        "review_checklist",
+        "quality_summary",
+        "evidence_map",
+        "known_caveats",
+        "next_evidence_to_collect",
+        "draft_readiness",
     ),
     "JAVA_MYBATIS_DRAFT": (
         "input_interpretation",
@@ -47,7 +58,11 @@ REQUIRED_SECTIONS_BY_ARTIFACT: dict[str, tuple[str, ...]] = {
         "code_draft",
         "message_and_config_examples",
         "assumptions_and_todo",
-        "review_checklist",
+        "quality_summary",
+        "evidence_map",
+        "known_caveats",
+        "next_evidence_to_collect",
+        "draft_readiness",
     ),
 }
 
@@ -126,7 +141,9 @@ def validate_artifact(
         )
 
     if review_required or _has_review_marker(content, assumptions):
-        manual_review_points.append("초안 artifact에는 downstream 사용 전 확인할 validation caveat가 있습니다.")
+        manual_review_points.append(
+            "초안 artifact에는 근거 보강 또는 품질 caveat가 남아 있습니다."
+        )
     for assumption in assumptions:
         manual_review_points.append(assumption)
 
@@ -143,49 +160,6 @@ def validate_artifact(
             "artifactType": artifact_type,
             "evidenceCoverage": 1.0 if evidence_refs else 0.0,
         },
-    )
-
-
-def validate_publish_gate(
-    *,
-    artifact_id: str,
-    validation_status: str | ValidationStatus | None,
-    approval_decision: str | None,
-    operation: str = "publish",
-) -> ValidationReport:
-    operation_value = _gate_operation(operation)
-    operation_label = operation_value.capitalize()
-    status_value = (
-        validation_status.value
-        if hasattr(validation_status, "value")
-        else str(validation_status or "")
-    )
-    passed_validation = status_value == ValidationStatus.PASSED.value
-    approved = approval_decision == "APPROVE"
-    result = (
-        ValidationCheckResult.PASS
-        if passed_validation and approved
-        else ValidationCheckResult.FAIL
-    )
-    message = (
-        f"{operation_label} gate는 PASSED validation과 approval record로 충족되었습니다."
-        if result == ValidationCheckResult.PASS
-        else f"{operation_label}에는 PASSED validation과 APPROVE decision이 필요합니다."
-    )
-    check = ValidationCheck(
-        rule_id="workflow.approval.before_publish",
-        severity=ValidationSeverity.ERROR,
-        result=result,
-        message=message,
-    )
-    return ValidationReport(
-        artifact_id=artifact_id,
-        status=_status_from_checks((check,)),
-        checks=(check,),
-        manual_review_points=()
-        if result == ValidationCheckResult.PASS
-        else (f"{operation_value}에 필요한 governance evidence가 부족합니다.",),
-        metadata={"gate": operation_value},
     )
 
 
@@ -211,63 +185,8 @@ def summarize_validation_report(report: ValidationReport) -> dict[str, Any]:
         "failedRuleIds": sorted(failed_rule_ids),
         "reviewRequiredRuleIds": sorted(review_required_rule_ids),
         "missingEvidence": list(report.missing_evidence),
-        "manualReviewPoints": list(report.manual_review_points),
+        "qualityCaveats": list(report.manual_review_points),
     }
-
-
-def build_reviewer_checklist(
-    report: ValidationReport,
-    *,
-    decision: str,
-    reviewer: str,
-    comment: str,
-) -> tuple[ReviewerChecklistItem, ...]:
-    reviewer_present = bool(str(reviewer).strip())
-    comment_present = bool(str(comment).strip())
-    manual_review_points = len(report.manual_review_points)
-    missing_evidence = len(report.missing_evidence)
-
-    return (
-        ReviewerChecklistItem(
-            item_id="validation.latest_report_bound",
-            label="최신 validation report 연결",
-            satisfied=True,
-            detail=f"{report.artifact_id}:{report.status.value}",
-        ),
-        ReviewerChecklistItem(
-            item_id="validation.status_passed_for_approval",
-            label="승인을 지원하는 validation status",
-            satisfied=report.status == ValidationStatus.PASSED,
-            detail=(
-                "APPROVE에는 PASSED validation이 필요하며, 비승인 decision은 미해결 검토를 "
-                "기록할 수 있습니다."
-            ),
-        ),
-        ReviewerChecklistItem(
-            item_id="validation.no_failed_checks",
-            label="실패 validation check 없음",
-            satisfied=not report.failed_checks,
-            detail=f"failed check {len(report.failed_checks)}개",
-        ),
-        ReviewerChecklistItem(
-            item_id="evidence.no_missing_refs",
-            label="누락 evidence 해소",
-            satisfied=missing_evidence == 0,
-            detail=f"missing evidence ref {missing_evidence}개",
-        ),
-        ReviewerChecklistItem(
-            item_id="review.manual_points_acknowledged",
-            label="수동 검토 항목 확인",
-            satisfied=manual_review_points == 0 or comment_present,
-            detail=f"manual review point {manual_review_points}개",
-        ),
-        ReviewerChecklistItem(
-            item_id="approval.human_actor_recorded",
-            label="검토자와 의견 기록",
-            satisfied=reviewer_present and comment_present,
-            detail=f"decision={decision}",
-        ),
-    )
 
 
 def _artifact_type_value(artifact: Any) -> str:
@@ -400,7 +319,7 @@ def _review_required_marker_check(
             rule_id="generator.uncertainty.marker",
             severity=ValidationSeverity.WARNING,
             result=ValidationCheckResult.REVIEW_REQUIRED,
-            message="초안의 불확실성이 validation caveat로 명시 표시되었습니다.",
+            message="초안의 불확실성이 근거 caveat로 명시되었습니다.",
         )
     if review_required:
         return ValidationCheck(
@@ -408,14 +327,14 @@ def _review_required_marker_check(
             severity=ValidationSeverity.WARNING,
             result=ValidationCheckResult.FAIL,
             message=(
-                "review_required metadata는 true이지만 본문에 REVIEW_REQUIRED/TODO marker가 없습니다."
+                "review_required metadata는 true이지만 본문에 REVIEW_REQUIRED/TODO caveat marker가 없습니다."
             ),
         )
     return ValidationCheck(
         rule_id="generator.uncertainty.marker",
         severity=ValidationSeverity.WARNING,
         result=ValidationCheckResult.PASS,
-        message="이 artifact metadata에는 review-required marker가 필요하지 않습니다.",
+        message="이 artifact metadata에는 추가 evidence caveat marker가 필요하지 않습니다.",
     )
 
 
@@ -486,13 +405,6 @@ def _has_review_marker(content: str, assumptions: Sequence[str]) -> bool:
         marker in content or marker in joined_assumptions
         for marker in ("REVIEW_REQUIRED", "TODO")
     )
-
-
-def _gate_operation(operation: str) -> str:
-    normalized = str(operation or "publish").strip().lower()
-    if normalized not in {"publish", "export"}:
-        raise ValueError(f"Unsupported approval gate operation: {operation}")
-    return normalized
 
 
 def _dedupe_preserve_order(items: Sequence[str]) -> list[str]:

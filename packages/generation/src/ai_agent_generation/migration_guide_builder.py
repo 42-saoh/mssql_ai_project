@@ -290,7 +290,7 @@ def _feature_branch_rows(
             "feature": "분기/기능 분류",
             "condition": "결정론적 DML 또는 LLM guide insight 없음",
             "status": "REVIEW_REQUIRED",
-            "summary": "업무 기능 분류는 추가 metadata 또는 검토자 확인이 필요합니다.",
+            "summary": "업무 기능 분류는 추가 metadata 확인이 필요합니다.",
             "evidence_refs": [static_ref],
         }
     ]
@@ -379,7 +379,7 @@ def _dependency_inventory(
                 "how_referenced": "dynamic SQL signal",
                 "why_uncertain": "정적 parser는 생성 SQL 내부 의존성을 확정할 수 없습니다.",
                 "what_to_extract_next": (
-                    "카탈로그로 확인된 dependency closure 또는 검토자가 제공한 sanitized "
+                    "카탈로그로 확인된 dependency closure 또는 사용자가 제공한 sanitized "
                     "metadata를 확보합니다."
                 ),
             }
@@ -498,7 +498,7 @@ def _dml_matrices(
             "delete": "Y" if "DELETE" in operations else "",
             "merge": "Y" if "MERGE" in operations else "",
             "keys_join_where_summary": (
-                "REVIEW_REQUIRED: predicate/key 추출은 검토자 확인이 필요합니다."
+                "REVIEW_REQUIRED: predicate/key 추출은 추가 근거 확인이 필요합니다."
             ),
             "important_columns_or_patterns": (
                 "REVIEW_REQUIRED: 중요 컬럼 패턴은 LLM 출력만으로 추론하지 않습니다."
@@ -591,7 +591,7 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
                 }
             ],
             "results": ["REVIEW_REQUIRED: result shape 검증이 필요합니다."],
-            "error_handling": "REVIEW_REQUIRED: 오류 처리는 검토자 확인이 필요합니다.",
+            "error_handling": "REVIEW_REQUIRED: 오류 처리는 추가 근거 확인이 필요합니다.",
         }
     for index, item in enumerate(dml_matrix, start=1):
         refs = [str(ref) for ref in _sequence(item.get("evidence_refs"))] or [static_ref]
@@ -665,7 +665,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
     )
     return {
         "policy": (
-            "수동 검토자 보조용입니다. 원천 메타데이터 DB에 대해 SSMS에서 실행하되, "
+            "수동 메타데이터 보강용입니다. 원천 메타데이터 DB에 대해 SSMS에서 실행하되, "
             "procedure 실행, row data 조회, DDL/DML 적용, raw definition 붙여넣기는 금지합니다."
         ),
         "queries": [

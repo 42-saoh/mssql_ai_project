@@ -63,7 +63,7 @@ P16이 `NO_GO`인 경우에는 P17A~P17D를 순차 실행한다.
 
 - `prompts/17a_dependency_metadata_evidence_closure.md` — `DEPENDENCY_METADATA_INCOMPLETE` 해소를 위한 metadata-only dependency evidence 보강
 - `prompts/17b_live_artifact_validation_closure.md` — confirmed pilot object set 기준 draft-only artifact validation closure
-- `prompts/17c_manual_approval_audit_binding.md` — human approval 및 audit evidence binding
+- `prompts/17c_draft_quality_audit_binding.md` — draft-quality audit evidence binding
 - `prompts/17d_pilot_release_go_decision.md` — hard-live 재검증 및 `NO_GO`/`CONDITIONAL_GO` 최종 판정
 
 P17 기준 문서는 `docs/live-pilot-blocker-closure-plan.md`, machine-readable fixture는 `fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml` 이다. P17도 PPM을 PLF로 대체하지 않으며, 전체 플랫폼 production-ready 선언은 금지한다.

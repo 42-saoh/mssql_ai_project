@@ -144,7 +144,6 @@ def test_p18b_web_http_and_auth_boundaries_are_explicit() -> None:
     )
     assert auth["documented_source"]["canonical_roles"] == [
         "USER",
-        "REVIEWER",
         "ADMIN",
         "AUDITOR",
     ]
@@ -169,7 +168,7 @@ def test_p18b_auth_source_docs_define_identity_roles_and_denials() -> None:
     ):
         assert phrase in combined
 
-    for role in ("USER", "REVIEWER", "ADMIN", "AUDITOR"):
+    for role in ("USER", "ADMIN", "AUDITOR"):
         assert role in auth_doc
 
     forbidden_fragments = (
@@ -201,7 +200,7 @@ def test_p18_forbidden_boundaries_remain_closed() -> None:
         "sql_definition_text",
         "auto_ddl_or_dml",
         "plf_fallback_for_ppm",
-        "unapproved_publish_or_export",
+        "publish_or_export_from_draft",
         "fake_auth_rbac_with_mock_headers",
     } <= set(fixture["forbidden_evidence"])
 

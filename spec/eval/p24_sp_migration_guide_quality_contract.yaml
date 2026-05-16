@@ -21,7 +21,7 @@ reference_policy:
   allowed_reference_derivations:
     - required_section_taxonomy
     - quality_dimensions
-    - review_checklist_categories
+    - draft_quality_caveat_categories
 runtime_profiles:
   guide_generation:
     default_model: gpt-5.5
@@ -130,7 +130,7 @@ dependency_inventory_requirements:
     - what_to_extract_next
 manual_metadata_extraction_appendix:
   required: true
-  execution_policy: reviewer_manual_metadata_only
+  execution_policy: metadata_only_evidence_collection
   forbidden:
     - row_data_select
     - procedure_execution

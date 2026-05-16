@@ -185,8 +185,8 @@ assert(profiles.profiles.every((profile) => profile.readOnly === true), "Metadat
 assert(metadataTools.tools.some((tool) => tool.name === "get_dependency_closure" && tool.invokable === true), "Dependency closure tool must be invokable");
 assert(metadataTools.tools.every((tool) => !("input" in tool)), "Metadata tool summary must not expose input schema");
 assert(dependencyClosure.toolName === "get_dependency_closure", "Dependency closure invocation returned the wrong tool");
-assert(dependencyClosure.data.unresolved?.length > 0, "Dependency closure must preserve unresolved review-required evidence");
-assert(dependencyClosure.data.edges.every((edge) => edge.resolutionStatus === "CONFIRMED"), "Closure graph must hide review-required edges when requested");
+assert(dependencyClosure.data.unresolved?.length > 0, "Dependency closure must preserve unresolved evidence caveats");
+assert(dependencyClosure.data.edges.every((edge) => edge.resolutionStatus === "CONFIRMED"), "Closure graph must hide evidence-caveated edges when requested");
 assert(dependencyResolution.toolName === "resolve_dependency_reference", "Dependency resolver invocation returned the wrong tool");
 assert(dependencyResolution.data.selectedResolution?.name === "TB_ORDER", "Dependency resolver did not select the confirmed table");
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);

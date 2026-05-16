@@ -81,11 +81,7 @@ function dependencyTargetKey(item: UnknownRecord, index: number) {
 }
 
 function stepState(job: Job, step: (typeof workflowSteps)[number]) {
-  if (
-    job.status === "VALIDATION_COMPLETE" ||
-    job.status === "APPROVED" ||
-    job.status === "REJECTED"
-  ) {
+  if (job.status === "VALIDATION_COMPLETE") {
     return "done";
   }
 
@@ -264,10 +260,10 @@ export function JobStatusView({
 
                 {skippedTargets.length > 0 ? (
                   <div className="callout callout--warning">
-                    <strong>REVIEW_REQUIRED dependencies</strong>
+                    <strong>근거 보강 필요 dependencies</strong>
                     <p>
-                      {countValue(dependencyAnalysis.skippedCount)} dependency targets require
-                      manual review. Showing {visibleSkippedTargets.length} of{" "}
+                      {countValue(dependencyAnalysis.skippedCount)} dependency targets need
+                      stronger evidence. Showing {visibleSkippedTargets.length} of{" "}
                       {skippedTargets.length}
                       {hiddenSkippedCount > 0 ? `; ${hiddenSkippedCount} more are hidden.` : "."}
                     </p>
@@ -275,7 +271,7 @@ export function JobStatusView({
                       {visibleSkippedTargets.map((target, index) => (
                         <li key={dependencyTargetKey(target, index)}>
                           {textValue(target.targetRef, "dependency target")} -{" "}
-                          {textValue(target.reason, "REVIEW_REQUIRED")}
+                          {textValue(target.reason, "근거 보강 필요")}
                         </li>
                       ))}
                     </ul>
@@ -384,7 +380,7 @@ export function JobStatusView({
                 <p>
                   {artifactTypeLabels[artifact.type]} · evidence coverage{" "}
                   {formatCoverage(artifact.evidenceCoverage)}
-                  {artifact.reviewRequired ? " · REVIEW_REQUIRED" : ""}
+                  {artifact.reviewRequired ? " · 근거 보강 필요" : ""}
                 </p>
                 {artifact.caveats?.length ? <small>{artifact.caveats.join(", ")}</small> : null}
               </div>

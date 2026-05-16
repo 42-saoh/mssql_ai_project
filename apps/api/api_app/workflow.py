@@ -46,10 +46,7 @@ from ai_agent_validation import (
     ValidationReport,
     ValidationSeverity,
     ValidationStatus,
-    build_reviewer_checklist,
-    summarize_validation_report,
     validate_artifact,
-    validate_publish_gate,
 )
 
 from api_app.ai_tool_orchestrator import AiToolOrchestrator
@@ -59,7 +56,6 @@ from api_app.metadata_gateway import McpMetadataGateway, MetadataCollectionResul
 from api_app.platform_tool_orchestrator import PlatformToolOrchestrator
 from api_app.repositories import (
     AgentRunRecord,
-    ApprovalRecordData,
     ArtifactRecord,
     JobRecord,
     ValidationReportRecord,
@@ -290,87 +286,6 @@ class WorkflowService:
             correlation_id=correlation_id,
             actor=actor or "api-system",
         )
-
-    def record_approval_decision(
-        self,
-        *,
-        artifact_id: str,
-        decision: str,
-        reviewer: str,
-        comment: str,
-        validation_report_id: str | None,
-        correlation_id: str | None = None,
-    ) -> ApprovalRecordData:
-        self._require_artifact(artifact_id)
-        latest_validation = self.repository.latest_validation_for(artifact_id)
-        if latest_validation is None:
-            raise ValueError("Approval decision requires the latest artifact validation.")
-        if validation_report_id is not None and (
-            validation_report_id != latest_validation.validation_report_id
-        ):
-            raise ValueError("validationReportId must match the latest artifact validation.")
-        if decision == "APPROVE":
-            if latest_validation.status != "PASSED":
-                raise ValueError("APPROVE requires latest validation status PASSED.")
-        validation_report = validation_record_to_report(latest_validation)
-        reviewer_checklist = [
-            item.as_dict()
-            for item in build_reviewer_checklist(
-                validation_report,
-                decision=decision,
-                reviewer=reviewer,
-                comment=comment,
-            )
-        ]
-        return self.repository.add_approval(
-            artifact_id=artifact_id,
-            decision=decision,
-            reviewer=reviewer,
-            comment=comment,
-            validation_report_id=latest_validation.validation_report_id,
-            reviewer_checklist=reviewer_checklist,
-            validation_summary=summarize_validation_report(validation_report),
-            correlation_id=correlation_id,
-        )
-
-    def evaluate_publish_gate(
-        self,
-        artifact_id: str,
-        *,
-        operation: str = "publish",
-    ) -> ValidationReportRecord:
-        artifact = self._require_artifact(artifact_id)
-        validation = self.repository.latest_validation_for(artifact_id)
-        approval = self.repository.latest_approval_for(artifact_id)
-        gate_report = validate_publish_gate(
-            artifact_id=artifact_id,
-            validation_status=validation.status if validation else None,
-            approval_decision=approval.decision if approval else None,
-            operation=operation,
-        )
-        record = self.repository.save_validation_report(
-            artifact_id=artifact_id,
-            status=gate_report.status.value,
-            checks=[check.as_dict() for check in gate_report.checks],
-            missing_evidence=list(gate_report.missing_evidence),
-            manual_review_points=list(gate_report.manual_review_points),
-        )
-        self.repository.record_audit_event(
-            action="PUBLISH_GATE_EVALUATED",
-            target_type="ARTIFACT",
-            target_ref_id=artifact_id,
-            payload={
-                "status": record.status,
-                "storageResult": record.storage_result,
-                "operation": operation,
-            },
-            correlation_id=(
-                job.correlation_id
-                if (job := self.repository.get_job(artifact.job_id)) is not None
-                else None
-            ),
-        )
-        return record
 
     def _collect_metadata(
         self,
@@ -804,15 +719,27 @@ class WorkflowService:
                 "## metadata_summary",
                 *metadata_detail_lines(metadata),
                 "",
-                "## assumptions_and_review",
+                "## assumptions_and_todo",
                 f"- {WORKFLOW_METADATA_NOTE}",
                 (
                     "- REVIEW_REQUIRED: 이 artifact type에 사용할 package-backed renderer가 "
-                    "아직 없습니다."
+                    "아직 없어 근거 caveat로 표시합니다."
                 ),
                 "",
-                "## review_checklist",
-                "- [ ] reviewer_confirms_contract_placeholder_boundary",
+                "## quality_summary",
+                "- 이 초안은 수집된 메타데이터만 사용하며 실행 가능한 변경을 포함하지 않습니다.",
+                "",
+                "## evidence_map",
+                *metadata_lines,
+                "",
+                "## known_caveats",
+                "- package-backed renderer 연결 전까지 구조와 세부 항목은 제한적입니다.",
+                "",
+                "## next_evidence_to_collect",
+                "- 전용 renderer가 요구하는 추가 metadata field와 deterministic analyzer 결과를 수집합니다.",
+                "",
+                "## draft_readiness",
+                "- status: evidence caveat",
                 "",
             ]
         )
@@ -1653,8 +1580,8 @@ def _append_dependency_semantic_analysis(
                 "targetRef": target_ref,
                 "riskArea": "dependency_call_flow",
                 "whatToExtractNext": (
-                    "transaction boundary, input/output DTO, nested DML/result shape를 reviewer가 "
-                    "child AgentRun과 대조합니다."
+                    "transaction boundary, input/output DTO, nested DML/result shape를 "
+                    "child AgentRun evidence와 대조할 수 있게 보강합니다."
                 ),
             }
         )
@@ -1662,7 +1589,7 @@ def _append_dependency_semantic_analysis(
             markers.append(
                 {
                     "code": "DEPENDENCY_CHILD_REVIEW_MARKERS_PRESENT",
-                    "message": f"{target_ref} child semantic run has review markers.",
+                    "message": f"{target_ref} child semantic run has evidence caveat markers.",
                     "status": "REVIEW_REQUIRED",
                     "evidenceRefs": refs,
                 }
@@ -1670,7 +1597,7 @@ def _append_dependency_semantic_analysis(
     output.setdefault("reviewMarkers", []).extend(markers)
     output["reviewMarkers"] = _dedupe_markers(output.get("reviewMarkers", []))
     output.setdefault("assumptions", []).append(
-        "confirmed dependency procedure semantic outputs are draft-only review aids.",
+        "confirmed dependency procedure semantic outputs are draft-only evidence aids.",
     )
     output["assumptions"] = list(dedupe_strings(str(item) for item in output["assumptions"]))
 

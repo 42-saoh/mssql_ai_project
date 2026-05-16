@@ -266,7 +266,7 @@ scenarios:
       - id: fact_p23_medium_hold_branch
         source: deterministic static analysis output
         fact_type: BRANCH_RULE
-        summary: HOLD branch inserts dbo.CreditReviewQueue and leaves the account in manual review.
+        summary: HOLD branch inserts dbo.CreditReviewQueue and leaves the account in the credit hold queue.
       - id: fact_p23_medium_audit_write
         source: deterministic static analysis output
         fact_type: TABLE_WRITE
@@ -344,7 +344,7 @@ scenarios:
             - fact_p23_medium_approve_branch
             - fact_p23_medium_parameters
         - category: CREDIT_HOLD_DECISION
-          summary: HOLD routes the account to manual review instead of approving it directly.
+          summary: HOLD routes the account to the credit hold queue instead of approving it directly.
           status: INFERRED_DESCRIPTION
           evidence_refs:
             - fact_p23_medium_hold_branch
