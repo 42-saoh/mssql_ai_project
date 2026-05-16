@@ -65,6 +65,12 @@ _FORBIDDEN_TEXT_MARKERS = (
     "CREATE PROC",
     "ALTER PROCEDURE",
 )
+_EVIDENCE_CAVEAT_TEXT_MARKERS = (
+    "REVIEW_REQUIRED",
+    "근거 보강 필요",
+    "evidence caveat",
+    "품질 caveat",
+)
 
 
 def migration_guide_payload(context: GenerationContext) -> Mapping[str, Any]:
@@ -1111,7 +1117,7 @@ def _review_required_claim_is_rendered(
     return (
         str(claim.get("expected_status")) == "REVIEW_REQUIRED"
         and str(claim.get("claim_code")) in combined_text
-        and "REVIEW_REQUIRED" in combined_text
+        and any(marker in combined_text for marker in _EVIDENCE_CAVEAT_TEXT_MARKERS)
         and _evidence_item_is_rendered(claim, combined_text)
     )
 

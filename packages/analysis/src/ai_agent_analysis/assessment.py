@@ -237,7 +237,7 @@ def calculate_overall_confidence(
         factors.append("하나 이상의 result-set hint가 REVIEW_REQUIRED 상태입니다.")
     if review_markers:
         score -= min(0.20, 0.05 * len(review_markers))
-        factors.append("분석 결과에 검토 마커가 포함되어 있습니다.")
+        factors.append("분석 결과에 근거 caveat가 포함되어 있습니다.")
     if blockers:
         score -= 0.05
         factors.append("canonical conversion binding이 아직 차단되어 있습니다.")

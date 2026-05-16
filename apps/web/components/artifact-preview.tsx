@@ -54,9 +54,8 @@ export function ArtifactPreview({
         <div className="callout callout--warning">
           <strong>Draft-only boundary</strong>
           <p>
-            This preview is not published or deployed. Validation remains required, while the
-            default UI exposes no approval decision, SQL execution, DDL apply, source write, or
-            publish action.
+            This preview is draft-only. The default UI exposes no publish, deploy, SQL execution,
+            DDL/DML apply, or source write action.
           </p>
         </div>
 
@@ -179,8 +178,11 @@ export function ArtifactPreview({
             </div>
           </div>
           <div className="evidence-list">
-            {artifact.evidenceRefs.map((evidence) => (
-              <article className="evidence-row" key={`${evidence.type}-${evidence.locator}`}>
+            {artifact.evidenceRefs.map((evidence, index) => (
+              <article
+                className="evidence-row"
+                key={`${evidence.type}-${evidence.locator}-${index}`}
+              >
                 <strong>{evidence.type}</strong>
                 <span>{evidence.objectRef}</span>
                 <code>{evidence.locator}</code>

@@ -168,9 +168,20 @@ def test_job_page_renders_dependency_child_agent_runs_without_raw_trace_dump() -
     assert "LLM_SEMANTIC_ANALYST_DEPENDENCY" in job_status_view
     assert "Dependency child" in job_status_view
     assert "Root run" in job_status_view
-    assert "REVIEW_REQUIRED dependencies" in job_status_view
+    assert "근거 보강 필요" in job_status_view
     assert "skippedDependencyDisplayLimit = 8" in job_status_view
     assert "sourceContextDigest" in job_status_view
     assert "target {run.targetRef}" in job_status_view
     assert "run.structuredOutput" not in job_status_view
     assert "componentInvocations" not in job_status_view
+
+
+def test_web_visible_copy_uses_evidence_caveat_language_not_review_actions() -> None:
+    source = _web_source().lower()
+
+    assert "review required" not in source
+    assert "review marker" not in source
+    assert "manual review" not in source
+    assert "approval decision" not in source
+    assert "evidence caveat" in source
+    assert "근거 보강 필요" in _web_source()

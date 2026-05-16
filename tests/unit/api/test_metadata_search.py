@@ -96,8 +96,8 @@ class RecordingSearchRegistry:
                             {
                                 "code": "DEPENDENCY_METADATA_INCOMPLETE",
                                 "message": (
-                                    "Dependency metadata is incomplete and requires review "
-                                    "before relying on links."
+                                    "Dependency metadata is incomplete; treat dependency links "
+                                    "as evidence caveats until confirmed."
                                 ),
                             }
                         ],
@@ -109,8 +109,8 @@ class RecordingSearchRegistry:
                     {
                         "code": "DEPENDENCY_METADATA_INCOMPLETE",
                         "message": (
-                            "Dependency metadata is incomplete and requires review "
-                            "before relying on links."
+                            "Dependency metadata is incomplete; treat dependency links "
+                            "as evidence caveats until confirmed."
                         ),
                     }
                 ],

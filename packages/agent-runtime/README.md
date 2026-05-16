@@ -18,7 +18,7 @@ OpenAI LLM agent runtime slice for P22.
 - `ModelGateway.analyze_metadata` provides response-only metadata analysis for `POST /api/v1/metadata/analyze`. It uses strict JSON structured output constrained to deterministic fact ids and does not store raw prompt, raw definition, row data, or provider response text.
 - Semantic analysis now runs through per-SP tasks. Multiple SP tasks can fan out with `LLM_SP_CONCURRENCY` (default `2`), while the public single-SP API stays unchanged.
 - P26 high-quality mode is the API/Web default. Each SP task uses staged calls for deterministic evidence digest, business rule extraction, Java/MyBatis conversion readiness, migration guide insights, evidence criticism, plus at most one repair call when evidence refs or required markers are missing.
-- The runtime constrains live structured-output schemas with the task's deterministic fact ids, repairs stored output so claim `evidenceRefs` do not use prompt/input/output hashes, and injects a `LLM_OUTPUT_STORAGE_SANITIZED` review marker when unsafe model text is removed.
+- The runtime constrains live structured-output schemas with the task's deterministic fact ids, repairs stored output so claim `evidenceRefs` do not use prompt/input/output hashes, and injects a `LLM_OUTPUT_STORAGE_SANITIZED` evidence caveat when unsafe model text is removed.
 
 ## Registry refs
 

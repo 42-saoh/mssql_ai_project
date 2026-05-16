@@ -1,11 +1,11 @@
-# ADR-0003 — 산출물은 Draft → Validate 를 기본 경로로 하고 Review/Approve/Publish 는 제품 표면에 두지 않는다
+# ADR-0003 — 산출물은 Draft → Validate 를 기본 경로로 하고 publish/deploy/apply 는 제품 표면에 두지 않는다
 
 ## 상태
 Accepted, amended by draft-quality no-review cleanup
 
 ## 결정
 기본 제품 흐름은 request → metadata → analysis → generation → validation 이후 job 상태
-`VALIDATION_COMPLETE` 에서 종료한다. Web review UI 와 approval decision API 는 노출하지 않는다.
+`VALIDATION_COMPLETE` 에서 종료한다. Web UI 와 public API 는 publish/deploy/apply action 을 노출하지 않는다.
 
 산출물 상태 모델은 draft/validation 중심으로 해석한다.
 

@@ -69,7 +69,7 @@ knowledge payloads.
 ## Draft validation / audit notes
 
 - Validation reports expose `qualityCaveats` for evidence and draft-quality caveats.
-- Approval decision routes and approval records are not registered in the public API.
+- Decision-gate routes and human decision records are not registered in the public API.
 - Audit payloads carry stage, actor, target ref, compact refs, and correlation id. Platform DB
   audit persistence uses the existing `TRC_ID` column and does not require schema changes.
 - Publish/export endpoints remain absent; generated output is draft-only.
@@ -307,7 +307,7 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
 - Asset/version lifecycle 은 `DRAFT`, `REVIEW_REQUIRED`, `ARCHIVED` 이다. 새
   content version 은 항상 `DRAFT` 로 시작하고, 같은 `contentHash` reuse 는 기존 lifecycle 을
   유지한다. `ARCHIVED` 는 terminal 이며 search default 에서는 제외된다.
-- Knowledge review API 와 reviewer identity writes 는 public/product surface 에 없다.
+- Knowledge curation API 와 reviewer identity writes 는 public/product surface 에 없다.
 - Fact graph edge 는 같은 asset version 의 실제 fact id 를 참조한다. edge endpoint 를 fact 로
   확인할 수 없으면 `REVIEW_REQUIRED` endpoint fact 를 만들어 graph integrity 를 유지한다.
 - Platform DB persistence 는 `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql` 수동 적용을
@@ -335,7 +335,7 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
 - Process-global admission control 기본값은 `WORKFLOW_MAX_ACTIVE_JOBS=4`,
   `MSSQL_METADATA_MAX_CONCURRENCY=4`, `BACKPRESSURE_WAIT_MS=250` 이다. Public API capacity 초과는
   `WORKFLOW_BACKPRESSURE` 또는 `MCP_BACKPRESSURE` code 로 반환하고, internal planner tool backpressure 는
-  review marker/caveat 로 남긴다.
+  evidence caveat 로 남긴다.
 
 ## Metadata tool invocation
 
@@ -363,5 +363,5 @@ artifact type, and no workflow state transition is added for dependency evidence
    의존한다. 테스트 기본값은 fixture-backed repository 이지만 route 는 hardcoded mock 응답을
    반환하지 않는다.
 3. OpenAI key 기반 generation provider wiring 은 P05 API/workflow slice 밖이다.
-4. OpenAPI approval decision 과 DDL approval enum 은 API 내부 mapping helper 로 고정했다.
+4. OpenAPI validation status 와 DDL draft-quality enum 은 API 내부 mapping helper 로 고정했다.
 5. validation status `PASSED/FAILED/REVIEW_REQUIRED` 와 DDL `PASS/FAIL` 은 API 내부 mapping helper 로 고정했다.

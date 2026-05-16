@@ -5,12 +5,17 @@ import json
 import pytest
 from api_app.knowledge_service import (
     export_knowledge,
+    persist_metadata_analysis_knowledge,
     persist_sp_workflow_knowledge,
     sanitize_knowledge_payload,
 )
 from api_app.metadata_gateway import MetadataCollectionResult
 from api_app.repositories import AgentRunRecord, KnowledgePersistenceError
-from api_app.schemas import KnowledgeExportRequest
+from api_app.schemas import (
+    KnowledgeExportRequest,
+    MetadataAnalysisRequest,
+    MetadataAnalysisResponse,
+)
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
 
@@ -207,6 +212,100 @@ def test_sp_workflow_knowledge_persists_versions_reuses_hash_and_exports_graph()
     assert "mcp.get_table_schema.abc123" in serialized
     assert "CREATE PROCEDURE" not in serialized
     assert "hidden" not in serialized
+
+
+def test_metadata_analysis_knowledge_dedupes_profile_and_deterministic_fact_ids() -> None:
+    repository = MemoryWorkflowRepository()
+    request = MetadataAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "options": {"persistKnowledge": True},
+        }
+    )
+    response = MetadataAnalysisResponse.model_validate(
+        {
+            "dbProfileId": "master",
+            "mode": "QUERY",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "sourceProfile": "master",
+            "sourceDatabase": "master",
+            "summary": "metadata analysis draft",
+            "objectProfiles": [
+                {
+                    "objectRef": "dbo.TB_ORDER",
+                    "objectType": "TABLE",
+                    "columnCount": 2,
+                    "reviewRequired": False,
+                    "evidenceRefs": ["metadata.profile.dup"],
+                    "sourceFactIds": ["metadata.profile.dup"],
+                }
+            ],
+            "deterministicFacts": [
+                {
+                    "id": "metadata.profile.dup",
+                    "type": "METADATA_PROFILE",
+                    "objectRef": "dbo.TB_ORDER",
+                    "summary": "profile fact",
+                    "status": "OBSERVED",
+                    "evidenceRefs": ["metadata.profile.dup"],
+                }
+            ],
+            "dependencyGraph": {
+                "nodes": [],
+                "edges": [
+                    {
+                        "from": "dbo.usp_Order",
+                        "to": "dbo.TB_ORDER",
+                        "relationshipType": "READS",
+                        "evidenceRefs": ["metadata.profile.dup"],
+                    },
+                    {
+                        "from": "dbo.usp_Order",
+                        "to": "dbo.TB_ORDER",
+                        "relationshipType": "READS",
+                        "evidenceRefs": ["metadata.profile.dup"],
+                    },
+                ],
+                "unresolved": [],
+            },
+            "dtoReadiness": [],
+            "aiToolEvidence": {},
+            "reviewMarkers": [],
+            "assumptions": [],
+            "caveats": [],
+            "reviewRequired": False,
+            "blockers": [],
+            "knowledgeAssets": [],
+        }
+    )
+
+    result = persist_metadata_analysis_knowledge(
+        repository=repository,
+        request=request,
+        response=response,
+    )
+
+    metadata_asset = next(asset for asset in result.assets if asset.asset_kind == "METADATA_PROFILE")
+    facts = repository.list_knowledge_facts(
+        metadata_asset.asset_id,
+        metadata_asset.current_version_id or "",
+    )
+
+    assert facts is not None
+    fact_ids = [fact.fact_id for fact in facts[0]]
+    assert fact_ids.count("metadata.profile.dup") == 1
+    dependency_asset = next(
+        asset for asset in result.assets if asset.asset_kind == "DEPENDENCY_EVIDENCE"
+    )
+    dependency_facts = repository.list_knowledge_facts(
+        dependency_asset.asset_id,
+        dependency_asset.current_version_id or "",
+    )
+    assert dependency_facts is not None
+    assert len({edge.edge_id for edge in dependency_facts[1]}) == len(dependency_facts[1])
 
 
 def test_same_content_version_reuse_still_links_each_job() -> None:

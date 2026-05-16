@@ -23,6 +23,7 @@ from ai_agent_generation import (
     render_java_mybatis_sp_wrapper,
 )
 from ai_agent_generation.models import GENERATOR_VERSION
+from ai_agent_generation.utils import draft_quality_text
 from ai_agent_runtime import (
     AgentRunPayload,
     ModelGateway,
@@ -70,7 +71,7 @@ from api_app.tracking import (
 )
 
 WORKFLOW_METADATA_NOTE = (
-    "REVIEW_REQUIRED: metadata는 MSSQL MCP registry 경계를 통해 수집되며 "
+    "근거 보강 필요: metadata는 MSSQL MCP registry 경계를 통해 수집되며 "
     "이 integration slice에서는 platform DB workflow repository에 저장됩니다."
 )
 DEPENDENCY_AGENT_TYPE = "LLM_SEMANTIC_ANALYST_DEPENDENCY"
@@ -722,7 +723,7 @@ class WorkflowService:
                 "## assumptions_and_todo",
                 f"- {WORKFLOW_METADATA_NOTE}",
                 (
-                    "- REVIEW_REQUIRED: 이 artifact type에 사용할 package-backed renderer가 "
+                    "- 근거 보강 필요: 이 artifact type에 사용할 package-backed renderer가 "
                     "아직 없어 근거 caveat로 표시합니다."
                 ),
                 "",
@@ -747,7 +748,7 @@ class WorkflowService:
             job_id=job_id,
             artifact_type=artifact_type,
             title=f"{artifact_type.value} 초안",
-            content=content,
+            content=draft_quality_text(content),
             evidence_refs=list(metadata.evidence_refs)
             or [
                 {
@@ -957,7 +958,7 @@ def _deterministic_facts_with_prefix(
 
 def metadata_detail_lines(metadata: MetadataCollectionResult) -> list[str]:
     if not metadata.table_schemas:
-        return ["- REVIEW_REQUIRED: table schema metadata를 사용할 수 없습니다."]
+        return ["- 근거 보강 필요: table schema metadata를 사용할 수 없습니다."]
     lines: list[str] = []
     for table in metadata.table_schemas:
         table_ref = f"{table.get('schema')}.{table.get('tableName')}"
@@ -1136,7 +1137,7 @@ def generation_assumptions(agent_run: AgentRunRecord | None) -> list[str]:
     assumptions = [WORKFLOW_METADATA_NOTE]
     if agent_run:
         assumptions.append(
-            "REVIEW_REQUIRED: LLM semantic analysis is inferred and remains a validation caveat."
+            "근거 보강 필요: LLM semantic analysis is inferred; treat it as an evidence caveat."
         )
         assumptions.extend(str(item) for item in agent_run.structured_output.get("assumptions", []))
     return list(dedupe_strings(assumptions))
@@ -1250,7 +1251,7 @@ def _summary_with_ai_tool_markers(
     )
     if not marker_count:
         return summary
-    return f"{summary}, tool orchestration 검토 마커 {marker_count}개"
+    return f"{summary}, tool orchestration 근거 caveat {marker_count}개"
 
 
 def _tool_evidence_blocks(metadata: MetadataCollectionResult) -> list[dict[str, object]]:

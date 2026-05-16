@@ -264,7 +264,7 @@ def _evidence_coverage_check(
                 severity=ValidationSeverity.ERROR,
                 result=ValidationCheckResult.REVIEW_REQUIRED,
                 message=(
-                    f"{artifact_type}에는 evidence ref가 없지만 REVIEW_REQUIRED로 명시 표시되었습니다."
+                    f"{artifact_type}에는 evidence ref가 없지만 evidence caveat로 명시 표시되었습니다."
                 ),
             ),
             (),
@@ -275,7 +275,7 @@ def _evidence_coverage_check(
                 rule_id="artifact.evidence.required",
                 severity=ValidationSeverity.ERROR,
                 result=ValidationCheckResult.FAIL,
-                message=f"{artifact_type}에는 evidence ref 또는 REVIEW_REQUIRED marker가 필요합니다.",
+                message=f"{artifact_type}에는 evidence ref 또는 evidence caveat marker가 필요합니다.",
             ),
             ("artifact.evidence_refs",),
         )
@@ -327,7 +327,7 @@ def _review_required_marker_check(
             severity=ValidationSeverity.WARNING,
             result=ValidationCheckResult.FAIL,
             message=(
-                "review_required metadata는 true이지만 본문에 REVIEW_REQUIRED/TODO caveat marker가 없습니다."
+                "review_required metadata는 true이지만 본문에 evidence caveat marker가 없습니다."
             ),
         )
     return ValidationCheck(
@@ -403,7 +403,16 @@ def _has_review_marker(content: str, assumptions: Sequence[str]) -> bool:
     joined_assumptions = "\n".join(assumptions)
     return any(
         marker in content or marker in joined_assumptions
-        for marker in ("REVIEW_REQUIRED", "TODO")
+        for marker in (
+            "REVIEW_REQUIRED",
+            "EVIDENCE_CAVEAT",
+            "evidence caveat",
+            "quality caveat",
+            "품질 caveat",
+            "근거 caveat",
+            "근거 보강 필요",
+            "TODO",
+        )
     )
 
 

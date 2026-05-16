@@ -46,7 +46,7 @@ METADATA_BLOCKER_MESSAGES = {
         "PPM pilot manifest is template_only, so real object names must not be returned."
     ),
     DEPENDENCY_METADATA_INCOMPLETE: (
-        "Dependency metadata is incomplete and requires review before relying on links."
+        "Dependency metadata is incomplete; treat dependency links as evidence caveats until confirmed."
     ),
     P21_LIVE_PPM_REQUIRED: (
         "P21 live portal gate requires live read-only PPM metadata access; fixture "

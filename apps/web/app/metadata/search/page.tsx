@@ -437,8 +437,8 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
               <div>
                 <p className="eyebrow">{group.category}</p>
                 <h3>{group.insights.length} insights</h3>
-                {group.insights.slice(0, 3).map((insight) => (
-                  <p key={`${group.category}-${insight.code}`}>
+                {group.insights.slice(0, 3).map((insight, index) => (
+                  <p key={`${group.category}-${insight.code}-${insight.objectRef}-${index}`}>
                     <strong>{insight.code}</strong> · {insight.summary}
                   </p>
                 ))}
@@ -447,8 +447,8 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
                 {group.insights
                   .flatMap((insight) => insight.evidenceRefs)
                   .slice(0, 4)
-                  .map((ref) => (
-                    <code key={`${group.category}-${ref}`}>{ref}</code>
+                  .map((ref, index) => (
+                    <code key={`${group.category}-${ref}-${index}`}>{ref}</code>
                   ))}
               </div>
             </article>
@@ -477,7 +477,8 @@ function MetadataAnalysisPanel({ analysis }: Readonly<{ analysis: MetadataAnalys
       ) : null}
 
       {analysis.reviewMarkers.length > 0 ? (
-        <div className="blocker-list">
+        <div className="blocker-list" aria-label="Evidence caveats">
+          <p className="eyebrow">Evidence caveats</p>
           {analysis.reviewMarkers.map((marker) => (
             <article className="blocker-row" key={marker.code}>
               <strong>{marker.code}</strong>

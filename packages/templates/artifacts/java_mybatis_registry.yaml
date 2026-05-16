@@ -61,7 +61,7 @@ templates:
         description: DTO/VO/Model 초안에는 실행 가능한 SQL이 포함되지 않는다.
       - code: FIELD_MAPPING_REVIEW_REQUIRED
         status: REVIEW_REQUIRED
-        description: field name과 Java type은 검토 전까지 초안 mapping으로 유지한다.
+        description: field name과 Java type은 근거 보강 전까지 초안 mapping으로 유지한다.
     draftQualityCaveats:
       - dto_vo_model_final_choice_flagged
       - field_mapping_evidence_linked

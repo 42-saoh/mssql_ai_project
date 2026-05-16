@@ -22,6 +22,7 @@ from ai_agent_generation.policy import (
     validate_generation_assets,
 )
 from ai_agent_generation.utils import (
+    draft_quality_text,
     ensure_trailing_newline,
     java_imports_for_types,
     korean_entity_label,
@@ -338,7 +339,7 @@ class JavaMyBatisDraftRendererBase:
             "## draft_readiness",
             *draft_readiness_lines,
         ]
-        return ensure_trailing_newline("\n".join(lines))
+        return ensure_trailing_newline(draft_quality_text("\n".join(lines)))
 
     def render_data_class(
         self,
@@ -380,7 +381,7 @@ class JavaMyBatisDraftRendererBase:
             self._append_accessor(lines, column, names)
 
         lines.append("}")
-        return ensure_trailing_newline("\n".join(lines))
+        return ensure_trailing_newline(draft_quality_text("\n".join(lines)))
 
     def render_service(
         self,
@@ -414,7 +415,7 @@ class JavaMyBatisDraftRendererBase:
             ),
             "}",
         ]
-        return ensure_trailing_newline("\n".join(lines))
+        return ensure_trailing_newline(draft_quality_text("\n".join(lines)))
 
     def render_mapper(
         self,
@@ -448,7 +449,7 @@ class JavaMyBatisDraftRendererBase:
             ),
             "}",
         ]
-        return ensure_trailing_newline("\n".join(lines))
+        return ensure_trailing_newline(draft_quality_text("\n".join(lines)))
 
     def render_mapper_xml(
         self,
@@ -479,7 +480,7 @@ class JavaMyBatisDraftRendererBase:
             "",
             "</mapper>",
         ]
-        return ensure_trailing_newline("\n".join(lines))
+        return ensure_trailing_newline(draft_quality_text("\n".join(lines)))
 
     def _append_field(
         self,

@@ -228,10 +228,9 @@ def persist_metadata_analysis_knowledge(
             },
             facts=[
                 *_facts_from_profiles(response.object_profiles),
-                *_facts_from_deterministic_facts(
+                *_facts_from_metadata_profile_deterministic_facts(
                     target=target,
                     facts=response.deterministic_facts,
-                    fallback_type="METADATA_FACT",
                 ),
             ],
             edges=[],
@@ -501,6 +500,8 @@ def _asset_spec(
     facts: list[dict[str, Any]],
     edges: list[dict[str, Any]],
 ) -> KnowledgeAssetSpec:
+    facts = _dedupe_facts(facts)
+    edges = _dedupe_edges(edges)
     sanitized_payload, payload_markers = sanitize_knowledge_payload(payload)
     sanitized_facts, fact_markers = sanitize_knowledge_payload(facts)
     sanitized_edges, edge_markers = sanitize_knowledge_payload(edges)
@@ -818,6 +819,35 @@ def _facts_from_deterministic_facts(
     return output
 
 
+def _facts_from_metadata_profile_deterministic_facts(
+    *,
+    target: dict[str, str],
+    facts,
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for fact in facts or []:
+        if not isinstance(fact, dict):
+            continue
+        fact_id = str(fact.get("id") or "")
+        if not fact_id.startswith("metadata.profile."):
+            continue
+        output.append(
+            _fact(
+                fact_id=fact_id,
+                fact_type="METADATA_PROFILE",
+                object_ref=str(fact.get("objectRef") or _target_ref(target)),
+                summary=_ensure_korean_summary(
+                    fact.get("summary") or fact_id,
+                    fallback=f"{fact_id} fact 요약입니다.",
+                ),
+                status=str(fact.get("status") or "OBSERVED"),
+                evidence_refs=_fact_refs(fact),
+                payload=fact,
+            )
+        )
+    return output
+
+
 def _facts_from_profiles(profiles) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
     for profile in profiles:
@@ -881,7 +911,7 @@ def _facts_from_dependency_graph(graph: dict[str, Any]) -> list[dict[str, Any]]:
                     fact_id=_graph_endpoint_fact_id(endpoint),
                     fact_type="DEPENDENCY_ENDPOINT",
                     object_ref=endpoint,
-                    summary=f"의존성 graph endpoint {endpoint}는 검토가 필요합니다.",
+                summary=f"의존성 graph endpoint {endpoint}는 근거 보강이 필요합니다.",
                     status="REVIEW_REQUIRED",
                     evidence_refs=[str(ref) for ref in edge.get("evidenceRefs", [])],
                     payload={"objectRef": endpoint, "source": "dependencyGraphEdge"},
@@ -1221,6 +1251,23 @@ def _dedupe_facts(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         seen.add(fact_id)
         output.append(fact)
+    return output
+
+
+def _dedupe_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    output: list[dict[str, Any]] = []
+    for edge in edges:
+        edge_id = str(edge.get("edgeId") or "")
+        if not edge_id:
+            edge_id = "|".join(
+                str(edge.get(key) or "")
+                for key in ("fromFactId", "from", "toFactId", "to", "edgeType", "type")
+            )
+        if not edge_id or edge_id in seen:
+            continue
+        seen.add(edge_id)
+        output.append(edge)
     return output
 
 

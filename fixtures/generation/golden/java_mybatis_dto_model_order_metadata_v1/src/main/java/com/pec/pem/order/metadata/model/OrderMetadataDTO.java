@@ -5,7 +5,7 @@ import java.time.LocalDate;
 /**
  * 주문 메타데이터 DTO/VO/Model DTO 초안.
  * evidence: dbo.TB_ORDER
- * REVIEW_REQUIRED: 필드/타입은 metadata evidence 기준 초안이다.
+ * 근거 보강 필요: 필드/타입은 metadata evidence 기준 초안이다.
  */
 public class OrderMetadataDTO {
 

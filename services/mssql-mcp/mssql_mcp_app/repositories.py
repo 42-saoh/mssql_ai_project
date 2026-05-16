@@ -4403,7 +4403,7 @@ def _metadata_search_caveats(results: list[dict[str, Any]]) -> list[str]:
 def _blockers_for_caveats(caveats: list[str]) -> list[dict[str, str]]:
     messages = {
         DEPENDENCY_METADATA_INCOMPLETE: (
-            "Dependency metadata is incomplete and requires review before relying on links."
+            "Dependency metadata is incomplete; treat dependency links as evidence caveats until confirmed."
         )
     }
     return [

@@ -217,7 +217,7 @@ def test_workflow_repository_contract_records_state_changes() -> None:
         evidence_refs=[{"type": "MCP_TOOL", "locator": "fixture"}],
         generator_version="test",
         registry_refs=("prompt@test",),
-        assumptions=("review required",),
+        assumptions=("evidence caveat",),
         review_required=True,
     )
     validation = repository.save_validation_report(
@@ -256,7 +256,7 @@ def test_workflow_repository_lists_artifacts_with_stable_internal_bound() -> Non
             evidence_refs=[{"type": "MSSQL_METADATA", "locator": "fixture"}],
             generator_version="test",
             registry_refs=("prompt@test",),
-            assumptions=("review required",),
+            assumptions=("evidence caveat",),
             review_required=True,
         )
 

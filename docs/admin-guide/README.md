@@ -22,7 +22,7 @@
 2. `config/mssql/local_docker_profiles.yaml` 에서 metadata 기본 profile `master` 와 platform profile `plf` 을 확인한다.
 3. schema 변경이 필요하면 `db/schema/` 에 versioned SQL 만 추가하고 실제 DB 적용은 외부 운영자가 수동 수행한다.
 4. 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 과 필요한 경우 `make test`, `make test-web-smoke` 로 수행한다.
-5. 기본 workflow 와 Web UI 는 validation 이후 `VALIDATION_COMPLETE` 에서 끝난다. Approval decision API 는 제품 표면에 없으며 publish 나 배포를 자동 수행하지 않는다.
+5. 기본 workflow 와 Web UI 는 validation 이후 `VALIDATION_COMPLETE` 에서 끝난다. 제품 표면에는 publish, deploy, apply action 이 없으며 자동 수행하지 않는다.
 6. Web HTTP adapter route smoke 는 `python3.14 tests/e2e/web_http_adapter_smoke.py` 로 실행한다. 이 검증은 fixture-backed local API route evidence 이며 production auth/RBAC evidence 가 아니다.
 7. Auth/RBAC route enforcement 검증은 `make test PYTEST_ARGS="tests/integration/api/test_api_auth_rbac.py"` 로 실행한다. 이 검증은 runtime-generated JWT 와 fixture PLF role repository 를 사용하며 운영 IdP/JWKS 검증을 대체하지 않는다.
 

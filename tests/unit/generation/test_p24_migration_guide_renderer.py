@@ -33,7 +33,7 @@ def test_p24_analysis_doc_emits_required_sections_and_evidence_refs() -> None:
     assert "ev_p24_complex_dynamic_sql" in artifact.content
     assert "ev_p24_complex_cross_db" in artifact.content
     assert "UNSUPPORTED_CROSS_DB_CLAIM_REVIEW" in artifact.content
-    assert "status=REVIEW_REQUIRED" in artifact.content
+    assert "status=evidence_caveat" in artifact.content
 
 
 def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None:
@@ -62,7 +62,7 @@ def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None
     )
     artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, context)
 
-    assert "llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`" in artifact.content
+    assert "llmInsightBoundary: `LLM_INFERENCE_EVIDENCE_CAVEAT`" in artifact.content
     assert "llmConversionGuidance: DTO_FIELD_MAPPING" in artifact.content
     assert "llmMigrationGuideInsight: migration_strategy" in artifact.content
     assert "whatToExtractNext=metadata-only appendix 결과를 확인합니다." in artifact.content
@@ -89,7 +89,7 @@ def test_p24_llm_guide_insights_are_placed_in_matching_sections() -> None:
     dependency_section = artifact.content.split("<!-- section:dependency_inventory -->", 1)[1]
     dependency_section = dependency_section.split("<!-- section:dml_impact_matrix -->", 1)[0]
 
-    assert "llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`" in dependency_section
+    assert "llmInsightBoundary: `LLM_INFERENCE_EVIDENCE_CAVEAT`" in dependency_section
     assert "llmMigrationGuideInsight: dependency_inventory" in dependency_section
     assert "dependency closure evidence를 확인합니다." in dependency_section
 
@@ -106,7 +106,7 @@ def test_p24_dependency_report_includes_dml_call_flow_and_readiness_note() -> No
     assert "<!-- section:call_flow -->" in artifact.content
     assert "## 분기별 호출 흐름" in artifact.content
     assert "PPM.dbo.P24_ShipmentDecisionAudit" in artifact.content
-    assert "TRANSACTIONAL_DML_REVIEW_REQUIRED" in artifact.content
+    assert "TRANSACTIONAL_DML_EVIDENCE_CAVEAT" in artifact.content
     assert "generated_source_application: `not_performed`" not in artifact.content
 
 
@@ -115,7 +115,7 @@ def test_p24_renderer_emits_confirmed_needs_verification_metrics_and_manual_quer
     artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, _context_from_scenario(scenario))
 
     assert "### 확인됨" in artifact.content
-    assert "### 검증 필요" in artifact.content
+    assert "### 근거 보강 필요" in artifact.content
     assert "다음 추출 항목" in artifact.content
     assert "| 테이블 | SELECT | INSERT | UPDATE | DELETE | MERGE |" in artifact.content
     assert "| Phase | 주요 읽기 | 주요 쓰기 | 위험/검토점 | 상태 | 근거 |" in artifact.content

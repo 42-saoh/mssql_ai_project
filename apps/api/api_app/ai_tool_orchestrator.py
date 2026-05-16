@@ -268,7 +268,7 @@ def deterministic_fallback_tool_requests(
             "get_dependency_closure",
             {**object_args, "maxDepth": 1, "includeReviewRequired": True},
             reason="fallback에는 제한된 dependency closure 근거가 필요합니다.",
-            expected="dependency, related object, review marker claim의 근거로 사용합니다.",
+            expected="dependency, related object, evidence caveat claim의 근거로 사용합니다.",
         )
         add(
             "get_extended_properties",

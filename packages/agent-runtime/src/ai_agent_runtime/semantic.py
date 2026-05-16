@@ -472,7 +472,7 @@ def _summary(output: LlmSemanticAnalysisOutput) -> str:
         f"비즈니스 규칙 {len(output.business_rules)}개, "
         f"현대화 포인트 {len(output.modernization_points)}개, "
         f"위험 플래그 {len(output.risk_flags)}개, "
-        f"검토 마커 {len(output.review_markers)}개, "
+        f"근거 caveat {len(output.review_markers)}개, "
         f"전환 가이드 {len(output.conversion_guidance)}개, "
         f"마이그레이션 가이드 인사이트 {len(output.migration_guide_insights)}개"
     )
@@ -1068,7 +1068,7 @@ def _apply_deterministic_safety_net(
                 "code": "DETERMINISTIC_SAFETY_NET_UNSUPPORTED_DEPENDENCY_REVIEW",
                 "message": (
                     "Dynamic 또는 cross-database evidence에서 나온 미지원 dependency/table/"
-                    "function/procedure claim은 review marker로만 유지합니다."
+                    "function/procedure claim은 evidence caveat로만 유지합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,

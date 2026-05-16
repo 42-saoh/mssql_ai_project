@@ -258,5 +258,5 @@ def _summary(output: MetadataAnalysisOutput) -> str:
     return (
         f"메타데이터 인사이트 {len(output.object_insights)}개, "
         f"인사이트 그룹 {len(output.insight_groups)}개, "
-        f"검토 마커 {len(output.review_markers)}개"
+        f"근거 caveat {len(output.review_markers)}개"
     )

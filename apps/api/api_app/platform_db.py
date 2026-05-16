@@ -884,7 +884,24 @@ class MssqlPlatformRepository:
             if existing is not None:
                 self._link_knowledge_asset_to_job(job_id, asset.asset_id, existing.version_id)
                 return existing
-        version_no = asset.current_version_no + 1
+        existing_by_hash = self._knowledge_asset_version_by_content_hash(
+            asset.asset_id,
+            content_hash,
+        )
+        if existing_by_hash is not None:
+            self._set_knowledge_asset_current_version(
+                asset_id=asset.asset_id,
+                version_id=existing_by_hash.version_id,
+                version_no=existing_by_hash.version_no,
+                content_hash=existing_by_hash.content_hash,
+                job_id=job_id,
+            )
+            self._link_knowledge_asset_to_job(job_id, asset.asset_id, existing_by_hash.version_id)
+            return existing_by_hash
+        version_no = max(
+            asset.current_version_no,
+            self._knowledge_asset_max_version_no(asset.asset_id),
+        ) + 1
         version_id = prefixed_id("knowv")
         self._execute(
             """
@@ -977,17 +994,12 @@ class MssqlPlatformRepository:
                     now,
                 ),
             )
-        self._execute(
-            """
-            UPDATE dbo.KNOWLEDGE_ASSETS
-            SET CUR_VER_ID = %s,
-                CUR_VER_NO = %s,
-                CNTNT_HASH_SHA256_VAL = %s,
-                SRC_JOB_ID = COALESCE(SRC_JOB_ID, %s),
-                UPD_DTM = SYSUTCDATETIME()
-            WHERE ASST_ID = %s
-            """,
-            (version_id, version_no, content_hash, job_id, asset.asset_id),
+        self._set_knowledge_asset_current_version(
+            asset_id=asset.asset_id,
+            version_id=version_id,
+            version_no=version_no,
+            content_hash=content_hash,
+            job_id=job_id,
         )
         self._link_knowledge_asset_to_job(job_id, asset.asset_id, version_id)
         source_job = self.get_job(job_id) if job_id else None
@@ -1668,6 +1680,56 @@ class MssqlPlatformRepository:
             (logical_key,),
         )
         return knowledge_asset_from_row(row) if row else None
+
+    def _knowledge_asset_max_version_no(self, asset_id: str) -> int:
+        row = self._query_one(
+            """
+            SELECT COALESCE(MAX(VER_SEQ_NO), 0)
+            FROM dbo.KNOWLEDGE_ASSET_VERSIONS
+            WHERE ASST_ID = %s
+            """,
+            (asset_id,),
+        )
+        return int(row[0] or 0) if row else 0
+
+    def _knowledge_asset_version_by_content_hash(
+        self,
+        asset_id: str,
+        content_hash: str,
+    ) -> KnowledgeAssetVersionRecord | None:
+        row = self._query_one(
+            """
+            SELECT ASST_VER_ID, ASST_ID, VER_SEQ_NO, CNTNT_HASH_SHA256_VAL,
+                   PAYLD_JSON, SRC_JOB_ID, CRE_DTM, LIFECYCLE_STAT_CD,
+                   ARCHV_DTM
+            FROM dbo.KNOWLEDGE_ASSET_VERSIONS
+            WHERE ASST_ID = %s AND CNTNT_HASH_SHA256_VAL = %s
+            """,
+            (asset_id, content_hash),
+        )
+        return self._knowledge_version_from_row(row) if row else None
+
+    def _set_knowledge_asset_current_version(
+        self,
+        *,
+        asset_id: str,
+        version_id: str,
+        version_no: int,
+        content_hash: str,
+        job_id: str | None,
+    ) -> None:
+        self._execute(
+            """
+            UPDATE dbo.KNOWLEDGE_ASSETS
+            SET CUR_VER_ID = %s,
+                CUR_VER_NO = %s,
+                CNTNT_HASH_SHA256_VAL = %s,
+                SRC_JOB_ID = COALESCE(SRC_JOB_ID, %s),
+                UPD_DTM = SYSUTCDATETIME()
+            WHERE ASST_ID = %s
+            """,
+            (version_id, version_no, content_hash, job_id, asset_id),
+        )
 
     def _knowledge_version_from_row(
         self,

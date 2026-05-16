@@ -64,7 +64,8 @@ def test_java_mybatis_sp_wrapper_matches_golden_manifest_and_files() -> None:
     assert bundle.blockers == ()
     assert bundle.manifest.review_required is True
     content = bundle.manifest.content
-    assert "REVIEW_REQUIRED" in content
+    assert "근거 보강 필요" in content
+    assert "REVIEW_REQUIRED:" not in content
     assert "## registry_versions" in content
     assert "## generator_metadata" in content
     assert "- generatorVersion: `generation-core-0.1.0`" in content
@@ -98,12 +99,14 @@ def test_analysis_and_dependency_renderers_emit_draft_required_sections() -> Non
 
     assert analysis.artifact_type == ArtifactType.SP_ANALYSIS_DOC
     assert "## analysis_summary" in analysis.content
-    assert "REVIEW_REQUIRED" in analysis.content
+    assert "근거 보강 필요" in analysis.content
+    assert "REVIEW_REQUIRED:" not in analysis.content
     assert analysis.evidence_refs
 
     assert dependency.artifact_type == ArtifactType.DEPENDENCY_REPORT
     assert "## dependency_table" in dependency.content
-    assert "REVIEW_REQUIRED" in dependency.content
+    assert "근거 보강 필요" in dependency.content
+    assert "REVIEW_REQUIRED:" not in dependency.content
     assert dependency.evidence_refs
 
 

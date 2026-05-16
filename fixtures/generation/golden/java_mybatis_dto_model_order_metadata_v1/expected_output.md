@@ -134,20 +134,20 @@
 
 ## sql_risk_markers
 - 상태 PASS: `NO_SQL_RENDERED` - DTO/VO/Model 초안에는 실행 가능한 SQL이 포함되지 않는다.
-- 상태 REVIEW_REQUIRED: `FIELD_MAPPING_REVIEW_REQUIRED` - field name과 Java type은 검토 전까지 초안 mapping으로 유지한다.
+- 상태 근거 보강 필요: `FIELD_MAPPING_EVIDENCE_CAVEAT` - field name과 Java type은 근거 보강 전까지 초안 mapping으로 유지한다.
 
 ## llm_conversion_guidance
 - status: NO_CONVERSION_GUIDANCE_RETURNED
 
 ## unconfirmed_areas
-- REVIEW_REQUIRED: `pk_columns` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `transaction_boundary` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `validation_group_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `base_framework_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `exact_exception_message_codes` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `controller_need` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `dto_vo_model_final_choice` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `sp_rebuild_feasibility` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `pk_columns` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `transaction_boundary` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `validation_group_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `base_framework_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `exact_exception_message_codes` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `controller_need` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `dto_vo_model_final_choice` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `sp_rebuild_feasibility` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
 
 ## message_and_config_examples
 - message key 예시: `biz.info.order.metadata.retrieve.001`
@@ -161,7 +161,7 @@ pem:
 ```
 
 ## assumptions_and_todo
-- REVIEW_REQUIRED: 모든 파일은 draft-only 이며 추가 근거 확보 전 자동 반영하지 않습니다.
+- 근거 보강 필요: 모든 파일은 draft-only 이며 추가 근거 확보 전 자동 반영하지 않습니다.
 - TODO(input): DTO/VO/Model 최종 선택은 모듈 관례 확인 후 확정한다.
 - TODO(input): STATUS_CD 값 도메인은 metadata 만으로 확정하지 않는다.
 - TODO(policy.mustMarkUnknown): pk_columns
@@ -185,7 +185,7 @@ pem:
 - Mapper/service shape: stored procedure signature and dependency/call-flow evidence
 
 ## known_caveats
-- REVIEW_REQUIRED는 근거 보강 필요 상태를 의미합니다.
+- 근거 보강 필요는 근거 보강 필요 상태를 의미합니다.
 - TODO(input): DTO/VO/Model 최종 선택은 모듈 관례 확인 후 확정한다.
 - TODO(input): STATUS_CD 값 도메인은 metadata 만으로 확정하지 않는다.
 - TODO(policy.mustMarkUnknown): pk_columns

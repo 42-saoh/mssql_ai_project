@@ -1,0 +1,1664 @@
+{
+  "baseUrl": "http://localhost:3035",
+  "screenshotDir": "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z",
+  "checks": [
+    {
+      "name": "home loads",
+      "pass": true,
+      "classification": "pass",
+      "details": "status=200"
+    },
+    {
+      "name": "home not unconfigured",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nCONTROLLED LIVE PORTAL\n\nAnalyze and validate\nHTTP API boundary\n\nPortal pages call the configured API/BFF for request intake, read-only metadata search, draft artifacts, validation evidence, and blockers.\n\nCreate PPM request\nSearch metadata\nInspect latest job\n\nRECENT JOB\n\njob_600f619b94\nValidation complete\nREQUEST\nreq_e7ed9626bf\nCURRENT GATE\nVALIDATE\nOpen job detail\n\nREGISTRY BINDINGS\n\nActive versions\nPROMPT\nprompt:sp_analysis@0.1.0\nTEMPLATE\ntemplate:sp_analysis_doc@0.1.0\nTEMPLATE\ntemplate:dependency_report@0.1.0\nTEMPLATE\ntemplate:java_mybatis_sp_wrapper@0.1.0\nPOLICY\npolicy:project_ai_java_mybatis_generation_policy@1.0.0\nDB_PROFILE\nconfig:mssql/local_docker_profiles.yaml@local\nGENERATOR\ngeneration-core-0.1.0\nMODEL\nmodel:openai_sp_semantic_analysis@0.1.0\nMODEL\nmodel:openai_fast_test@gpt-5.3-codex@0.1.0\nPROMPT\nprompt:sp_semantic_analysis@0.4.1\nSCHEMA\nschema:llm_semantic_analysis@0.4.1\nPROMPT\nprompt:mssql_metadata_tool_planner@0.1.0\nSCHEMA\nschema:mssql_metadata_tool_plan@0.1.0\nPROMPT\nprompt:platform_tool_planner@0.1.0\nSCHEMA\nschema:platform_tool_plan@0.1.0\nPROMPT\nprompt:mssql_metadata_analysis@0.1.1\nSCHEMA\nschema:mssql_metadata_analysis@0.1.1\n\nMETADATA SEARCH\n\nPPM identities\n근거 보강 필요\nPROFILE\nppm\nDATABASE\nPPM\nRESULTS\n6\nDEPENDENCY_METADATA_INCOMPLETE\nDependency metadata is incomplete; treat dependency links as evidence caveats until confirmed.\nOpen metadata search\n\nARTIFACT PREVIEWS\n\nDraft outputs\nGetInspItemsCd SP 분석 초안\n\nSP analysis doc · evidence coverage 100%\n\nDraft\nPreview\nGetInspItemsCd 의존성 보고서 초안\n\nDependency report · evidence coverage 100%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/model/GetInspItemsCdDTO.java\n\nDTO draft · evidence coverage 0%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/service/GetInspItemsCdService.java\n\nService draft · evidence coverage 0%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/mapper/GetInspItemsCdMapper.java\n\nMapper interface · eviden"
+    },
+    {
+      "name": "home dashboard content",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nCONTROLLED LIVE PORTAL\n\nAnalyze and validate\nHTTP API boundary\n\nPortal pages call the configured API/BFF for request intake, read-only metadata search, draft artifacts, validation evidence, and blockers.\n\nCreate PPM request\nSearch metadata\nInspect latest job\n\nRECENT JOB\n\njob_600f619b94\nValidation complete\nREQUEST\nreq_e7ed9626bf\nCURRENT GATE\nVALIDATE\nOpen job detail\n\nREGISTRY BINDINGS\n\nActive versions\nPROMPT\nprompt:sp_analysis@0.1.0\nTEMPLATE\ntemplate:sp_analysis_doc@0.1.0\nTEMPLATE\ntemplate:dependency_report@0.1.0\nTEMPLATE\ntemplate:java_mybatis_sp_wrapper@0.1.0\nPOLICY\npolicy:project_ai_java_mybatis_generation_policy@1.0.0\nDB_PROFILE\nconfig:mssql/local_docker_profiles.yaml@local\nGENERATOR\ngeneration-core-0.1.0\nMODEL\nmodel:openai_sp_semantic_analysis@0.1.0\nMODEL\nmodel:openai_fast_test@gpt-5.3-codex@0.1.0\nPROMPT\nprompt:sp_semantic_analysis@0.4.1\nSCHEMA\nschema:llm_semantic_analysis@0.4.1\nPROMPT\nprompt:mssql_metadata_tool_planner@0.1.0\nSCHEMA\nschema:mssql_metadata_tool_plan@0.1.0\nPROMPT\nprompt:platform_tool_planner@0.1.0\nSCHEMA\nschema:platform_tool_plan@0.1.0\nPROMPT\nprompt:mssql_metadata_analysis@0.1.1\nSCHEMA\nschema:mssql_metadata_analysis@0.1.1\n\nMETADATA SEARCH\n\nPPM identities\n근거 보강 필요\nPROFILE\nppm\nDATABASE\nPPM\nRESULTS\n6\nDEPENDENCY_METADATA_INCOMPLETE\nDependency metadata is incomplete; treat dependency links as evidence caveats until confirmed.\nOpen metadata search\n\nARTIFACT PREVIEWS\n\nDraft outputs\nGetInspItemsCd SP 분석 초안\n\nSP analysis doc · evidence coverage 100%\n\nDraft\nPreview\nGetInspItemsCd 의존성 보고서 초안\n\nDependency report · evidence coverage 100%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/model/GetInspItemsCdDTO.java\n\nDTO draft · evidence coverage 0%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/service/GetInspItemsCdService.java\n\nService draft · evidence coverage 0%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/mapper/GetInspItemsCdMapper.java\n\nMapper interface · eviden"
+    },
+    {
+      "name": "home: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "request page renders form",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREQUEST INTAKE\n\nStored procedure analysis request\nDraft only\n\nCompose the OpenAPI-shaped request payload for one stored procedure target. Submission calls the configured API and redirects to the returned workflow job.\n\nPPM PILOT SAMPLES\n\nSample request target\ndbo.GetInspItemsCd\nsimple procedure\n1 params · 1 dependency refs\ndbo.PAD_GET_BAT_LIST_PRC\nmedium procedure\n6 params · 4 dependency refs\ndbo.PCS_PY_ManageInvoiceFldSchd_PRC\ncomplex procedure\n10 params · 63 dependency refs\ndbo.PAD_REG_BAT_HIS_PRC\nmedium procedure\n6 params · 2 dependency refs\ndbo.PAD_SAVE_COM_CD_DTL_PRC\nmedium procedure\n18 params · 1 dependency refs\ndbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC\ncomplex procedure\n0 params · 3 dependency refs\ndbo.PCO_BAT_CallSendMail_PRC\ncomplex procedure\n0 params · 5 dependency refs\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nTarget type\nStored procedure\nSchema\nProcedure name\nSelected manifest sample\n\ndbo.GetInspItemsCd uses dbProfileId ppm. It is metadata-only and remains evidence-caveated while dependency evidence is incomplete.\n\nRequested outputs\nSP analysis document\nProcedure summary, behavior notes, assumptions, and evidence references.\nDependency report\nProcedure, table, view, function, and call relationship preview.\nJava/MyBatis draft\nMapper XML, mapper interface, and service draft grouping.\nDTO/model draft\nDTO/VO/model draft grouping with evidence caveats.\nDDL draft file\nDraft SQL file; no execution path is exposed.\nWorkflow options\nInclude evidence refs\nInclude modernization hints\nRun high-quality LLM semantic analysis\nUse bounded AI metadata tools\nUse platform context tools\nAllow transient SP definition in model input\nLLM profile\nsemantic analysis - gpt-5.5\nfast/test - gpt-5-nano\nSource context\nretrieved spans\nmetadata only\nDependency analysis\nconfirmed procedures\nroot procedure only\nSubmit request\nSearch metadata\n\nBATCH MODE\n\nStored procedure batch\nBounded batch intake\n\nEnter one sche"
+    },
+    {
+      "name": "request page renders PPM samples",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREQUEST INTAKE\n\nStored procedure analysis request\nDraft only\n\nCompose the OpenAPI-shaped request payload for one stored procedure target. Submission calls the configured API and redirects to the returned workflow job.\n\nPPM PILOT SAMPLES\n\nSample request target\ndbo.GetInspItemsCd\nsimple procedure\n1 params · 1 dependency refs\ndbo.PAD_GET_BAT_LIST_PRC\nmedium procedure\n6 params · 4 dependency refs\ndbo.PCS_PY_ManageInvoiceFldSchd_PRC\ncomplex procedure\n10 params · 63 dependency refs\ndbo.PAD_REG_BAT_HIS_PRC\nmedium procedure\n6 params · 2 dependency refs\ndbo.PAD_SAVE_COM_CD_DTL_PRC\nmedium procedure\n18 params · 1 dependency refs\ndbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC\ncomplex procedure\n0 params · 3 dependency refs\ndbo.PCO_BAT_CallSendMail_PRC\ncomplex procedure\n0 params · 5 dependency refs\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nTarget type\nStored procedure\nSchema\nProcedure name\nSelected manifest sample\n\ndbo.GetInspItemsCd uses dbProfileId ppm. It is metadata-only and remains evidence-caveated while dependency evidence is incomplete.\n\nRequested outputs\nSP analysis document\nProcedure summary, behavior notes, assumptions, and evidence references.\nDependency report\nProcedure, table, view, function, and call relationship preview.\nJava/MyBatis draft\nMapper XML, mapper interface, and service draft grouping.\nDTO/model draft\nDTO/VO/model draft grouping with evidence caveats.\nDDL draft file\nDraft SQL file; no execution path is exposed.\nWorkflow options\nInclude evidence refs\nInclude modernization hints\nRun high-quality LLM semantic analysis\nUse bounded AI metadata tools\nUse platform context tools\nAllow transient SP definition in model input\nLLM profile\nsemantic analysis - gpt-5.5\nfast/test - gpt-5-nano\nSource context\nretrieved spans\nmetadata only\nDependency analysis\nconfirmed procedures\nroot procedure only\nSubmit request\nSearch metadata\n\nBATCH MODE\n\nStored procedure batch\nBounded batch intake\n\nEnter one sche"
+    },
+    {
+      "name": "request page renders workflow options",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREQUEST INTAKE\n\nStored procedure analysis request\nDraft only\n\nCompose the OpenAPI-shaped request payload for one stored procedure target. Submission calls the configured API and redirects to the returned workflow job.\n\nPPM PILOT SAMPLES\n\nSample request target\ndbo.GetInspItemsCd\nsimple procedure\n1 params · 1 dependency refs\ndbo.PAD_GET_BAT_LIST_PRC\nmedium procedure\n6 params · 4 dependency refs\ndbo.PCS_PY_ManageInvoiceFldSchd_PRC\ncomplex procedure\n10 params · 63 dependency refs\ndbo.PAD_REG_BAT_HIS_PRC\nmedium procedure\n6 params · 2 dependency refs\ndbo.PAD_SAVE_COM_CD_DTL_PRC\nmedium procedure\n18 params · 1 dependency refs\ndbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC\ncomplex procedure\n0 params · 3 dependency refs\ndbo.PCO_BAT_CallSendMail_PRC\ncomplex procedure\n0 params · 5 dependency refs\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nTarget type\nStored procedure\nSchema\nProcedure name\nSelected manifest sample\n\ndbo.GetInspItemsCd uses dbProfileId ppm. It is metadata-only and remains evidence-caveated while dependency evidence is incomplete.\n\nRequested outputs\nSP analysis document\nProcedure summary, behavior notes, assumptions, and evidence references.\nDependency report\nProcedure, table, view, function, and call relationship preview.\nJava/MyBatis draft\nMapper XML, mapper interface, and service draft grouping.\nDTO/model draft\nDTO/VO/model draft grouping with evidence caveats.\nDDL draft file\nDraft SQL file; no execution path is exposed.\nWorkflow options\nInclude evidence refs\nInclude modernization hints\nRun high-quality LLM semantic analysis\nUse bounded AI metadata tools\nUse platform context tools\nAllow transient SP definition in model input\nLLM profile\nsemantic analysis - gpt-5.5\nfast/test - gpt-5-nano\nSource context\nretrieved spans\nmetadata only\nDependency analysis\nconfirmed procedures\nroot procedure only\nSubmit request\nSearch metadata\n\nBATCH MODE\n\nStored procedure batch\nBounded batch intake\n\nEnter one sche"
+    },
+    {
+      "name": "request page: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "primary submit redirects to job",
+      "pass": true,
+      "classification": "pass",
+      "details": "http://localhost:3035/jobs/job_38ebabc4b1"
+    },
+    {
+      "name": "primary job page has workflow status",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_38ebabc4b1\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_d252f579c9\nCURRENT STEP\nAnalyze\nUPDATED\n2026-05-16T08:33:35.675000\nPROGRESS\n0%\nFailure reason\n\nOpenAI response did not match the required structured output schema.\n\nOPENAI_STRUCTURED_OUTPUT_INVALID\nOpenAI response did not match the required structured output schema.\nCaveats\nOPENAI_STRUCTURED_OUTPUT_INVALID\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.GetInspItemsCd\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · LLM semantic analysis가 안전 코드 OPENAI_STRUCTURED_OUTPUT_INVALID로 실패했습니다.\n\ninput 3bdf9904de0ac4eac331282147086dee9935e622ecb2562ec829d5256399b3ef · output 8cb17cca896c7eba0ef0f3352731a17d7de030597728e224eb9fdccd7b51cf1f · tokens 0 · latency 0ms\nFAILED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nNo knowledge asset recorded\n\nKnowledge assetization may be disabled or awaiting the v5 schema.\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API"
+    },
+    {
+      "name": "primary job page has sanitized trace or blocker",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_38ebabc4b1\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_d252f579c9\nCURRENT STEP\nAnalyze\nUPDATED\n2026-05-16T08:33:35.675000\nPROGRESS\n0%\nFailure reason\n\nOpenAI response did not match the required structured output schema.\n\nOPENAI_STRUCTURED_OUTPUT_INVALID\nOpenAI response did not match the required structured output schema.\nCaveats\nOPENAI_STRUCTURED_OUTPUT_INVALID\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.GetInspItemsCd\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · LLM semantic analysis가 안전 코드 OPENAI_STRUCTURED_OUTPUT_INVALID로 실패했습니다.\n\ninput 3bdf9904de0ac4eac331282147086dee9935e622ecb2562ec829d5256399b3ef · output 8cb17cca896c7eba0ef0f3352731a17d7de030597728e224eb9fdccd7b51cf1f · tokens 0 · latency 0ms\nFAILED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nNo knowledge asset recorded\n\nKnowledge assetization may be disabled or awaiting the v5 schema.\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API"
+    },
+    {
+      "name": "primary job has draft artifact preview or explicit blocker",
+      "pass": true,
+      "classification": "API/LLM prerequisite blocker",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_38ebabc4b1\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_d252f579c9\nCURRENT STEP\nAnalyze\nUPDATED\n2026-05-16T08:33:35.675000\nPROGRESS\n0%\nFailure reason\n\nOpenAI response did not match the required structured output schema.\n\nOPENAI_STRUCTURED_OUTPUT_INVALID\nOpenAI response did not match the required structured output schema.\nCaveats\nOPENAI_STRUCTURED_OUTPUT_INVALID\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.GetInspItemsCd\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · LLM semantic analysis가 안전 코드 OPENAI_STRUCTURED_OUTPUT_INVALID로 실패했습니다.\n\ninput 3bdf9904de0ac4eac331282147086dee9935e622ecb2562ec829d5256399b3ef · output 8cb17cca896c7eba0ef0f3352731a17d7de030597728e224eb9fdccd7b51cf1f · tokens 0 · latency 0ms\nFAILED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nNo knowledge asset recorded\n\nKnowledge assetization may be disabled or awaiting the v5 schema.\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API"
+    },
+    {
+      "name": "primary job page: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "alternate submit redirects to job",
+      "pass": true,
+      "classification": "pass",
+      "details": "http://localhost:3035/jobs/job_079eac4e7a"
+    },
+    {
+      "name": "alternate job page has workflow status",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_079eac4e7a\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_5aca1986e3\nCURRENT STEP\nValidate\nUPDATED\n2026-05-16T08:36:16.308000\nPROGRESS\n0%\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nMODE\nCONFIRMED_PROCEDURES\nREQUESTED DEPTH\n2\nSELECTED\n0\nANALYZED\n0\nSKIPPED\n0\nCHILD RUNS\n0\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.PAD_GET_BAT_LIST_PRC\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · 비즈니스 규칙 3개, 현대화 포인트 3개, 위험 플래그 2개, 근거 caveat 6개, 전환 가이드 3개, 마이그레이션 가이드 인사이트 12개 Dependency child analysis 0건을 반영했습니다., tool orchestration 근거 caveat 1개\n\ninput 301d82d9b72f5de855aada75b123c91cea1647661e0ae048d6c62b6f22da80e0 · output 816b96b4feff550e7fadfcf22e5b63c527b0a5da7b399dbc5c1973ab577ee9c8 · tokens 216228 · latency 115484ms\nSUCCEEDED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nCANONICAL_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent c0b8a8c901eda30822a55cfbad05b665c590f7256d25e8926cd0b175a865cbf0\nOpen\nFacts\nDTO_READINESS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 83dbe2fa37fccb9af95d62897b5f53e284906d1602482f43d411af4e6a92d17d\nOpen\nFacts\nMETADATA_PROFILE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent bf1ad3a81525193f7ba1c03b28ffc76d5b19ccebc369573098e58e4567df7ba4\nOpen\nFacts\nDEPENDENCY_EVIDENCE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 4758976326827b9194c21f676016c0051b94d39f8dc6261743be54dafaffc88a\nOpen\nFacts\nSP_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 05e097a4f30791e0dbba3bb8760b5c2cfa4de2291f05f6902ea50f0820e86788\nOpen\nFacts\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API\nPADGETBATLISTPRC SP 분석 초안\n\nSP analysis doc · evidence coverage 100%\n\nDraft\nPreview\nPADGETBATLISTPRC 의존성 보고서 초안\n\nDependency report · evidence coverage 100%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/model/PADGETBATLISTPRCDTO.java\n\nDT"
+    },
+    {
+      "name": "alternate job page has sanitized trace or blocker",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_079eac4e7a\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_5aca1986e3\nCURRENT STEP\nValidate\nUPDATED\n2026-05-16T08:36:16.308000\nPROGRESS\n0%\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nMODE\nCONFIRMED_PROCEDURES\nREQUESTED DEPTH\n2\nSELECTED\n0\nANALYZED\n0\nSKIPPED\n0\nCHILD RUNS\n0\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.PAD_GET_BAT_LIST_PRC\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · 비즈니스 규칙 3개, 현대화 포인트 3개, 위험 플래그 2개, 근거 caveat 6개, 전환 가이드 3개, 마이그레이션 가이드 인사이트 12개 Dependency child analysis 0건을 반영했습니다., tool orchestration 근거 caveat 1개\n\ninput 301d82d9b72f5de855aada75b123c91cea1647661e0ae048d6c62b6f22da80e0 · output 816b96b4feff550e7fadfcf22e5b63c527b0a5da7b399dbc5c1973ab577ee9c8 · tokens 216228 · latency 115484ms\nSUCCEEDED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nCANONICAL_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent c0b8a8c901eda30822a55cfbad05b665c590f7256d25e8926cd0b175a865cbf0\nOpen\nFacts\nDTO_READINESS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 83dbe2fa37fccb9af95d62897b5f53e284906d1602482f43d411af4e6a92d17d\nOpen\nFacts\nMETADATA_PROFILE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent bf1ad3a81525193f7ba1c03b28ffc76d5b19ccebc369573098e58e4567df7ba4\nOpen\nFacts\nDEPENDENCY_EVIDENCE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 4758976326827b9194c21f676016c0051b94d39f8dc6261743be54dafaffc88a\nOpen\nFacts\nSP_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 05e097a4f30791e0dbba3bb8760b5c2cfa4de2291f05f6902ea50f0820e86788\nOpen\nFacts\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API\nPADGETBATLISTPRC SP 분석 초안\n\nSP analysis doc · evidence coverage 100%\n\nDraft\nPreview\nPADGETBATLISTPRC 의존성 보고서 초안\n\nDependency report · evidence coverage 100%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/model/PADGETBATLISTPRCDTO.java\n\nDT"
+    },
+    {
+      "name": "alternate job has draft artifact preview or explicit blocker",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_079eac4e7a\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_5aca1986e3\nCURRENT STEP\nValidate\nUPDATED\n2026-05-16T08:36:16.308000\nPROGRESS\n0%\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nMODE\nCONFIRMED_PROCEDURES\nREQUESTED DEPTH\n2\nSELECTED\n0\nANALYZED\n0\nSKIPPED\n0\nCHILD RUNS\n0\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.PAD_GET_BAT_LIST_PRC\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · 비즈니스 규칙 3개, 현대화 포인트 3개, 위험 플래그 2개, 근거 caveat 6개, 전환 가이드 3개, 마이그레이션 가이드 인사이트 12개 Dependency child analysis 0건을 반영했습니다., tool orchestration 근거 caveat 1개\n\ninput 301d82d9b72f5de855aada75b123c91cea1647661e0ae048d6c62b6f22da80e0 · output 816b96b4feff550e7fadfcf22e5b63c527b0a5da7b399dbc5c1973ab577ee9c8 · tokens 216228 · latency 115484ms\nSUCCEEDED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nCANONICAL_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent c0b8a8c901eda30822a55cfbad05b665c590f7256d25e8926cd0b175a865cbf0\nOpen\nFacts\nDTO_READINESS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 83dbe2fa37fccb9af95d62897b5f53e284906d1602482f43d411af4e6a92d17d\nOpen\nFacts\nMETADATA_PROFILE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent bf1ad3a81525193f7ba1c03b28ffc76d5b19ccebc369573098e58e4567df7ba4\nOpen\nFacts\nDEPENDENCY_EVIDENCE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 4758976326827b9194c21f676016c0051b94d39f8dc6261743be54dafaffc88a\nOpen\nFacts\nSP_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 05e097a4f30791e0dbba3bb8760b5c2cfa4de2291f05f6902ea50f0820e86788\nOpen\nFacts\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API\nPADGETBATLISTPRC SP 분석 초안\n\nSP analysis doc · evidence coverage 100%\n\nDraft\nPreview\nPADGETBATLISTPRC 의존성 보고서 초안\n\nDependency report · evidence coverage 100%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/model/PADGETBATLISTPRCDTO.java\n\nDT"
+    },
+    {
+      "name": "alternate job page: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "artifact preview loads draft content",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nARTIFACT PREVIEW\n\nPADGETBATLISTPRC SP 분석 초안\nDraft\nARTIFACT ID\nart_ebcc8e9971\nTYPE\nSP analysis doc\nEVIDENCE COVERAGE\n100%\nGENERATOR\ngeneration-core-0.1.0\nDraft-only boundary\n\nThis preview is draft-only. The default UI exposes no publish, deploy, SQL execution, DDL/DML apply, or source write action.\n\n# PADGETBATLISTPRC SP 분석 초안\n\n## input_interpretation\n- systemCode: PPM\n- entityName: PADGETBATLISTPRC\n- spName: dbo.PAD_GET_BAT_LIST_PRC\n- tableName: dbo.PAD_BAT_HIS\n\n## analysis_summary\n- 상태: 초안(`DRAFT`)\n- 근거 보강 필요: SP 내부 제어 흐름과 비즈니스 규칙은 canonical analysis 확정 후 보강\n- generationMode: spWrapper\n\n## procedure_signature\n- `P_OPT` varchar required=true\n- `P_SUB_SYS_CD` varchar required=true\n- `P_BAT_NM` varchar required=true\n- `P_EXEC_PER_STRT_DT` varchar required=true\n- `P_EXEC_PER_END_DT` varchar required=true\n- `P_BAT_CD` varchar required=true\n\n## result_shape\n- `HIS_SEQ_NO`\n- `BAT_CD`\n- `EXEC_PGM_NM`\n- `EXEC_STRT_DTM`\n- `EXEC_END_DTM`\n- `SCS_YN`\n- `ERR_CNTNT`\n- `IMME_EXEC_YN`\n- `IMME_EXEC_USER_ID`\n- `CRE_USR_ID`\n- `CRE_DTM`\n- `UPD_USR_ID`\n- `UPD_DTM`\n\n## dependency_summary\n- 저장 프로시저: `dbo.PAD_GET_BAT_LIST_PRC`\n- 테이블: `dbo.PAD_BAT_HIS`\n\n<!-- section:sp_overview -->\n## 1. SP 개요 및 기본 정보\n<!-- section-title:SP 개요 및 기본 정보 -->\n<!-- contract-title:SP 개요 및 기본 정보 -->\n- 근거: ev_metadata_1\n<!-- claim:claim_sp_overview status=evidence_caveat evidenceRefs=ev_metadata_1 -->\n- 판단: sp_overview section은 sanitized metadata/static fact를 근거로 렌더링됩니다. 상태=근거 보강 필요 근거=ev_metadata_1\n| 항목 | 값 | 상태 | 근거 |\n|---|---|---|---|\n| 대상 SP | dbo.PAD_GET_BAT_LIST_PRC | Confirmed | ev_metadata_1 |\n| 메타데이터 프로필 | ppm | Confirmed | ev_metadata_1 |\n| 입력 파라미터 수 | 6 | Confirmed | ev_metadata_1 |\n| 결과 필드 후보 수 | 13 | 근거 보강 필요 | static.analysis.migration_guide |\n\n- targetRef: `dbo.PAD_GET_BAT_LIST_PRC`\n- fixtureId: `req_5aca1986e3`\n- status: DRAFT\n- productionReady: `false`\n- artifactsUnderTest: SP_ANALYSIS_DOC, DEPENDENCY_REPORT\n- metadataProfileId: "
+    },
+    {
+      "name": "artifact evidence and trace visible",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nARTIFACT PREVIEW\n\nPADGETBATLISTPRC SP 분석 초안\nDraft\nARTIFACT ID\nart_ebcc8e9971\nTYPE\nSP analysis doc\nEVIDENCE COVERAGE\n100%\nGENERATOR\ngeneration-core-0.1.0\nDraft-only boundary\n\nThis preview is draft-only. The default UI exposes no publish, deploy, SQL execution, DDL/DML apply, or source write action.\n\n# PADGETBATLISTPRC SP 분석 초안\n\n## input_interpretation\n- systemCode: PPM\n- entityName: PADGETBATLISTPRC\n- spName: dbo.PAD_GET_BAT_LIST_PRC\n- tableName: dbo.PAD_BAT_HIS\n\n## analysis_summary\n- 상태: 초안(`DRAFT`)\n- 근거 보강 필요: SP 내부 제어 흐름과 비즈니스 규칙은 canonical analysis 확정 후 보강\n- generationMode: spWrapper\n\n## procedure_signature\n- `P_OPT` varchar required=true\n- `P_SUB_SYS_CD` varchar required=true\n- `P_BAT_NM` varchar required=true\n- `P_EXEC_PER_STRT_DT` varchar required=true\n- `P_EXEC_PER_END_DT` varchar required=true\n- `P_BAT_CD` varchar required=true\n\n## result_shape\n- `HIS_SEQ_NO`\n- `BAT_CD`\n- `EXEC_PGM_NM`\n- `EXEC_STRT_DTM`\n- `EXEC_END_DTM`\n- `SCS_YN`\n- `ERR_CNTNT`\n- `IMME_EXEC_YN`\n- `IMME_EXEC_USER_ID`\n- `CRE_USR_ID`\n- `CRE_DTM`\n- `UPD_USR_ID`\n- `UPD_DTM`\n\n## dependency_summary\n- 저장 프로시저: `dbo.PAD_GET_BAT_LIST_PRC`\n- 테이블: `dbo.PAD_BAT_HIS`\n\n<!-- section:sp_overview -->\n## 1. SP 개요 및 기본 정보\n<!-- section-title:SP 개요 및 기본 정보 -->\n<!-- contract-title:SP 개요 및 기본 정보 -->\n- 근거: ev_metadata_1\n<!-- claim:claim_sp_overview status=evidence_caveat evidenceRefs=ev_metadata_1 -->\n- 판단: sp_overview section은 sanitized metadata/static fact를 근거로 렌더링됩니다. 상태=근거 보강 필요 근거=ev_metadata_1\n| 항목 | 값 | 상태 | 근거 |\n|---|---|---|---|\n| 대상 SP | dbo.PAD_GET_BAT_LIST_PRC | Confirmed | ev_metadata_1 |\n| 메타데이터 프로필 | ppm | Confirmed | ev_metadata_1 |\n| 입력 파라미터 수 | 6 | Confirmed | ev_metadata_1 |\n| 결과 필드 후보 수 | 13 | 근거 보강 필요 | static.analysis.migration_guide |\n\n- targetRef: `dbo.PAD_GET_BAT_LIST_PRC`\n- fixtureId: `req_5aca1986e3`\n- status: DRAFT\n- productionReady: `false`\n- artifactsUnderTest: SP_ANALYSIS_DOC, DEPENDENCY_REPORT\n- metadataProfileId: "
+    },
+    {
+      "name": "artifact caveats/latest validation visible",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nARTIFACT PREVIEW\n\nPADGETBATLISTPRC SP 분석 초안\nDraft\nARTIFACT ID\nart_ebcc8e9971\nTYPE\nSP analysis doc\nEVIDENCE COVERAGE\n100%\nGENERATOR\ngeneration-core-0.1.0\nDraft-only boundary\n\nThis preview is draft-only. The default UI exposes no publish, deploy, SQL execution, DDL/DML apply, or source write action.\n\n# PADGETBATLISTPRC SP 분석 초안\n\n## input_interpretation\n- systemCode: PPM\n- entityName: PADGETBATLISTPRC\n- spName: dbo.PAD_GET_BAT_LIST_PRC\n- tableName: dbo.PAD_BAT_HIS\n\n## analysis_summary\n- 상태: 초안(`DRAFT`)\n- 근거 보강 필요: SP 내부 제어 흐름과 비즈니스 규칙은 canonical analysis 확정 후 보강\n- generationMode: spWrapper\n\n## procedure_signature\n- `P_OPT` varchar required=true\n- `P_SUB_SYS_CD` varchar required=true\n- `P_BAT_NM` varchar required=true\n- `P_EXEC_PER_STRT_DT` varchar required=true\n- `P_EXEC_PER_END_DT` varchar required=true\n- `P_BAT_CD` varchar required=true\n\n## result_shape\n- `HIS_SEQ_NO`\n- `BAT_CD`\n- `EXEC_PGM_NM`\n- `EXEC_STRT_DTM`\n- `EXEC_END_DTM`\n- `SCS_YN`\n- `ERR_CNTNT`\n- `IMME_EXEC_YN`\n- `IMME_EXEC_USER_ID`\n- `CRE_USR_ID`\n- `CRE_DTM`\n- `UPD_USR_ID`\n- `UPD_DTM`\n\n## dependency_summary\n- 저장 프로시저: `dbo.PAD_GET_BAT_LIST_PRC`\n- 테이블: `dbo.PAD_BAT_HIS`\n\n<!-- section:sp_overview -->\n## 1. SP 개요 및 기본 정보\n<!-- section-title:SP 개요 및 기본 정보 -->\n<!-- contract-title:SP 개요 및 기본 정보 -->\n- 근거: ev_metadata_1\n<!-- claim:claim_sp_overview status=evidence_caveat evidenceRefs=ev_metadata_1 -->\n- 판단: sp_overview section은 sanitized metadata/static fact를 근거로 렌더링됩니다. 상태=근거 보강 필요 근거=ev_metadata_1\n| 항목 | 값 | 상태 | 근거 |\n|---|---|---|---|\n| 대상 SP | dbo.PAD_GET_BAT_LIST_PRC | Confirmed | ev_metadata_1 |\n| 메타데이터 프로필 | ppm | Confirmed | ev_metadata_1 |\n| 입력 파라미터 수 | 6 | Confirmed | ev_metadata_1 |\n| 결과 필드 후보 수 | 13 | 근거 보강 필요 | static.analysis.migration_guide |\n\n- targetRef: `dbo.PAD_GET_BAT_LIST_PRC`\n- fixtureId: `req_5aca1986e3`\n- status: DRAFT\n- productionReady: `false`\n- artifactsUnderTest: SP_ANALYSIS_DOC, DEPENDENCY_REPORT\n- metadataProfileId: "
+    },
+    {
+      "name": "artifact validation report visible",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nARTIFACT PREVIEW\n\nPADGETBATLISTPRC SP 분석 초안\nDraft\nARTIFACT ID\nart_ebcc8e9971\nTYPE\nSP analysis doc\nEVIDENCE COVERAGE\n100%\nGENERATOR\ngeneration-core-0.1.0\nDraft-only boundary\n\nThis preview is draft-only. The default UI exposes no publish, deploy, SQL execution, DDL/DML apply, or source write action.\n\n# PADGETBATLISTPRC SP 분석 초안\n\n## input_interpretation\n- systemCode: PPM\n- entityName: PADGETBATLISTPRC\n- spName: dbo.PAD_GET_BAT_LIST_PRC\n- tableName: dbo.PAD_BAT_HIS\n\n## analysis_summary\n- 상태: 초안(`DRAFT`)\n- 근거 보강 필요: SP 내부 제어 흐름과 비즈니스 규칙은 canonical analysis 확정 후 보강\n- generationMode: spWrapper\n\n## procedure_signature\n- `P_OPT` varchar required=true\n- `P_SUB_SYS_CD` varchar required=true\n- `P_BAT_NM` varchar required=true\n- `P_EXEC_PER_STRT_DT` varchar required=true\n- `P_EXEC_PER_END_DT` varchar required=true\n- `P_BAT_CD` varchar required=true\n\n## result_shape\n- `HIS_SEQ_NO`\n- `BAT_CD`\n- `EXEC_PGM_NM`\n- `EXEC_STRT_DTM`\n- `EXEC_END_DTM`\n- `SCS_YN`\n- `ERR_CNTNT`\n- `IMME_EXEC_YN`\n- `IMME_EXEC_USER_ID`\n- `CRE_USR_ID`\n- `CRE_DTM`\n- `UPD_USR_ID`\n- `UPD_DTM`\n\n## dependency_summary\n- 저장 프로시저: `dbo.PAD_GET_BAT_LIST_PRC`\n- 테이블: `dbo.PAD_BAT_HIS`\n\n<!-- section:sp_overview -->\n## 1. SP 개요 및 기본 정보\n<!-- section-title:SP 개요 및 기본 정보 -->\n<!-- contract-title:SP 개요 및 기본 정보 -->\n- 근거: ev_metadata_1\n<!-- claim:claim_sp_overview status=evidence_caveat evidenceRefs=ev_metadata_1 -->\n- 판단: sp_overview section은 sanitized metadata/static fact를 근거로 렌더링됩니다. 상태=근거 보강 필요 근거=ev_metadata_1\n| 항목 | 값 | 상태 | 근거 |\n|---|---|---|---|\n| 대상 SP | dbo.PAD_GET_BAT_LIST_PRC | Confirmed | ev_metadata_1 |\n| 메타데이터 프로필 | ppm | Confirmed | ev_metadata_1 |\n| 입력 파라미터 수 | 6 | Confirmed | ev_metadata_1 |\n| 결과 필드 후보 수 | 13 | 근거 보강 필요 | static.analysis.migration_guide |\n\n- targetRef: `dbo.PAD_GET_BAT_LIST_PRC`\n- fixtureId: `req_5aca1986e3`\n- status: DRAFT\n- productionReady: `false`\n- artifactsUnderTest: SP_ANALYSIS_DOC, DEPENDENCY_REPORT\n- metadataProfileId: "
+    },
+    {
+      "name": "artifact page: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "batch submit shows result summary",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREQUEST INTAKE\n\nStored procedure analysis request\nDraft only\n\nCompose the OpenAPI-shaped request payload for one stored procedure target. Submission calls the configured API and redirects to the returned workflow job.\n\nBATCH RESULT\n\nPARTIAL\nbatch_fdd22b39cb\nAccepted1\nRejected1\nLimits20/2\ndbo.GetInspItemsCd · job_efa473fe3e\nDUPLICATE_TARGET_SKIPPED\ndbo.GetInspItemsCd\n\nPPM PILOT SAMPLES\n\nSample request target\ndbo.GetInspItemsCd\nsimple procedure\n1 params · 1 dependency refs\ndbo.PAD_GET_BAT_LIST_PRC\nmedium procedure\n6 params · 4 dependency refs\ndbo.PCS_PY_ManageInvoiceFldSchd_PRC\ncomplex procedure\n10 params · 63 dependency refs\ndbo.PAD_REG_BAT_HIS_PRC\nmedium procedure\n6 params · 2 dependency refs\ndbo.PAD_SAVE_COM_CD_DTL_PRC\nmedium procedure\n18 params · 1 dependency refs\ndbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC\ncomplex procedure\n0 params · 3 dependency refs\ndbo.PCO_BAT_CallSendMail_PRC\ncomplex procedure\n0 params · 5 dependency refs\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nTarget type\nStored procedure\nSchema\nProcedure name\nSelected manifest sample\n\ndbo.GetInspItemsCd uses dbProfileId ppm. It is metadata-only and remains evidence-caveated while dependency evidence is incomplete.\n\nRequested outputs\nSP analysis document\nProcedure summary, behavior notes, assumptions, and evidence references.\nDependency report\nProcedure, table, view, function, and call relationship preview.\nJava/MyBatis draft\nMapper XML, mapper interface, and service draft grouping.\nDTO/model draft\nDTO/VO/model draft grouping with evidence caveats.\nDDL draft file\nDraft SQL file; no execution path is exposed.\nWorkflow options\nInclude evidence refs\nInclude modernization hints\nRun high-quality LLM semantic analysis\nUse bounded AI metadata tools\nUse platform context tools\nAllow transient SP definition in model input\nLLM profile\nsemantic analysis - gpt-5.5\nfast/test - gpt-5-nano\nSource context\nretrieved spans\nmetadata only\nDependency an"
+    },
+    {
+      "name": "batch result: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "metadata search renders results or blocker",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREAD-ONLY METADATA\n\nMetadata search\nMCP boundary\n\nSearch object identities, evidence refs, caveats, and blockers through the portal API adapter. Results never include row data, SQL definition text, procedure execution, or DDL/DML controls.\n\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nSearch query\nLimit\nObject types\nPROCEDURE\nTABLE\nVIEW\nFUNCTION\nSearch metadata\nAnalyze metadata\nUse in request\n\nSEARCH RESULTS\n\nPPM.P\n근거 보강 필요\nPROFILE\nppm\nDATABASE\nPPM\nRESULTS\n5\nDEPENDENCY_METADATA_INCOMPLETE\nDependency metadata is incomplete; treat dependency links as evidence caveats until confirmed.\nCaveats\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_002_RiskMonitoringMsg_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[0]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_003_SendInvoiceToERP_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[35]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetOvseVndrGeneralInfoWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[66]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetSgCtExistWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[69]\n\nPROCEDURE\n\ndbo.DGSUP_BA_SaveAttachMasterWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[71]\n\nDEPENDENCY BLOCKER\n\nMetadata analysis is unavailable\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED: METADATA_PROFILE knowledge persistence가 실패했습니다: PlatformPersistenceError"
+    },
+    {
+      "name": "metadata analysis renders evidence or blocker",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREAD-ONLY METADATA\n\nMetadata search\nMCP boundary\n\nSearch object identities, evidence refs, caveats, and blockers through the portal API adapter. Results never include row data, SQL definition text, procedure execution, or DDL/DML controls.\n\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nSearch query\nLimit\nObject types\nPROCEDURE\nTABLE\nVIEW\nFUNCTION\nSearch metadata\nAnalyze metadata\nUse in request\n\nSEARCH RESULTS\n\nPPM.P\n근거 보강 필요\nPROFILE\nppm\nDATABASE\nPPM\nRESULTS\n5\nDEPENDENCY_METADATA_INCOMPLETE\nDependency metadata is incomplete; treat dependency links as evidence caveats until confirmed.\nCaveats\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_002_RiskMonitoringMsg_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[0]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_003_SendInvoiceToERP_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[35]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetOvseVndrGeneralInfoWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[66]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetSgCtExistWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[69]\n\nPROCEDURE\n\ndbo.DGSUP_BA_SaveAttachMasterWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[71]\n\nDEPENDENCY BLOCKER\n\nMetadata analysis is unavailable\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED: METADATA_PROFILE knowledge persistence가 실패했습니다: PlatformPersistenceError"
+    },
+    {
+      "name": "metadata analysis includes draft-quality sections",
+      "pass": false,
+      "classification": "UI regression",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREAD-ONLY METADATA\n\nMetadata search\nMCP boundary\n\nSearch object identities, evidence refs, caveats, and blockers through the portal API adapter. Results never include row data, SQL definition text, procedure execution, or DDL/DML controls.\n\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nSearch query\nLimit\nObject types\nPROCEDURE\nTABLE\nVIEW\nFUNCTION\nSearch metadata\nAnalyze metadata\nUse in request\n\nSEARCH RESULTS\n\nPPM.P\n근거 보강 필요\nPROFILE\nppm\nDATABASE\nPPM\nRESULTS\n5\nDEPENDENCY_METADATA_INCOMPLETE\nDependency metadata is incomplete; treat dependency links as evidence caveats until confirmed.\nCaveats\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_002_RiskMonitoringMsg_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[0]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_003_SendInvoiceToERP_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[35]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetOvseVndrGeneralInfoWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[66]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetSgCtExistWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[69]\n\nPROCEDURE\n\ndbo.DGSUP_BA_SaveAttachMasterWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[71]\n\nDEPENDENCY BLOCKER\n\nMetadata analysis is unavailable\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED: METADATA_PROFILE knowledge persistence가 실패했습니다: PlatformPersistenceError"
+    },
+    {
+      "name": "metadata search: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "dependency closure renders tool summary",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREAD-ONLY DEPENDENCY EVIDENCE\n\nDependency diagnostics\nMCP registry\nClosure\nResolve reference\nget_dependency_closure\nInvokable\nresolve_dependency_reference\nInvokable\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nObject type\nPROCEDURE\nVIEW\nFUNCTION\nSchema\nObject name\nMax depth\nInclude evidence-caveated graph items\nInvoke closure\nSearch metadata\n\nGET_DEPENDENCY_CLOSURE\n\nppm\nEvidence only\nSNAPSHOT\nlive:ppm:2026-05-16T08:39:20Z\nCOLLECTED\n2026-05-16T08:39:20Z\nEVIDENCE REFS\n1\nNODES\n6\nEDGES\n5\nUNRESOLVED\n0\nNodes\n\nPROCEDURE\n\ndbo.PAD_GET_BAT_LIST_PRC\n\nPPM\n\nConfirmed\n\nTABLE\n\ndbo.EHRTB_IFEmployee\n\nHRM\n\nConfirmed\n\nTABLE\n\ndbo.PAD_BAT_HIS\n\nPPM\n\nConfirmed\n\nTABLE\n\ndbo.PAD_BAT_MGMT\n\nPPM\n\nConfirmed\n\nVIEW\n\ndbo.PCO_COM_CD_DTL_V\n\nPPM\n\nConfirmed\n\nTABLE\n\ndbo.TCM_COM_CD_DTL\n\nTCM\n\nConfirmed\nEdges\n\nREFERENCE\n\n|HRM|dbo|EHRTB_IFEmployee|TABLE\n\nSAME_SERVER_CROSS_DATABASE_CATALOG\n\nConfirmed\n\nREFERENCE\n\n|PPM|dbo|PAD_BAT_HIS|TABLE\n\nREFERENCED_ID\n\nConfirmed\n\nREFERENCE\n\n|PPM|dbo|PAD_BAT_MGMT|TABLE\n\nREFERENCED_ID\n\nConfirmed\n\nREFERENCE\n\n|PPM|dbo|PCO_COM_CD_DTL_V|VIEW\n\nREFERENCED_ID\n\nConfirmed\n\nREFERENCE\n\n|TCM|dbo|TCM_COM_CD_DTL|TABLE\n\nSAME_SERVER_CROSS_DATABASE_CATALOG\n\nConfirmed\nUnresolved\nEvidence refs\ndbo.PAD_GET_BAT_LIST_PRC\nsys.objects"
+    },
+    {
+      "name": "dependency closure renders evidence or blocker",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREAD-ONLY DEPENDENCY EVIDENCE\n\nDependency diagnostics\nMCP registry\nClosure\nResolve reference\nget_dependency_closure\nInvokable\nresolve_dependency_reference\nInvokable\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nObject type\nPROCEDURE\nVIEW\nFUNCTION\nSchema\nObject name\nMax depth\nInclude evidence-caveated graph items\nInvoke closure\nSearch metadata\n\nGET_DEPENDENCY_CLOSURE\n\nppm\nEvidence only\nSNAPSHOT\nlive:ppm:2026-05-16T08:39:20Z\nCOLLECTED\n2026-05-16T08:39:20Z\nEVIDENCE REFS\n1\nNODES\n6\nEDGES\n5\nUNRESOLVED\n0\nNodes\n\nPROCEDURE\n\ndbo.PAD_GET_BAT_LIST_PRC\n\nPPM\n\nConfirmed\n\nTABLE\n\ndbo.EHRTB_IFEmployee\n\nHRM\n\nConfirmed\n\nTABLE\n\ndbo.PAD_BAT_HIS\n\nPPM\n\nConfirmed\n\nTABLE\n\ndbo.PAD_BAT_MGMT\n\nPPM\n\nConfirmed\n\nVIEW\n\ndbo.PCO_COM_CD_DTL_V\n\nPPM\n\nConfirmed\n\nTABLE\n\ndbo.TCM_COM_CD_DTL\n\nTCM\n\nConfirmed\nEdges\n\nREFERENCE\n\n|HRM|dbo|EHRTB_IFEmployee|TABLE\n\nSAME_SERVER_CROSS_DATABASE_CATALOG\n\nConfirmed\n\nREFERENCE\n\n|PPM|dbo|PAD_BAT_HIS|TABLE\n\nREFERENCED_ID\n\nConfirmed\n\nREFERENCE\n\n|PPM|dbo|PAD_BAT_MGMT|TABLE\n\nREFERENCED_ID\n\nConfirmed\n\nREFERENCE\n\n|PPM|dbo|PCO_COM_CD_DTL_V|VIEW\n\nREFERENCED_ID\n\nConfirmed\n\nREFERENCE\n\n|TCM|dbo|TCM_COM_CD_DTL|TABLE\n\nSAME_SERVER_CROSS_DATABASE_CATALOG\n\nConfirmed\nUnresolved\nEvidence refs\ndbo.PAD_GET_BAT_LIST_PRC\nsys.objects"
+    },
+    {
+      "name": "dependency closure: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "dependency resolver renders candidate result",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREAD-ONLY DEPENDENCY EVIDENCE\n\nDependency diagnostics\nMCP registry\nClosure\nResolve reference\nget_dependency_closure\nInvokable\nresolve_dependency_reference\nInvokable\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nSource type\nPROCEDURE\nVIEW\nFUNCTION\nSource schema\nSource name\nReferenced schema\nReferenced name\nReferenced database\nReferenced server\nInvoke resolver\nSearch metadata\n\nRESOLVE_DEPENDENCY_REFERENCE\n\nppm\nEvidence only\nSNAPSHOT\nlive:ppm:2026-05-16T08:39:24Z\nCOLLECTED\n2026-05-16T08:39:24Z\nEVIDENCE REFS\n3\nSelected resolution\n\ndbo.EHRTB_IFEmployee - SAME_SERVER_CROSS_DATABASE_CATALOG\n\nCandidates\n\nTABLE\n\ndbo.EHRTB_IFEmployee\n\nCATALOG_OBJECT_ID\n\nHIGH\nEvidence refs\ndbo.EHRTB_IFEmployee\nsys.sql_expression_dependencies\ndbo.HRM\nsys.databases\ndbo.EHRTB_IFEmployee\nHRM.sys.objects,sys.schemas:name_resolution"
+    },
+    {
+      "name": "dependency resolver: no forbidden action controls",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    },
+    {
+      "name": "review decision route removed",
+      "pass": true,
+      "classification": "pass",
+      "details": "status=404 text=MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n404\nThis page could not be found."
+    },
+    {
+      "name": "mobile home usable",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nCONTROLLED LIVE PORTAL\n\nAnalyze and validate\nHTTP API boundary\n\nPortal pages call the configured API/BFF for request intake, read-only metadata search, draft artifacts, validation evidence, and blockers.\n\nCreate PPM request\nSearch metadata\nInspect latest job\n\nRECENT JOB\n\njob_efa473fe3e\nFailed\nREQUEST\nreq_c5ee498382\nCURRENT GATE\nVALIDATE\nOpen job detail\n\nREGISTRY BINDINGS\n\nActive versions\nPROMPT\nprompt:sp_analysis@0.1.0\nTEMPLATE\ntemplate:sp_analysis_doc@0.1.0\nTEMPLATE\ntemplate:dependency_report@0.1.0\nTEMPLATE\ntemplate:java_mybatis_sp_wrapper@0.1.0\nPOLICY\npolicy:project_ai_java_mybatis_generation_policy@1.0.0\nDB_PROFILE\nconfig:mssql/local_docker_profiles.yaml@local\nGENERATOR\ngeneration-core-0.1.0\nMODEL\nmodel:openai_sp_semantic_analysis@0.1.0\nMODEL\nmodel:openai_fast_test@gpt-5.3-codex@0.1.0\nPROMPT\nprompt:sp_semantic_analysis@0.4.1\nSCHEMA\nschema:llm_semantic_analysis@0.4.1\nPROMPT\nprompt:mssql_metadata_tool_planner@0.1.0\nSCHEMA\nschema:mssql_metadata_tool_plan@0.1.0\nPROMPT\nprompt:platform_tool_planner@0.1.0\nSCHEMA\nschema:platform_tool_plan@0.1.0\nPROMPT\nprompt:mssql_metadata_analysis@0.1.1\nSCHEMA\nschema:mssql_metadata_analysis@0.1.1\n\nMETADATA SEARCH\n\nPPM identities\n근거 보강 필요\nPROFILE\nppm\nDATABASE\nPPM\nRESULTS\n6\nDEPENDENCY_METADATA_INCOMPLETE\nDependency metadata is incomplete; treat dependency links as evidence caveats until confirmed.\nOpen metadata search\n\nARTIFACT PREVIEWS\n\nDraft outputs\nGetInspItemsCd SP 분석 초안\n\nSP analysis doc · evidence coverage 100%\n\nDraft\nPreview\nGetInspItemsCd 의존성 보고서 초안\n\nDependency report · evidence coverage 100%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/model/GetInspItemsCdDTO.java\n\nDTO draft · evidence coverage 0%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/service/GetInspItemsCdService.java\n\nService draft · evidence coverage 0%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/mapper/GetInspItemsCdMapper.java\n\nMapper interface · evidence coverage 0"
+    },
+    {
+      "name": "mobile home: no horizontal overflow",
+      "pass": true,
+      "classification": "pass",
+      "details": "{\"innerWidth\":745,\"scrollWidth\":745,\"bodyScrollWidth\":744}"
+    },
+    {
+      "name": "mobile request usable",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREQUEST INTAKE\n\nStored procedure analysis request\nDraft only\n\nCompose the OpenAPI-shaped request payload for one stored procedure target. Submission calls the configured API and redirects to the returned workflow job.\n\nPPM PILOT SAMPLES\n\nSample request target\ndbo.GetInspItemsCd\nsimple procedure\n1 params · 1 dependency refs\ndbo.PAD_GET_BAT_LIST_PRC\nmedium procedure\n6 params · 4 dependency refs\ndbo.PCS_PY_ManageInvoiceFldSchd_PRC\ncomplex procedure\n10 params · 63 dependency refs\ndbo.PAD_REG_BAT_HIS_PRC\nmedium procedure\n6 params · 2 dependency refs\ndbo.PAD_SAVE_COM_CD_DTL_PRC\nmedium procedure\n18 params · 1 dependency refs\ndbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC\ncomplex procedure\n0 params · 3 dependency refs\ndbo.PCO_BAT_CallSendMail_PRC\ncomplex procedure\n0 params · 5 dependency refs\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nTarget type\nStored procedure\nSchema\nProcedure name\nSelected manifest sample\n\ndbo.GetInspItemsCd uses dbProfileId ppm. It is metadata-only and remains evidence-caveated while dependency evidence is incomplete.\n\nRequested outputs\nSP analysis document\nProcedure summary, behavior notes, assumptions, and evidence references.\nDependency report\nProcedure, table, view, function, and call relationship preview.\nJava/MyBatis draft\nMapper XML, mapper interface, and service draft grouping.\nDTO/model draft\nDTO/VO/model draft grouping with evidence caveats.\nDDL draft file\nDraft SQL file; no execution path is exposed.\nWorkflow options\nInclude evidence refs\nInclude modernization hints\nRun high-quality LLM semantic analysis\nUse bounded AI metadata tools\nUse platform context tools\nAllow transient SP definition in model input\nLLM profile\nsemantic analysis - gpt-5.5\nfast/test - gpt-5-nano\nSource context\nretrieved spans\nmetadata only\nDependency analysis\nconfirmed procedures\nroot procedure only\nSubmit request\nSearch metadata\n\nBATCH MODE\n\nStored procedure batch\nBounded batch intake\n\nEnter one sche"
+    },
+    {
+      "name": "mobile request: no horizontal overflow",
+      "pass": true,
+      "classification": "pass",
+      "details": "{\"innerWidth\":390,\"scrollWidth\":390,\"bodyScrollWidth\":390}"
+    },
+    {
+      "name": "mobile job usable",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_079eac4e7a\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_5aca1986e3\nCURRENT STEP\nValidate\nUPDATED\n2026-05-16T08:36:16.308000\nPROGRESS\n0%\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nMODE\nCONFIRMED_PROCEDURES\nREQUESTED DEPTH\n2\nSELECTED\n0\nANALYZED\n0\nSKIPPED\n0\nCHILD RUNS\n0\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.PAD_GET_BAT_LIST_PRC\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · 비즈니스 규칙 3개, 현대화 포인트 3개, 위험 플래그 2개, 근거 caveat 6개, 전환 가이드 3개, 마이그레이션 가이드 인사이트 12개 Dependency child analysis 0건을 반영했습니다., tool orchestration 근거 caveat 1개\n\ninput 301d82d9b72f5de855aada75b123c91cea1647661e0ae048d6c62b6f22da80e0 · output 816b96b4feff550e7fadfcf22e5b63c527b0a5da7b399dbc5c1973ab577ee9c8 · tokens 216228 · latency 115484ms\nSUCCEEDED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nCANONICAL_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent c0b8a8c901eda30822a55cfbad05b665c590f7256d25e8926cd0b175a865cbf0\nOpen\nFacts\nDTO_READINESS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 83dbe2fa37fccb9af95d62897b5f53e284906d1602482f43d411af4e6a92d17d\nOpen\nFacts\nMETADATA_PROFILE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent bf1ad3a81525193f7ba1c03b28ffc76d5b19ccebc369573098e58e4567df7ba4\nOpen\nFacts\nDEPENDENCY_EVIDENCE\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 4758976326827b9194c21f676016c0051b94d39f8dc6261743be54dafaffc88a\nOpen\nFacts\nSP_ANALYSIS\n\nPROCEDURE · dbo.PAD_GET_BAT_LIST_PRC · v1\n\ncontent 05e097a4f30791e0dbba3bb8760b5c2cfa4de2291f05f6902ea50f0820e86788\nOpen\nFacts\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API\nPADGETBATLISTPRC SP 분석 초안\n\nSP analysis doc · evidence coverage 100%\n\nDraft\nPreview\nPADGETBATLISTPRC 의존성 보고서 초안\n\nDependency report · evidence coverage 100%\n\nDraft\nPreview\nsrc/main/java/com/pec/ppm/workflow/draft/model/PADGETBATLISTPRCDTO.java\n\nDT"
+    },
+    {
+      "name": "mobile job: no horizontal overflow",
+      "pass": true,
+      "classification": "pass",
+      "details": "{\"innerWidth\":776,\"scrollWidth\":776,\"bodyScrollWidth\":776}"
+    },
+    {
+      "name": "mobile artifact usable",
+      "pass": true,
+      "classification": "pass",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nARTIFACT PREVIEW\n\nPADGETBATLISTPRC SP 분석 초안\nDraft\nARTIFACT ID\nart_ebcc8e9971\nTYPE\nSP analysis doc\nEVIDENCE COVERAGE\n100%\nGENERATOR\ngeneration-core-0.1.0\nDraft-only boundary\n\nThis preview is draft-only. The default UI exposes no publish, deploy, SQL execution, DDL/DML apply, or source write action.\n\n# PADGETBATLISTPRC SP 분석 초안\n\n## input_interpretation\n- systemCode: PPM\n- entityName: PADGETBATLISTPRC\n- spName: dbo.PAD_GET_BAT_LIST_PRC\n- tableName: dbo.PAD_BAT_HIS\n\n## analysis_summary\n- 상태: 초안(`DRAFT`)\n- 근거 보강 필요: SP 내부 제어 흐름과 비즈니스 규칙은 canonical analysis 확정 후 보강\n- generationMode: spWrapper\n\n## procedure_signature\n- `P_OPT` varchar required=true\n- `P_SUB_SYS_CD` varchar required=true\n- `P_BAT_NM` varchar required=true\n- `P_EXEC_PER_STRT_DT` varchar required=true\n- `P_EXEC_PER_END_DT` varchar required=true\n- `P_BAT_CD` varchar required=true\n\n## result_shape\n- `HIS_SEQ_NO`\n- `BAT_CD`\n- `EXEC_PGM_NM`\n- `EXEC_STRT_DTM`\n- `EXEC_END_DTM`\n- `SCS_YN`\n- `ERR_CNTNT`\n- `IMME_EXEC_YN`\n- `IMME_EXEC_USER_ID`\n- `CRE_USR_ID`\n- `CRE_DTM`\n- `UPD_USR_ID`\n- `UPD_DTM`\n\n## dependency_summary\n- 저장 프로시저: `dbo.PAD_GET_BAT_LIST_PRC`\n- 테이블: `dbo.PAD_BAT_HIS`\n\n<!-- section:sp_overview -->\n## 1. SP 개요 및 기본 정보\n<!-- section-title:SP 개요 및 기본 정보 -->\n<!-- contract-title:SP 개요 및 기본 정보 -->\n- 근거: ev_metadata_1\n<!-- claim:claim_sp_overview status=evidence_caveat evidenceRefs=ev_metadata_1 -->\n- 판단: sp_overview section은 sanitized metadata/static fact를 근거로 렌더링됩니다. 상태=근거 보강 필요 근거=ev_metadata_1\n| 항목 | 값 | 상태 | 근거 |\n|---|---|---|---|\n| 대상 SP | dbo.PAD_GET_BAT_LIST_PRC | Confirmed | ev_metadata_1 |\n| 메타데이터 프로필 | ppm | Confirmed | ev_metadata_1 |\n| 입력 파라미터 수 | 6 | Confirmed | ev_metadata_1 |\n| 결과 필드 후보 수 | 13 | 근거 보강 필요 | static.analysis.migration_guide |\n\n- targetRef: `dbo.PAD_GET_BAT_LIST_PRC`\n- fixtureId: `req_5aca1986e3`\n- status: DRAFT\n- productionReady: `false`\n- artifactsUnderTest: SP_ANALYSIS_DOC, DEPENDENCY_REPORT\n- metadataProfileId: "
+    },
+    {
+      "name": "mobile artifact: no horizontal overflow",
+      "pass": true,
+      "classification": "pass",
+      "details": "{\"innerWidth\":710,\"scrollWidth\":710,\"bodyScrollWidth\":710}"
+    },
+    {
+      "name": "no forbidden network paths",
+      "pass": true,
+      "classification": "pass",
+      "details": "[]"
+    },
+    {
+      "name": "no page errors",
+      "pass": true,
+      "classification": "pass",
+      "details": ""
+    }
+  ],
+  "screenshots": [
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\00-home-dashboard.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\01-request-form-before-submit.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\02-primary-job-detail-after-submit.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\03-alternate-job-detail-after-submit.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\04-artifact-preview-after-validation.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\05-metadata-analysis-panel.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\06-dependency-diagnostics-closure.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\07-dependency-diagnostics-resolver.png",
+    "D:\\wt\\p35\\.tmp\\playwright-live-smoke-2026-05-16T08-32-45-523Z\\mobile-smoke-final.png"
+  ],
+  "observedRequests": [
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/requests/new",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/requests/new?sample=dbo.PAD_GET_BAT_LIST_PRC",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/artifacts/art_ebcc8e9971?_rsc=1oag5",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/artifacts/art_ebcc8e9971",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/requests/new",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/search?dbProfileId=ppm&query=P&limit=5&objectTypes=PROCEDURE&objectTypes=TABLE&analyze=1",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?mode=closure&dbProfileId=ppm&schema=dbo&objectName=PAD_GET_BAT_LIST_PRC&objectType=PROCEDURE&maxDepth=2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/metadata/dependencies?mode=resolver&dbProfileId=ppm&sourceSchema=dbo&sourceName=PAD_GET_BAT_LIST_PRC&sourceObjectType=PROCEDURE&referencedSchema=dbo&referencedName=EHRTB_IFEmployee",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/review/decision",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_079eac4e7a",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/artifacts/art_ebcc8e9971",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js",
+      "viewport": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2",
+      "viewport": "mobile"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "mobile"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "mobile"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "mobile"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "mobile"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/__nextjs_original-stack-frames",
+      "viewport": "mobile"
+    }
+  ],
+  "forbiddenRequests": [],
+  "consoleMessages": [
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-MSSQL MCP table schema metadata",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.databases",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-MSSQL MCP table schema metadata",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.databases",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-MSSQL MCP table schema metadata",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.databases",
+      "viewport": "desktop"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-MSSQL MCP table schema metadata",
+      "viewport": "mobile"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "mobile"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "mobile"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "mobile"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "mobile"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.objects,sys.schemas:referenced_id",
+      "viewport": "mobile"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.sql_expression_dependencies",
+      "viewport": "mobile"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. MSSQL_METADATA-sys.databases",
+      "viewport": "mobile"
+    }
+  ],
+  "pageErrors": [],
+  "blockers": [
+    {
+      "name": "primary artifact preview",
+      "classification": "API/LLM prerequisite blocker",
+      "message": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nWORKFLOW JOB\n\njob_38ebabc4b1\nFailed\n\nThe workflow failed and requires operator inspection.\n\nREQUEST\nreq_d252f579c9\nCURRENT STEP\nAnalyze\nUPDATED\n2026-05-16T08:33:35.675000\nPROGRESS\n0%\nFailure reason\n\nOpenAI response did not match the required structured output schema.\n\nOPENAI_STRUCTURED_OUTPUT_INVALID\nOpenAI response did not match the required structured output schema.\nCaveats\nOPENAI_STRUCTURED_OUTPUT_INVALID\n\nVALIDATION FLOW\n\nDraft to validation complete\nCollect metadata\nAnalyze\nGenerate\nValidate\n\nAGENT RUNTIME\n\nLLM trace summary\nSanitized\nLLM_SEMANTIC_ANALYST\nRoot run\ntarget dbo.GetInspItemsCd\n\ngpt-5.3-codex · prompt:sp_semantic_analysis@0.4.1 · LLM semantic analysis가 안전 코드 OPENAI_STRUCTURED_OUTPUT_INVALID로 실패했습니다.\n\ninput 3bdf9904de0ac4eac331282147086dee9935e622ecb2562ec829d5256399b3ef · output 8cb17cca896c7eba0ef0f3352731a17d7de030597728e224eb9fdccd7b51cf1f · tokens 0 · latency 0ms\nFAILED\nnone\n\nKNOWLEDGE ASSETS\n\nVersioned fact graph\nSanitized\nNo knowledge asset recorded\n\nKnowledge assetization may be disabled or awaiting the v5 schema.\n\nDRAFT ARTIFACTS\n\nPreview outputs\nHTTP API"
+    }
+  ],
+  "jobs": [
+    {
+      "label": "primary",
+      "sampleId": "dbo.GetInspItemsCd",
+      "target": "dbo.GetInspItemsCd",
+      "schema": "dbo",
+      "name": "GetInspItemsCd",
+      "jobUrl": "http://localhost:3035/jobs/job_38ebabc4b1",
+      "jobId": "job_38ebabc4b1",
+      "outcome": "failed",
+      "currentStep": "Analyze",
+      "failureCode": "WORKFLOW"
+    },
+    {
+      "label": "alternate",
+      "sampleId": "dbo.PAD_GET_BAT_LIST_PRC",
+      "target": "dbo.PAD_GET_BAT_LIST_PRC",
+      "schema": "dbo",
+      "name": "PAD_GET_BAT_LIST_PRC",
+      "jobUrl": "http://localhost:3035/jobs/job_079eac4e7a",
+      "jobId": "job_079eac4e7a",
+      "outcome": "artifact_available",
+      "currentStep": "Validate",
+      "failureCode": "WORKFLOW"
+    }
+  ],
+  "created": {
+    "primaryJobUrl": "http://localhost:3035/jobs/job_38ebabc4b1",
+    "primaryJobId": "job_38ebabc4b1",
+    "alternateJobUrl": "http://localhost:3035/jobs/job_079eac4e7a",
+    "alternateJobId": "job_079eac4e7a",
+    "artifactUrl": "http://localhost:3035/artifacts/art_ebcc8e9971"
+  },
+  "uiPass": false,
+  "acceptancePass": false,
+  "failedChecks": [
+    {
+      "name": "metadata analysis includes draft-quality sections",
+      "pass": false,
+      "classification": "UI regression",
+      "details": "MSSQL Agent Portal\nNew request\nMetadata search\nDependency diagnostics\n\nREAD-ONLY METADATA\n\nMetadata search\nMCP boundary\n\nSearch object identities, evidence refs, caveats, and blockers through the portal API adapter. Results never include row data, SQL definition text, procedure execution, or DDL/DML controls.\n\nMetadata profile\nplf - PLF\nmaster - master\nppm - PPM\nSearch query\nLimit\nObject types\nPROCEDURE\nTABLE\nVIEW\nFUNCTION\nSearch metadata\nAnalyze metadata\nUse in request\n\nSEARCH RESULTS\n\nPPM.P\n근거 보강 필요\nPROFILE\nppm\nDATABASE\nPPM\nRESULTS\n5\nDEPENDENCY_METADATA_INCOMPLETE\nDependency metadata is incomplete; treat dependency links as evidence caveats until confirmed.\nCaveats\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_002_RiskMonitoringMsg_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[0]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.BAT_PEQ_003_SendInvoiceToERP_PRC\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[35]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetOvseVndrGeneralInfoWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\n근거 보강 필요\nsys.objects[66]\nDEPENDENCY_METADATA_INCOMPLETE\n\nPROCEDURE\n\ndbo.DGSUP_BA_GetSgCtExistWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[69]\n\nPROCEDURE\n\ndbo.DGSUP_BA_SaveAttachMasterWeb\n\nppm · PPM · live:ppm:2026-05-16T08:38:44Z\n\nEvidence only\nsys.objects[71]\n\nDEPENDENCY BLOCKER\n\nMetadata analysis is unavailable\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED\nKNOWLEDGE_PERSISTENCE_FAILED: METADATA_PROFILE knowledge persistence가 실패했습니다: PlatformPersistenceError"
+    }
+  ],
+  "requestCount": 232
+}

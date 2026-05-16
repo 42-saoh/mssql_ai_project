@@ -7,7 +7,7 @@ from ai_agent_generation.migration_guide import (
     render_p24_migration_guide_sections,
 )
 from ai_agent_generation.models import GenerationContext, RenderedArtifact
-from ai_agent_generation.utils import ensure_trailing_newline
+from ai_agent_generation.utils import draft_quality_text, ensure_trailing_newline
 
 
 class SPAnalysisDocumentRenderer:
@@ -83,7 +83,7 @@ class SPAnalysisDocumentRenderer:
         return RenderedArtifact(
             artifact_type=self.artifact_type,
             title=f"{context.entity_name} SP 분석 초안",
-            content=ensure_trailing_newline("\n".join(lines)),
+            content=ensure_trailing_newline(draft_quality_text("\n".join(lines))),
             evidence_refs=context.evidence_refs,
             registry_refs=("template:sp_analysis_doc@0.1.0",),
             assumptions=context.evidence_assumptions,
@@ -156,7 +156,7 @@ class DependencyReportRenderer:
         return RenderedArtifact(
             artifact_type=self.artifact_type,
             title=f"{context.entity_name} 의존성 보고서 초안",
-            content=ensure_trailing_newline("\n".join(lines)),
+            content=ensure_trailing_newline(draft_quality_text("\n".join(lines))),
             evidence_refs=context.evidence_refs,
             registry_refs=("template:dependency_report@0.1.0",),
             assumptions=context.evidence_assumptions,
@@ -250,7 +250,7 @@ def _llm_semantic_lines(payload: dict) -> list[str]:
             f"- 가이드 인사이트({insight.get('section')}): {insight.get('summary')}{suffix}"
         )
     for marker in payload.get("reviewMarkers", []) or []:
-        lines.append(f"- 검토 마커({marker.get('code')}): {marker.get('message')}")
+        lines.append(f"- 근거 caveat({marker.get('code')}): {marker.get('message')}")
     return lines
 
 

@@ -39,9 +39,9 @@
 
 ## P25 behavior
 
-- `/review/decision` 화면과 approval CTA 는 Web UI 에서 제거되었고 직접 접근은 404 로 처리한다.
+- Draft-only flow 는 publish/deploy/apply action 을 노출하지 않으며 `/review/decision` 직접 접근은 404 로 처리한다.
 - Validation 결과의 `REVIEW_REQUIRED` 는 사람 승인 요청이 아니라 evidence caveat 로 표시한다.
-- Approval API/server code 와 Web API client 호출은 제품 표면에서 제거되었다.
+- Human approval server code 와 Web API client 호출은 제품 표면에서 제거되었다.
 
 ## P29 behavior
 

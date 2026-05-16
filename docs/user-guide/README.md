@@ -44,6 +44,6 @@ P15 보고서/로그에서 확인해야 하는 항목은 correlation id, evidenc
 - `docs/pilot-release-readiness.md` 는 현재 live pilot release 를 scoped CONDITIONAL_GO 로 판정한다.
 - fixture-first/demo handoff 는 GO WITH LIMITATIONS 이며, 결과물은 계속 draft-only 이다.
 - P17A dependency gate 는 selected SP suite majority 기준으로 통과했지만, SP 와 table 사이의 확정 dependency 는 manifest 의 confirmed `related_procedures` evidence 가 있을 때만 해석한다.
-- Approval decision API 는 현재 제품 표면에 없으며 publish, 배포, DDL 적용도 수행하지 않는다.
+- 현재 제품 표면에는 publish, 배포, DDL 적용 action 이 없으며 자동 수행하지 않는다.
 - P18/P19 productization readiness 는 CanonicalAnalysisModel, web HTTP adapter smoke evidence, production auth/RBAC source 문서화, fixture-backed enforcement 를 기록해 controlled CONDITIONAL_GO 로 해석한다. 단, live IdP/JWKS 와 PLF role lookup 검증 전까지 production-grade enterprise Auth/RBAC 또는 `production_ready: true` 로 주장하지 않는다.
 - Web readiness 는 HTTP API 연결, PLF/PPM blocker rendering, explicit validation action, review UI absent 상태를 확인하는 controlled live portal 기준이다. 이 기준도 full production-ready 주장은 아니며 `production_ready: false` 를 유지한다.

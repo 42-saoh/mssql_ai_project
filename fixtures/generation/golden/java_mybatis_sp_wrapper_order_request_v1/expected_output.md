@@ -168,22 +168,22 @@
 - 초안은 evidence map과 caveat를 함께 제공해 최초 설계 업무의 출발점을 줄입니다.
 
 ## sql_risk_markers
-- 상태 REVIEW_REQUIRED: `SP_EXEC_WRAPPER` - Mapper XML은 EXEC 저장 프로시저 wrapper를 유지하며 생성 과정에서는 실행하지 않는다.
-- 상태 REVIEW_REQUIRED: `SQL_REBUILD_NOT_CONFIRMED` - 더 강한 근거가 없으면 저장 프로시저 로직을 inline SQL로 재구성하지 않는다.
-- 상태 REVIEW_REQUIRED: `PARAMETER_BINDING_REVIEW_REQUIRED` - 적용 전 procedure metadata 기준으로 parameter binding을 확인해야 한다.
+- 상태 근거 보강 필요: `SP_EXEC_WRAPPER` - Mapper XML은 EXEC 저장 프로시저 wrapper를 유지하며 생성 과정에서는 실행하지 않는다.
+- 상태 근거 보강 필요: `SQL_REBUILD_NOT_CONFIRMED` - 더 강한 근거가 없으면 저장 프로시저 로직을 inline SQL로 재구성하지 않는다.
+- 상태 근거 보강 필요: `PARAMETER_BINDING_EVIDENCE_CAVEAT` - 적용 전 procedure metadata 기준으로 parameter binding을 확인해야 한다.
 
 ## llm_conversion_guidance
 - status: NO_CONVERSION_GUIDANCE_RETURNED
 
 ## unconfirmed_areas
-- REVIEW_REQUIRED: `pk_columns` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `transaction_boundary` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `validation_group_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `base_framework_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `exact_exception_message_codes` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `controller_need` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `dto_vo_model_final_choice` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- REVIEW_REQUIRED: `sp_rebuild_feasibility` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `pk_columns` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `transaction_boundary` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `validation_group_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `base_framework_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `exact_exception_message_codes` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `controller_need` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `dto_vo_model_final_choice` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `sp_rebuild_feasibility` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
 
 ## message_and_config_examples
 - message key 예시: `biz.info.order.request.retrieve.001`
@@ -197,7 +197,7 @@ pem:
 ```
 
 ## assumptions_and_todo
-- REVIEW_REQUIRED: 모든 파일은 draft-only 이며 추가 근거 확보 전 자동 반영하지 않습니다.
+- 근거 보강 필요: 모든 파일은 draft-only 이며 추가 근거 확보 전 자동 반영하지 않습니다.
 - TODO(input): 페이징 정책은 아직 미확정이므로 TODO 로 남긴다.
 - TODO(input): 정렬 규칙은 SP 내부 기본 정렬을 그대로 유지한다.
 - TODO(policy.mustMarkUnknown): pk_columns
@@ -221,7 +221,7 @@ pem:
 - Mapper/service shape: stored procedure signature and dependency/call-flow evidence
 
 ## known_caveats
-- REVIEW_REQUIRED는 근거 보강 필요 상태를 의미합니다.
+- 근거 보강 필요는 근거 보강 필요 상태를 의미합니다.
 - TODO(input): 페이징 정책은 아직 미확정이므로 TODO 로 남긴다.
 - TODO(input): 정렬 규칙은 SP 내부 기본 정렬을 그대로 유지한다.
 - TODO(policy.mustMarkUnknown): pk_columns

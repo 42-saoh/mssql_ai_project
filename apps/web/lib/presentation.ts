@@ -96,7 +96,7 @@ export function jobStatusSummary(status: JobStatus): string {
     case "VALIDATING":
       return "Generated drafts are passing through evidence and policy checks.";
     case "VALIDATION_COMPLETE":
-      return "Validation is complete for the draft artifacts. No approval or publish action is exposed.";
+      return "Validation is complete for the draft artifacts. No publish, deploy, or apply action is exposed.";
     case "FAILED":
       return "The workflow failed and requires operator inspection.";
     case "CANCELED":

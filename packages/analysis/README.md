@@ -8,7 +8,7 @@ Stored Procedure 분석의 fixture-first 구현을 둔다.
 - table, view, function, nested procedure call, call graph extraction
 - transaction, TRY/CATCH, dynamic SQL, temp table, cursor, multi-result-set detector
 - static result-set hint extraction
-- business-rule summary, confidence, TODO, review marker, evidence assessment
+- business-rule summary, confidence, TODO, evidence caveat, evidence assessment
 - modernization point evidence caveat markers
 - schema-search fixture enrichment
 - `CanonicalAnalysisModel` deterministic mapping when snapshot id and registry refs are bound

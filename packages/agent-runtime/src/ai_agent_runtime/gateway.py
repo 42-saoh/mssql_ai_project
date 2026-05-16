@@ -382,7 +382,7 @@ def _default_fake_metadata_analysis_output(
                         "code": "DRAFT_DTO_READINESS_REVIEW",
                         "objectRef": target_ref or "metadata.analysis",
                         "summary": (
-                            "결정론적 메타데이터 profile과 review marker를 확인하기 전까지 "
+                            "결정론적 메타데이터 profile과 evidence caveat를 확인하기 전까지 "
                             "DTO readiness는 draft-only로 유지합니다."
                         ),
                         "status": "REVIEW_REQUIRED",
