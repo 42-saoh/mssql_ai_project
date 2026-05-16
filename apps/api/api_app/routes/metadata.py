@@ -2,9 +2,21 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from api_app.dependencies import get_metadata_analysis_service, get_repository
+from api_app.dependencies import (
+    get_metadata_analysis_service,
+    get_repository,
+)
 from api_app.errors import api_http_exception
-from api_app.repositories import KnowledgePersistenceError, WorkflowRepository
+from api_app.metadata_analysis_runs import (
+    create_metadata_analysis_run,
+    execute_metadata_analysis_run,
+    get_metadata_analysis_run as read_metadata_analysis_run,
+)
+from api_app.repositories import (
+    KnowledgePersistenceError,
+    MetadataAnalysisRunPersistenceError,
+    WorkflowRepository,
+)
 from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.metadata_service import (
     DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
@@ -17,11 +29,12 @@ from api_app.metadata_service import (
 from api_app.schemas import (
     MetadataAnalysisRequest,
     MetadataAnalysisResponse,
+    MetadataAnalysisRunStatus,
     MetadataSearchResponse,
     MetadataToolInvokeRequest,
     MetadataToolInvokeResponse,
 )
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, status
 from mssql_mcp_app.errors import MetadataToolError
 
 router = APIRouter(prefix="/api/v1/metadata", tags=["metadata"])
@@ -151,3 +164,54 @@ def analyze_metadata(
             detail=str(exc),
             code="VALIDATION_ERROR",
         ) from exc
+
+
+@router.post(
+    "/analysis-runs",
+    response_model=MetadataAnalysisRunStatus,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def submit_metadata_analysis_run(
+    request: MetadataAnalysisRequest,
+    background_tasks: BackgroundTasks,
+    service: Annotated[MetadataAnalysisService, Depends(get_metadata_analysis_service)],
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> MetadataAnalysisRunStatus:
+    try:
+        run = create_metadata_analysis_run(repository=repository, request=request)
+    except MetadataAnalysisRunPersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc
+    background_tasks.add_task(
+        execute_metadata_analysis_run,
+        run_id=run.run_id,
+        request=request.model_copy(deep=True),
+        service=service,
+        repository=repository,
+    )
+    return run
+
+
+@router.get("/analysis-runs/{runId}", response_model=MetadataAnalysisRunStatus)
+def get_metadata_analysis_run(
+    run_id: Annotated[str, Path(alias="runId", min_length=1)],
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> MetadataAnalysisRunStatus:
+    try:
+        run = read_metadata_analysis_run(repository=repository, run_id=run_id)
+    except MetadataAnalysisRunPersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc
+    if run is None:
+        raise api_http_exception(
+            status_code=404,
+            detail="Metadata analysis run was not found.",
+            code="METADATA_ANALYSIS_RUN_NOT_FOUND",
+        )
+    return run

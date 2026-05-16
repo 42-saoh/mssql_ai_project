@@ -97,6 +97,10 @@
   digest, deterministic fact id, object profile/graph/dto readiness 요약만 포함하고 raw definition,
   row data, free-form SQL, procedure execution, DDL/DML, secrets, raw prompt/provider response text 는
   포함하지 않는다.
+- `POST /api/v1/metadata/analysis-runs` and polling storage use the same sanitized metadata
+  analysis payloads. Durable run storage may keep request/result/error JSON only; it must not keep
+  row data, raw SQL/SP definitions, procedure execution output, DDL/DML controls, secrets, raw
+  prompts, raw provider responses, approval decisions, reviewer identity, or human review records.
 - AI platform context tool orchestration 은 bounded planner 방식만 허용한다. LLM 은
   `spec/agent-tools/platform_ai_tool_catalog.yaml` 의 internal/read-only tool request plan 을 제안할 수
   있지만 실제 실행은 current job/db profile/target scope gate 와 내부 platform registry 가 수행한다.

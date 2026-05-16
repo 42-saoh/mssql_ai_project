@@ -232,6 +232,31 @@ class KnowledgeExportRecord:
     created_at: datetime = field(default_factory=utc_now)
 
 
+class MetadataAnalysisRunPersistenceError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "METADATA_ANALYSIS_RUN_PERSISTENCE_FAILED",
+        status_code: int = 503,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
+
+
+@dataclass
+class MetadataAnalysisRunRecord:
+    run_id: str
+    status: str
+    request: dict[str, Any]
+    submitted_at: datetime = field(default_factory=utc_now)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    analysis: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+
+
 class WorkflowRepository(Protocol):
     def create_request(
         self,
@@ -444,6 +469,36 @@ class WorkflowRepository(Protocol):
         content_hash: str,
         asset_ids: list[str],
     ) -> KnowledgeExportRecord:
+        ...
+
+    def create_metadata_analysis_run(
+        self,
+        *,
+        run_id: str,
+        request: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        ...
+
+    def get_metadata_analysis_run(self, run_id: str) -> MetadataAnalysisRunRecord | None:
+        ...
+
+    def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:
+        ...
+
+    def mark_metadata_analysis_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        analysis: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        ...
+
+    def mark_metadata_analysis_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
         ...
 
 

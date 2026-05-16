@@ -5,10 +5,12 @@ import { MetadataAnalysisPanel } from "@/components/metadata-analysis-panel";
 import type {
   MetadataAnalysisRequest,
   MetadataAnalysisResponse,
+  MetadataAnalysisRunStatus,
   MetadataSearchObjectType,
 } from "@/lib/api/types";
 
 const ANALYSIS_TIMEOUT_MS = 120_000;
+const ANALYSIS_POLL_INTERVAL_MS = 1_500;
 
 interface AnalysisError {
   code: string;
@@ -32,6 +34,8 @@ export function MetadataAnalyzeAction({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [maxTargets, setMaxTargets] = useState(String(clampMaxTargets(defaultMaxTargets)));
+  const [runId, setRunId] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<string | null>(null);
 
   const request = useMemo<MetadataAnalysisRequest>(
     () => ({
@@ -64,10 +68,12 @@ export function MetadataAnalyzeAction({
     setAnalysis(null);
     setError(null);
     setElapsedSeconds(0);
+    setRunId(null);
+    setRunStatus(null);
     setStartedAt(Date.now());
     setIsLoading(true);
     try {
-      const response = await fetch("/api/metadata/analyze", {
+      const response = await fetch("/api/metadata/analysis-runs", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(request),
@@ -76,7 +82,30 @@ export function MetadataAnalyzeAction({
       if (!response.ok) {
         throw await readAnalysisError(response);
       }
-      setAnalysis((await response.json()) as MetadataAnalysisResponse);
+      let run = (await response.json()) as MetadataAnalysisRunStatus;
+      setRunId(run.runId);
+      setRunStatus(run.status);
+      while (run.status === "QUEUED" || run.status === "RUNNING") {
+        await sleep(ANALYSIS_POLL_INTERVAL_MS, controller.signal);
+        const pollResponse = await fetch(
+          `/api/metadata/analysis-runs/${encodeURIComponent(run.runId)}`,
+          { signal: controller.signal },
+        );
+        if (!pollResponse.ok) {
+          throw await readAnalysisError(pollResponse);
+        }
+        run = (await pollResponse.json()) as MetadataAnalysisRunStatus;
+        setRunStatus(run.status);
+      }
+      if (run.status === "SUCCEEDED" && run.analysis) {
+        setAnalysis(run.analysis);
+      } else {
+        const runError: AnalysisError = {
+          code: run.error?.code ?? "AI_METADATA_ANALYSIS_RUN_FAILED",
+          message: run.error?.message ?? "Metadata analysis run failed.",
+        };
+        throw runError;
+      }
     } catch (caught) {
       setError(normalizeError(caught));
     } finally {
@@ -117,11 +146,12 @@ export function MetadataAnalyzeAction({
             </button>
             {isLoading ? (
               <span className="quiet-label" aria-live="polite">
-                분석 중 {elapsedSeconds}s
+                분석 중 {elapsedSeconds}s{runStatus ? ` - ${runStatus}` : ""}
               </span>
             ) : null}
           </div>
         </div>
+        {runId ? <p className="quiet-label">Run {runId}</p> : null}
         {error ? (
           <div className="blocker-list" aria-live="polite">
             <article className="blocker-row">
@@ -142,6 +172,24 @@ function clampMaxTargets(value: number): number {
     return 1;
   }
   return Math.min(Math.max(Math.trunc(value), 1), 5);
+}
+
+function sleep(durationMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Metadata analysis was aborted.", "AbortError"));
+      return;
+    }
+    const timer = window.setTimeout(resolve, durationMs);
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Metadata analysis was aborted.", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }
 
 async function readAnalysisError(response: Response): Promise<AnalysisError> {

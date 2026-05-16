@@ -571,6 +571,26 @@ class MetadataAnalysisResponse(ApiModel):
     )
 
 
+MetadataAnalysisRunStatusValue = Literal["QUEUED", "RUNNING", "SUCCEEDED", "FAILED"]
+
+
+class MetadataAnalysisRunError(ApiModel):
+    code: str
+    message: str
+    status_code: int = Field(alias="statusCode")
+
+
+class MetadataAnalysisRunStatus(ApiModel):
+    run_id: str = Field(alias="runId")
+    status: MetadataAnalysisRunStatusValue
+    submitted_at: datetime = Field(alias="submittedAt")
+    started_at: datetime | None = Field(default=None, alias="startedAt")
+    completed_at: datetime | None = Field(default=None, alias="completedAt")
+    request: MetadataAnalysisRequest
+    analysis: MetadataAnalysisResponse | None = None
+    error: MetadataAnalysisRunError | None = None
+
+
 class RegistryVersion(ApiModel):
     registry_type: Literal[
         "PROMPT",

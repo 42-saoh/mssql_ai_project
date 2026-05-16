@@ -164,6 +164,16 @@ const metadataAnalysis = await api.analyzeMetadata({
     maxTargets: 3,
   },
 });
+const metadataAnalysisRun = await api.submitMetadataAnalysisRun({
+  dbProfileId: "master",
+  target: { schema: "dbo", name: "TB_ORDER", type: "TABLE" },
+  options: {
+    useLlmAnalysis: false,
+    useAiToolOrchestration: true,
+    maxTargets: 1,
+  },
+});
+const metadataAnalysisRunStatus = await api.getMetadataAnalysisRun(metadataAnalysisRun.runId);
 const exportCandidate = knowledgeAssets.knowledgeAssets[0] ?? metadataAnalysis.knowledgeAssets[0];
 const knowledgeExport = exportCandidate
   ? await api.createKnowledgeExport({
@@ -200,6 +210,9 @@ assert(Array.isArray(metadataAnalysis.dtoReadiness), "Metadata analysis must inc
 assert(metadataAnalysis.aiToolEvidence?.plannerMetrics, "Metadata analysis must include planner metrics");
 assert(Array.isArray(metadataAnalysis.knowledgeAssets), "Metadata analysis must include knowledgeAssets");
 assert(metadataAnalysis.summary.length > 0, "Metadata analysis summary is empty");
+assert(metadataAnalysisRun.runId, "Metadata analysis run did not return a run id");
+assert(metadataAnalysisRunStatus.status === "SUCCEEDED", `Unexpected metadata analysis run status: ${metadataAnalysisRunStatus.status}`);
+assert(metadataAnalysisRunStatus.analysis?.mode === "TARGET", "Metadata analysis run did not return target analysis");
 assert(!knowledgeExport || knowledgeExport.format === "GRAPH_JSON", "Knowledge export must return GRAPH_JSON");
 assert(registry.versions.length > 0, "Registry versions response is empty");
 
@@ -221,6 +234,8 @@ for (const [label, payload] of Object.entries({
   dependencyResolution,
   metadataSearch,
   metadataAnalysis,
+  metadataAnalysisRun,
+  metadataAnalysisRunStatus,
   knowledgeExport,
   registry,
 })) {
@@ -268,6 +283,12 @@ assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
 );
 assertObserved("POST /api/v1/metadata/analyze", ({ method, path }) =>
   method === "POST" && path === "/api/v1/metadata/analyze",
+);
+assertObserved("POST /api/v1/metadata/analysis-runs", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/analysis-runs",
+);
+assertObserved("GET /api/v1/metadata/analysis-runs/{runId}", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/metadata\/analysis-runs\/[^/]+$/.test(path),
 );
 assertObserved("POST /api/v1/knowledge/exports", ({ method, path }) =>
   method === "POST" && path === "/api/v1/knowledge/exports",

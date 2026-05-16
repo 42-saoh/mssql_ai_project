@@ -25,6 +25,7 @@ from api_app.repositories import (
     KnowledgeFactRecord,
     KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
+    MetadataAnalysisRunRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkRequestRecord,
@@ -48,6 +49,7 @@ class MemoryWorkflowRepository:
         self.knowledge_versions: dict[str, KnowledgeAssetVersionRecord] = {}
         self.knowledge_exports: dict[str, KnowledgeExportRecord] = {}
         self.knowledge_job_links: set[tuple[str, str, str]] = set()
+        self.metadata_analysis_runs: dict[str, MetadataAnalysisRunRecord] = {}
         self.audit_events: list[AuditEventRecord] = []
         self.auth_actors: dict[str, Actor] = {}
 
@@ -724,6 +726,55 @@ class MemoryWorkflowRepository:
             },
         )
         return record
+
+    def create_metadata_analysis_run(
+        self,
+        *,
+        run_id: str,
+        request: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        record = MetadataAnalysisRunRecord(
+            run_id=run_id,
+            status="QUEUED",
+            request=dict(request),
+        )
+        self.metadata_analysis_runs[run_id] = record
+        return replace(record)
+
+    def get_metadata_analysis_run(self, run_id: str) -> MetadataAnalysisRunRecord | None:
+        record = self.metadata_analysis_runs.get(run_id)
+        return replace(record) if record else None
+
+    def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:
+        record = self.metadata_analysis_runs[run_id]
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        return replace(record)
+
+    def mark_metadata_analysis_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        analysis: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        record = self.metadata_analysis_runs[run_id]
+        record.status = "SUCCEEDED"
+        record.completed_at = utc_now()
+        record.analysis = dict(analysis)
+        record.error = None
+        return replace(record)
+
+    def mark_metadata_analysis_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        record = self.metadata_analysis_runs[run_id]
+        record.status = "FAILED"
+        record.completed_at = utc_now()
+        record.error = dict(error)
+        return replace(record)
 
     def _link_knowledge_asset_to_job(
         self,

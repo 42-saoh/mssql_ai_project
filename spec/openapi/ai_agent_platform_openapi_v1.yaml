@@ -500,6 +500,69 @@ paths:
           $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/analysis-runs:
+    post:
+      tags: [metadata]
+      summary: Submit an asynchronous metadata analysis run.
+      operationId: submitMetadataAnalysisRun
+      description: |
+        Starts a durable platform metadata analysis run and returns a run id for polling.
+        The run executes the same sanitized, read-only analysis as `POST /api/v1/metadata/analyze`
+        using the manual-apply v7 `METADATA_ANALYSIS_RUNS` storage contract. Submit/poll returns
+        `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED` when that table, required columns, or indexes
+        are missing. Polling results never include row data, raw SQL definition text, procedure
+        execution output, DDL/DML controls, secrets, raw prompts, or raw provider traces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataAnalysisRequest"
+      responses:
+        "202":
+          description: Metadata analysis run was accepted for asynchronous execution.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataAnalysisRunStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/analysis-runs/{runId}:
+    get:
+      tags: [metadata]
+      summary: Poll an asynchronous metadata analysis run.
+      operationId: getMetadataAnalysisRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current metadata analysis run status, result, or failure payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataAnalysisRunStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/assets:
     get:
       tags: [knowledge]
@@ -1459,6 +1522,56 @@ components:
           default: [PROCEDURE, TABLE, VIEW, FUNCTION]
         options:
           $ref: "#/components/schemas/MetadataAnalysisOptions"
+    MetadataAnalysisRunError:
+      type: object
+      required: [code, message, statusCode]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        statusCode:
+          type: integer
+    MetadataAnalysisRunStatus:
+      type: object
+      required:
+        - runId
+        - status
+        - submittedAt
+        - request
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+          enum:
+            - QUEUED
+            - RUNNING
+            - SUCCEEDED
+            - FAILED
+        submittedAt:
+          type: string
+          format: date-time
+        startedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        completedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        request:
+          $ref: "#/components/schemas/MetadataAnalysisRequest"
+        analysis:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataAnalysisResponse"
+            - type: "null"
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataAnalysisRunError"
+            - type: "null"
     MetadataAnalysisInsight:
       type: object
       required: [code, objectRef, summary, status, evidenceRefs]

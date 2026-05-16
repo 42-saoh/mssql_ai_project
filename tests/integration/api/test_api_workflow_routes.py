@@ -1028,6 +1028,99 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
     assert not any(field in serialized for field in forbidden_fields)
 
 
+def test_metadata_analysis_run_submit_and_poll(client: TestClient) -> None:
+    submit_response = client.post(
+        "/api/v1/metadata/analysis-runs",
+        json={
+            "dbProfileId": "master",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": True},
+        },
+    )
+
+    assert submit_response.status_code == 202
+    submitted = submit_response.json()
+    assert submitted["runId"].startswith("metadata_run_")
+    assert submitted["status"] in {"QUEUED", "RUNNING", "SUCCEEDED"}
+    assert submitted["request"]["dbProfileId"] == "master"
+    assert submitted["analysis"] is None
+    assert submitted["error"] is None
+
+    poll_response = client.get(f"/api/v1/metadata/analysis-runs/{submitted['runId']}")
+
+    assert poll_response.status_code == 200
+    polled = poll_response.json()
+    assert polled["runId"] == submitted["runId"]
+    assert polled["status"] == "SUCCEEDED"
+    assert polled["startedAt"]
+    assert polled["completedAt"]
+    assert polled["analysis"]["mode"] == "TARGET"
+    assert polled["analysis"]["target"]["name"] == "TB_ORDER"
+    assert polled["analysis"]["deterministicFacts"]
+    assert any(
+        marker["code"] == "AI_METADATA_ANALYSIS_SKIPPED"
+        for marker in polled["analysis"]["reviewMarkers"]
+    )
+    forbidden_keys = {
+        "rowdata",
+        "rawdefinition",
+        "definitiontext",
+        "sqltext",
+        "ddl",
+        "dml",
+        "execute",
+        "procedureexecution",
+    }
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(submitted))
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(polled))
+
+
+def test_metadata_analysis_run_poll_missing_id_returns_404(client: TestClient) -> None:
+    response = client.get("/api/v1/metadata/analysis-runs/missing")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "METADATA_ANALYSIS_RUN_NOT_FOUND"
+
+
+def test_metadata_analysis_run_preserves_dependency_error_in_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    repository = KnowledgeSchemaRequiredRepository()
+    service = WorkflowService(repository)
+    metadata_service = MetadataAnalysisService()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    app.dependency_overrides[get_metadata_analysis_service] = lambda: metadata_service
+    try:
+        client = TestClient(app)
+        submit_response = client.post(
+            "/api/v1/metadata/analysis-runs",
+            json={
+                "dbProfileId": "master",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+            },
+        )
+        poll_response = client.get(
+            f"/api/v1/metadata/analysis-runs/{submit_response.json()['runId']}"
+        )
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert submit_response.status_code == 202
+    assert poll_response.status_code == 200
+    polled = poll_response.json()
+    assert polled["status"] == "FAILED"
+    assert polled["analysis"] is None
+    assert polled["error"]["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert polled["error"]["statusCode"] == 503
+
+
 def test_metadata_analysis_maps_knowledge_schema_required_to_dependency_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

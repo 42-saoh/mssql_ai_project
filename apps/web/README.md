@@ -23,7 +23,11 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 ## Metadata Search And Analysis
 
 - Search stays server-rendered and calls `GET /api/v1/metadata/search`.
-- `Analyze metadata` is a client-side async action. It calls the internal Web route `POST /api/metadata/analyze`, which proxies the existing public `POST /api/v1/metadata/analyze` API. No new public API is introduced for this slice.
+- `Analyze metadata` is a client-side async action. It calls the internal Web route `POST /api/metadata/analysis-runs`, which proxies public `POST /api/v1/metadata/analysis-runs`; the client then polls `GET /api/metadata/analysis-runs/{runId}` until the public run reaches `SUCCEEDED` or `FAILED`.
+- The public analysis-run API uses durable platform storage when
+  `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql` has been manually applied.
+  If that schema is missing, the page renders the API blocker instead of falling back to a mock or
+  process-local run state.
 - The action defaults `maxTargets` to `1` and clamps user input to `1-5`.
 - While analysis is running, the page shows a disabled button, `분석 중` elapsed time, and any timeout/API blocker on the same screen instead of holding a full page navigation.
 - The reusable metadata analysis panel renders summary, facts/tool metrics, object profiles, insight groups, dependency graph, DTO readiness, knowledge assets, evidence caveats, and caveats.

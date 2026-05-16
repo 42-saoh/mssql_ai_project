@@ -107,9 +107,22 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert 'cleanParam(params, "referencedName", "PEX_INSP_ITEMS")' in page
     assert "MetadataAnalyzeAction" in search_page
     assert 'defaultMaxTargets={1}' in search_page
-    assert 'fetch("/api/metadata/analyze"' in analyze_action
+    assert 'fetch("/api/metadata/analysis-runs"' in analyze_action
+    assert "/api/metadata/analysis-runs/${encodeURIComponent(run.runId)}" in analyze_action
     assert "AI_METADATA_ANALYSIS_TIMEOUT" in analyze_action
     assert "Analysis target limit" in analyze_action
+    assert "api.submitMetadataAnalysisRun(payload)" in (
+        WEB_ROOT / "app" / "api" / "metadata" / "analysis-runs" / "route.ts"
+    ).read_text(encoding="utf-8")
+    assert "api.getMetadataAnalysisRun(runId)" in (
+        WEB_ROOT
+        / "app"
+        / "api"
+        / "metadata"
+        / "analysis-runs"
+        / "[runId]"
+        / "route.ts"
+    ).read_text(encoding="utf-8")
     assert "api.analyzeMetadata(payload)" in analyze_route
     assert "evidenceStatusLabel(item.status)" in _web_source()
     assert "DTO {item.status}" not in _web_source()

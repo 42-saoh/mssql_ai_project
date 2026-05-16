@@ -197,6 +197,21 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       });
     },
 
+    submitMetadataAnalysisRun(request: MetadataAnalysisRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/analysis-runs", {
+        method: "POST",
+        json: request,
+      });
+    },
+
+    getMetadataAnalysisRun(runId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/metadata/analysis-runs/${encodeURIComponent(runId)}`,
+      );
+    },
+
     listRegistryVersions() {
       return readJson(fetcher, baseUrl, "/api/v1/registry/versions");
     },

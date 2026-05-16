@@ -10,6 +10,7 @@ import type {
   KnowledgeFactGraph,
   MetadataAnalysisRequest,
   MetadataAnalysisResponse,
+  MetadataAnalysisRunStatus,
   MetadataProfile,
   MetadataSearchRequest,
   MetadataSearchResponse,
@@ -57,5 +58,7 @@ export interface PortalApi {
   ): Promise<MetadataToolInvokeResponse>;
   searchMetadataObjects(request: MetadataSearchRequest): Promise<MetadataSearchResponse>;
   analyzeMetadata(request: MetadataAnalysisRequest): Promise<MetadataAnalysisResponse>;
+  submitMetadataAnalysisRun(request: MetadataAnalysisRequest): Promise<MetadataAnalysisRunStatus>;
+  getMetadataAnalysisRun(runId: string): Promise<MetadataAnalysisRunStatus>;
   listRegistryVersions(): Promise<{ versions: RegistryVersion[] }>;
 }

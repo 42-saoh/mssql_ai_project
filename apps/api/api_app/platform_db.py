@@ -35,6 +35,8 @@ from api_app.repositories import (
     KnowledgeFactRecord,
     KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
+    MetadataAnalysisRunPersistenceError,
+    MetadataAnalysisRunRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkflowRepository,
@@ -1359,6 +1361,115 @@ class MssqlPlatformRepository:
         )
         return record
 
+    def create_metadata_analysis_run(
+        self,
+        *,
+        run_id: str,
+        request: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        self._require_metadata_analysis_run_schema()
+        record = MetadataAnalysisRunRecord(
+            run_id=run_id,
+            status="QUEUED",
+            request=request,
+        )
+        self._execute(
+            """
+            INSERT INTO dbo.METADATA_ANALYSIS_RUNS(
+                RUN_ID, STAT_CD, REQUEST_JSON, ANALYSIS_JSON, ERR_JSON,
+                SUBMITTED_DTM, START_DTM, COMPLETED_DTM, UPD_DTM
+            )
+            VALUES (%s, 'QUEUED', %s, NULL, NULL, %s, NULL, NULL, %s)
+            """,
+            (
+                record.run_id,
+                json_text(record.request),
+                record.submitted_at,
+                record.submitted_at,
+            ),
+        )
+        return record
+
+    def get_metadata_analysis_run(self, run_id: str) -> MetadataAnalysisRunRecord | None:
+        self._require_metadata_analysis_run_schema()
+        row = self._query_one(
+            """
+            SELECT RUN_ID, STAT_CD, REQUEST_JSON, ANALYSIS_JSON, ERR_JSON,
+                   SUBMITTED_DTM, START_DTM, COMPLETED_DTM
+            FROM dbo.METADATA_ANALYSIS_RUNS
+            WHERE RUN_ID = %s
+            """,
+            (run_id,),
+        )
+        return metadata_analysis_run_from_row(row) if row else None
+
+    def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:
+        self._require_metadata_analysis_run_schema()
+        now = utc_now()
+        self._execute(
+            """
+            UPDATE dbo.METADATA_ANALYSIS_RUNS
+            SET STAT_CD = 'RUNNING',
+                START_DTM = COALESCE(START_DTM, %s),
+                UPD_DTM = %s
+            WHERE RUN_ID = %s
+            """,
+            (now, now, run_id),
+        )
+        record = self.get_metadata_analysis_run(run_id)
+        if record is None:
+            raise KeyError(run_id)
+        return record
+
+    def mark_metadata_analysis_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        analysis: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        self._require_metadata_analysis_run_schema()
+        now = utc_now()
+        self._execute(
+            """
+            UPDATE dbo.METADATA_ANALYSIS_RUNS
+            SET STAT_CD = 'SUCCEEDED',
+                ANALYSIS_JSON = %s,
+                ERR_JSON = NULL,
+                COMPLETED_DTM = %s,
+                UPD_DTM = %s
+            WHERE RUN_ID = %s
+            """,
+            (json_text(analysis), now, now, run_id),
+        )
+        record = self.get_metadata_analysis_run(run_id)
+        if record is None:
+            raise KeyError(run_id)
+        return record
+
+    def mark_metadata_analysis_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        self._require_metadata_analysis_run_schema()
+        now = utc_now()
+        self._execute(
+            """
+            UPDATE dbo.METADATA_ANALYSIS_RUNS
+            SET STAT_CD = 'FAILED',
+                ERR_JSON = %s,
+                COMPLETED_DTM = %s,
+                UPD_DTM = %s
+            WHERE RUN_ID = %s
+            """,
+            (json_text(error), now, now, run_id),
+        )
+        record = self.get_metadata_analysis_run(run_id)
+        if record is None:
+            raise KeyError(run_id)
+        return record
+
     def _correlation_for_artifact(self, artifact: ArtifactRecord) -> str | None:
         job = self.get_job(artifact.job_id)
         return job.correlation_id if job else None
@@ -1567,6 +1678,89 @@ class MssqlPlatformRepository:
                 (value,),
             )
         )
+
+    def _require_metadata_analysis_run_schema(self) -> None:
+        rows = self._query_all(
+            """
+            SELECT TABLE_NAME
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'METADATA_ANALYSIS_RUNS'
+            """,
+            (),
+        )
+        missing_items: list[str] = []
+        if not rows:
+            missing_items.append("table:METADATA_ANALYSIS_RUNS")
+        required_columns = {
+            "RUN_ID",
+            "STAT_CD",
+            "REQUEST_JSON",
+            "ANALYSIS_JSON",
+            "ERR_JSON",
+            "SUBMITTED_DTM",
+            "START_DTM",
+            "COMPLETED_DTM",
+            "UPD_DTM",
+        }
+        column_rows = self._query_all(
+            """
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'METADATA_ANALYSIS_RUNS'
+              AND COLUMN_NAME IN (
+                'RUN_ID',
+                'STAT_CD',
+                'REQUEST_JSON',
+                'ANALYSIS_JSON',
+                'ERR_JSON',
+                'SUBMITTED_DTM',
+                'START_DTM',
+                'COMPLETED_DTM',
+                'UPD_DTM'
+              )
+            """,
+            (),
+        )
+        found_columns = {str(row[0]) for row in column_rows}
+        missing_items.extend(
+            f"column:METADATA_ANALYSIS_RUNS.{column}"
+            for column in sorted(required_columns - found_columns)
+        )
+        index_rows = self._query_all(
+            """
+            SELECT i.name
+            FROM sys.indexes i
+            JOIN sys.objects o ON o.object_id = i.object_id
+            JOIN sys.schemas s ON s.schema_id = o.schema_id
+            WHERE s.name = 'dbo'
+              AND o.name = 'METADATA_ANALYSIS_RUNS'
+              AND i.name IN (
+                'IX_METADATA_ANALYSIS_RUNS_STATUS',
+                'IX_METADATA_ANALYSIS_RUNS_SUBMITTED'
+              )
+            """,
+            (),
+        )
+        found_indexes = {str(row[0]) for row in index_rows}
+        required_indexes = {
+            "IX_METADATA_ANALYSIS_RUNS_STATUS",
+            "IX_METADATA_ANALYSIS_RUNS_SUBMITTED",
+        }
+        missing_items.extend(
+            f"index:METADATA_ANALYSIS_RUNS.{index_name}"
+            for index_name in sorted(required_indexes - found_indexes)
+        )
+        if missing_items:
+            raise MetadataAnalysisRunPersistenceError(
+                (
+                    "Metadata analysis run polling requires v7 platform schema objects: "
+                    + ", ".join(missing_items)
+                ),
+                code="METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED",
+                status_code=503,
+            )
 
     def _require_knowledge_schema(self) -> None:
         required_tables = {
@@ -1999,6 +2193,27 @@ def knowledge_asset_from_row(row: tuple[Any, ...]) -> KnowledgeAssetRecord:
         updated_at=as_datetime(row[12]),
         lifecycle_status=str(row[13] or "DRAFT") if len(row) > 13 else "DRAFT",
         archived_at=as_datetime(row[14]) if len(row) > 14 and row[14] else None,
+    )
+
+
+def metadata_analysis_run_from_row(row: tuple[Any, ...]) -> MetadataAnalysisRunRecord:
+    return MetadataAnalysisRunRecord(
+        run_id=str(row[0]),
+        status=str(row[1] or "QUEUED"),
+        request=dict(parse_json(row[2], {})),
+        analysis=(
+            dict(parse_json(row[3], {}))
+            if row[3] is not None and str(row[3]).strip()
+            else None
+        ),
+        error=(
+            dict(parse_json(row[4], {}))
+            if row[4] is not None and str(row[4]).strip()
+            else None
+        ),
+        submitted_at=as_datetime(row[5]),
+        started_at=as_datetime(row[6]) if row[6] else None,
+        completed_at=as_datetime(row[7]) if row[7] else None,
     )
 
 

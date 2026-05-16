@@ -30,6 +30,8 @@
 - `POST /api/v1/metadata/tools/{toolName}/invoke`
 - `GET /api/v1/metadata/search`
 - `POST /api/v1/metadata/analyze`
+- `POST /api/v1/metadata/analysis-runs`
+- `GET /api/v1/metadata/analysis-runs/{runId}`
 - `GET /api/v1/knowledge/assets`
 - `GET /api/v1/knowledge/facts/search`
 - `GET /api/v1/knowledge/assets/{assetId}`
@@ -290,6 +292,15 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
   claim support rate 만 담는 sanitized effectiveness summary 다. P34 부터 `persistKnowledge=true`
   기본값에서는 sanitized `knowledgeAssets[]` summary 도 함께 반환한다. persisted artifact 와 workflow
   state transition 은 추가하지 않는다.
+- `POST /api/v1/metadata/analysis-runs` starts the same metadata analysis through durable
+  platform run storage and returns `202` with `runId`, `QUEUED|RUNNING|SUCCEEDED|FAILED`,
+  timestamps, and the sanitized request. `GET /api/v1/metadata/analysis-runs/{runId}` polls
+  that run and returns `analysis` on success or structured `error` on failure.
+- Durable analysis-run storage requires the manual-apply
+  `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql` draft. The API never
+  auto-applies DDL; if the table, required columns, or indexes are missing, submit/poll returns
+  `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`. Durable knowledge persistence continues to use
+  the existing `persistKnowledge` path and platform schema readiness checks.
 
 ## Knowledge assetization
 

@@ -145,6 +145,8 @@ repo/
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
 - Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
 - P25 validation-complete status DDL 초안: `db/schema/ai_agent_platform_schema_v4_validation_complete_status.sql`
+- Knowledge asset DDL draft: `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql`
+- Metadata analysis run DDL draft: `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql`
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - OpenAI LLM runtime package: `packages/agent-runtime/src/ai_agent_runtime`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`

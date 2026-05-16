@@ -81,9 +81,12 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "WorkflowStepType" in data["components"]["schemas"]
     assert "/api/v1/metadata/search" in data["paths"]
     assert "/api/v1/metadata/analyze" in data["paths"]
+    assert "/api/v1/metadata/analysis-runs" in data["paths"]
+    assert "/api/v1/metadata/analysis-runs/{runId}" in data["paths"]
     assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisResponse" in data["components"]["schemas"]
+    assert "MetadataAnalysisRunStatus" in data["components"]["schemas"]
     assert "MetadataToolInvokeResponse" in data["components"]["schemas"]
     assert "KnowledgeAssetSummary" in data["components"]["schemas"]
     assert "KnowledgeExportResponse" in data["components"]["schemas"]
@@ -263,6 +266,61 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
     assert forbidden_response_fields.isdisjoint(response_properties)
 
 
+def test_openapi_metadata_analysis_run_contract_matches_async_polling_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    paths = openapi["paths"]
+    schemas = openapi["components"]["schemas"]
+
+    submit = paths["/api/v1/metadata/analysis-runs"]["post"]
+    poll = paths["/api/v1/metadata/analysis-runs/{runId}"]["get"]
+
+    assert submit["operationId"] == "submitMetadataAnalysisRun"
+    assert submit["tags"] == ["metadata"]
+    assert submit["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisRequest"
+    }
+    assert submit["responses"]["202"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisRunStatus"
+    }
+    assert poll["operationId"] == "getMetadataAnalysisRun"
+    assert poll["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisRunStatus"
+    }
+    assert {
+        parameter["name"] for parameter in poll["parameters"]
+    } == {"runId"}
+    run_schema = schemas["MetadataAnalysisRunStatus"]
+    assert run_schema["properties"]["status"]["enum"] == [
+        "QUEUED",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+    ]
+    assert run_schema["properties"]["request"] == {
+        "$ref": "#/components/schemas/MetadataAnalysisRequest"
+    }
+    assert run_schema["properties"]["startedAt"]["oneOf"] == [
+        {"type": "string", "format": "date-time"},
+        {"type": "null"},
+    ]
+    assert run_schema["properties"]["completedAt"]["oneOf"] == [
+        {"type": "string", "format": "date-time"},
+        {"type": "null"},
+    ]
+    assert run_schema["properties"]["analysis"]["oneOf"] == [
+        {"$ref": "#/components/schemas/MetadataAnalysisResponse"},
+        {"type": "null"},
+    ]
+    assert run_schema["properties"]["error"]["oneOf"] == [
+        {"$ref": "#/components/schemas/MetadataAnalysisRunError"},
+        {"type": "null"},
+    ]
+
+
 def test_openapi_sp_batch_contract_matches_p33_scale_surface() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
@@ -421,6 +479,49 @@ def test_platform_repository_checks_all_v6_knowledge_tables() -> None:
     ):
         assert removed_schema_object not in source
     assert "KNOWLEDGE_SCHEMA_REQUIRED" in source
+
+
+def test_v7_metadata_analysis_run_schema_is_durable_and_draft_only() -> None:
+    ddl_text = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v7_metadata_analysis_runs.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "Manual apply only" in ddl_text
+    assert "CREATE TABLE dbo.METADATA_ANALYSIS_RUNS" in ddl_text
+    assert "RUN_ID NVARCHAR(80) NOT NULL" in ddl_text
+    assert "REQUEST_JSON NVARCHAR(MAX) NOT NULL" in ddl_text
+    assert "ANALYSIS_JSON NVARCHAR(MAX) NULL" in ddl_text
+    assert "ERR_JSON NVARCHAR(MAX) NULL" in ddl_text
+    assert "STAT_CD IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')" in ddl_text
+    assert "IX_METADATA_ANALYSIS_RUNS_STATUS" in ddl_text
+    assert "IX_METADATA_ANALYSIS_RUNS_SUBMITTED" in ddl_text
+    for forbidden in (
+        "APPROVAL_DECISIONS",
+        "REVIEWER_REF_TXT",
+        "ROW_DATA",
+        "RAW_PROMPT",
+        "RAW_PROVIDER",
+    ):
+        assert forbidden not in ddl_text.upper()
+
+
+def test_platform_repository_checks_v7_metadata_analysis_run_schema() -> None:
+    source = (ROOT / "apps" / "api" / "api_app" / "platform_db.py").read_text(
+        encoding="utf-8"
+    )
+
+    for schema_object in (
+        "METADATA_ANALYSIS_RUNS",
+        "RUN_ID",
+        "STAT_CD",
+        "REQUEST_JSON",
+        "ANALYSIS_JSON",
+        "ERR_JSON",
+        "IX_METADATA_ANALYSIS_RUNS_STATUS",
+        "IX_METADATA_ANALYSIS_RUNS_SUBMITTED",
+        "METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED",
+    ):
+        assert schema_object in source
 
 
 def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:

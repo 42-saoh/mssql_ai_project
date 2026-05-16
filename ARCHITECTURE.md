@@ -178,6 +178,10 @@ flowchart LR
 - JSONL / GRAPH_JSON export 제공
 - v6 DDL is the current manual-apply draft and keeps version lifecycle state:
   `DRAFT`, `REVIEW_REQUIRED`, `ARCHIVED`.
+- v7 DDL adds durable `METADATA_ANALYSIS_RUNS` storage for public metadata
+  analysis submit/polling. It stores sanitized request/result/error JSON only
+  and never stores raw SQL/SP definitions, row data, raw prompts, provider traces,
+  publish/deploy/apply controls, approval decisions, or human review records.
 - `REVIEW_REQUIRED` is a machine evidence caveat. It is not a human review request,
   publish approval, deployment approval, or automatic conversion approval.
 - Public knowledge search is read-only: `GET /api/v1/knowledge/assets` and
@@ -188,6 +192,9 @@ flowchart LR
 - Platform DB readiness checks cover v5 tables, lifecycle columns, and critical
   indexes. Missing objects surface as `503 KNOWLEDGE_SCHEMA_REQUIRED` with the
   missing item list; API code never auto-applies DDL.
+- Metadata analysis run readiness checks cover the v7 table, columns, and indexes.
+  Missing objects surface as `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`; API code
+  never auto-applies DDL.
 - raw SP definition, SQL text, row data, secret, raw prompt/provider trace 는 저장/응답/export 에 포함하지 않음
 
 ### MSSQL Metadata MCP
@@ -342,10 +349,14 @@ packages/templates
 - Platform DB DDL 초안: `db/schema/ai_agent_platform_schema_v2_dbo_prefix.sql`
 - Agent runtime DDL 초안: `db/schema/ai_agent_platform_schema_v3_agent_runtime.sql`
 - Knowledge asset DDL 초안: `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql`
+- Metadata analysis run DDL draft: `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql`
 - v6 knowledge DDL 은 `KNOWLEDGE_ASSET_JOB_LINKS`, fact-edge FK,
   lifecycle/archive columns, lifecycle/search indexes 를
   포함하는 manual-apply 초안이며, adapter 는 필수 v6 table/column/index 가
   없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패한다.
+- v7 metadata analysis run DDL stores durable submit/poll status and sanitized
+  request/result/error JSON. Missing v7 table/column/index objects fail as
+  `METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`.
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - P27 dependency evidence tooling contract: `spec/eval/p27_dependency_evidence_tooling_contract.yaml`

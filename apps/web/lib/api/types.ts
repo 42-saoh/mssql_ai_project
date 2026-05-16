@@ -532,6 +532,25 @@ export interface MetadataAnalysisResponse {
   knowledgeAssets: KnowledgeAssetSummary[];
 }
 
+export type MetadataAnalysisRunStatusValue = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+
+export interface MetadataAnalysisRunError {
+  code: string;
+  message: string;
+  statusCode: number;
+}
+
+export interface MetadataAnalysisRunStatus {
+  runId: string;
+  status: MetadataAnalysisRunStatusValue;
+  submittedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  request: MetadataAnalysisRequest;
+  analysis?: MetadataAnalysisResponse | null;
+  error?: MetadataAnalysisRunError | null;
+}
+
 export interface RegistryVersion {
   registryType: RegistryType;
   version: string;

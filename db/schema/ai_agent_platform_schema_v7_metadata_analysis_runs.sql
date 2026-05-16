@@ -1,0 +1,47 @@
+/*
+  MSSQL Analysis Agent Platform
+  Platform DB DDL Draft v7: Durable Metadata Analysis Runs
+
+  Manual apply only. Codex must not execute this file automatically.
+  This schema stores sanitized metadata analysis run request/result state for
+  public submit/polling APIs. It does not store row data, raw SQL text, raw SP
+  definitions, procedure execution output, secrets, raw prompts, raw provider
+  responses, publish/deploy/apply controls, approval decisions, reviewer
+  identities, or human review records.
+*/
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE TABLE dbo.METADATA_ANALYSIS_RUNS (
+    RUN_ID NVARCHAR(80) NOT NULL,
+    STAT_CD NVARCHAR(30) NOT NULL,
+    REQUEST_JSON NVARCHAR(MAX) NOT NULL,
+    ANALYSIS_JSON NVARCHAR(MAX) NULL,
+    ERR_JSON NVARCHAR(MAX) NULL,
+    SUBMITTED_DTM DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    START_DTM DATETIME2(3) NULL,
+    COMPLETED_DTM DATETIME2(3) NULL,
+    UPD_DTM DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_METADATA_ANALYSIS_RUNS PRIMARY KEY CLUSTERED (RUN_ID),
+    CONSTRAINT CHK_METADATA_ANALYSIS_RUNS_STATUS CHECK (
+        STAT_CD IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')
+    ),
+    CONSTRAINT CHK_METADATA_ANALYSIS_RUNS_REQUEST_JSON CHECK (ISJSON(REQUEST_JSON) = 1),
+    CONSTRAINT CHK_METADATA_ANALYSIS_RUNS_ANALYSIS_JSON CHECK (
+        ANALYSIS_JSON IS NULL OR ISJSON(ANALYSIS_JSON) = 1
+    ),
+    CONSTRAINT CHK_METADATA_ANALYSIS_RUNS_ERR_JSON CHECK (
+        ERR_JSON IS NULL OR ISJSON(ERR_JSON) = 1
+    )
+);
+GO
+
+CREATE INDEX IX_METADATA_ANALYSIS_RUNS_STATUS
+    ON dbo.METADATA_ANALYSIS_RUNS(STAT_CD, UPD_DTM DESC);
+GO
+
+CREATE INDEX IX_METADATA_ANALYSIS_RUNS_SUBMITTED
+    ON dbo.METADATA_ANALYSIS_RUNS(SUBMITTED_DTM DESC);
+GO

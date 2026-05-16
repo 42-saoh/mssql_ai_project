@@ -17,11 +17,13 @@ from api_app.platform_db import (
     content_type_for_artifact,
     job_from_row,
     load_platform_db_settings,
+    metadata_analysis_run_from_row,
     options_storage_payload,
     storage_uuid,
 )
 from api_app.repositories import (
     ArtifactRecord,
+    MetadataAnalysisRunPersistenceError,
 )
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
@@ -263,6 +265,86 @@ def test_workflow_repository_contract_records_state_changes() -> None:
     assert repository.validation_reports[validation.validation_report_id].status == "PASSED"
     assert not any(event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events)
     assert repository.audit_events[0].correlation_id == "corr-platform-contract"
+
+
+def test_workflow_repository_contract_persists_metadata_analysis_runs() -> None:
+    repository = MemoryWorkflowRepository()
+
+    created = repository.create_metadata_analysis_run(
+        run_id="metadata_run_contract",
+        request={
+            "dbProfileId": "master",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "options": {"useLlmAnalysis": False},
+        },
+    )
+    repository.mark_metadata_analysis_run_running(created.run_id)
+    repository.mark_metadata_analysis_run_succeeded(
+        created.run_id,
+        analysis={
+            "dbProfileId": "master",
+            "mode": "TARGET",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "sourceProfile": "master",
+            "sourceDatabase": "master",
+            "summary": "Sanitized metadata profile.",
+        },
+    )
+
+    record = repository.get_metadata_analysis_run(created.run_id)
+
+    assert record is not None
+    assert record.status == "SUCCEEDED"
+    assert record.request["target"]["name"] == "TB_ORDER"
+    assert record.analysis
+    assert record.analysis["mode"] == "TARGET"
+    assert record.error is None
+
+
+def test_platform_db_metadata_analysis_run_row_mapping() -> None:
+    row = (
+        "metadata_run_row",
+        "FAILED",
+        '{"dbProfileId": "master", "query": "order"}',
+        None,
+        '{"code": "KNOWLEDGE_SCHEMA_REQUIRED", "message": "schema missing", "statusCode": 503}',
+        "2026-05-16T00:00:00Z",
+        "2026-05-16T00:00:01Z",
+        "2026-05-16T00:00:02Z",
+    )
+
+    record = metadata_analysis_run_from_row(row)
+
+    assert record.run_id == "metadata_run_row"
+    assert record.status == "FAILED"
+    assert record.request["query"] == "order"
+    assert record.analysis is None
+    assert record.error
+    assert record.error["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+
+
+def test_platform_db_metadata_analysis_run_schema_gap_is_explicit() -> None:
+    settings = PlatformDbSettings(
+        host="127.0.0.1",
+        port=1433,
+        user="sa",
+        password="do-not-echo",
+        database="PLF",
+        requester_login="codex-api-local",
+    )
+    repository = MssqlPlatformRepository(settings)
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(repository, "_query_all", lambda _sql, _params: [])
+        with pytest.raises(MetadataAnalysisRunPersistenceError) as exc_info:
+            repository.create_metadata_analysis_run(
+                run_id="metadata_run_missing_schema",
+                request={"dbProfileId": "master", "query": "order"},
+            )
+
+    assert exc_info.value.code == "METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED"
+    assert "METADATA_ANALYSIS_RUNS" in str(exc_info.value)
+    assert "do-not-echo" not in str(exc_info.value)
 
 
 def test_workflow_repository_lists_artifacts_with_stable_internal_bound() -> None:
