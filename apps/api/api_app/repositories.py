@@ -28,6 +28,7 @@ class WorkRequestRecord:
     request_hash: str
     correlation_id: str
     idempotency_key: str | None = None
+    target_key: str | None = None
     status: JobStatus = JobStatus.SUBMITTED
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -42,6 +43,7 @@ class JobRecord:
     correlation_id: str | None = None
     db_profile_id: str | None = None
     target: dict[str, Any] | None = None
+    target_key: str | None = None
     outputs: tuple[str, ...] = ()
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -69,6 +71,7 @@ class AgentRunRecord:
     summary: str
     structured_output: dict[str, Any]
     model_invocation: dict[str, Any]
+    target_key: str | None = None
     created_at: datetime = field(default_factory=utc_now)
 
 
@@ -85,6 +88,7 @@ class ArtifactRecord:
     registry_refs: tuple[str, ...]
     assumptions: tuple[str, ...]
     review_required: bool = True
+    target_key: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -159,6 +163,7 @@ class KnowledgeAssetRecord:
     target_schema: str
     target_name: str
     logical_key: str
+    target_key: str | None = None
     current_version_id: str | None = None
     current_version_no: int = 0
     content_hash: str | None = None
@@ -268,6 +273,7 @@ class WorkflowRepository(Protocol):
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
+        target_key: str | None = None,
     ) -> WorkRequestRecord:
         ...
 
@@ -275,6 +281,9 @@ class WorkflowRepository(Protocol):
         self,
         idempotency_key: str,
     ) -> WorkRequestRecord | None:
+        ...
+
+    def get_request(self, request_id: str) -> WorkRequestRecord | None:
         ...
 
     def update_request_status(self, request_id: str, status: JobStatus) -> None:
@@ -320,6 +329,7 @@ class WorkflowRepository(Protocol):
         summary: str,
         structured_output: dict[str, Any],
         model_invocation: dict[str, Any],
+        target_key: str | None = None,
     ) -> AgentRunRecord:
         ...
 
@@ -343,16 +353,45 @@ class WorkflowRepository(Protocol):
         assumptions: tuple[str, ...],
         review_required: bool,
         extra: dict[str, Any] | None = None,
+        target_key: str | None = None,
     ) -> ArtifactRecord:
         ...
 
     def get_job(self, job_id: str) -> JobRecord | None:
         ...
 
-    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+    def list_jobs(
+        self,
+        *,
+        limit: int | None = None,
+        target_key: str | None = None,
+    ) -> list[JobRecord]:
+        ...
+
+    def list_stale_active_jobs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[JobRecord]:
+        ...
+
+    def claim_stale_active_job(
+        self,
+        job_id: str,
+        *,
+        stale_before: datetime,
+    ) -> JobRecord | None:
         ...
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
+        ...
+
+    def find_job_artifact_by_type(
+        self,
+        job_id: str,
+        artifact_type: ArtifactType,
+    ) -> ArtifactRecord | None:
         ...
 
     def list_job_artifacts(
@@ -480,6 +519,22 @@ class WorkflowRepository(Protocol):
         ...
 
     def get_metadata_analysis_run(self, run_id: str) -> MetadataAnalysisRunRecord | None:
+        ...
+
+    def list_recoverable_metadata_analysis_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataAnalysisRunRecord]:
+        ...
+
+    def claim_metadata_analysis_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataAnalysisRunRecord | None:
         ...
 
     def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:

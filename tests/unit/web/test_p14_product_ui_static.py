@@ -161,7 +161,10 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "api.createSPAnalysisBatchRequest" in request_page
     assert "AnalysisHistoryList" in source
     assert "api.listJobs(5)" in source
-    assert "api.listJobs(limit)" in source
+    assert "api.listJobs(limit, targetKey || undefined)" in source
+    assert "targetKey" in source
+    assert "Same target history" in source
+    assert "Exact targetKey" in source
     assert 'firstParam(value) ?? "50"' in source
     assert "api.listJobArtifacts(job.jobId)" in source
     assert "View all analysis history" in source

@@ -6,7 +6,7 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 
 - `/` - dashboard with recent analysis jobs, metadata search summary, and draft artifact links.
 - `/requests/new` - submits single and batch SP analysis requests to the portal API, then links to accepted jobs.
-- `/jobs` - recent analysis history with target/profile/status/output filters and artifact preview links.
+- `/jobs` - recent analysis history with targetKey/target/profile/status/output filters and artifact preview links.
 - `/jobs/[jobId]` - workflow status, sanitized LLM trace summary, knowledge assets, and draft artifacts.
 - `/artifacts/[artifactId]` - artifact preview, evidence refs, caveats, sanitized trace, and explicit validation trigger.
 - `/metadata/search` - read-only metadata identity/evidence search plus client-side async metadata analysis.
@@ -20,6 +20,12 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `lib/api/errors.ts` normalizes API `{code, detail}` blockers for UI display.
 - `lib/pilot-manifest.ts` only reads live sample object identities when the pilot manifest is in `live_metadata` mode.
 
+## Analysis History
+
+- History rows, job detail, artifact preview, metadata profiles, and knowledge asset rows show the server-derived `targetKey` when available.
+- `/jobs?targetKey=...` uses the public exact-match filter so users can paste a canonical key and find prior runs for the same root target.
+- Job and artifact views include same-target history links. `targetRef` remains display text; `targetKey` is the stable lookup key.
+
 ## Metadata Search And Analysis
 
 - Search stays server-rendered and calls `GET /api/v1/metadata/search`.
@@ -28,6 +34,9 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
   `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql` has been manually applied.
   If that schema is missing, the page renders the API blocker instead of falling back to a mock or
   process-local run state.
+- If a durable run is interrupted, the API background recovery worker reclaims queued or
+  stale running metadata runs and the same polling UI continues until the run reaches a
+  terminal `SUCCEEDED` or structured `FAILED` result.
 - The action defaults `maxTargets` to `1` and clamps user input to `1-5`.
 - While analysis is running, the page shows a disabled button, `분석 중` elapsed time, and any timeout/API blocker on the same screen instead of holding a full page navigation.
 - The reusable metadata analysis panel renders summary, facts/tool metrics, object profiles, insight groups, dependency graph, DTO readiness, knowledge assets, evidence caveats, and caveats.

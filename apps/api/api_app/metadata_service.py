@@ -21,6 +21,7 @@ from api_app.schemas import (
     MetadataToolInvokeResponse,
     MetadataToolSummary,
 )
+from api_app.target_keys import target_key_for_target
 
 METADATA_SEARCH_MCP_TOOL_MISSING = "METADATA_SEARCH_MCP_TOOL_MISSING"
 METADATA_TOOL_INVOCATION_NOT_ALLOWED = "METADATA_TOOL_INVOCATION_NOT_ALLOWED"
@@ -379,6 +380,11 @@ def _metadata_search_result(
             schema=schema,
             name=name,
             type=object_type,
+        ),
+        targetKey=target_key_for_target(
+            result_source_profile,
+            {"type": object_type, "schema": schema, "name": name},
+            database=result_source_database,
         ),
         sourceProfile=result_source_profile,
         sourceDatabase=result_source_database,

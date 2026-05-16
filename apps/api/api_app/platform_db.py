@@ -47,6 +47,7 @@ from api_app.repositories import (
     tracking_payload,
     utc_now,
 )
+from api_app.target_keys import target_key_for_target
 
 STORAGE_NAMESPACE = UUID("a8e6e20c-0158-5d6f-8a39-a97f7325c6a2")
 
@@ -138,7 +139,9 @@ class MssqlPlatformRepository:
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
+        target_key: str | None = None,
     ) -> WorkRequestRecord:
+        canonical_key = target_key or target_key_for_target(db_profile_id, target)
         record = WorkRequestRecord(
             request_id=prefixed_id("req"),
             db_profile_id=db_profile_id,
@@ -148,6 +151,7 @@ class MssqlPlatformRepository:
             request_hash=request_hash,
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
+            target_key=canonical_key,
         )
         requester_id = self._resolve_user_id(self.settings.requester_login)
         storage_profile_id = self._resolve_db_profile_id(db_profile_id)
@@ -156,9 +160,9 @@ class MssqlPlatformRepository:
             INSERT INTO dbo.CORE_WORK_REQUESTS(
                 REQ_ID, REQ_TP_CD, REQR_USR_ID, DB_PRFL_ID, TRGT_PAYLD_JSON,
                 DESIRED_RSLT_JSON, OPTN_PAYLD_JSON, CUR_STAT_CD, TRC_ID,
-                SUBMITTED_DTM, UPD_DTM
+                CANON_TRGT_KEY_TXT, SUBMITTED_DTM, UPD_DTM
             )
-            VALUES (%s, 'SP_ANALYSIS', %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, 'SP_ANALYSIS', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 storage_uuid(record.request_id),
@@ -169,6 +173,7 @@ class MssqlPlatformRepository:
                 json_text(options_storage_payload(record)),
                 record.status.value,
                 record.request_id,
+                canonical_key,
                 record.created_at,
                 record.updated_at,
             ),
@@ -180,6 +185,7 @@ class MssqlPlatformRepository:
             payload={
                 "dbProfileId": db_profile_id,
                 "outputs": list(outputs),
+                "targetKey": canonical_key,
                 "tracking": tracking_payload(
                     correlation_id=correlation_id,
                     idempotency_key=idempotency_key,
@@ -203,31 +209,55 @@ class MssqlPlatformRepository:
                 OPTN_PAYLD_JSON,
                 CUR_STAT_CD,
                 SUBMITTED_DTM,
-                UPD_DTM
-            FROM dbo.CORE_WORK_REQUESTS
-            WHERE JSON_VALUE(OPTN_PAYLD_JSON, '$.__tracking.idempotencyKey') = %s
-            ORDER BY SUBMITTED_DTM DESC
+                UPD_DTM,
+                COALESCE(
+                    JSON_VALUE(OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    p.DB_PRFL_NM,
+                    CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
+                ),
+                COALESCE(
+                    r.CANON_TRGT_KEY_TXT,
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.targetKey')
+                )
+            FROM dbo.CORE_WORK_REQUESTS r
+            LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
+            WHERE JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.idempotencyKey') = %s
+            ORDER BY r.SUBMITTED_DTM DESC
             """,
             (idempotency_key,),
         )
         if row is None:
             return None
-        options_payload = parse_json(row[3], {})
-        tracking = dict(options_payload.get("__tracking") or {})
-        options_payload.pop("__tracking", None)
-        return WorkRequestRecord(
-            request_id=str(row[0]),
-            db_profile_id=str(tracking.get("dbProfileId") or ""),
-            target=dict(parse_json(row[1], {})),
-            outputs=tuple(parse_json(row[2], [])),
-            options=dict(options_payload),
-            request_hash=str(tracking.get("requestHash") or ""),
-            correlation_id=str(tracking.get("correlationId") or ""),
-            idempotency_key=str(tracking.get("idempotencyKey") or idempotency_key),
-            status=JobStatus(str(row[4])),
-            created_at=as_datetime(row[5]),
-            updated_at=as_datetime(row[6]),
+        return work_request_from_row(row, idempotency_key=idempotency_key)
+
+    def get_request(self, request_id: str) -> WorkRequestRecord | None:
+        row = self._query_one(
+            """
+            SELECT TOP (1)
+                COALESCE(TRC_ID, CONVERT(NVARCHAR(36), REQ_ID)),
+                TRGT_PAYLD_JSON,
+                DESIRED_RSLT_JSON,
+                OPTN_PAYLD_JSON,
+                CUR_STAT_CD,
+                SUBMITTED_DTM,
+                UPD_DTM,
+                COALESCE(
+                    JSON_VALUE(OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    p.DB_PRFL_NM,
+                    CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
+                ),
+                COALESCE(
+                    r.CANON_TRGT_KEY_TXT,
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.targetKey')
+                )
+            FROM dbo.CORE_WORK_REQUESTS r
+            LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
+            WHERE r.REQ_ID = %s OR r.TRC_ID = %s
+            ORDER BY SUBMITTED_DTM DESC
+            """,
+            (storage_uuid(request_id), request_id),
         )
+        return work_request_from_row(row) if row else None
 
     def update_request_status(self, request_id: str, status: JobStatus) -> None:
         self._execute(
@@ -240,18 +270,21 @@ class MssqlPlatformRepository:
         )
 
     def create_job(self, request_id: str, *, correlation_id: str | None = None) -> JobRecord:
+        request = self.get_request(request_id)
         record = JobRecord(
             job_id=prefixed_id("job"),
             request_id=request_id,
             correlation_id=correlation_id,
+            target_key=request.target_key if request else None,
         )
         self._execute(
             """
             INSERT INTO dbo.CORE_JOBS(
                 JOB_ID, REQ_ID, CUR_STAT_CD, START_DTM, CUR_STEP_TP_CD,
-                RGST_BINDING_JSON, WRKR_REF_ID, ERR_CD, ERR_CNTNT, CRE_DTM, UPD_DTM
+                RGST_BINDING_JSON, WRKR_REF_ID, ERR_CD, ERR_CNTNT,
+                CANON_TRGT_KEY_TXT, CRE_DTM, UPD_DTM
             )
-            VALUES (%s, %s, %s, %s, NULL, %s, %s, NULL, NULL, %s, %s)
+            VALUES (%s, %s, %s, %s, NULL, %s, %s, NULL, NULL, %s, %s, %s)
             """,
             (
                 storage_uuid(record.job_id),
@@ -266,6 +299,7 @@ class MssqlPlatformRepository:
                     }
                 ),
                 record.job_id,
+                record.target_key,
                 record.created_at,
                 record.updated_at,
             ),
@@ -292,7 +326,12 @@ class MssqlPlatformRepository:
                     CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
                 ),
                 r.TRGT_PAYLD_JSON,
-                r.DESIRED_RSLT_JSON
+                r.DESIRED_RSLT_JSON,
+                COALESCE(
+                    j.CANON_TRGT_KEY_TXT,
+                    r.CANON_TRGT_KEY_TXT,
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.targetKey')
+                )
             FROM dbo.CORE_JOBS j
             JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
             LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
@@ -460,6 +499,7 @@ class MssqlPlatformRepository:
         summary: str,
         structured_output: dict[str, Any],
         model_invocation: dict[str, Any],
+        target_key: str | None = None,
     ) -> AgentRunRecord:
         record = AgentRunRecord(
             agent_run_id=prefixed_id("agent"),
@@ -470,14 +510,16 @@ class MssqlPlatformRepository:
             summary=summary,
             structured_output=structured_output,
             model_invocation=model_invocation,
+            target_key=target_key,
         )
         self._execute(
             """
             INSERT INTO dbo.AGENT_RUNS(
                 AGNT_RUN_ID, JOB_ID, AGNT_TP_CD, STAT_CD, TRGT_REF_TXT,
-                SMRY_TXT, STRUCTURED_OUTPUT_JSON, MODEL_INVOCATION_JSON, CRE_DTM
+                SMRY_TXT, STRUCTURED_OUTPUT_JSON, MODEL_INVOCATION_JSON,
+                CANON_TRGT_KEY_TXT, CRE_DTM
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 storage_uuid(record.agent_run_id),
@@ -488,6 +530,7 @@ class MssqlPlatformRepository:
                 summary,
                 json_text(structured_output),
                 json_text(model_invocation),
+                target_key,
                 record.created_at,
             ),
         )
@@ -529,6 +572,7 @@ class MssqlPlatformRepository:
                 "agentType": agent_type,
                 "status": status,
                 "targetRef": target_ref,
+                "targetKey": target_key,
                 "modelInvocation": _public_model_invocation(model_invocation),
             },
             correlation_id=job.correlation_id if job else None,
@@ -554,6 +598,7 @@ class MssqlPlatformRepository:
                 SMRY_TXT,
                 STRUCTURED_OUTPUT_JSON,
                 MODEL_INVOCATION_JSON,
+                CANON_TRGT_KEY_TXT,
                 CRE_DTM
             FROM dbo.AGENT_RUNS
             WHERE JOB_ID = %s
@@ -576,7 +621,9 @@ class MssqlPlatformRepository:
         assumptions: tuple[str, ...],
         review_required: bool,
         extra: dict[str, Any] | None = None,
+        target_key: str | None = None,
     ) -> ArtifactRecord:
+        job = self.get_job(job_id)
         record = ArtifactRecord(
             artifact_id=prefixed_id("art"),
             job_id=job_id,
@@ -590,9 +637,9 @@ class MssqlPlatformRepository:
             assumptions=assumptions,
             review_required=review_required,
             extra=extra or {},
+            target_key=target_key or (job.target_key if job else None),
         )
         self._save_artifact(record)
-        job = self.get_job(job_id)
         self.record_audit_event(
             action="ARTIFACT_CREATED",
             target_type="ARTIFACT",
@@ -602,6 +649,7 @@ class MssqlPlatformRepository:
                 "jobId": job_id,
                 "artifactType": artifact_type.value,
                 "status": record.status.value,
+                "targetKey": record.target_key,
             },
             correlation_id=job.correlation_id if job else None,
         )
@@ -627,7 +675,12 @@ class MssqlPlatformRepository:
                     CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
                 ),
                 r.TRGT_PAYLD_JSON,
-                r.DESIRED_RSLT_JSON
+                r.DESIRED_RSLT_JSON,
+                COALESCE(
+                    j.CANON_TRGT_KEY_TXT,
+                    r.CANON_TRGT_KEY_TXT,
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.targetKey')
+                )
             FROM dbo.CORE_JOBS j
             JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
             LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
@@ -637,7 +690,65 @@ class MssqlPlatformRepository:
         )
         return job_from_row(row) if row else None
 
-    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+    def list_jobs(
+        self,
+        *,
+        limit: int | None = None,
+        target_key: str | None = None,
+    ) -> list[JobRecord]:
+        normalized_limit = normalize_list_limit(limit)
+        where_clause = ""
+        params: tuple[Any, ...] = ()
+        if target_key:
+            where_clause = """
+            WHERE COALESCE(
+                    j.CANON_TRGT_KEY_TXT,
+                    r.CANON_TRGT_KEY_TXT,
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.targetKey')
+                  ) = %s
+            """
+            params = (target_key,)
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({normalized_limit})
+                CONVERT(NVARCHAR(36), j.JOB_ID),
+                COALESCE(j.WRKR_REF_ID, CONVERT(NVARCHAR(36), j.JOB_ID)),
+                COALESCE(r.TRC_ID, CONVERT(NVARCHAR(36), j.REQ_ID)),
+                j.CUR_STAT_CD,
+                j.CUR_STEP_TP_CD,
+                j.ERR_CD,
+                j.ERR_CNTNT,
+                j.CRE_DTM,
+                j.UPD_DTM,
+                j.RGST_BINDING_JSON,
+                COALESCE(
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    p.DB_PRFL_NM,
+                    CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
+                ),
+                r.TRGT_PAYLD_JSON,
+                r.DESIRED_RSLT_JSON,
+                COALESCE(
+                    j.CANON_TRGT_KEY_TXT,
+                    r.CANON_TRGT_KEY_TXT,
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.targetKey')
+                )
+            FROM dbo.CORE_JOBS j
+            JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
+            LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
+            {where_clause}
+            ORDER BY j.CRE_DTM DESC, j.JOB_ID DESC
+            """,
+            params,
+        )
+        return [job_from_row(row) for row in rows]
+
+    def list_stale_active_jobs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[JobRecord]:
         normalized_limit = normalize_list_limit(limit)
         rows = self._query_all(
             f"""
@@ -658,15 +769,53 @@ class MssqlPlatformRepository:
                     CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
                 ),
                 r.TRGT_PAYLD_JSON,
-                r.DESIRED_RSLT_JSON
+                r.DESIRED_RSLT_JSON,
+                COALESCE(
+                    j.CANON_TRGT_KEY_TXT,
+                    r.CANON_TRGT_KEY_TXT,
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.targetKey')
+                )
             FROM dbo.CORE_JOBS j
             JOIN dbo.CORE_WORK_REQUESTS r ON r.REQ_ID = j.REQ_ID
             LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
-            ORDER BY j.CRE_DTM DESC, j.JOB_ID DESC
+            WHERE j.CUR_STAT_CD IN (
+                'SUBMITTED',
+                'COLLECTING_METADATA',
+                'ANALYZING',
+                'GENERATING',
+                'VALIDATING'
+            )
+              AND j.UPD_DTM <= %s
+            ORDER BY j.UPD_DTM ASC, j.JOB_ID ASC
             """,
-            (),
+            (stale_before,),
         )
         return [job_from_row(row) for row in rows]
+
+    def claim_stale_active_job(
+        self,
+        job_id: str,
+        *,
+        stale_before: datetime,
+    ) -> JobRecord | None:
+        row = self._query_one(
+            """
+            UPDATE dbo.CORE_JOBS
+            SET UPD_DTM = SYSUTCDATETIME()
+            OUTPUT COALESCE(INSERTED.WRKR_REF_ID, CONVERT(NVARCHAR(36), INSERTED.JOB_ID))
+            WHERE (JOB_ID = %s OR WRKR_REF_ID = %s)
+              AND CUR_STAT_CD IN (
+                'SUBMITTED',
+                'COLLECTING_METADATA',
+                'ANALYZING',
+                'GENERATING',
+                'VALIDATING'
+              )
+              AND UPD_DTM <= %s
+            """,
+            (storage_uuid(job_id), job_id, stale_before),
+        )
+        return self.get_job(str(row[0])) if row else None
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         row = self._query_one(
@@ -675,6 +824,21 @@ class MssqlPlatformRepository:
                 "WHERE a.ARTF_ID = %s OR CONVERT(NVARCHAR(36), a.ARTF_ID) = %s"
             ),
             (storage_uuid(artifact_id), artifact_id),
+        )
+        return self._artifact_from_row(row) if row else None
+
+    def find_job_artifact_by_type(
+        self,
+        job_id: str,
+        artifact_type: ArtifactType,
+    ) -> ArtifactRecord | None:
+        row = self._query_one(
+            (
+                f"{artifact_select_sql()} "
+                "WHERE a.JOB_ID = %s AND a.ARTF_TP_CD = %s "
+                "ORDER BY a.CRE_DTM ASC, a.ARTF_ID ASC"
+            ),
+            (storage_uuid(job_id), artifact_type.value),
         )
         return self._artifact_from_row(row) if row else None
 
@@ -862,11 +1026,24 @@ class MssqlPlatformRepository:
         target_type = str(target.get("type") or "OBJECT")
         target_schema = str(target.get("schema") or "")
         target_name = str(target.get("name") or "")
+        target_key = target_key_for_target(db_profile_id, target)
         logical_key = "|".join(
             [db_profile_id, asset_kind, target_type, target_schema, target_name]
         ).lower()
         asset = self._knowledge_asset_by_logical_key(logical_key)
         now = utc_now()
+        if asset is not None and target_key and not asset.target_key:
+            asset.target_key = target_key
+            self._execute(
+                """
+                UPDATE dbo.KNOWLEDGE_ASSETS
+                SET CANON_TRGT_KEY_TXT = %s,
+                    UPD_DTM = SYSUTCDATETIME()
+                WHERE ASST_ID = %s
+                  AND CANON_TRGT_KEY_TXT IS NULL
+                """,
+                (target_key, asset.asset_id),
+            )
         if asset is None:
             asset = KnowledgeAssetRecord(
                 asset_id=prefixed_id("know"),
@@ -877,6 +1054,7 @@ class MssqlPlatformRepository:
                 target_name=target_name,
                 logical_key=logical_key,
                 source_job_id=job_id,
+                target_key=target_key,
                 created_at=now,
                 updated_at=now,
             )
@@ -885,9 +1063,10 @@ class MssqlPlatformRepository:
                 INSERT INTO dbo.KNOWLEDGE_ASSETS(
                     ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                     TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
-                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
+                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID,
+                    CANON_TRGT_KEY_TXT, CRE_DTM, UPD_DTM
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NULL, 0, NULL, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NULL, 0, NULL, %s, %s, %s, %s)
                 """,
                 (
                     asset.asset_id,
@@ -898,6 +1077,7 @@ class MssqlPlatformRepository:
                     target_name,
                     logical_key,
                     job_id,
+                    target_key,
                     now,
                     now,
                 ),
@@ -1039,6 +1219,7 @@ class MssqlPlatformRepository:
                 "versionNo": version_no,
                 "contentHash": content_hash,
                 "sourceJobId": job_id,
+                "targetKey": target_key,
             },
             correlation_id=source_job.correlation_id if source_job else None,
         )
@@ -1063,7 +1244,7 @@ class MssqlPlatformRepository:
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM,
-                   LIFECYCLE_STAT_CD, ARCHV_DTM
+                   CANON_TRGT_KEY_TXT, LIFECYCLE_STAT_CD, ARCHV_DTM
             FROM (
                 SELECT
                     a.ASST_ID,
@@ -1081,6 +1262,7 @@ class MssqlPlatformRepository:
                     a.SRC_JOB_ID,
                     a.CRE_DTM,
                     a.UPD_DTM,
+                    a.CANON_TRGT_KEY_TXT,
                     jl.CRE_DTM AS LINK_DTM,
                     ROW_NUMBER() OVER (
                         PARTITION BY a.ASST_ID
@@ -1141,7 +1323,7 @@ class MssqlPlatformRepository:
                    a.ASST_ID, a.ASST_KIND_CD, a.DB_PRFL_REF_TXT, a.TRGT_TP_CD,
                    a.TRGT_SCHM_NM, a.TRGT_OBJ_NM, a.LOGICAL_KEY_TXT, a.CUR_VER_ID,
                    a.CUR_VER_NO, a.CNTNT_HASH_SHA256_VAL, a.SRC_JOB_ID, a.CRE_DTM, a.UPD_DTM,
-                   v.LIFECYCLE_STAT_CD, v.ARCHV_DTM
+                   a.CANON_TRGT_KEY_TXT, v.LIFECYCLE_STAT_CD, v.ARCHV_DTM
             FROM dbo.KNOWLEDGE_ASSETS a
             LEFT JOIN dbo.KNOWLEDGE_ASSET_VERSIONS v
               ON v.ASST_VER_ID = a.CUR_VER_ID
@@ -1159,7 +1341,7 @@ class MssqlPlatformRepository:
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
                    CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM,
-                   LIFECYCLE_STAT_CD, ARCHV_DTM
+                   CANON_TRGT_KEY_TXT, LIFECYCLE_STAT_CD, ARCHV_DTM
             FROM (
                 SELECT
                     a.ASST_ID,
@@ -1175,6 +1357,7 @@ class MssqlPlatformRepository:
                     a.SRC_JOB_ID,
                     a.CRE_DTM,
                     a.UPD_DTM,
+                    a.CANON_TRGT_KEY_TXT,
                     v.LIFECYCLE_STAT_CD,
                     v.ARCHV_DTM
                 FROM dbo.KNOWLEDGE_ASSETS a
@@ -1403,6 +1586,70 @@ class MssqlPlatformRepository:
         )
         return metadata_analysis_run_from_row(row) if row else None
 
+    def list_recoverable_metadata_analysis_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataAnalysisRunRecord]:
+        self._require_metadata_analysis_run_schema()
+        normalized_limit = normalize_list_limit(limit)
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({normalized_limit})
+                RUN_ID, STAT_CD, REQUEST_JSON, ANALYSIS_JSON, ERR_JSON,
+                SUBMITTED_DTM, START_DTM, COMPLETED_DTM
+            FROM dbo.METADATA_ANALYSIS_RUNS
+            WHERE STAT_CD = 'QUEUED'
+               OR (
+                    STAT_CD = 'RUNNING'
+                    AND COALESCE(START_DTM, SUBMITTED_DTM) <= %s
+               )
+            ORDER BY SUBMITTED_DTM ASC, RUN_ID ASC
+            """,
+            (stale_before,),
+        )
+        return [metadata_analysis_run_from_row(row) for row in rows]
+
+    def claim_metadata_analysis_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataAnalysisRunRecord | None:
+        self._require_metadata_analysis_run_schema()
+        now = utc_now()
+        row = self._query_one(
+            """
+            UPDATE dbo.METADATA_ANALYSIS_RUNS
+            SET STAT_CD = 'RUNNING',
+                START_DTM = %s,
+                COMPLETED_DTM = NULL,
+                ANALYSIS_JSON = NULL,
+                ERR_JSON = NULL,
+                UPD_DTM = %s
+            OUTPUT
+                INSERTED.RUN_ID,
+                INSERTED.STAT_CD,
+                INSERTED.REQUEST_JSON,
+                INSERTED.ANALYSIS_JSON,
+                INSERTED.ERR_JSON,
+                INSERTED.SUBMITTED_DTM,
+                INSERTED.START_DTM,
+                INSERTED.COMPLETED_DTM
+            WHERE RUN_ID = %s
+              AND (
+                    STAT_CD = 'QUEUED'
+                    OR (
+                        STAT_CD = 'RUNNING'
+                        AND COALESCE(START_DTM, SUBMITTED_DTM) <= %s
+                    )
+              )
+            """,
+            (now, now, run_id, stale_before),
+        )
+        return metadata_analysis_run_from_row(row) if row else None
+
     def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:
         self._require_metadata_analysis_run_schema()
         now = utc_now()
@@ -1522,9 +1769,10 @@ class MssqlPlatformRepository:
             self._execute(
                 """
                 INSERT INTO dbo.ARTIFACTS(
-                    ARTF_ID, JOB_ID, ARTF_TP_CD, CUR_STAT_CD, TITL, CRE_DTM, UPD_DTM
+                    ARTF_ID, JOB_ID, ARTF_TP_CD, CUR_STAT_CD, TITL,
+                    CANON_TRGT_KEY_TXT, CRE_DTM, UPD_DTM
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     artifact_id,
@@ -1532,6 +1780,7 @@ class MssqlPlatformRepository:
                     record.type.value,
                     record.status.value,
                     record.title,
+                    record.target_key,
                     record.created_at,
                     record.updated_at,
                 ),
@@ -1572,10 +1821,11 @@ class MssqlPlatformRepository:
             UPDATE dbo.ARTIFACTS
             SET CUR_STAT_CD = %s,
                 CUR_ARTF_VER_ID = %s,
+                CANON_TRGT_KEY_TXT = COALESCE(CANON_TRGT_KEY_TXT, %s),
                 UPD_DTM = SYSUTCDATETIME()
             WHERE ARTF_ID = %s
             """,
-            (record.status.value, artifact_version_id, artifact_id),
+            (record.status.value, artifact_version_id, record.target_key, artifact_id),
         )
 
     def _artifact_from_row(self, row: tuple[Any, ...] | None) -> ArtifactRecord | None:
@@ -1605,6 +1855,7 @@ class MssqlPlatformRepository:
                 latest_validation.validation_report_id if latest_validation else None
             ),
             latest_validation_status=latest_validation.status if latest_validation else None,
+            target_key=str(row[11]) if len(row) > 11 and row[11] else None,
         )
 
     def _insert_job_step(
@@ -1891,7 +2142,8 @@ class MssqlPlatformRepository:
             """
             SELECT ASST_ID, ASST_KIND_CD, DB_PRFL_REF_TXT, TRGT_TP_CD,
                    TRGT_SCHM_NM, TRGT_OBJ_NM, LOGICAL_KEY_TXT, CUR_VER_ID,
-                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM
+                   CUR_VER_NO, CNTNT_HASH_SHA256_VAL, SRC_JOB_ID, CRE_DTM, UPD_DTM,
+                   CANON_TRGT_KEY_TXT
             FROM dbo.KNOWLEDGE_ASSETS
             WHERE LOGICAL_KEY_TXT = %s
             """,
@@ -2115,7 +2367,8 @@ def artifact_select_sql() -> str:
             v.CNTNT_TXT,
             v.RGST_BINDING_JSON,
             v.EVDC_JSON,
-            j.WRKR_REF_ID
+            j.WRKR_REF_ID,
+            COALESCE(a.CANON_TRGT_KEY_TXT, j.CANON_TRGT_KEY_TXT)
         FROM dbo.ARTIFACTS a
         JOIN dbo.CORE_JOBS j ON j.JOB_ID = a.JOB_ID
         LEFT JOIN dbo.ARTIFACT_VERSIONS v ON v.ARTF_VER_ID = a.CUR_ARTF_VER_ID
@@ -2128,19 +2381,61 @@ def job_from_row(row: tuple[Any, ...]) -> JobRecord:
     correlation_id = str(binding.get("correlationId") or "") or None
     target = parse_json(row[11] if len(row) > 11 else None, None)
     outputs = parse_json(row[12] if len(row) > 12 else None, [])
+    db_profile_id = str(row[10]) if len(row) > 10 and row[10] else None
+    target_dict = dict(target) if isinstance(target, dict) else None
+    target_key = (
+        str(row[13])
+        if len(row) > 13 and row[13]
+        else target_key_for_target(db_profile_id, target_dict)
+    )
     return JobRecord(
         job_id=str(row[1]),
         request_id=str(row[2]),
         status=JobStatus(str(row[3])),
         current_step=current_step,
         correlation_id=correlation_id,
-        db_profile_id=str(row[10]) if len(row) > 10 and row[10] else None,
-        target=dict(target) if isinstance(target, dict) else None,
+        db_profile_id=db_profile_id,
+        target=target_dict,
         outputs=tuple(str(item) for item in outputs) if isinstance(outputs, list) else (),
+        target_key=target_key,
         error_code=str(row[5]) if row[5] else None,
         error_message=str(row[6]) if row[6] else None,
         created_at=as_datetime(row[7]),
         updated_at=as_datetime(row[8]),
+    )
+
+
+def work_request_from_row(
+    row: tuple[Any, ...],
+    *,
+    idempotency_key: str | None = None,
+) -> WorkRequestRecord:
+    options_payload = parse_json(row[3], {})
+    tracking = dict(options_payload.get("__tracking") or {})
+    options_payload.pop("__tracking", None)
+    db_profile_id = str(tracking.get("dbProfileId") or "")
+    if not db_profile_id and len(row) > 7 and row[7]:
+        db_profile_id = str(row[7])
+    target = dict(parse_json(row[1], {}))
+    target_key = (
+        str(row[8])
+        if len(row) > 8 and row[8]
+        else target_key_for_target(db_profile_id, target)
+    )
+    restored_idempotency_key = tracking.get("idempotencyKey") or idempotency_key
+    return WorkRequestRecord(
+        request_id=str(row[0]),
+        db_profile_id=db_profile_id,
+        target=target,
+        outputs=tuple(parse_json(row[2], [])),
+        options=dict(options_payload),
+        request_hash=str(tracking.get("requestHash") or ""),
+        correlation_id=str(tracking.get("correlationId") or ""),
+        idempotency_key=str(restored_idempotency_key) if restored_idempotency_key else None,
+        target_key=target_key,
+        status=JobStatus(str(row[4])),
+        created_at=as_datetime(row[5]),
+        updated_at=as_datetime(row[6]),
     )
 
 
@@ -2163,6 +2458,8 @@ def validation_from_row(
 
 
 def agent_run_from_row(row: tuple[Any, ...], job_id: str) -> AgentRunRecord:
+    target_key = str(row[7]) if len(row) > 8 and row[7] else None
+    created_value = row[8] if len(row) > 8 else row[7]
     return AgentRunRecord(
         agent_run_id=str(row[0]),
         job_id=job_id,
@@ -2172,11 +2469,13 @@ def agent_run_from_row(row: tuple[Any, ...], job_id: str) -> AgentRunRecord:
         summary=str(row[4] or ""),
         structured_output=dict(parse_json(row[5], {})),
         model_invocation=dict(parse_json(row[6], {})),
-        created_at=as_datetime(row[7]),
+        target_key=target_key,
+        created_at=as_datetime(created_value),
     )
 
 
 def knowledge_asset_from_row(row: tuple[Any, ...]) -> KnowledgeAssetRecord:
+    target_key = str(row[13]) if len(row) > 13 and row[13] else None
     return KnowledgeAssetRecord(
         asset_id=str(row[0]),
         asset_kind=str(row[1]),
@@ -2191,8 +2490,9 @@ def knowledge_asset_from_row(row: tuple[Any, ...]) -> KnowledgeAssetRecord:
         source_job_id=str(row[10]) if row[10] else None,
         created_at=as_datetime(row[11]),
         updated_at=as_datetime(row[12]),
-        lifecycle_status=str(row[13] or "DRAFT") if len(row) > 13 else "DRAFT",
-        archived_at=as_datetime(row[14]) if len(row) > 14 and row[14] else None,
+        target_key=target_key,
+        lifecycle_status=str(row[14] or "DRAFT") if len(row) > 14 else "DRAFT",
+        archived_at=as_datetime(row[15]) if len(row) > 15 and row[15] else None,
     )
 
 
@@ -2225,6 +2525,7 @@ def artifact_binding(record: ArtifactRecord) -> dict[str, Any]:
         "registryRefs": list(record.registry_refs),
         "assumptions": list(record.assumptions),
         "reviewRequired": record.review_required,
+        "targetKey": record.target_key,
         "extra": dict(record.extra),
     }
 
@@ -2244,6 +2545,7 @@ def options_storage_payload(record: WorkRequestRecord) -> dict[str, Any]:
         "correlationId": record.correlation_id,
         "idempotencyKey": record.idempotency_key,
         "requestHash": record.request_hash,
+        "targetKey": record.target_key,
     }
     return payload
 

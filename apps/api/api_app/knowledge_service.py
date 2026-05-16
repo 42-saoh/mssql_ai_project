@@ -342,6 +342,7 @@ def present_knowledge_asset(record: KnowledgeAssetRecord) -> KnowledgeAssetSumma
         targetType=record.target_type,
         targetSchema=record.target_schema,
         targetName=record.target_name,
+        targetKey=record.target_key,
         logicalKey=record.logical_key,
         currentVersionId=record.current_version_id,
         currentVersionNo=record.current_version_no,

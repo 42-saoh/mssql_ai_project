@@ -17,7 +17,7 @@
 
 - `GET /health`
 - `POST /api/v1/requests/sp-analysis`
-- `GET /api/v1/jobs`
+- `GET /api/v1/jobs` (`targetKey` exact filter optional)
 - `GET /api/v1/jobs/{jobId}`
 - `GET /api/v1/jobs/{jobId}/agent-runs`
 - `GET /api/v1/jobs/{jobId}/knowledge-assets`
@@ -66,10 +66,18 @@ knowledge payloads.
 - Artifact listing is internally bounded and stable-ordered. A public pagination contract
   remains an OpenAPI coordination item, so no query/body schema was added in P09.
 - `GET /api/v1/jobs` and `GET /api/v1/jobs/{jobId}` include optional request context
-  (`dbProfileId`, `target`, `outputs`) so Web history can show previous analyses without
-  exposing raw SQL, row data, or new storage tables.
+  (`dbProfileId`, `target`, `targetKey`, `outputs`) so Web history can show previous analyses
+  and exact same-target runs without exposing raw SQL, row data, or new storage tables.
 - Default workflow stops at `VALIDATION_COMPLETE` after validation. Artifacts remain
   draft/validated outputs; human decision gates and publish transitions are not exposed.
+
+## Canonical Target Keys
+
+The API derives `targetKey` on the server and never trusts a client-provided key. The public shape is
+`mssql:<dbProfileId>:<database|->:<objectType>:<schema>.<name>`, normalized to lower case with one
+layer of SQL identifier quoting removed. Jobs, agent runs, artifacts, knowledge asset summaries,
+and metadata identities expose `targetKey` when derivable. `GET /api/v1/jobs?targetKey=...` returns
+exact same-target history while preserving the existing `limit` parameter.
 
 ## Draft validation / audit notes
 
@@ -201,7 +209,9 @@ evidence digest only with `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`.
 same-profile PROCEDURE dependencies as child `LLM_SEMANTIC_ANALYST_DEPENDENCY` runs, bounded by
 `LLM_SP_DEPENDENCY_DEPTH` (default `2`, hard max `3`) and `LLM_SP_MAX_DEPENDENCY_TASKS` (default
 `8`). Child results are stored as sanitized AgentRuns and reduced into the root run's called
-procedure strategy guidance.
+procedure strategy guidance. Same-job recovery reuses an existing successful dependency child
+AgentRun by canonical `targetKey` first, then exact `targetRef` fallback for older records; failed
+or missing child runs are retried.
 
 `POST /api/v1/requests/sp-analysis` 는 P26 기준 high-quality hybrid LLM semantic analysis 를 기본값으로 사용한다.
 
@@ -301,6 +311,17 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
   auto-applies DDL; if the table, required columns, or indexes are missing, submit/poll returns
   `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`. Durable knowledge persistence continues to use
   the existing `persistKnowledge` path and platform schema readiness checks.
+- The API starts a background recovery worker on application startup. It claims queued
+  metadata analysis runs and reclaims stale running runs using
+  `METADATA_ANALYSIS_RUN_STALE_SECONDS` (default `1800`, minimum `60`). The loop uses
+  `METADATA_ANALYSIS_RUN_WORKER_INTERVAL_SECONDS=10` and
+  `METADATA_ANALYSIS_RUN_WORKER_BATCH_SIZE=5` by default, so interrupted background work is
+  retried instead of leaving a polling client waiting indefinitely.
+- The same worker claims stale active SP workflow jobs after `SP_WORKFLOW_STALE_SECONDS`
+  (default `1800`, minimum `60`) and resumes the same `jobId`. Recovery reuses existing
+  root semantic agent runs, successful dependency child semantic runs by target, artifact rows,
+  knowledge content/version links, and validation reports where present; unsafe/missing request
+  state fails with `SP_WORKFLOW_RECOVERY_BLOCKED`.
 
 ## Knowledge assetization
 

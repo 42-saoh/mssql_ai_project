@@ -77,7 +77,14 @@ function sourceContextDigest(value: unknown) {
 }
 
 function dependencyTargetKey(item: UnknownRecord, index: number) {
-  return `${textValue(item.targetRef, "dependency")}-${textValue(item.agentRunId, String(index))}`;
+  return `${textValue(item.targetKey, textValue(item.targetRef, "dependency"))}-${textValue(
+    item.agentRunId,
+    String(index),
+  )}`;
+}
+
+function sameTargetHref(targetKey: string): string {
+  return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
 }
 
 function stepState(job: Job, step: (typeof workflowSteps)[number]) {
@@ -150,7 +157,22 @@ export function JobStatusView({
             <dt>Progress</dt>
             <dd>{job.progress !== undefined ? `${Math.round(job.progress * 100)}%` : "Unknown"}</dd>
           </div>
+          {job.targetKey ? (
+            <div>
+              <dt>targetKey</dt>
+              <dd>
+                <code>{job.targetKey}</code>
+              </dd>
+            </div>
+          ) : null}
         </dl>
+        {job.targetKey ? (
+          <div className="form-actions">
+            <Link className="secondary-action" href={sameTargetHref(job.targetKey)}>
+              Same target history
+            </Link>
+          </div>
+        ) : null}
 
         {job.failureReason ? (
           <div className="callout callout--warning">
@@ -251,6 +273,7 @@ export function JobStatusView({
                         </div>
                         <div className="dependency-target-meta">
                           <code>{textValue(target.agentRunId, "child run pending")}</code>
+                          {target.targetKey ? <code>{textValue(target.targetKey)}</code> : null}
                           <span>{sourceContextDigest(target.sourceContextSummary)}</span>
                         </div>
                       </article>
@@ -272,6 +295,7 @@ export function JobStatusView({
                         <li key={dependencyTargetKey(target, index)}>
                           {textValue(target.targetRef, "dependency target")} -{" "}
                           {textValue(target.reason, "근거 보강 필요")}
+                          {target.targetKey ? ` - ${textValue(target.targetKey)}` : ""}
                         </li>
                       ))}
                     </ul>
@@ -290,7 +314,10 @@ export function JobStatusView({
                       {run.agentType === dependencyAgentType ? "Dependency child" : "Root run"}
                     </span>
                   </div>
-                  <small>target {run.targetRef}</small>
+                  <small>
+                    target {run.targetRef}
+                    {run.targetKey ? ` - ${run.targetKey}` : ""}
+                  </small>
                   <p>
                     {run.modelInvocation.model} · {run.modelInvocation.promptVersion} ·{" "}
                     {run.summary}
@@ -341,9 +368,13 @@ export function JobStatusView({
                     {asset.currentVersionNo}
                   </p>
                   <small>content {asset.contentHash ?? "pending"}</small>
+                  {asset.targetKey ? <small>targetKey {asset.targetKey}</small> : null}
                 </div>
                 <div className="row-actions">
                   <Link href={`/api/v1/knowledge/assets/${asset.assetId}`}>Open</Link>
+                  {asset.targetKey ? (
+                    <Link href={sameTargetHref(asset.targetKey)}>Same target history</Link>
+                  ) : null}
                   {asset.currentVersionId ? (
                     <Link
                       href={`/api/v1/knowledge/assets/${asset.assetId}/versions/${asset.currentVersionId}/facts`}
@@ -383,12 +414,16 @@ export function JobStatusView({
                   {artifact.reviewRequired ? " · 근거 보강 필요" : ""}
                 </p>
                 {artifact.caveats?.length ? <small>{artifact.caveats.join(", ")}</small> : null}
+                {artifact.targetKey ? <small>targetKey {artifact.targetKey}</small> : null}
               </div>
               <div className="row-actions">
                 <StatusPill
                   value={artifact.status}
                   label={artifactStatusLabels[artifact.status]}
                 />
+                {artifact.targetKey ? (
+                  <Link href={sameTargetHref(artifact.targetKey)}>Same target history</Link>
+                ) : null}
                 <Link href={`/artifacts/${artifact.artifactId}`}>Preview</Link>
               </div>
             </article>

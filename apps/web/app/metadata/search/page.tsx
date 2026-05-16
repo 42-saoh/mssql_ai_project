@@ -226,6 +226,7 @@ export default async function MetadataSearchPage({
                     {result.sourceProfile} - {result.sourceDatabase}
                     {result.snapshotId ? ` - ${result.snapshotId}` : ""}
                   </p>
+                  {result.targetKey ? <code>{result.targetKey}</code> : null}
                 </div>
                 <div className="metadata-result-detail">
                   <StatusPill

@@ -64,6 +64,7 @@ from api_app.repositories import (
     WorkRequestRecord,
 )
 from api_app.schemas import SPAnalysisRequest
+from api_app.target_keys import target_key_for_ref, target_key_for_target
 from api_app.tracking import (
     IdempotencyConflictError,
     RequestTrackingContext,
@@ -76,6 +77,33 @@ WORKFLOW_METADATA_NOTE = (
 )
 DEPENDENCY_AGENT_TYPE = "LLM_SEMANTIC_ANALYST_DEPENDENCY"
 SOURCE_DEPENDENCY_MODE_CONFIRMED = "CONFIRMED_PROCEDURES"
+SP_WORKFLOW_RECOVERY_BLOCKED = "SP_WORKFLOW_RECOVERY_BLOCKED"
+RECOVERABLE_SP_JOB_STATUSES = frozenset(
+    {
+        JobStatus.SUBMITTED,
+        JobStatus.COLLECTING_METADATA,
+        JobStatus.ANALYZING,
+        JobStatus.GENERATING,
+        JobStatus.VALIDATING,
+    }
+)
+TERMINAL_SP_JOB_STATUSES = frozenset(
+    {
+        JobStatus.VALIDATION_COMPLETE,
+        JobStatus.FAILED,
+        JobStatus.CANCELED,
+        JobStatus.APPROVED,
+        JobStatus.REJECTED,
+        JobStatus.PUBLISHED,
+    }
+)
+
+
+class WorkflowRecoveryBlocked(RuntimeError):
+    code = SP_WORKFLOW_RECOVERY_BLOCKED
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -149,6 +177,10 @@ class WorkflowService:
                 existing_request.status = job.status
                 return existing_request, job
         with workflow_admission():
+            target_key = target_key_for_target(
+                request.db_profile_id,
+                request.target.to_response(),
+            )
             request_record = self.repository.create_request(
                 db_profile_id=request.db_profile_id,
                 target=request.target.to_response(),
@@ -157,6 +189,7 @@ class WorkflowService:
                 request_hash=request_hash,
                 correlation_id=tracking.correlation_id,
                 idempotency_key=tracking.idempotency_key,
+                target_key=target_key,
             )
             job = self.repository.create_job(
                 request_record.request_id,
@@ -257,7 +290,7 @@ class WorkflowService:
             status=JobStatus.VALIDATING,
             current_step=WorkflowStepType.VALIDATE,
         )
-        reports = [self.validate_artifact(artifact.artifact_id) for artifact in artifacts]
+        reports = [self._validate_artifact_for_workflow(artifact) for artifact in artifacts]
         next_status = (
             JobStatus.FAILED
             if any(report.status == "FAILED" for report in reports)
@@ -265,6 +298,174 @@ class WorkflowService:
         )
         return self.repository.transition_job(
             job_id,
+            status=next_status,
+            current_step=WorkflowStepType.VALIDATE,
+        )
+
+    def resume_sp_workflow(self, job_id: str) -> JobRecord:
+        job = self.repository.get_job(job_id)
+        if job is None:
+            raise KeyError(job_id)
+        if job.status in TERMINAL_SP_JOB_STATUSES:
+            return job
+        if job.status not in RECOVERABLE_SP_JOB_STATUSES:
+            return self.repository.fail_job(
+                job_id,
+                code=SP_WORKFLOW_RECOVERY_BLOCKED,
+                message=f"SP workflow recovery does not support status {job.status.value}.",
+            )
+        request = self.repository.get_request(job.request_id)
+        if request is None:
+            return self.repository.fail_job(
+                job_id,
+                code=SP_WORKFLOW_RECOVERY_BLOCKED,
+                message="SP workflow recovery could not restore the original work request.",
+            )
+        try:
+            with workflow_admission():
+                return self._resume_sp_workflow(job, request)
+        except Exception as exc:  # noqa: BLE001 - recovery reports sanitized job failure
+            return self.repository.fail_job(
+                job_id,
+                code=str(getattr(exc, "code", exc.__class__.__name__)),
+                message=str(exc)[:2000],
+            )
+
+    def _resume_sp_workflow(
+        self,
+        job: JobRecord,
+        request: WorkRequestRecord,
+    ) -> JobRecord:
+        metadata: MetadataCollectionResult | None = None
+        static_analysis: dict[str, object] | None = None
+        agent_run = self._existing_successful_root_agent_run(job.job_id)
+        if job.status in {
+            JobStatus.SUBMITTED,
+            JobStatus.COLLECTING_METADATA,
+            JobStatus.ANALYZING,
+            JobStatus.GENERATING,
+        }:
+            if job.status == JobStatus.SUBMITTED:
+                self.repository.transition_job(
+                    job.job_id,
+                    status=JobStatus.COLLECTING_METADATA,
+                    current_step=WorkflowStepType.COLLECT_METADATA,
+                )
+            elif job.status == JobStatus.COLLECTING_METADATA:
+                self.repository.transition_job(
+                    job.job_id,
+                    status=JobStatus.COLLECTING_METADATA,
+                    current_step=WorkflowStepType.COLLECT_METADATA,
+                )
+            metadata = self._collect_metadata(job.job_id, request)
+            definition_text = procedure_definition_text(metadata)
+            static_analysis = static_analysis_payload(
+                definition_text,
+                source_name=f"{request.target['schema']}.{request.target['name']}",
+                snapshot_id=metadata.snapshot_id,
+            )
+            if job.status in {JobStatus.SUBMITTED, JobStatus.COLLECTING_METADATA}:
+                self.repository.transition_job(
+                    job.job_id,
+                    status=JobStatus.ANALYZING,
+                    current_step=WorkflowStepType.ANALYZE,
+                )
+            elif job.status == JobStatus.ANALYZING:
+                self.repository.transition_job(
+                    job.job_id,
+                    status=JobStatus.ANALYZING,
+                    current_step=WorkflowStepType.ANALYZE,
+                )
+            if agent_run is None:
+                orchestration = self.ai_tool_orchestrator.run(
+                    request_record=request,
+                    metadata=metadata,
+                    static_analysis=static_analysis,
+                )
+                metadata = orchestration.metadata
+                platform_orchestration = self.platform_tool_orchestrator.run(
+                    job_id=job.job_id,
+                    request_record=request,
+                    metadata=metadata,
+                    static_analysis=static_analysis,
+                )
+                metadata = platform_orchestration.metadata
+                agent_run = self._run_llm_semantic_analysis(
+                    job.job_id,
+                    request_record=request,
+                    metadata=metadata,
+                    static_analysis=static_analysis,
+                    tool_component_invocations=(
+                        *orchestration.component_invocations,
+                        *platform_orchestration.component_invocations,
+                    ),
+                )
+            metadata = metadata_with_planner_metrics(
+                metadata,
+                agent_run=agent_run,
+                ai_tool_component_invocations=(),
+                platform_tool_component_invocations=(),
+            )
+            persist_sp_workflow_knowledge(
+                repository=self.repository,
+                job_id=job.job_id,
+                request_record=request,
+                metadata=metadata,
+                static_analysis=static_analysis,
+                agent_run=agent_run,
+            )
+            if self.repository.latest_metadata_for_job(job.job_id) is None:
+                self.repository.save_metadata_collection(
+                    job_id=job.job_id,
+                    status=metadata.status,
+                    payload=sanitized_metadata_payload(metadata.as_dict()),
+                )
+
+        if job.status != JobStatus.VALIDATING:
+            self.repository.transition_job(
+                job.job_id,
+                status=JobStatus.GENERATING,
+                current_step=WorkflowStepType.GENERATE,
+            )
+            if metadata is None:
+                metadata = self._collect_metadata(job.job_id, request)
+                definition_text = procedure_definition_text(metadata)
+                static_analysis = static_analysis_payload(
+                    definition_text,
+                    source_name=f"{request.target['schema']}.{request.target['name']}",
+                    snapshot_id=metadata.snapshot_id,
+                )
+            artifacts = self._generate_artifacts(
+                job.job_id,
+                request,
+                metadata,
+                agent_run,
+                static_analysis=static_analysis,
+            )
+            if not artifacts:
+                raise WorkflowRecoveryBlocked(
+                    "SP workflow recovery could not produce or reuse draft artifacts."
+                )
+            self.repository.transition_job(
+                job.job_id,
+                status=JobStatus.VALIDATING,
+                current_step=WorkflowStepType.VALIDATE,
+            )
+        else:
+            artifacts = self.repository.list_job_artifacts(job.job_id) or []
+            if not artifacts:
+                raise WorkflowRecoveryBlocked(
+                    "SP workflow recovery found VALIDATING status without artifacts."
+                )
+
+        reports = [self._validate_artifact_for_workflow(artifact) for artifact in artifacts]
+        next_status = (
+            JobStatus.FAILED
+            if any(report.status == "FAILED" for report in reports)
+            else JobStatus.VALIDATION_COMPLETE
+        )
+        return self.repository.transition_job(
+            job.job_id,
             status=next_status,
             current_step=WorkflowStepType.VALIDATE,
         )
@@ -287,6 +488,15 @@ class WorkflowService:
             correlation_id=correlation_id,
             actor=actor or "api-system",
         )
+
+    def _validate_artifact_for_workflow(
+        self,
+        artifact: ArtifactRecord,
+    ) -> ValidationReportRecord:
+        existing = self.repository.latest_validation_for(artifact.artifact_id)
+        if existing is not None:
+            return existing
+        return self.validate_artifact(artifact.artifact_id)
 
     def _collect_metadata(
         self,
@@ -440,6 +650,7 @@ class WorkflowService:
             summary=run_payload.summary,
             structured_output=run_payload.structured_output,
             model_invocation=run_payload.model_invocation.to_storage_dict(),
+            target_key=request_record.target_key,
         )
 
     def _run_dependency_semantic_analyses(
@@ -459,6 +670,7 @@ class WorkflowService:
             "analyzedCount": 0,
             "skippedCount": 0,
             "childRunCount": 0,
+            "reusedChildRunCount": 0,
             "analyzedTargets": [],
             "skippedTargets": [],
             "reviewMarkers": [],
@@ -476,6 +688,41 @@ class WorkflowService:
         summary["skippedCount"] = len(skipped)
         summary["reviewMarkers"].extend(dependency_review_markers(skipped))
         for candidate in candidates:
+            candidate_target_key = target_key_for_ref(
+                db_profile_id=request_record.db_profile_id,
+                database=candidate.database,
+                object_type="PROCEDURE",
+                target_ref=candidate.target_ref,
+            )
+            existing_child_run = self._existing_successful_dependency_agent_run(
+                job_id,
+                candidate.target_ref,
+                target_key=candidate_target_key,
+            )
+            if existing_child_run is not None:
+                summary["analyzedCount"] += 1
+                summary["childRunCount"] += 1
+                summary["reusedChildRunCount"] += 1
+                summary["analyzedTargets"].append(
+                    {
+                        "targetRef": candidate.target_ref,
+                        "targetKey": candidate_target_key,
+                        "agentRunId": existing_child_run.agent_run_id,
+                        "depth": candidate.depth,
+                        "database": candidate.database,
+                        "sourceScope": candidate.source_scope,
+                        "evidenceRefs": list(candidate.evidence_refs),
+                        "structuredOutput": existing_child_run.structured_output,
+                        "sourceContextSummary": dict(
+                            existing_child_run.model_invocation.get(
+                                "sourceContextSummary",
+                            )
+                            or {}
+                        ),
+                        "reused": True,
+                    }
+                )
+                continue
             payload = self.metadata_gateway.collect_procedure_definition(
                 db_profile_id=request_record.db_profile_id,
                 schema=candidate.schema,
@@ -531,6 +778,7 @@ class WorkflowService:
                     error_code=exc.code,
                     provider_error=exc.provider_error,
                     agent_type=DEPENDENCY_AGENT_TYPE,
+                    target_key=candidate_target_key,
                 )
                 skipped_item = {
                     "targetRef": candidate.target_ref,
@@ -553,12 +801,14 @@ class WorkflowService:
                 summary=child_payload.summary,
                 structured_output=child_payload.structured_output,
                 model_invocation=child_payload.model_invocation.to_storage_dict(),
+                target_key=candidate_target_key,
             )
             summary["analyzedCount"] += 1
             summary["childRunCount"] += 1
             summary["analyzedTargets"].append(
                 {
                     "targetRef": candidate.target_ref,
+                    "targetKey": candidate_target_key,
                     "agentRunId": child_run.agent_run_id,
                     "depth": candidate.depth,
                     "database": candidate.database,
@@ -582,6 +832,7 @@ class WorkflowService:
         error_code: str,
         provider_error: dict[str, str] | None = None,
         agent_type: str = "LLM_SEMANTIC_ANALYST",
+        target_key: str | None = None,
     ) -> None:
         profile = model_profile_from_env(profile_id)
         structured_output = {
@@ -642,16 +893,60 @@ class WorkflowService:
             summary=f"LLM semantic analysis가 안전 코드 {error_code}로 실패했습니다.",
             structured_output=structured_output,
             model_invocation=invocation.to_storage_dict(),
+            target_key=target_key,
         )
+
+    def _existing_successful_root_agent_run(self, job_id: str) -> AgentRunRecord | None:
+        runs = self.repository.list_agent_runs(job_id, limit=100)
+        if not runs:
+            return None
+        for run in runs:
+            if (
+                run.agent_type == "LLM_SEMANTIC_ANALYST"
+                and run.status == AgentRunStatus.SUCCEEDED.value
+            ):
+                return run
+        return None
+
+    def _existing_successful_dependency_agent_run(
+        self,
+        job_id: str,
+        target_ref: str,
+        *,
+        target_key: str | None = None,
+    ) -> AgentRunRecord | None:
+        runs = self.repository.list_agent_runs(job_id, limit=100)
+        if not runs:
+            return None
+        for run in runs:
+            if (
+                run.agent_type == DEPENDENCY_AGENT_TYPE
+                and run.status == AgentRunStatus.SUCCEEDED.value
+                and target_key
+                and run.target_key == target_key
+            ):
+                return run
+        for run in runs:
+            if (
+                run.agent_type == DEPENDENCY_AGENT_TYPE
+                and run.status == AgentRunStatus.SUCCEEDED.value
+                and run.target_ref == target_ref
+            ):
+                return run
+        return None
 
     def _store_rendered_artifact(
         self,
         job_id: str,
         rendered: RenderedArtifact,
     ) -> ArtifactRecord:
+        artifact_type = ArtifactType(rendered.artifact_type_value)
+        existing = self.repository.find_job_artifact_by_type(job_id, artifact_type)
+        if existing is not None:
+            return existing
         return self.repository.add_artifact(
             job_id=job_id,
-            artifact_type=ArtifactType(rendered.artifact_type_value),
+            artifact_type=artifact_type,
             title=rendered.title,
             content=rendered.content,
             evidence_refs=[ref.as_dict() for ref in rendered.evidence_refs],
@@ -676,6 +971,13 @@ class WorkflowService:
         )
         artifacts = []
         for file in bundle.files:
+            existing = self.repository.find_job_artifact_by_type(
+                job_id,
+                file.artifact_type,
+            )
+            if existing is not None:
+                artifacts.append(existing)
+                continue
             artifacts.append(
                 self.repository.add_artifact(
                     job_id=job_id,
@@ -703,6 +1005,9 @@ class WorkflowService:
         metadata: MetadataCollectionResult,
         agent_run: AgentRunRecord | None = None,
     ) -> ArtifactRecord:
+        existing = self.repository.find_job_artifact_by_type(job_id, artifact_type)
+        if existing is not None:
+            return existing
         target = request.target
         object_ref = f"{target['schema']}.{target['name']}"
         metadata_lines = metadata_summary_lines(metadata)
@@ -737,7 +1042,10 @@ class WorkflowService:
                 "- package-backed renderer 연결 전까지 구조와 세부 항목은 제한적입니다.",
                 "",
                 "## next_evidence_to_collect",
-                "- 전용 renderer가 요구하는 추가 metadata field와 deterministic analyzer 결과를 수집합니다.",
+                (
+                    "- 전용 renderer가 요구하는 추가 metadata field와 deterministic analyzer "
+                    "결과를 수집합니다."
+                ),
                 "",
                 "## draft_readiness",
                 "- status: evidence caveat",
@@ -1643,15 +1951,18 @@ def dependency_analysis_summary(dependency_analysis: Mapping[str, Any]) -> dict[
         "analyzedCount": int(dependency_analysis.get("analyzedCount") or 0),
         "skippedCount": int(dependency_analysis.get("skippedCount") or 0),
         "childRunCount": int(dependency_analysis.get("childRunCount") or 0),
+        "reusedChildRunCount": int(dependency_analysis.get("reusedChildRunCount") or 0),
         "analyzedTargets": [
             {
                 "targetRef": str(item.get("targetRef") or ""),
+                "targetKey": item.get("targetKey"),
                 "agentRunId": str(item.get("agentRunId") or ""),
                 "depth": item.get("depth"),
                 "database": item.get("database"),
                 "sourceScope": item.get("sourceScope"),
                 "evidenceRefs": list(item.get("evidenceRefs") or []),
                 "sourceContextSummary": dict(item.get("sourceContextSummary") or {}),
+                "reused": bool(item.get("reused")),
             }
             for item in dependency_analysis.get("analyzedTargets", [])
             if isinstance(item, Mapping)

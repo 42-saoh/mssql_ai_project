@@ -31,6 +31,7 @@ def present_job(job: JobRecord) -> Job:
         status=job.status,
         dbProfileId=job.db_profile_id,
         target=_present_target(job.target),
+        targetKey=job.target_key,
         outputs=_present_outputs(job.outputs),
         currentStep=job.current_step,
         createdAt=job.created_at,
@@ -63,6 +64,7 @@ def present_artifact_summary(artifact: ArtifactRecord) -> ArtifactSummary:
         type=artifact.type,
         status=artifact.status,
         title=artifact.title,
+        targetKey=artifact.target_key,
         evidenceCoverage=artifact.evidence_coverage,
     )
 
@@ -97,6 +99,7 @@ def present_agent_run(record: AgentRunRecord) -> AgentRunSummary:
         agentType=record.agent_type,
         status=record.status,
         targetRef=record.target_ref,
+        targetKey=record.target_key,
         summary=record.summary,
         structuredOutput=record.structured_output,
         modelInvocation=record.model_invocation,

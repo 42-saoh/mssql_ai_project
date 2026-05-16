@@ -42,6 +42,10 @@ function outputSummary(outputs?: RequestedOutputType[]): string {
   return outputs.map((output) => outputLabels[output] ?? output).join(", ");
 }
 
+function sameTargetHref(targetKey: string): string {
+  return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
+}
+
 export function AnalysisHistoryList({
   jobs,
   artifactsByJob,
@@ -93,6 +97,14 @@ export function AnalysisHistoryList({
                   <dt>Outputs</dt>
                   <dd>{outputSummary(job.outputs)}</dd>
                 </div>
+                {job.targetKey ? (
+                  <div>
+                    <dt>targetKey</dt>
+                    <dd>
+                      <code>{job.targetKey}</code>
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
               {job.blockers?.length ? (
                 <div className="history-caveats">
@@ -113,6 +125,9 @@ export function AnalysisHistoryList({
             </div>
             <div className="history-actions">
               <Link href={`/jobs/${job.jobId}`}>Open job</Link>
+              {job.targetKey ? (
+                <Link href={sameTargetHref(job.targetKey)}>Same target history</Link>
+              ) : null}
               {artifactState.error ? (
                 <span className="history-error">{artifactState.error}</span>
               ) : null}
@@ -123,6 +138,7 @@ export function AnalysisHistoryList({
                     {artifactStatusLabels[artifact.status]} -{" "}
                     {formatCoverage(artifact.evidenceCoverage)}
                   </span>
+                  {artifact.targetKey ? <code>{artifact.targetKey}</code> : null}
                 </Link>
               ))}
               {artifacts.length > (compact ? 3 : 8) ? (

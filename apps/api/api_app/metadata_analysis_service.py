@@ -64,6 +64,7 @@ from api_app.schemas import (
     MetadataSearchResult,
     ModelInvocationSummary,
 )
+from api_app.target_keys import target_key_for_ref, target_key_for_target
 from api_app.repositories import WorkflowRepository
 
 AI_METADATA_ANALYSIS_SKIPPED = "AI_METADATA_ANALYSIS_SKIPPED"
@@ -130,6 +131,11 @@ class MetadataAnalysisService:
             targets=targets,
             baseline_facts=baseline_facts,
             tool_evidence=tool_run.evidence,
+        )
+        _attach_metadata_target_keys(
+            object_depth,
+            db_profile_id=request.db_profile_id,
+            source_database=source_database,
         )
         deterministic_facts = [*deterministic_facts, *object_depth.deterministic_facts]
         metadata_payload["objectProfiles"] = list(object_depth.object_profiles)
@@ -1122,6 +1128,11 @@ def _target_result(
     object_ref = f"{source_database}.{target.schema_name}.{target.name}"
     return MetadataSearchResult(
         objectIdentity=target,
+        targetKey=target_key_for_target(
+            source_profile or db_profile_id,
+            {"type": target.type, "schema": target.schema_name, "name": target.name},
+            database=source_database or db_profile_id,
+        ),
         sourceProfile=source_profile or db_profile_id,
         sourceDatabase=source_database or db_profile_id,
         evidenceRefs=[
@@ -1146,6 +1157,38 @@ def _source_database(db_profile_id: str) -> str:
         if profile.id == db_profile_id:
             return profile.database
     return db_profile_id
+
+
+def _attach_metadata_target_keys(
+    object_depth: MetadataObjectDepth,
+    *,
+    db_profile_id: str,
+    source_database: str,
+) -> None:
+    for profile in object_depth.object_profiles:
+        profile["targetKey"] = target_key_for_ref(
+            db_profile_id=db_profile_id,
+            database=source_database,
+            object_type=str(profile.get("objectType") or "OBJECT"),
+            target_ref=str(profile.get("objectRef") or ""),
+        )
+    graph = object_depth.dependency_graph
+    for node in graph.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        node["targetKey"] = target_key_for_ref(
+            db_profile_id=db_profile_id,
+            database=source_database,
+            object_type=str(node.get("objectType") or "OBJECT"),
+            target_ref=str(node.get("objectRef") or ""),
+        )
+    for item in object_depth.dto_readiness:
+        item["targetKey"] = target_key_for_ref(
+            db_profile_id=db_profile_id,
+            database=source_database,
+            object_type="TABLE",
+            target_ref=str(item.get("objectRef") or ""),
+        )
 
 
 def _safe_tool_results(tool_evidence: dict[str, Any]) -> list[dict[str, Any]]:

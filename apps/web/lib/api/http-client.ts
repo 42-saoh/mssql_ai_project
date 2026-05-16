@@ -59,10 +59,13 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       });
     },
 
-    listJobs(limit?: number) {
+    listJobs(limit?: number, targetKey?: string) {
       const params = new URLSearchParams();
       if (limit !== undefined) {
         params.set("limit", String(limit));
+      }
+      if (targetKey) {
+        params.set("targetKey", targetKey);
       }
       const suffix = params.size > 0 ? `?${params.toString()}` : "";
       return readJson(fetcher, baseUrl, `/api/v1/jobs${suffix}`);

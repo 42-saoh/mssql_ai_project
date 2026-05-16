@@ -20,9 +20,19 @@ when `sourceDependencyMode=CONFIRMED_PROCEDURES` (default). The workflow selects
 `resolutionStatus=CONFIRMED` PROCEDURE dependencies from sanitized dependency closure evidence,
 collects their definitions internally through the existing read-only MCP registry path, stores each
 dependency result as a child `LLM_SEMANTIC_ANALYST_DEPENDENCY` AgentRun, and reduces sanitized
-called-procedure strategy guidance back into the root AgentRun. Dynamic SQL, unresolved,
+called-procedure strategy guidance back into the root AgentRun. Same-job recovery reuses an
+existing successful child dependency AgentRun by canonical `targetKey` first, then exact
+`targetRef` fallback for older records, and only retries missing or failed dependency child runs.
+Dynamic SQL, unresolved,
 caller-dependent, cross-server, and unsafe or unconfirmed cross-database dependencies remain
 `REVIEW_REQUIRED`.
+
+Canonical target keys are server-derived identifiers for root analysis targets, dependency child
+targets, artifacts, knowledge assets, and metadata identities. The public field is `targetKey`, the
+internal Python field is `target_key`, and the platform DB column is `CANON_TRGT_KEY_TXT`. The fixed
+format is `mssql:<dbProfileId>:<database|->:<objectType>:<schema>.<name>`, normalized to lower case
+with one layer of SQL identifier quoting stripped. `GET /api/v1/jobs?targetKey=...` provides exact
+same-target analysis history without trusting client-supplied target keys in write requests.
 
 ## 목적
 
@@ -195,6 +205,12 @@ flowchart LR
 - Metadata analysis run readiness checks cover the v7 table, columns, and indexes.
   Missing objects surface as `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`; API code
   never auto-applies DDL.
+- API startup runs a background recovery worker. It claims queued metadata analysis runs,
+  reclaims stale running metadata analysis runs for retry, and claims stale active SP
+  workflow jobs for same-job resume. SP recovery reuses existing root semantic agent runs,
+  successful dependency child semantic agent runs by target, draft artifacts, knowledge
+  content/version links, and validation reports; missing or contradictory request state fails as
+  `SP_WORKFLOW_RECOVERY_BLOCKED`.
 - raw SP definition, SQL text, row data, secret, raw prompt/provider trace 는 저장/응답/export 에 포함하지 않음
 
 ### MSSQL Metadata MCP
@@ -356,7 +372,9 @@ packages/templates
   없으면 `KNOWLEDGE_SCHEMA_REQUIRED` 로 실패한다.
 - v7 metadata analysis run DDL stores durable submit/poll status and sanitized
   request/result/error JSON. Missing v7 table/column/index objects fail as
-  `METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`.
+  `METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`. The API recovery worker uses the existing
+  status/time columns to claim queued runs and retry stale running runs; no automatic DDL
+  apply path is introduced.
 - Domain enum / mapping 기준: `packages/domain/src/ai_agent_domain/models.py`
 - MSSQL Metadata MCP catalog: `spec/mcp/mssql_metadata_tool_catalog.yaml`
 - P27 dependency evidence tooling contract: `spec/eval/p27_dependency_evidence_tooling_contract.yaml`

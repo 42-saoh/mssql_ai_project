@@ -143,6 +143,12 @@ paths:
             minimum: 1
             maximum: 100
             default: 20
+        - name: targetKey
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Exact canonical target key filter.
       responses:
         "200":
           description: Recent workflow jobs with target/profile/output context when available.
@@ -512,6 +518,9 @@ paths:
         `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED` when that table, required columns, or indexes
         are missing. Polling results never include row data, raw SQL definition text, procedure
         execution output, DDL/DML controls, secrets, raw prompts, or raw provider traces.
+        A background recovery worker claims `QUEUED` runs and reclaims stale `RUNNING`
+        runs for retry so interrupted background work does not leave users waiting
+        indefinitely.
       requestBody:
         required: true
         content:
@@ -1039,6 +1048,9 @@ components:
           description: Metadata profile requested for this analysis job when available.
         target:
           $ref: "#/components/schemas/TargetObject"
+        targetKey:
+          type: string
+          description: Server-derived canonical target key for exact same-target history.
         outputs:
           type: array
           description: Requested draft output groups for this analysis job when available.
@@ -1101,6 +1113,9 @@ components:
           $ref: "#/components/schemas/ArtifactStatus"
         title:
           type: string
+        targetKey:
+          type: string
+          description: Canonical target key inherited from the workflow job.
         evidenceCoverage:
           type: number
           minimum: 0
@@ -1295,6 +1310,9 @@ components:
           enum: [SUCCEEDED, FAILED, SKIPPED]
         targetRef:
           type: string
+        targetKey:
+          type: string
+          description: Canonical target key when the run is bound to a root or dependency target.
         summary:
           type: string
         structuredOutput:
@@ -1411,6 +1429,9 @@ components:
       properties:
         objectIdentity:
           $ref: "#/components/schemas/MetadataObjectIdentity"
+        targetKey:
+          type: string
+          description: Canonical target key for this metadata object identity.
         sourceProfile:
           type: string
         sourceDatabase:
@@ -1606,6 +1627,8 @@ components:
       properties:
         objectRef:
           type: string
+        targetKey:
+          type: string
         objectType:
           type: string
         columnCount:
@@ -1663,6 +1686,8 @@ components:
           type: string
         objectRef:
           type: string
+        targetKey:
+          type: string
         objectType:
           type: string
         status:
@@ -1711,6 +1736,8 @@ components:
       required: [objectRef, status, fieldCount, reviewReasons, evidenceRefs]
       properties:
         objectRef:
+          type: string
+        targetKey:
           type: string
         status:
           type: string
@@ -1889,6 +1916,8 @@ components:
         targetSchema:
           type: string
         targetName:
+          type: string
+        targetKey:
           type: string
         logicalKey:
           type: string

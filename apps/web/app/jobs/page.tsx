@@ -49,6 +49,7 @@ function filterJobs(
   jobs: Job[],
   filters: {
     query: string;
+    targetKey: string;
     status: string;
     profile: string;
     output: string;
@@ -60,6 +61,7 @@ function filterJobs(
       job.jobId,
       job.requestId,
       job.dbProfileId ?? "",
+      job.targetKey ?? "",
       targetLabel(job.target),
       ...(job.outputs ?? []),
     ]
@@ -67,6 +69,7 @@ function filterJobs(
       .toLowerCase();
     return (
       (!query || searchable.includes(query)) &&
+      (!filters.targetKey || job.targetKey === filters.targetKey) &&
       (!filters.status || job.status === filters.status) &&
       (!filters.profile || job.dbProfileId === filters.profile) &&
       (!filters.output || (job.outputs ?? []).includes(filters.output as RequestedOutputType))
@@ -124,9 +127,10 @@ export default async function JobsPage({
 
   const params = await searchParams;
   const limit = limitParam(params.limit);
+  const targetKey = firstParam(params.targetKey)?.trim() ?? "";
   let jobs: Job[];
   try {
-    jobs = (await api.listJobs(limit)).jobs;
+    jobs = (await api.listJobs(limit, targetKey || undefined)).jobs;
   } catch (error) {
     return (
       <div className="stack">
@@ -141,6 +145,7 @@ export default async function JobsPage({
 
   const filters = {
     query: firstParam(params.q)?.trim() ?? "",
+    targetKey,
     status: firstParam(params.status)?.trim() ?? "",
     profile: firstParam(params.profile)?.trim() ?? "",
     output: firstParam(params.output)?.trim() ?? "",
@@ -177,8 +182,20 @@ export default async function JobsPage({
         <form className="metadata-search-form" method="get">
           <div className="form-grid">
             <label>
-              <span>Target or job search</span>
-              <input name="q" defaultValue={filters.query} placeholder="schema.objectName" />
+              <span>Target, key, or job search</span>
+              <input
+                name="q"
+                defaultValue={filters.query}
+                placeholder="schema.objectName or targetKey"
+              />
+            </label>
+            <label>
+              <span>Exact targetKey</span>
+              <input
+                name="targetKey"
+                defaultValue={filters.targetKey}
+                placeholder="mssql:ppm:-:procedure:dbo.getinspitemscd"
+              />
             </label>
             <label>
               <span>Status</span>

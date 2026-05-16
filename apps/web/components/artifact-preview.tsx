@@ -10,6 +10,10 @@ import {
 
 const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
 
+function sameTargetHref(targetKey: string): string {
+  return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
+}
+
 export function ArtifactPreview({
   artifact,
   validation,
@@ -49,6 +53,14 @@ export function ArtifactPreview({
             <dt>Generator</dt>
             <dd>{artifact.generatorVersion}</dd>
           </div>
+          {artifact.targetKey ? (
+            <div>
+              <dt>targetKey</dt>
+              <dd>
+                <code>{artifact.targetKey}</code>
+              </dd>
+            </div>
+          ) : null}
         </dl>
 
         <div className="callout callout--warning">
@@ -237,6 +249,9 @@ export function ArtifactPreview({
 
       <div className="page-actions">
         {artifact.jobId ? <Link href={`/jobs/${artifact.jobId}`}>Back to job</Link> : null}
+        {artifact.targetKey ? (
+          <Link href={sameTargetHref(artifact.targetKey)}>Same target history</Link>
+        ) : null}
       </div>
     </div>
   );

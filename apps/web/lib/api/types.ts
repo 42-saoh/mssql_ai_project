@@ -133,6 +133,7 @@ export interface Job {
   status: JobStatus;
   dbProfileId?: string;
   target?: TargetObject;
+  targetKey?: string | null;
   outputs?: RequestedOutputType[];
   currentStep?: WorkflowStepType | null;
   createdAt?: string;
@@ -168,6 +169,7 @@ export interface AgentRunSummary {
   agentType: string;
   status: "SUCCEEDED" | "FAILED" | "SKIPPED";
   targetRef: string;
+  targetKey?: string | null;
   summary: string;
   structuredOutput: Record<string, unknown>;
   modelInvocation: ModelInvocationSummary;
@@ -180,6 +182,7 @@ export interface ArtifactSummary {
   type: ArtifactType;
   status: ArtifactStatus;
   title?: string;
+  targetKey?: string | null;
   evidenceCoverage?: number;
   reviewRequired?: boolean;
   blockers?: MetadataSearchBlocker[];
@@ -268,6 +271,7 @@ export interface MetadataSearchRequest {
 
 export interface MetadataSearchResult {
   objectIdentity: MetadataObjectIdentity;
+  targetKey?: string | null;
   sourceProfile: string;
   sourceDatabase: string;
   snapshotId?: string;
@@ -327,6 +331,7 @@ export type MetadataInsightCategory =
 
 export interface MetadataObjectProfile {
   objectRef: string;
+  targetKey?: string | null;
   objectType: string;
   columnCount: number;
   primaryKeyCount: number;
@@ -347,6 +352,7 @@ export interface MetadataInsightGroup {
 export interface MetadataDependencyGraphNode {
   id: string;
   objectRef: string;
+  targetKey?: string | null;
   objectType: string;
   status: "CONFIRMED" | "REVIEW_REQUIRED";
   evidenceRefs: string[];
@@ -368,6 +374,7 @@ export interface MetadataDependencyGraph {
 
 export interface MetadataDtoReadiness {
   objectRef: string;
+  targetKey?: string | null;
   status: "READY" | "PARTIAL" | "REVIEW_REQUIRED";
   fieldCount: number;
   reviewReasons: string[];
@@ -395,6 +402,7 @@ export interface KnowledgeAssetSummary {
   targetType: string;
   targetSchema: string;
   targetName: string;
+  targetKey?: string | null;
   logicalKey: string;
   currentVersionId?: string | null;
   currentVersionNo: number;

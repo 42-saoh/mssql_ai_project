@@ -10,6 +10,7 @@ from api_app.lifecycle import WorkflowStateError
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
 from api_app.workflow import (
+    DEPENDENCY_AGENT_TYPE,
     WORKFLOW_METADATA_NOTE,
     WorkflowService,
     dependency_procedure_candidates,
@@ -314,6 +315,190 @@ def test_confirmed_dependency_procedure_creates_child_agent_run_and_reduces_root
         payload["targetRef"] == "OtherDB.dbo.usp_CrossDbOrderAudit"
         for payload in spy_gateway.prompt_payloads
     )
+
+
+def test_dependency_semantic_analysis_reuses_successful_child_run_by_target() -> None:
+    class ChildReuseSpyGateway:
+        def __init__(self) -> None:
+            self.prompt_payloads: list[dict] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.prompt_payloads.append(payload)
+            assert payload["targetRef"] != "dbo.usp_GetOrderSummary"
+            ref = (payload["evidenceRefContract"]["allowedFactIds"] or ["metadata.snapshot"])[0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "NEW_CHILD_RULE",
+                        "summary": f"{payload['targetRef']} child analysis was retried.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-child-reuse",
+                structured_output=structured_output,
+            )
+
+    repository = MemoryWorkflowRepository()
+    spy_gateway = ChildReuseSpyGateway()
+    service = WorkflowService(repository, model_gateway=spy_gateway)
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "master",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_ProcessOrderBatch",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": True,
+                "llmProfileId": "openai_fast_test",
+                "allowSpDefinitionToModel": True,
+            },
+        }
+    )
+    request_record = repository.create_request(
+        db_profile_id=request.db_profile_id,
+        target=request.target.to_response(),
+        outputs=tuple(output.value for output in request.outputs),
+        options=request.options.to_response(),
+        request_hash="hash-child-reuse",
+        correlation_id="corr-child-reuse",
+        idempotency_key=None,
+    )
+    job = repository.create_job(
+        request_record.request_id,
+        correlation_id=request_record.correlation_id,
+    )
+    metadata = service._collect_metadata(job.job_id, request_record)
+    profile = model_profile_from_env("openai_fast_test")
+    reused_output = {
+        "businessRules": [
+            {
+                "category": "REUSED_CHILD_RULE",
+                "summary": "Existing child semantic run is safe to reuse.",
+                "status": "INFERRED_DESCRIPTION",
+                "evidenceRefs": ["metadata.snapshot"],
+            }
+        ],
+        "modernizationPoints": [],
+        "riskFlags": [],
+        "reviewMarkers": [],
+        "conversionGuidance": [],
+        "migrationGuideInsights": [],
+        "assumptions": [],
+    }
+    reused_invocation = ModelInvocationRecord(
+        provider="spy-existing",
+        model=profile.model,
+        model_profile_id=profile.profile_id,
+        model_registry_ref=profile.registry_ref,
+        reasoning_effort=profile.reasoning_effort,
+        prompt_version="test",
+        output_schema_version="test",
+        input_hash="input-reused",
+        prompt_hash="prompt-reused",
+        output_hash=stable_json_hash(reused_output),
+        status=AgentRunStatus.SUCCEEDED,
+        structured_output=reused_output,
+        token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+        latency_ms=0,
+        component_invocations=(
+            {
+                "stage": "dependency_semantic_analysis",
+                "status": "SUCCEEDED",
+                "sourceContextSummary": {
+                    "mode": "RETRIEVED_SPANS",
+                    "budgetStatus": "WITHIN_BUDGET",
+                    "selectedSpanCount": 1,
+                    "skippedSpanCount": 0,
+                    "reviewMarkers": [],
+                },
+            },
+        ),
+    )
+    existing = repository.save_agent_run(
+        job_id=job.job_id,
+        agent_type=DEPENDENCY_AGENT_TYPE,
+        status=AgentRunStatus.SUCCEEDED.value,
+        target_ref="DBO.USP_GETORDERSUMMARY",
+        target_key="mssql:master:-:procedure:dbo.usp_getordersummary",
+        summary="existing dependency child semantic analysis",
+        structured_output=reused_output,
+        model_invocation=reused_invocation.to_storage_dict(),
+    )
+    failed_output = {
+        "businessRules": [],
+        "modernizationPoints": [],
+        "riskFlags": [],
+        "reviewMarkers": [],
+        "conversionGuidance": [],
+        "migrationGuideInsights": [],
+        "assumptions": [],
+    }
+    repository.save_agent_run(
+        job_id=job.job_id,
+        agent_type=DEPENDENCY_AGENT_TYPE,
+        status=AgentRunStatus.FAILED.value,
+        target_ref="OtherDB.dbo.usp_CrossDbOrderAudit",
+        summary="previous failed dependency child semantic analysis",
+        structured_output=failed_output,
+        model_invocation={
+            **reused_invocation.to_storage_dict(),
+            "status": AgentRunStatus.FAILED.value,
+            "outputHash": stable_json_hash(failed_output),
+        },
+    )
+
+    summary = service._run_dependency_semantic_analyses(
+        job_id=job.job_id,
+        request_record=request_record,
+        metadata=metadata,
+    )
+
+    runs = repository.list_agent_runs(job.job_id)
+    assert runs is not None
+    reused_runs = [
+        run
+        for run in runs
+        if run.target_key == "mssql:master:-:procedure:dbo.usp_getordersummary"
+    ]
+    retried_runs = [
+        run
+        for run in runs
+        if run.target_ref == "OtherDB.dbo.usp_CrossDbOrderAudit"
+    ]
+    assert [run.agent_run_id for run in reused_runs] == [existing.agent_run_id]
+    assert len(retried_runs) == 2
+    assert any(run.status == AgentRunStatus.SUCCEEDED.value for run in retried_runs)
+    assert spy_gateway.prompt_payloads
+    assert {payload["targetRef"] for payload in spy_gateway.prompt_payloads} == {
+        "OtherDB.dbo.usp_CrossDbOrderAudit"
+    }
+    assert summary["analyzedCount"] == 2
+    assert summary["childRunCount"] == 2
+    assert summary["reusedChildRunCount"] == 1
+    reused_target = next(
+        item
+        for item in summary["analyzedTargets"]
+        if item["targetRef"] == "dbo.usp_GetOrderSummary"
+    )
+    assert reused_target["agentRunId"] == existing.agent_run_id
+    assert reused_target["targetKey"] == "mssql:master:-:procedure:dbo.usp_getordersummary"
+    assert reused_target["reused"] is True
 
 
 def test_dependency_child_context_error_records_failed_child_and_keeps_root_complete() -> None:
@@ -1197,5 +1382,11 @@ def test_validation_only_workflow_has_no_approval_audit_events() -> None:
     service = WorkflowService(repository)
     service.submit_sp_analysis(_request(["SP_ANALYSIS_DOCUMENT"]))
 
-    assert not any(event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events)
-    assert all(artifact.status != ArtifactStatus.PUBLISHED for artifact in repository.artifacts.values())
+    assert not any(
+        event.action == "APPROVAL_DECISION_RECORDED"
+        for event in repository.audit_events
+    )
+    assert all(
+        artifact.status != ArtifactStatus.PUBLISHED
+        for artifact in repository.artifacts.values()
+    )

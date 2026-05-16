@@ -92,6 +92,26 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "KnowledgeExportResponse" in data["components"]["schemas"]
 
 
+def test_openapi_exposes_canonical_target_keys_on_public_history_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    paths = openapi["paths"]
+    schemas = openapi["components"]["schemas"]
+
+    job_parameters = paths["/api/v1/jobs"]["get"]["parameters"]
+    assert {parameter["name"] for parameter in job_parameters} == {"limit", "targetKey"}
+    assert schemas["Job"]["properties"]["targetKey"]["type"] == "string"
+    assert schemas["ArtifactSummary"]["properties"]["targetKey"]["type"] == "string"
+    assert schemas["AgentRunSummary"]["properties"]["targetKey"]["type"] == "string"
+    assert schemas["KnowledgeAssetSummary"]["properties"]["targetKey"]["type"] == "string"
+    assert schemas["MetadataSearchResult"]["properties"]["targetKey"]["type"] == "string"
+    assert schemas["MetadataObjectProfile"]["properties"]["targetKey"]["type"] == "string"
+    assert schemas["MetadataDependencyGraphNode"]["properties"]["targetKey"]["type"] == "string"
+
+
 def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
@@ -280,6 +300,8 @@ def test_openapi_metadata_analysis_run_contract_matches_async_polling_surface() 
 
     assert submit["operationId"] == "submitMetadataAnalysisRun"
     assert submit["tags"] == ["metadata"]
+    assert "background recovery worker" in submit["description"]
+    assert "reclaims stale `RUNNING`" in submit["description"]
     assert submit["requestBody"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/MetadataAnalysisRequest"
     }
@@ -503,6 +525,45 @@ def test_v7_metadata_analysis_run_schema_is_durable_and_draft_only() -> None:
         "RAW_PROVIDER",
     ):
         assert forbidden not in ddl_text.upper()
+
+
+def test_v8_canonical_target_key_schema_is_manual_and_no_review_surface() -> None:
+    ddl_text = (
+        ROOT
+        / "db"
+        / "schema"
+        / "ai_agent_platform_schema_v8_canonical_target_keys_consolidated.sql"
+    ).read_text(encoding="utf-8")
+    upper = ddl_text.upper()
+
+    assert "Manual apply only" in ddl_text
+    assert "CANON_TRGT_KEY_TXT NVARCHAR(300) NULL" in ddl_text
+    for table_name in (
+        "CORE_WORK_REQUESTS",
+        "CORE_JOBS",
+        "AGENT_RUNS",
+        "ARTIFACTS",
+        "KNOWLEDGE_ASSETS",
+    ):
+        assert f"dbo.{table_name}" in ddl_text
+    for index_name in (
+        "IX_CORE_WORK_REQUESTS_CANON_TARGET_SUBMITTED",
+        "IX_CORE_JOBS_CANON_TARGET_CREATED",
+        "IX_AGENT_RUNS_JOB_CANON_TARGET",
+        "IX_ARTIFACTS_JOB_CANON_TARGET",
+        "IX_KNOWLEDGE_ASSETS_CANON_TARGET",
+    ):
+        assert index_name in ddl_text
+    for forbidden in (
+        "CREATE TABLE DBO.APPROVAL",
+        "CREATE TABLE DBO.KNOWLEDGE_ASSET_REVIEWS",
+        "PUBLISH_JOB",
+        "DEPLOY_JOB",
+        "EXECUTE_SQL",
+        "ROW_DATA",
+        "RAW_PROMPT",
+    ):
+        assert forbidden not in upper
 
 
 def test_platform_repository_checks_v7_metadata_analysis_run_schema() -> None:

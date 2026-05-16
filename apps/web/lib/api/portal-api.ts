@@ -31,7 +31,7 @@ export interface PortalApi {
   createSPAnalysisBatchRequest(
     request: SPAnalysisBatchRequest,
   ): Promise<SPAnalysisBatchResponse>;
-  listJobs(limit?: number): Promise<{ jobs: Job[] }>;
+  listJobs(limit?: number, targetKey?: string): Promise<{ jobs: Job[] }>;
   getJob(jobId: string): Promise<Job>;
   listJobAgentRuns(
     jobId: string,

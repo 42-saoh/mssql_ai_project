@@ -114,6 +114,7 @@ class Job(ApiModel):
     status: JobStatus
     db_profile_id: str | None = Field(default=None, alias="dbProfileId")
     target: TargetObject | None = None
+    target_key: str | None = Field(default=None, alias="targetKey")
     outputs: list[RequestedOutputType] = Field(default_factory=list)
     current_step: WorkflowStepType | None = Field(default=None, alias="currentStep")
     created_at: datetime | None = Field(default=None, alias="createdAt")
@@ -144,6 +145,7 @@ class ArtifactSummary(ApiModel):
     type: ArtifactType
     status: ArtifactStatus
     title: str | None = None
+    target_key: str | None = Field(default=None, alias="targetKey")
     evidence_coverage: float | None = Field(default=None, alias="evidenceCoverage")
 
 
@@ -206,6 +208,7 @@ class AgentRunSummary(ApiModel):
     agent_type: str = Field(alias="agentType")
     status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
     target_ref: str = Field(alias="targetRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     summary: str
     structured_output: dict[str, Any] = Field(alias="structuredOutput")
     model_invocation: ModelInvocationSummary = Field(alias="modelInvocation")
@@ -255,6 +258,7 @@ class MetadataObjectIdentity(ApiModel):
 
 class MetadataSearchResult(ApiModel):
     object_identity: MetadataObjectIdentity = Field(alias="objectIdentity")
+    target_key: str | None = Field(default=None, alias="targetKey")
     source_profile: str = Field(alias="sourceProfile")
     source_database: str = Field(alias="sourceDatabase")
     snapshot_id: str | None = Field(default=None, alias="snapshotId")
@@ -337,6 +341,7 @@ MetadataInsightCategory = Literal[
 
 class MetadataObjectProfile(ApiModel):
     object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     object_type: str = Field(alias="objectType")
     column_count: int = Field(default=0, alias="columnCount")
     primary_key_count: int = Field(default=0, alias="primaryKeyCount")
@@ -357,6 +362,7 @@ class MetadataInsightGroup(ApiModel):
 class MetadataDependencyGraphNode(ApiModel):
     id: str
     object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     object_type: str = Field(alias="objectType")
     status: Literal["CONFIRMED", "REVIEW_REQUIRED"] = "CONFIRMED"
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
@@ -378,6 +384,7 @@ class MetadataDependencyGraph(ApiModel):
 
 class MetadataDtoReadiness(ApiModel):
     object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     status: Literal["READY", "PARTIAL", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
     field_count: int = Field(default=0, alias="fieldCount")
     review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
@@ -404,6 +411,7 @@ class KnowledgeAssetSummary(ApiModel):
     target_type: str = Field(alias="targetType")
     target_schema: str = Field(alias="targetSchema")
     target_name: str = Field(alias="targetName")
+    target_key: str | None = Field(default=None, alias="targetKey")
     logical_key: str = Field(alias="logicalKey")
     current_version_id: str | None = Field(default=None, alias="currentVersionId")
     current_version_no: int = Field(default=0, alias="currentVersionNo")

@@ -33,6 +33,7 @@ from api_app.repositories import (
     standardized_audit_payload,
     utc_now,
 )
+from api_app.target_keys import target_key_for_target
 
 
 class MemoryWorkflowRepository:
@@ -91,7 +92,9 @@ class MemoryWorkflowRepository:
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
+        target_key: str | None = None,
     ) -> WorkRequestRecord:
+        canonical_key = target_key or target_key_for_target(db_profile_id, target)
         record = WorkRequestRecord(
             request_id=prefixed_id("req"),
             db_profile_id=db_profile_id,
@@ -101,6 +104,7 @@ class MemoryWorkflowRepository:
             request_hash=request_hash,
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
+            target_key=canonical_key,
         )
         self.requests[record.request_id] = record
         self.record_audit_event(
@@ -109,6 +113,7 @@ class MemoryWorkflowRepository:
             target_ref_id=record.request_id,
             payload={
                 "dbProfileId": db_profile_id,
+                "targetKey": canonical_key,
                 "outputs": list(outputs),
                 "tracking": {
                     "correlationId": correlation_id,
@@ -129,8 +134,14 @@ class MemoryWorkflowRepository:
                 return replace(request)
         return None
 
+    def get_request(self, request_id: str) -> WorkRequestRecord | None:
+        request = self.requests.get(request_id)
+        return replace(request) if request else None
+
     def update_request_status(self, request_id: str, status: JobStatus) -> None:
-        request = self.requests[request_id]
+        request = self.requests.get(request_id)
+        if request is None:
+            return
         request.status = status
         request.updated_at = utc_now()
 
@@ -142,6 +153,7 @@ class MemoryWorkflowRepository:
             correlation_id=correlation_id,
             db_profile_id=request.db_profile_id if request else None,
             target=dict(request.target) if request else None,
+            target_key=request.target_key if request else None,
             outputs=tuple(request.outputs) if request else (),
         )
         self.jobs[record.job_id] = record
@@ -237,6 +249,7 @@ class MemoryWorkflowRepository:
         summary: str,
         structured_output: dict[str, Any],
         model_invocation: dict[str, Any],
+        target_key: str | None = None,
     ) -> AgentRunRecord:
         record = AgentRunRecord(
             agent_run_id=prefixed_id("agent"),
@@ -247,6 +260,7 @@ class MemoryWorkflowRepository:
             summary=summary,
             structured_output=structured_output,
             model_invocation=model_invocation,
+            target_key=target_key,
         )
         self.agent_runs[record.agent_run_id] = record
         job = self.jobs.get(job_id)
@@ -259,6 +273,7 @@ class MemoryWorkflowRepository:
                 "agentType": agent_type,
                 "status": status,
                 "targetRef": target_ref,
+                "targetKey": target_key,
                 "modelInvocation": _public_model_invocation(model_invocation),
             },
             correlation_id=job.correlation_id if job else None,
@@ -295,7 +310,9 @@ class MemoryWorkflowRepository:
         assumptions: tuple[str, ...],
         review_required: bool,
         extra: dict[str, Any] | None = None,
+        target_key: str | None = None,
     ) -> ArtifactRecord:
+        job = self.jobs.get(job_id)
         record = ArtifactRecord(
             artifact_id=prefixed_id("art"),
             job_id=job_id,
@@ -308,10 +325,10 @@ class MemoryWorkflowRepository:
             registry_refs=registry_refs,
             assumptions=assumptions,
             review_required=review_required,
+            target_key=target_key or (job.target_key if job else None),
             extra=extra or {},
         )
         self.artifacts[record.artifact_id] = record
-        job = self.jobs.get(job_id)
         self.record_audit_event(
             action="ARTIFACT_CREATED",
             target_type="ARTIFACT",
@@ -320,6 +337,7 @@ class MemoryWorkflowRepository:
                 "artifactId": record.artifact_id,
                 "jobId": job_id,
                 "artifactType": artifact_type.value,
+                "targetKey": record.target_key,
                 "status": record.status.value,
             },
             correlation_id=job.correlation_id if job else None,
@@ -329,18 +347,86 @@ class MemoryWorkflowRepository:
     def get_job(self, job_id: str) -> JobRecord | None:
         return self.jobs.get(job_id)
 
-    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+    def list_jobs(
+        self,
+        *,
+        limit: int | None = None,
+        target_key: str | None = None,
+    ) -> list[JobRecord]:
         jobs = sorted(
             self.jobs.values(),
             key=lambda job: (job.created_at, job.job_id),
             reverse=True,
         )
+        if target_key:
+            jobs = [job for job in jobs if job.target_key == target_key]
         if limit is not None:
             jobs = jobs[: max(min(int(limit), 100), 1)]
         return [replace(job) for job in jobs]
 
+    def list_stale_active_jobs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[JobRecord]:
+        active_statuses = {
+            JobStatus.SUBMITTED,
+            JobStatus.COLLECTING_METADATA,
+            JobStatus.ANALYZING,
+            JobStatus.GENERATING,
+            JobStatus.VALIDATING,
+        }
+        jobs = sorted(
+            (
+                job
+                for job in self.jobs.values()
+                if job.status in active_statuses and job.updated_at <= stale_before
+            ),
+            key=lambda job: (job.updated_at, job.job_id),
+        )
+        if limit is not None:
+            jobs = jobs[: max(min(int(limit), 100), 1)]
+        return [replace(job) for job in jobs]
+
+    def claim_stale_active_job(
+        self,
+        job_id: str,
+        *,
+        stale_before: datetime,
+    ) -> JobRecord | None:
+        job = self.jobs.get(job_id)
+        if job is None:
+            return None
+        active_statuses = {
+            JobStatus.SUBMITTED,
+            JobStatus.COLLECTING_METADATA,
+            JobStatus.ANALYZING,
+            JobStatus.GENERATING,
+            JobStatus.VALIDATING,
+        }
+        if job.status not in active_statuses or job.updated_at > stale_before:
+            return None
+        job.updated_at = utc_now()
+        return replace(job)
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         return self.artifacts.get(artifact_id)
+
+    def find_job_artifact_by_type(
+        self,
+        job_id: str,
+        artifact_type: ArtifactType,
+    ) -> ArtifactRecord | None:
+        artifacts = sorted(
+            (
+                artifact
+                for artifact in self.artifacts.values()
+                if artifact.job_id == job_id and artifact.type == artifact_type
+            ),
+            key=lambda artifact: (artifact.created_at, artifact.artifact_id),
+        )
+        return replace(artifacts[0]) if artifacts else None
 
     def list_job_artifacts(
         self,
@@ -451,6 +537,7 @@ class MemoryWorkflowRepository:
         target_type = str(target.get("type") or "OBJECT")
         target_schema = str(target.get("schema") or "")
         target_name = str(target.get("name") or "")
+        target_key = target_key_for_target(db_profile_id, target)
         logical_key = "|".join(
             [db_profile_id, asset_kind, target_type, target_schema, target_name]
         ).lower()
@@ -471,9 +558,12 @@ class MemoryWorkflowRepository:
                 target_schema=target_schema,
                 target_name=target_name,
                 logical_key=logical_key,
+                target_key=target_key,
                 source_job_id=job_id,
             )
             self.knowledge_assets[asset.asset_id] = asset
+        elif not asset.target_key:
+            asset.target_key = target_key
         if asset.content_hash == content_hash and asset.current_version_id:
             version = self.knowledge_versions[asset.current_version_id]
             if job_id and not asset.source_job_id:
@@ -541,6 +631,7 @@ class MemoryWorkflowRepository:
                 "versionNo": version_no,
                 "contentHash": content_hash,
                 "sourceJobId": job_id,
+                "targetKey": target_key,
             },
             correlation_id=self.jobs[job_id].correlation_id if job_id in self.jobs else None,
         )
@@ -745,6 +836,42 @@ class MemoryWorkflowRepository:
         record = self.metadata_analysis_runs.get(run_id)
         return replace(record) if record else None
 
+    def list_recoverable_metadata_analysis_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataAnalysisRunRecord]:
+        records = sorted(
+            (
+                record
+                for record in self.metadata_analysis_runs.values()
+                if _metadata_analysis_run_is_recoverable(record, stale_before=stale_before)
+            ),
+            key=lambda record: (record.submitted_at, record.run_id),
+        )
+        if limit is not None:
+            records = records[: max(min(int(limit), 100), 1)]
+        return [replace(record) for record in records]
+
+    def claim_metadata_analysis_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataAnalysisRunRecord | None:
+        record = self.metadata_analysis_runs.get(run_id)
+        if record is None or not _metadata_analysis_run_is_recoverable(
+            record,
+            stale_before=stale_before,
+        ):
+            return None
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        record.completed_at = None
+        record.error = None
+        return replace(record)
+
     def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:
         record = self.metadata_analysis_runs[run_id]
         record.status = "RUNNING"
@@ -850,3 +977,16 @@ def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
             "componentInvocations",
         }
     }
+
+
+def _metadata_analysis_run_is_recoverable(
+    record: MetadataAnalysisRunRecord,
+    *,
+    stale_before: datetime,
+) -> bool:
+    if record.status == "QUEUED":
+        return True
+    if record.status != "RUNNING":
+        return False
+    reference_time = record.started_at or record.submitted_at
+    return reference_time <= stale_before

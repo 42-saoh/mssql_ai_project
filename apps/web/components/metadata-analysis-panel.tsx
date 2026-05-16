@@ -78,6 +78,7 @@ export function MetadataAnalysisPanel({
                 <p>
                   version {asset.currentVersionNo} - content {asset.contentHash ?? "pending"}
                 </p>
+                {asset.targetKey ? <code>{asset.targetKey}</code> : null}
               </div>
               <div className="metadata-result-detail">
                 <Link href={`/api/v1/knowledge/assets/${asset.assetId}`}>Asset</Link>
@@ -105,6 +106,7 @@ export function MetadataAnalysisPanel({
                   {profile.columnCount} columns - {profile.primaryKeyCount} PK -{" "}
                   {profile.foreignKeyCount} FK - {profile.indexCount} indexes
                 </p>
+                {profile.targetKey ? <code>{profile.targetKey}</code> : null}
               </div>
               <div className="metadata-result-detail">
                 <StatusPill
@@ -128,6 +130,9 @@ export function MetadataAnalysisPanel({
             {analysis.dependencyGraph.edges.length} edges -{" "}
             {analysis.dependencyGraph.unresolved.length} unresolved
           </p>
+          {analysis.dependencyGraph.nodes.slice(0, 3).map((node) => (
+            <code key={node.id}>{node.targetKey ?? node.objectRef}</code>
+          ))}
         </div>
       ) : null}
 
@@ -139,6 +144,7 @@ export function MetadataAnalysisPanel({
                 <p className="eyebrow">DTO {evidenceStatusLabel(item.status)}</p>
                 <h3>{item.objectRef}</h3>
                 <p>{item.fieldCount} candidate fields</p>
+                {item.targetKey ? <code>{item.targetKey}</code> : null}
               </div>
               <div className="metadata-result-detail">
                 {item.reviewReasons.slice(0, 3).map((reason) => (

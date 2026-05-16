@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from ai_agent_domain import ArtifactType
+from ai_agent_domain import ArtifactType, JobStatus, WorkflowStepType
 from ai_agent_runtime.gateway import model_profile_from_env
 from api_app.dependencies import (
     get_metadata_analysis_service,
@@ -14,9 +14,11 @@ from api_app.dependencies import (
     reset_application_state,
 )
 from api_app.main import app
+from api_app.metadata_analysis_runs import execute_metadata_analysis_run
 from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.recovery_worker import run_recovery_once
 from api_app.repositories import KnowledgePersistenceError, ValidationReportRecord
-from api_app.workflow import WorkflowService
+from api_app.workflow import SP_WORKFLOW_RECOVERY_BLOCKED, WorkflowService
 from fastapi.testclient import TestClient
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
@@ -53,6 +55,16 @@ class KnowledgeSchemaRequiredRepository(MemoryWorkflowRepository):
             code="KNOWLEDGE_SCHEMA_REQUIRED",
             status_code=503,
         )
+
+
+class ExplodingMetadataAnalysisService(MetadataAnalysisService):
+    def __init__(self) -> None:
+        super().__init__()
+        self.analyze_calls = 0
+
+    def analyze(self, request):  # type: ignore[override]
+        self.analyze_calls += 1
+        raise AssertionError("analyze should not run without a metadata run claim")
 
 
 @pytest.fixture
@@ -1080,6 +1092,274 @@ def test_metadata_analysis_run_poll_missing_id_returns_404(client: TestClient) -
 
     assert response.status_code == 404
     assert response.json()["code"] == "METADATA_ANALYSIS_RUN_NOT_FOUND"
+
+
+def test_metadata_analysis_run_poll_leaves_active_run_for_worker(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, repository = client_and_repository
+    monkeypatch.setenv("METADATA_ANALYSIS_RUN_STALE_SECONDS", "60")
+    created = repository.create_metadata_analysis_run(
+        run_id="metadata_run_stale",
+        request={
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+        },
+    )
+    repository.mark_metadata_analysis_run_running(created.run_id)
+    stored = repository.metadata_analysis_runs[created.run_id]
+    stored.submitted_at = datetime.now(UTC) - timedelta(seconds=180)
+    stored.started_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    response = client.get(f"/api/v1/metadata/analysis-runs/{created.run_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "RUNNING"
+    assert payload["error"] is None
+
+
+def test_metadata_analysis_run_execute_skips_non_stale_running_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("METADATA_ANALYSIS_RUN_STALE_SECONDS", "60")
+    repository = MemoryWorkflowRepository()
+    service = ExplodingMetadataAnalysisService()
+    created = repository.create_metadata_analysis_run(
+        run_id="metadata_run_claimed_elsewhere",
+        request={
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+        },
+    )
+    repository.mark_metadata_analysis_run_running(created.run_id)
+
+    claimed = execute_metadata_analysis_run(
+        run_id=created.run_id,
+        request=None,
+        service=service,
+        repository=repository,
+    )
+
+    assert claimed is False
+    assert service.analyze_calls == 0
+    assert repository.get_metadata_analysis_run(created.run_id).status == "RUNNING"
+
+
+def test_recovery_worker_processes_queued_metadata_run(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+) -> None:
+    _client, repository = client_and_repository
+    created = repository.create_metadata_analysis_run(
+        run_id="metadata_run_worker_queued",
+        request={
+            "dbProfileId": "master",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+        },
+    )
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        batch_size=5,
+    )
+    record = repository.get_metadata_analysis_run(created.run_id)
+
+    assert report.metadata_runs_claimed == 1
+    assert report.errors == ()
+    assert record is not None
+    assert record.status == "SUCCEEDED"
+    assert record.analysis
+    assert record.analysis["target"]["name"] == "TB_ORDER"
+
+
+def test_recovery_worker_recovers_stale_sp_workflow_same_job(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _client, repository = client_and_repository
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-stale-sp",
+        correlation_id="corr-stale-sp",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.COLLECTING_METADATA,
+        current_step=WorkflowStepType.COLLECT_METADATA,
+    )
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        batch_size=5,
+    )
+    recovered = repository.get_job(job.job_id)
+    artifacts = repository.list_job_artifacts(job.job_id)
+
+    assert report.sp_jobs_recovered == 1
+    assert report.sp_jobs_failed == 0
+    assert recovered is not None
+    assert recovered.job_id == job.job_id
+    assert recovered.status == JobStatus.VALIDATION_COMPLETE
+    assert artifacts is not None
+    assert len(artifacts) == 1
+    assert repository.latest_validation_for(artifacts[0].artifact_id) is not None
+
+
+def test_recovery_worker_reuses_existing_artifact_and_generates_missing_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-generating-recovery",
+        correlation_id="corr-generating-recovery",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.COLLECTING_METADATA,
+        current_step=WorkflowStepType.COLLECT_METADATA,
+    )
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.ANALYZING,
+        current_step=WorkflowStepType.ANALYZE,
+    )
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.GENERATING,
+        current_step=WorkflowStepType.GENERATE,
+    )
+    service = WorkflowService(repository)
+    metadata = service._collect_metadata(job.job_id, request)
+    generated = service._generate_artifacts(job.job_id, request, metadata)
+    existing = next(artifact for artifact in generated if artifact.type == ArtifactType.SP_ANALYSIS_DOC)
+    for artifact in generated:
+        if artifact.type != ArtifactType.SP_ANALYSIS_DOC:
+            del repository.artifacts[artifact.artifact_id]
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        workflow_service=service,
+        batch_size=5,
+    )
+    artifacts = repository.list_job_artifacts(job.job_id)
+
+    assert report.sp_jobs_recovered == 1
+    assert repository.get_job(job.job_id).status == JobStatus.VALIDATION_COMPLETE
+    assert artifacts is not None
+    assert [artifact.type for artifact in artifacts].count(ArtifactType.SP_ANALYSIS_DOC) == 1
+    assert any(artifact.artifact_id == existing.artifact_id for artifact in artifacts)
+    assert any(artifact.type == ArtifactType.DEPENDENCY_REPORT for artifact in artifacts)
+
+
+def test_recovery_worker_reuses_existing_validation_reports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    repository = CountingValidationRepository()
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-validating-recovery",
+        correlation_id="corr-validating-recovery",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    for status, step in (
+        (JobStatus.COLLECTING_METADATA, WorkflowStepType.COLLECT_METADATA),
+        (JobStatus.ANALYZING, WorkflowStepType.ANALYZE),
+        (JobStatus.GENERATING, WorkflowStepType.GENERATE),
+        (JobStatus.VALIDATING, WorkflowStepType.VALIDATE),
+    ):
+        repository.transition_job(job.job_id, status=status, current_step=step)
+    service = WorkflowService(repository)
+    metadata = service._collect_metadata(job.job_id, request)
+    artifacts = service._generate_artifacts(job.job_id, request, metadata)
+    first = next(artifact for artifact in artifacts if artifact.type == ArtifactType.SP_ANALYSIS_DOC)
+    second = next(artifact for artifact in artifacts if artifact.type == ArtifactType.DEPENDENCY_REPORT)
+    existing_report = repository.save_validation_report(
+        artifact_id=first.artifact_id,
+        status="PASSED",
+        checks=[{"ruleId": "preseed", "status": "PASSED"}],
+        missing_evidence=[],
+        manual_review_points=[],
+    )
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        workflow_service=service,
+        batch_size=5,
+    )
+
+    assert report.sp_jobs_recovered == 1
+    assert repository.get_job(job.job_id).status == JobStatus.VALIDATION_COMPLETE
+    assert repository.validation_write_count == 2
+    assert repository.latest_validation_for(first.artifact_id) == existing_report
+    assert repository.latest_validation_for(second.artifact_id) is not None
+
+
+def test_recovery_worker_blocks_sp_workflow_when_original_request_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-missing-request",
+        correlation_id="corr-missing-request",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.COLLECTING_METADATA,
+        current_step=WorkflowStepType.COLLECT_METADATA,
+    )
+    del repository.requests[request.request_id]
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        workflow_service=WorkflowService(repository),
+        batch_size=5,
+    )
+    failed = repository.get_job(job.job_id)
+
+    assert report.sp_jobs_failed == 1
+    assert failed is not None
+    assert failed.status == JobStatus.FAILED
+    assert failed.error_code == SP_WORKFLOW_RECOVERY_BLOCKED
 
 
 def test_metadata_analysis_run_preserves_dependency_error_in_status(
