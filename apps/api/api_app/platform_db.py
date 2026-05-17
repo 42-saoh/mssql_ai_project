@@ -203,15 +203,15 @@ class MssqlPlatformRepository:
         row = self._query_one(
             """
             SELECT TOP (1)
-                COALESCE(TRC_ID, CONVERT(NVARCHAR(36), REQ_ID)),
-                TRGT_PAYLD_JSON,
-                DESIRED_RSLT_JSON,
-                OPTN_PAYLD_JSON,
-                CUR_STAT_CD,
-                SUBMITTED_DTM,
-                UPD_DTM,
+                COALESCE(r.TRC_ID, CONVERT(NVARCHAR(36), r.REQ_ID)),
+                r.TRGT_PAYLD_JSON,
+                r.DESIRED_RSLT_JSON,
+                r.OPTN_PAYLD_JSON,
+                r.CUR_STAT_CD,
+                r.SUBMITTED_DTM,
+                r.UPD_DTM,
                 COALESCE(
-                    JSON_VALUE(OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
                     p.DB_PRFL_NM,
                     CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
                 ),
@@ -234,15 +234,15 @@ class MssqlPlatformRepository:
         row = self._query_one(
             """
             SELECT TOP (1)
-                COALESCE(TRC_ID, CONVERT(NVARCHAR(36), REQ_ID)),
-                TRGT_PAYLD_JSON,
-                DESIRED_RSLT_JSON,
-                OPTN_PAYLD_JSON,
-                CUR_STAT_CD,
-                SUBMITTED_DTM,
-                UPD_DTM,
+                COALESCE(r.TRC_ID, CONVERT(NVARCHAR(36), r.REQ_ID)),
+                r.TRGT_PAYLD_JSON,
+                r.DESIRED_RSLT_JSON,
+                r.OPTN_PAYLD_JSON,
+                r.CUR_STAT_CD,
+                r.SUBMITTED_DTM,
+                r.UPD_DTM,
                 COALESCE(
-                    JSON_VALUE(OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
+                    JSON_VALUE(r.OPTN_PAYLD_JSON, '$.__tracking.dbProfileId'),
                     p.DB_PRFL_NM,
                     CONVERT(NVARCHAR(36), r.DB_PRFL_ID)
                 ),
@@ -253,7 +253,7 @@ class MssqlPlatformRepository:
             FROM dbo.CORE_WORK_REQUESTS r
             LEFT JOIN dbo.CORE_DB_PROFILES p ON p.DB_PRFL_ID = r.DB_PRFL_ID
             WHERE r.REQ_ID = %s OR r.TRC_ID = %s
-            ORDER BY SUBMITTED_DTM DESC
+            ORDER BY r.SUBMITTED_DTM DESC
             """,
             (storage_uuid(request_id), request_id),
         )

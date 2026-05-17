@@ -935,6 +935,14 @@ input:disabled {
   font-size: 12px;
 }
 
+.evidence-row > *,
+.validation-row > *,
+.status-cluster > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .evidence-row small {
   color: var(--muted);
 }

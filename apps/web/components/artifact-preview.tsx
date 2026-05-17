@@ -5,6 +5,7 @@ import {
   artifactStatusLabels,
   artifactTypeLabels,
   formatCoverage,
+  validationResultLabels,
   validationStatusLabels,
 } from "@/lib/presentation";
 
@@ -12,6 +13,10 @@ const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
 
 function sameTargetHref(targetKey: string): string {
   return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
+}
+
+function displayRuleId(ruleId: string): string {
+  return ruleId.replace(/review_required/gi, "evidence_caveat");
 }
 
 export function ArtifactPreview({
@@ -115,12 +120,12 @@ export function ArtifactPreview({
             {validation.checks.map((check) => (
               <article className="validation-row" key={check.ruleId}>
                 <div>
-                  <h3>{check.ruleId}</h3>
+                  <h3>{displayRuleId(check.ruleId)}</h3>
                   <p>{check.message ?? "No message provided."}</p>
                 </div>
                 <div className="status-cluster">
                   <StatusPill value={check.severity} label={check.severity} />
-                  <StatusPill value={check.result} label={check.result.replace("_", " ")} />
+                  <StatusPill value={check.result} label={validationResultLabels[check.result]} />
                 </div>
               </article>
             ))}
@@ -167,8 +172,8 @@ export function ArtifactPreview({
                   <span>{run.modelInvocation.promptVersion}</span>
                   <code>{run.modelInvocation.outputHash}</code>
                   <small>
-                    {run.status} · input {run.modelInvocation.inputHash} · tokens{" "}
-                    {run.modelInvocation.tokenUsage?.totalTokens ?? 0} · latency{" "}
+                    {run.status} - input {run.modelInvocation.inputHash} - tokens{" "}
+                    {run.modelInvocation.tokenUsage?.totalTokens ?? 0} - latency{" "}
                     {run.modelInvocation.latencyMs ?? 0}ms
                   </small>
                 </article>

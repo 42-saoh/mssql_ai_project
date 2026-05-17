@@ -1,0 +1,42 @@
+{
+  "baseURL": "http://localhost:3035",
+  "apiBaseURL": "http://localhost:8035",
+  "startedAt": "2026-05-16T23:36:03.156Z",
+  "targetKey": "mssql:ppm:-:procedure:dbo.getinspitemscd",
+  "jobId": "job_375dca8fd7",
+  "artifactId": "art_c49a6621a3",
+  "validationStatus": "evidence caveat",
+  "steps": [
+    {
+      "name": "artifact discovery",
+      "status": "pass",
+      "notes": "using art_c49a6621a3 from job_375dca8fd7"
+    },
+    {
+      "name": "artifact page",
+      "status": "pass",
+      "notes": "targetKey, artifact id, evidence and validation copy visible"
+    },
+    {
+      "name": "artifact validation",
+      "status": "pass",
+      "notes": "visible validation status evidence caveat"
+    },
+    {
+      "name": "mobile artifact",
+      "status": "pass",
+      "notes": "no horizontal overflow detected"
+    }
+  ],
+  "screenshots": {
+    "artifact-focused-before-validation": "D:\\wt\\p35\\.tmp\\playwright-live-targetkey-artifact-2026-05-16T23-36-03-154Z\\artifact-focused-before-validation.png",
+    "artifact-focused-after-validation": "D:\\wt\\p35\\.tmp\\playwright-live-targetkey-artifact-2026-05-16T23-36-03-154Z\\artifact-focused-after-validation.png",
+    "artifact-focused-mobile": "D:\\wt\\p35\\.tmp\\playwright-live-targetkey-artifact-2026-05-16T23-36-03-154Z\\artifact-focused-mobile.png"
+  },
+  "forbiddenRequests": [],
+  "consoleMessages": [],
+  "pageErrors": [],
+  "blockers": [],
+  "completedAt": "2026-05-16T23:36:14.430Z",
+  "status": "pass"
+}

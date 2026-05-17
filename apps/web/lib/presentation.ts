@@ -3,6 +3,7 @@ import type {
   ArtifactType,
   JobStatus,
   RequestedOutputType,
+  ValidationResult,
   ValidationStatus,
   WorkflowStepType,
 } from "./api/types";
@@ -75,6 +76,12 @@ export const artifactStatusLabels: Record<ArtifactStatus, string> = {
 export const validationStatusLabels: Record<ValidationStatus, string> = {
   PASSED: "Passed",
   FAILED: "Failed",
+  REVIEW_REQUIRED: "Evidence caveat",
+};
+
+export const validationResultLabels: Record<ValidationResult, string> = {
+  PASS: "Pass",
+  FAIL: "Fail",
   REVIEW_REQUIRED: "Evidence caveat",
 };
 
