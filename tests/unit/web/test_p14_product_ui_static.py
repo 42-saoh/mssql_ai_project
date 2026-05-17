@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -238,6 +239,94 @@ def test_job_page_renders_dependency_child_agent_runs_without_raw_trace_dump() -
     assert "target {run.targetRef}" in job_status_view
     assert "run.structuredOutput" not in job_status_view
     assert "componentInvocations" not in job_status_view
+
+
+def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> None:
+    job_status_view = (WEB_ROOT / "components" / "job-status-view.tsx").read_text(
+        encoding="utf-8"
+    )
+    artifact_preview = (WEB_ROOT / "components" / "artifact-preview.tsx").read_text(
+        encoding="utf-8"
+    )
+    artifact_actions = (WEB_ROOT / "components" / "artifact-actions.tsx").read_text(
+        encoding="utf-8"
+    )
+    asset_page = (
+        WEB_ROOT / "app" / "knowledge" / "assets" / "[assetId]" / "page.tsx"
+    ).read_text(encoding="utf-8")
+    facts_page = (
+        WEB_ROOT
+        / "app"
+        / "knowledge"
+        / "assets"
+        / "[assetId]"
+        / "versions"
+        / "[versionId]"
+        / "facts"
+        / "page.tsx"
+    ).read_text(encoding="utf-8")
+    single_download_route = (
+        WEB_ROOT / "app" / "artifacts" / "[artifactId]" / "download" / "route.ts"
+    ).read_text(encoding="utf-8")
+    bundle_download_route = (
+        WEB_ROOT / "app" / "jobs" / "[jobId]" / "artifacts" / "download" / "route.ts"
+    ).read_text(encoding="utf-8")
+    artifact_download = (WEB_ROOT / "lib" / "artifact-download.ts").read_text(
+        encoding="utf-8"
+    )
+    zip_writer = (WEB_ROOT / "lib" / "zip-writer.ts").read_text(encoding="utf-8")
+    package_json = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
+    helper_smoke = (WEB_ROOT / "scripts" / "draft-download-helper-smoke.mjs").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'href={`/api/v1/knowledge/assets/${asset.assetId}`}' not in job_status_view
+    assert "knowledgeAssetHref(asset.assetId)" in job_status_view
+    assert "knowledgeFactsHref(asset.assetId, asset.currentVersionId)" in job_status_view
+    assert "api.getKnowledgeAsset(assetId)" in asset_page
+    assert "api.listKnowledgeAssetVersions(assetId)" in asset_page
+    assert "api.listKnowledgeFacts(assetId, versionId)" in facts_page
+    assert "fact.payload" not in facts_page
+    assert "edge.payload" not in facts_page
+    assert "Open current facts" in asset_page
+    assert "Sanitized fact rows" in facts_page
+    assert "Fact graph links" in facts_page
+
+    assert "ArtifactActions" in artifact_preview
+    assert "Copy content" in artifact_actions
+    assert "Download draft file" in artifact_actions
+    assert "navigator.clipboard.writeText(content)" in artifact_actions
+    assert "/artifacts/${encodeURIComponent(artifactId)}/download" in artifact_actions
+    assert "Download all draft artifacts" in job_status_view
+    assert "/artifacts/download" in job_status_view
+    assert "api.getArtifact(artifactId)" in single_download_route
+    assert "api.listJobArtifacts(jobId)" in bundle_download_route
+    assert "api.getArtifact(artifact.artifactId)" in bundle_download_route
+    assert "createStoreOnlyZip(entries)" in bundle_download_route
+    assert "README.md" in bundle_download_route
+    assert "manifest.json" in bundle_download_route
+    assert "application/zip" in bundle_download_route
+
+    assert 'SP_ANALYSIS_DOC: "md"' in artifact_download
+    assert 'DEPENDENCY_REPORT: "md"' in artifact_download
+    assert 'MAPPER_XML: "xml"' in artifact_download
+    assert 'MAPPER_INTERFACE: "java"' in artifact_download
+    assert 'SERVICE_DRAFT: "java"' in artifact_download
+    assert 'DDL_DRAFT: "sql"' in artifact_download
+    assert "sanitizeFilePart" in artifact_download
+    assert "0x04034b50" in zip_writer
+    assert "0x02014b50" in zip_writer
+    assert "0x06054b50" in zip_writer
+    assert package_json["scripts"]["smoke:draft-download"] == (
+        "node --experimental-strip-types scripts/draft-download-helper-smoke.mjs"
+    )
+    assert package_json["scripts"]["test:smoke"] == "pnpm run build"
+    assert "artifactFileExtension(\"SP_ANALYSIS_DOC\")" in helper_smoke
+    assert "artifactFilename(" in helper_smoke
+    assert "createStoreOnlyZip(" in helper_smoke
+    assert "README.md" in helper_smoke
+    assert "manifest.json" in helper_smoke
+    assert "0x06054b50" in helper_smoke
 
 
 def test_web_visible_copy_uses_evidence_caveat_language_not_review_actions() -> None:

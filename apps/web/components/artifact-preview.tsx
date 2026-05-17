@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArtifactActions } from "@/components/artifact-actions";
 import { StatusPill } from "@/components/status-pill";
 import type { AgentRunSummary, Artifact, ValidationReport } from "@/lib/api/types";
 import {
@@ -75,6 +76,8 @@ export function ArtifactPreview({
             DDL/DML apply, or source write action.
           </p>
         </div>
+
+        <ArtifactActions artifactId={artifact.artifactId} content={artifact.content} />
 
         {artifact.blockers?.length ? (
           <div className="blocker-list">

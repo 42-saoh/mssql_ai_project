@@ -8,7 +8,8 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `/requests/new` - submits single and batch SP analysis requests to the portal API, then links to accepted jobs.
 - `/jobs` - recent analysis history with targetKey/target/profile/status/output filters and artifact preview links.
 - `/jobs/[jobId]` - workflow status, sanitized LLM trace summary, knowledge assets, and draft artifacts.
-- `/artifacts/[artifactId]` - artifact preview, evidence refs, caveats, sanitized trace, and explicit validation trigger.
+- `/knowledge/assets/[assetId]` and `/knowledge/assets/[assetId]/versions/[versionId]/facts` - sanitized knowledge asset version and fact graph views.
+- `/artifacts/[artifactId]` - artifact preview, copy/download controls, evidence refs, caveats, sanitized trace, and explicit validation trigger.
 - `/metadata/search` - read-only metadata identity/evidence search plus client-side async metadata analysis.
 - `/metadata/dependencies` - read-only dependency closure and reference resolver diagnostics.
 
@@ -28,6 +29,12 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `lib/api/client.ts` requires HTTP mode and API base URL; there is no mock adapter or demo id fallback.
 - `lib/api/errors.ts` normalizes API `{code, detail}` blockers for UI display.
 - `lib/pilot-manifest.ts` only reads live sample object identities when the pilot manifest is in `live_metadata` mode.
+
+## Local Checks
+
+- `pnpm --dir apps/web run test:smoke` runs the Web build smoke.
+- `pnpm --dir apps/web run smoke:draft-download` verifies draft artifact filename mapping and the dependency-free ZIP writer.
+- `pnpm --dir apps/web run smoke:http-adapter -- <api-base-url>` exercises the strict HTTP adapter against a running Portal API.
 
 ## Analysis History
 
@@ -69,6 +76,7 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 
 ## Knowledge Asset Behavior
 
-- `/jobs/[jobId]` reads `GET /api/v1/jobs/{jobId}/knowledge-assets` and renders safe summaries plus asset/fact graph API links.
+- `/jobs/[jobId]` reads `GET /api/v1/jobs/{jobId}/knowledge-assets` and renders safe summaries plus Web asset/fact graph links.
 - `/metadata/search` renders metadata analysis `knowledgeAssets[]` summaries in the reusable analysis panel.
 - The Web client includes sanitized knowledge export support, but does not render raw fact payloads, raw metadata payloads, provider traces, row data, or raw SQL.
+- Draft artifact downloads are Web-internal convenience routes backed by existing sanitized artifact preview APIs. Single artifact files and job-level ZIP bundles are draft-only and do not add publish/deploy/execute/apply behavior.

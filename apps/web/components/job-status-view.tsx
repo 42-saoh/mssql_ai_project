@@ -88,6 +88,16 @@ function sameTargetHref(targetKey: string): string {
   return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
 }
 
+function knowledgeAssetHref(assetId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}`;
+}
+
+function knowledgeFactsHref(assetId: string, versionId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(
+    versionId,
+  )}/facts`;
+}
+
 function stepState(job: Job, step: (typeof workflowSteps)[number]) {
   if (job.status === "VALIDATION_COMPLETE") {
     return "done";
@@ -393,14 +403,12 @@ export function JobStatusView({
                   {asset.targetKey ? <small>targetKey {asset.targetKey}</small> : null}
                 </div>
                 <div className="row-actions">
-                  <Link href={`/api/v1/knowledge/assets/${asset.assetId}`}>Open</Link>
+                  <Link href={knowledgeAssetHref(asset.assetId)}>Open</Link>
                   {asset.targetKey ? (
                     <Link href={sameTargetHref(asset.targetKey)}>Same target history</Link>
                   ) : null}
                   {asset.currentVersionId ? (
-                    <Link
-                      href={`/api/v1/knowledge/assets/${asset.assetId}/versions/${asset.currentVersionId}/facts`}
-                    >
+                    <Link href={knowledgeFactsHref(asset.assetId, asset.currentVersionId)}>
                       Facts
                     </Link>
                   ) : null}
@@ -422,7 +430,12 @@ export function JobStatusView({
             <p className="eyebrow">Draft artifacts</p>
             <h2>Preview outputs</h2>
           </div>
-          <span className="quiet-label">HTTP API</span>
+          <Link
+            className="secondary-action"
+            href={`/jobs/${encodeURIComponent(job.jobId)}/artifacts/download`}
+          >
+            Download all draft artifacts
+          </Link>
         </div>
 
         <div className="artifact-list">
@@ -446,6 +459,9 @@ export function JobStatusView({
                 {artifact.targetKey ? (
                   <Link href={sameTargetHref(artifact.targetKey)}>Same target history</Link>
                 ) : null}
+                <Link href={`/artifacts/${encodeURIComponent(artifact.artifactId)}/download`}>
+                  Download
+                </Link>
                 <Link href={`/artifacts/${artifact.artifactId}`}>Preview</Link>
               </div>
             </article>

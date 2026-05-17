@@ -1,0 +1,13 @@
+{
+  "jobId": "job_7f1635c8de",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-knowledge-download-2026-05-17T01-46-41-635Z",
+  "status": "fail",
+  "screenshots": [],
+  "forbiddenRequests": [],
+  "pageErrors": [],
+  "consoleMessages": [],
+  "error": {
+    "message": "Job page did not render knowledge assets.",
+    "stack": "Error: Job page did not render knowledge assets.\n    at assertState (D:\\wt\\p35\\.tmp\\knowledge_artifact_download_smoke.cjs:32:11)\n    at D:\\wt\\p35\\.tmp\\knowledge_artifact_download_smoke.cjs:65:5"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "jobId": "job_7f1635c8de",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-knowledge-download-2026-05-17T01-49-33-646Z",
+  "status": "pass",
+  "screenshots": [
+    {
+      "name": "job knowledge and downloads",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-knowledge-download-2026-05-17T01-49-33-646Z\\job-knowledge-download.png"
+    },
+    {
+      "name": "knowledge asset",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-knowledge-download-2026-05-17T01-49-33-646Z\\knowledge-asset.png"
+    },
+    {
+      "name": "knowledge facts",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-knowledge-download-2026-05-17T01-49-33-646Z\\knowledge-facts.png"
+    },
+    {
+      "name": "artifact copy download",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-knowledge-download-2026-05-17T01-49-33-646Z\\artifact-copy-download.png"
+    }
+  ],
+  "forbiddenRequests": [],
+  "pageErrors": [],
+  "consoleMessages": [],
+  "bundleDownload": {
+    "filename": "job_7f1635c8de-draft-artifacts.zip",
+    "size": 58598,
+    "zipMagic": "504b0304"
+  },
+  "singleDownload": {
+    "filename": "GetInspItemsCd-SP-art_397f75bc45.md",
+    "size": 39513,
+    "hasDraftContent": true
+  }
+}

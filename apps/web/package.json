@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "smoke:http-adapter": "node --experimental-strip-types scripts/http-adapter-smoke.mjs",
+    "smoke:draft-download": "node --experimental-strip-types scripts/draft-download-helper-smoke.mjs",
     "test:smoke": "pnpm run build",
     "test": "pnpm run test:smoke"
   },
