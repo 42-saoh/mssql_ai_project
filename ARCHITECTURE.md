@@ -77,18 +77,27 @@ analysis and Java/MyBatis generation. It does not replace `CanonicalAnalysisMode
 it narrows code-generation planning around operation branches, sanitized statement
 evidence, and DTO blueprints.
 
-For `PCO_GU_ManageBond_PRC`, P41A models the `CRUDFlag` branches
+For `PCO_GU_ManageBond_PRC`, P41 models the `CRUDFlag` branches
 `R/A/C/U/D/VENDOR_U/ONLINE_U`, plus branch variables such as `@BondKindCode`,
 `@GUBUNFlag`, and `@SValue`. The contract records statement ids, operation type,
 target ref, input/output/write field candidates, cross-database flags, evidence refs,
 and `REVIEW_REQUIRED` markers. It also records DTO blueprints by role such as
 `QUERY`, `RESULT`, `COMMAND`, `BATCH_ITEM`, and `CALL_REQUEST`.
 
+The implementation path is split deliberately:
+deterministic analysis creates sanitized `statementEvidence`, the structured planner
+uses the existing Responses/httpx gateway and strict JSON schema to produce
+`SpOperationModel.v0.1`, and the Java/MyBatis renderer consumes that model
+deterministically. `OperationModel` inference is not promoted to metadata fact; weak
+branch/DTO naming and uncertain dependencies stay `REVIEW_REQUIRED`.
+
 The generation boundary remains draft-only. Public artifact types are not expanded:
-`DTO_DRAFT` may later contain a multi-file DTO bundle, while `SERVICE_DRAFT`,
-`MAPPER_INTERFACE`, and `MAPPER_XML` may remain single files. P41A adds no UI,
-OpenAPI, DB schema, live MCP tool, procedure execution, row-data query, automatic
-DDL/DML apply, or generated-source deployment.
+`DTO_DRAFT` can contain a multi-file DTO bundle when `operationModel.dtoBlueprints`
+is supplied, while `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML` remain
+single files. Without `operationModel`, the legacy single DTO path remains for
+backward compatibility and is still considered insufficient for complex SPs. P41 adds
+no UI, OpenAPI, DB schema, live MCP public tool, procedure execution, row-data query,
+automatic DDL/DML apply, or generated-source deployment.
 
 ## P35 Source Context Architecture
 

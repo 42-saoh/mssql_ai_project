@@ -28,6 +28,11 @@ from ai_agent_runtime.models import (
     semantic_output_schema,
     stable_json_hash,
 )
+from ai_agent_runtime.operation_model import (
+    parse_sp_operation_model_json,
+    sp_operation_model_output_schema,
+    validate_sp_operation_model_output,
+)
 
 REMOTE_PROVIDER_OPENAI = "openai"
 REMOTE_PROVIDER_PGPT = "pgpt"
@@ -74,6 +79,14 @@ class ModelGateway(Protocol):
         ...
 
     def plan_platform_tools(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        ...
+
+    def plan_sp_operation_model(
         self,
         *,
         prompt: RenderedPrompt,
@@ -141,6 +154,7 @@ class FakeModelGateway:
         tool_plan_by_target_ref: Mapping[str, Any] | None = None,
         platform_tool_plan_by_target_ref: Mapping[str, Any] | None = None,
         metadata_analysis_by_target_ref: Mapping[str, Any] | None = None,
+        sp_operation_model_by_target_ref: Mapping[str, Any] | None = None,
     ) -> None:
         self._output_by_target_ref = {
             target_ref: LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
@@ -157,6 +171,10 @@ class FakeModelGateway:
         self._metadata_analysis_by_target_ref = {
             target_ref: MetadataAnalysisOutput.model_validate(output).to_storage_dict()
             for target_ref, output in (metadata_analysis_by_target_ref or {}).items()
+        }
+        self._sp_operation_model_by_target_ref = {
+            target_ref: validate_sp_operation_model_output(output).to_storage_dict()
+            for target_ref, output in (sp_operation_model_by_target_ref or {}).items()
         }
 
     def invoke_semantic_analysis(
@@ -279,6 +297,39 @@ class FakeModelGateway:
             token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
             latency_ms=0,
             provider_request_id="fake-metadata-analysis",
+        )
+
+    def plan_sp_operation_model(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        target_ref = str(prompt.metadata.get("targetRef") or "")
+        raw_output = self._sp_operation_model_by_target_ref.get(target_ref) or (
+            _default_fake_sp_operation_model_output(
+                allowed_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+                target_ref=target_ref,
+            )
+        )
+        output = validate_sp_operation_model_output(raw_output)
+        structured_output = output.to_storage_dict()
+        return ModelInvocationRecord(
+            provider=self.provider,
+            model=profile.model,
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort=profile.reasoning_effort,
+            prompt_version=prompt.prompt_version,
+            output_schema_version=prompt.output_schema_version,
+            input_hash=prompt.input_hash,
+            prompt_hash=prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=0,
+            provider_request_id="fake-sp-operation-model",
         )
 
 
@@ -417,6 +468,79 @@ def _default_fake_metadata_analysis_output(
     }
 
 
+def _default_fake_sp_operation_model_output(
+    *,
+    allowed_refs: Any,
+    target_ref: str,
+) -> dict[str, Any]:
+    refs = [str(ref) for ref in allowed_refs if str(ref).strip()]
+    evidence_refs = refs[:1] or ["metadata.operation_model.no_fact"]
+    normalized_target_ref = target_ref or "sp.operation.review_required"
+    return {
+        "schemaVersion": "SpOperationModel.v0.1",
+        "contractTarget": "SpOperationModel",
+        "targetRef": normalized_target_ref,
+        "sourcePolicy": "sanitized_facts_only",
+        "productionReady": False,
+        "operations": [
+            {
+                "operationId": "reviewRequiredOperation",
+                "crudFlag": "REVIEW_REQUIRED",
+                "title": "Operation model review required",
+                "summary": "Fake gateway fallback operation model requires fixture evidence.",
+                "branchCondition": {
+                    "expression": "REVIEW_REQUIRED",
+                    "variables": [],
+                    "evidenceRefs": evidence_refs,
+                    "status": "REVIEW_REQUIRED",
+                },
+                "statementRefs": ["stmt.review_required"],
+                "dtoBlueprintRefs": ["OperationModelReviewRequired"],
+                "stateTransitions": [],
+                "riskMarkers": ["OPERATION_MODEL_FIXTURE_REVIEW_REQUIRED"],
+                "evidenceRefs": evidence_refs,
+                "status": "REVIEW_REQUIRED",
+            }
+        ],
+        "statementEvidence": [
+            {
+                "statementId": "stmt.review_required",
+                "operation": "VALIDATE",
+                "targetRef": normalized_target_ref,
+                "phase": "review_required",
+                "inputs": [],
+                "outputs": [],
+                "writes": [],
+                "crossDatabase": False,
+                "reviewMarkers": ["OPERATION_MODEL_FIXTURE_REVIEW_REQUIRED"],
+                "evidenceRefs": evidence_refs,
+                "status": "REVIEW_REQUIRED",
+            }
+        ],
+        "dtoBlueprints": [
+            {
+                "name": "OperationModelReviewRequired",
+                "role": "REVIEW_REQUIRED",
+                "operationIds": ["reviewRequiredOperation"],
+                "fields": [
+                    {
+                        "name": "reviewRequired",
+                        "dbType": "varchar(4000)",
+                        "source": "REVIEW_REQUIRED",
+                        "required": False,
+                        "evidenceRefs": evidence_refs,
+                    }
+                ],
+                "evidenceRefs": evidence_refs,
+                "reviewMarkers": ["OPERATION_MODEL_FIXTURE_REVIEW_REQUIRED"],
+            }
+        ],
+        "reviewMarkers": ["OPERATION_MODEL_FIXTURE_REVIEW_REQUIRED"],
+        "evidenceRefs": evidence_refs,
+        "assumptions": ["Fake gateway fallback is not a production operation model."],
+    }
+
+
 class OpenAIModelGateway:
     provider = REMOTE_PROVIDER_OPENAI
 
@@ -495,6 +619,27 @@ class OpenAIModelGateway:
             ),
             parser=MetadataAnalysisOutput.model_validate_json,
             invalid_code="OPENAI_METADATA_ANALYSIS_INVALID",
+        )
+
+    def plan_sp_operation_model(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        allowed_refs = prompt.metadata.get("allowedEvidenceRefs") or ()
+        return self._invoke_structured_output(
+            prompt=prompt,
+            profile=profile,
+            schema_name="sp_operation_model",
+            schema=sp_operation_model_output_schema(
+                allowed_evidence_refs=allowed_refs,
+            ),
+            parser=lambda output_text: parse_sp_operation_model_json(
+                output_text,
+                allowed_evidence_refs=allowed_refs,
+            ),
+            invalid_code="OPENAI_SP_OPERATION_MODEL_INVALID",
         )
 
     def _invoke_structured_output(
@@ -801,6 +946,20 @@ def _retry_root_keys(schema_name: str) -> tuple[str, ...]:
             "insightGroups",
             "dtoReadiness",
             "reviewMarkers",
+            "assumptions",
+        )
+    if schema_name == "sp_operation_model":
+        return (
+            "schemaVersion",
+            "contractTarget",
+            "targetRef",
+            "sourcePolicy",
+            "productionReady",
+            "operations",
+            "statementEvidence",
+            "dtoBlueprints",
+            "reviewMarkers",
+            "evidenceRefs",
             "assumptions",
         )
     return ("structuredOutput",)

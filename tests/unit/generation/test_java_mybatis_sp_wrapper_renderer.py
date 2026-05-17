@@ -31,6 +31,16 @@ def _golden_context() -> GenerationContext:
     return GenerationContext.from_mapping(payload)
 
 
+def _p41_operation_model_context() -> tuple[GenerationContext, dict]:
+    fixture = yaml.safe_load(
+        (ROOT / "fixtures" / "eval" / "sp_operation_model_p41_manage_bond_v1.yaml")
+        .read_text(encoding="utf-8")
+    )
+    probe = deepcopy(fixture["generation_readiness"]["current_renderer_probe"])
+    probe["request"]["operationModel"] = fixture["operation_model"]
+    return GenerationContext.from_mapping(probe), fixture["operation_model"]
+
+
 def test_java_mybatis_sp_wrapper_matches_golden_manifest_and_files() -> None:
     context = _golden_context()
     bundle = JavaMyBatisSpWrapperRenderer().render_bundle(context)
@@ -153,3 +163,69 @@ def test_template_requested_output_drift_blocks_generation() -> None:
         assert RequestedOutputType.JAVA_MYBATIS_DRAFT.value in str(exc)
     else:
         raise AssertionError("registry requestedOutputType drift should block rendering")
+
+
+def test_p41_operation_model_renders_multi_dto_java_mybatis_bundle() -> None:
+    context, operation_model = _p41_operation_model_context()
+    bundle = JavaMyBatisSpWrapperRenderer().render_bundle(context)
+
+    dto_files = [
+        file for file in bundle.files if file.artifact_type == ArtifactType.DTO_DRAFT
+    ]
+    dto_paths = {file.path for file in dto_files}
+
+    assert len(dto_files) == len(operation_model["dtoBlueprints"]) >= 10
+    assert not any(path.endswith("/ManageBondDTO.java") for path in dto_paths)
+    assert {
+        "src/main/java/com/pec/ppm/guarantee/bond/model/ManageBondSearchCriteria.java",
+        "src/main/java/com/pec/ppm/guarantee/bond/model/ManageBondSearchRow.java",
+        "src/main/java/com/pec/ppm/guarantee/bond/model/ApproveAdvanceBondCommand.java",
+        "src/main/java/com/pec/ppm/guarantee/bond/model/CreateRetentionBondBatchItem.java",
+        "src/main/java/com/pec/ppm/guarantee/bond/model/VendorBondUpdateCommand.java",
+        "src/main/java/com/pec/ppm/guarantee/bond/model/OnlineBondUpdateCommand.java",
+    }.issubset(dto_paths)
+
+    assert bundle.artifact_types.count(ArtifactType.DTO_DRAFT.value) == len(
+        operation_model["dtoBlueprints"]
+    )
+    assert bundle.artifact_types.count(ArtifactType.SERVICE_DRAFT.value) == 1
+    assert bundle.artifact_types.count(ArtifactType.MAPPER_INTERFACE.value) == 1
+    assert bundle.artifact_types.count(ArtifactType.MAPPER_XML.value) == 1
+
+    service = bundle.file_map[
+        "src/main/java/com/pec/ppm/guarantee/bond/service/ManageBondService.java"
+    ]
+    mapper = bundle.file_map[
+        "src/main/java/com/pec/ppm/guarantee/bond/mapper/ManageBondMapper.java"
+    ]
+    mapper_xml = bundle.file_map[
+        "src/main/resources/mybatis/ppm/mappers/guarantee/bond/ManageBondMapperSQL.xml"
+    ]
+
+    assert (
+        "List<ManageBondSearchRow> readBond(ManageBondSearchCriteria condition)"
+        in service
+    )
+    assert "int approveAdvanceBond(ApproveAdvanceBondCommand command)" in service
+    assert "int financeTransfer(FinanceTransferCommand request)" in service
+    assert "int createRetentionBond(CreateRetentionBondBatchItem item)" in service
+    assert "int vendorBondUpdate(VendorBondUpdateCommand command)" in mapper
+    assert "int onlineBondUpdate(OnlineBondUpdateCommand command)" in mapper
+
+    assert '<select id="readBond"' in mapper_xml
+    assert (
+        'parameterType="com.pec.ppm.guarantee.bond.model.ManageBondSearchCriteria"'
+        in mapper_xml
+    )
+    assert (
+        'resultType="com.pec.ppm.guarantee.bond.model.ManageBondSearchRow"'
+        in mapper_xml
+    )
+    assert (
+        'parameterType="com.pec.ppm.guarantee.bond.model.VendorBondUpdateCommand"'
+        in mapper_xml
+    )
+    assert (
+        'parameterType="com.pec.ppm.guarantee.bond.model.OnlineBondUpdateCommand"'
+        in mapper_xml
+    )

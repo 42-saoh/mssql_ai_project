@@ -17,6 +17,10 @@ from ai_agent_runtime.models import (
     stable_json_hash,
     text_hash,
 )
+from ai_agent_runtime.operation_model import (
+    SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
+    SP_OPERATION_PLANNER_PROMPT_VERSION,
+)
 
 SYSTEM_PROMPT = f"""You analyze MSSQL stored procedures for a draft-only migration platform.
 Return only schema-valid JSON. Treat deterministic metadata and static analysis as evidence.
@@ -66,6 +70,18 @@ constraint, documentation gap, DTO readiness, and dependency categories when sup
 {KOREAN_OUTPUT_INSTRUCTION}
 Never request or imply row data access, procedure execution, DDL/DML, deployment, secrets,
 credentials, or profile switching."""
+
+SP_OPERATION_PLANNER_SYSTEM_PROMPT = f"""You plan draft-only operation contracts for complex MSSQL
+stored procedure Java/MyBatis generation. Return only schema-valid SpOperationModel JSON.
+Every evidenceRefs array must use ids copied exactly from evidenceRefContract.allowedFactIds.
+Use statementEvidence as deterministic evidence; do not promote LLM inference to metadata fact.
+Keep productionReady false and sourcePolicy sanitized_facts_only. Preserve separate DTO blueprints
+for query criteria, result rows, commands, batch items, and called procedure request shapes. Never
+collapse all procedure inputs/results into one DTO. Mark weak business naming, result-shape
+uncertainty, cross-database writes, dynamic SQL, TVF/procedure uncertainty, and called procedure
+I/O as REVIEW_REQUIRED. Never include raw SQL snippets, row data, prompt/provider trace ids,
+procedure execution, DDL/DML apply, deployment, or secrets.
+{KOREAN_OUTPUT_INSTRUCTION}"""
 
 
 def render_semantic_analysis_prompt(
@@ -420,6 +436,83 @@ def render_metadata_analysis_prompt(
     )
 
 
+def render_sp_operation_model_prompt(
+    *,
+    target_ref: str,
+    statement_evidence: list[dict[str, Any]],
+    allowed_evidence_refs: list[str] | tuple[str, ...] | None = None,
+    stage: str = "operation_model_planning",
+    repair_context: dict[str, Any] | None = None,
+) -> RenderedPrompt:
+    allowed_refs = sorted(
+        {str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()}
+    )
+    input_payload = {
+        "targetRef": target_ref,
+        "stage": stage,
+        "statementEvidence": statement_evidence,
+        "task": (
+            "Create a SpOperationModel.v0.1 object with branch-level operations, "
+            "statementRefs, dtoBlueprintRefs, and multi-DTO blueprints. Keep QUERY and "
+            "RESULT DTOs separate from COMMAND, BATCH_ITEM, and CALL_REQUEST DTOs."
+        ),
+        "dtoBlueprintPolicy": {
+            "mustNotCollapseToSingleDto": True,
+            "expectedRoles": [
+                "QUERY",
+                "RESULT",
+                "COMMAND",
+                "BATCH_ITEM",
+                "CALL_REQUEST",
+                "CALL_RESULT",
+                "REVIEW_REQUIRED",
+            ],
+            "namingRule": (
+                "Name DTOs by business operation and role, for example SearchCriteria, "
+                "SearchRow, ApproveCommand, CreateBatchItem, or FinanceCallRequest. "
+                "If business names are inferred from branch flags only, keep a "
+                "REVIEW_REQUIRED marker."
+            ),
+        },
+        "evidenceRefContract": {
+            "allowedFactIds": allowed_refs,
+            "factCatalog": _operation_fact_catalog(statement_evidence, allowed_refs),
+            "forbiddenEvidenceRefs": [
+                "prompt.inputHash",
+                "prompt.promptHash",
+                "modelInvocation.outputHash",
+                "metadata.snapshot",
+                "static.analysis",
+            ],
+            "rule": (
+                "Every operation, branchCondition, statement, DTO, and DTO field "
+                "evidenceRefs array must contain one or more ids copied exactly from "
+                "allowedFactIds. If no allowed fact supports a claim, mark the item "
+                "REVIEW_REQUIRED or omit it."
+            ),
+        },
+        "requiredReviewMarkers": _operation_required_review_markers(statement_evidence),
+    }
+    if repair_context is not None:
+        input_payload["repairContext"] = repair_context
+    user_prompt = json.dumps(input_payload, ensure_ascii=False, sort_keys=True, default=str)
+    prompt_hash = text_hash(f"{SP_OPERATION_PLANNER_SYSTEM_PROMPT}\n{user_prompt}")
+    return RenderedPrompt(
+        prompt_version=SP_OPERATION_PLANNER_PROMPT_VERSION,
+        output_schema_version=SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
+        system_prompt=SP_OPERATION_PLANNER_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        input_hash=stable_json_hash(input_payload),
+        prompt_hash=prompt_hash,
+        metadata={
+            "targetRef": target_ref,
+            "stage": stage,
+            "allowedEvidenceRefs": allowed_refs,
+            "statementEvidenceCount": len(statement_evidence),
+        },
+    )
+
+
 def _metadata_without_raw_definition(metadata: dict[str, Any]) -> dict[str, Any]:
     sanitized = json.loads(json.dumps(metadata, ensure_ascii=False, default=str))
     return _remove_raw_metadata_fields(sanitized)
@@ -456,6 +549,82 @@ def _remove_raw_metadata_fields(value: Any) -> Any:
     if isinstance(value, list):
         return [_remove_raw_metadata_fields(item) for item in value]
     return value
+
+
+def _operation_fact_catalog(
+    statement_evidence: list[dict[str, Any]],
+    allowed_refs: list[str],
+) -> list[dict[str, str]]:
+    catalog: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for statement in statement_evidence:
+        if not isinstance(statement, dict):
+            continue
+        refs = statement.get("evidenceRefs")
+        if not isinstance(refs, list):
+            continue
+        summary = (
+            f"{statement.get('operation', 'STATEMENT')} {statement.get('targetRef', '')} "
+            f"phase={statement.get('phase', '')}"
+        )
+        for ref in refs:
+            ref_text = str(ref)
+            if ref_text not in allowed_refs or ref_text in seen:
+                continue
+            seen.add(ref_text)
+            catalog.append(
+                {
+                    "id": ref_text,
+                    "type": "STATEMENT_EVIDENCE",
+                    "summary": summary.strip(),
+                }
+            )
+    for ref in allowed_refs:
+        if ref not in seen:
+            catalog.append(
+                {
+                    "id": ref,
+                    "type": "DETERMINISTIC_EVIDENCE",
+                    "summary": "Additional deterministic operation-model evidence.",
+                }
+            )
+    return catalog
+
+
+def _operation_required_review_markers(
+    statement_evidence: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    markers: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for statement in statement_evidence:
+        if not isinstance(statement, dict):
+            continue
+        refs = [
+            str(ref)
+            for ref in statement.get("evidenceRefs", [])
+            if str(ref).strip()
+        ]
+        for marker in statement.get("reviewMarkers", []) or []:
+            marker_code = str(marker)
+            if not marker_code or marker_code in seen:
+                continue
+            seen.add(marker_code)
+            markers.append(
+                {
+                    "code": marker_code,
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": refs[:1],
+                }
+            )
+    if "LLM_BUSINESS_NAMING_REVIEW_REQUIRED" not in seen:
+        markers.append(
+            {
+                "code": "LLM_BUSINESS_NAMING_REVIEW_REQUIRED",
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": [],
+            }
+        )
+    return markers
 
 
 def _stage_task(stage: str) -> str:

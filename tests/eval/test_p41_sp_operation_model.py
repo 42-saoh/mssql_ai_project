@@ -115,3 +115,33 @@ def test_p41_current_java_mybatis_renderer_gap_is_visible() -> None:
     assert gap["single_dto_collapse"] is True
     assert gap["marker"] == "SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED"
     assert gap["next_slice_required"] == "P41B"
+
+
+def test_p41_operation_model_renderer_keeps_multi_dto_bundle() -> None:
+    fixture = _yaml(FIXTURE)
+    probe = dict(fixture["generation_readiness"]["current_renderer_probe"])
+    probe["request"] = dict(probe["request"])
+    probe["request"]["operationModel"] = fixture["operation_model"]
+    context = GenerationContext.from_mapping(probe)
+
+    bundle = JavaMyBatisSpWrapperRenderer().render_bundle(context)
+    dto_files = [file for file in bundle.files if file.artifact_type == ArtifactType.DTO_DRAFT]
+    service_files = [
+        file for file in bundle.files if file.artifact_type == ArtifactType.SERVICE_DRAFT
+    ]
+    mapper_files = [
+        file for file in bundle.files if file.artifact_type == ArtifactType.MAPPER_INTERFACE
+    ]
+    mapper_xml_files = [
+        file for file in bundle.files if file.artifact_type == ArtifactType.MAPPER_XML
+    ]
+
+    expected = fixture["generation_readiness"]["operation_model_renderer_behavior"]
+    assert expected["observed_behavior"] == "multi_file_dto_draft_bundle"
+    assert len(dto_files) == expected["expected_dto_blueprint_count"]
+    assert len(service_files) == expected["service_draft_files"]
+    assert len(mapper_files) == expected["mapper_interface_files"]
+    assert len(mapper_xml_files) == expected["mapper_xml_files"]
+    assert not any(file.path.endswith("/ManageBondDTO.java") for file in dto_files)
+    assert expected["public_artifact_types_unchanged"] is True
+    assert expected["productionReady"] is False

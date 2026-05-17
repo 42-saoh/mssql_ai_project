@@ -1,7 +1,7 @@
 contract_id: p41_sp_operation_model@0.1.0
 phase: P41
 title: SP operation model and multi-DTO blueprint renewal contract
-status: p41a_groundwork_ready
+status: p41f_quality_gate_ready
 production_ready: false
 
 depends_on:
@@ -11,10 +11,11 @@ depends_on:
   - template:java_mybatis_sp_wrapper@0.3.0
 
 objective: >
-  Define the first P41 contract slice for separating stored-procedure business
-  operation analysis from Java/MyBatis generation. P41A proves that a complex
-  guide such as PCO_GU_ManageBond_PRC requires branch-level operation contracts
-  and multiple DTO blueprints rather than one merged DTO.
+  Define the P41 contract for separating stored-procedure business operation
+  analysis from Java/MyBatis generation. P41 proves that a complex guide such as
+  PCO_GU_ManageBond_PRC requires branch-level operation contracts and multiple
+  DTO blueprints rather than one merged DTO, then wires that model into draft
+  Java/MyBatis generation.
 
 execution_shape:
   mode: sequential_only
@@ -132,6 +133,19 @@ generator_gap_expectation:
   expected_gap_marker: SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED
   acceptable_for_p41a: true
   required_next_slice: P41B
+  resolved_when_operation_model_supplied_by: P41E
+
+p41e_generation_contract:
+  renderer: JavaMyBatisSpWrapperRenderer
+  input_contract: request.operationModel
+  operation_model_schema: SpOperationModel.v0.1
+  dto_draft_internal_shape: multi_file_bundle
+  service_draft_shape: single_file
+  mapper_interface_shape: single_file
+  mapper_xml_shape: single_file
+  legacy_without_operation_model: single_dto_file
+  production_ready: false
+  no_new_public_artifact_type: true
 
 mcp_tooling_design:
   p41a_adds_live_tool: false

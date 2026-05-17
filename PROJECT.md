@@ -47,19 +47,21 @@ row inputs. P40 adds no new DDL and keeps `production_ready: false`.
 
 ## P41 SP Operation Model Renewal Groundwork
 
-P41 starts the renewal of SP analysis and Java/MyBatis generation for complex
-stored procedures such as `PPM.dbo.PCO_GU_ManageBond_PRC`. P41A adds an internal
-`SpOperationModel.v0.1` contract that separates branch-level operation analysis,
-sanitized statement evidence, and DTO blueprints before source generation.
+P41 renews SP analysis and Java/MyBatis generation for complex stored procedures
+such as `PPM.dbo.PCO_GU_ManageBond_PRC`. P41A-F now connect an internal
+`SpOperationModel.v0.1` contract, deterministic sanitized statement evidence,
+strict structured planning, and Java/MyBatis generation that can keep branch-level
+DTO blueprints separate before source drafting.
 
-The current single-DTO Java/MyBatis renderer remains supported as draft behavior,
-but P41A records it as insufficient for complex SPs through fixture-first evals.
-Public output groups and artifact types remain unchanged: `JAVA_MYBATIS_DRAFT`
-still expands to `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
-`MAPPER_XML`. The new DTO behavior is an internal multi-file `DTO_DRAFT` bundle
-target for later P41 slices, not a new public artifact type. P41 remains
-`production_ready: false`, with no UI change, row-data access, procedure
-execution, automatic DDL/DML apply, or generated-source deployment.
+The legacy single-DTO Java/MyBatis renderer remains supported when no
+`operationModel` is supplied, and that path is still recorded as insufficient for
+complex SPs through fixture-first evals. When `operationModel.dtoBlueprints` is
+present, `JAVA_MYBATIS_DRAFT` keeps the same public artifact types while
+rendering `DTO_DRAFT` as an internal multi-file bundle; `SERVICE_DRAFT`,
+`MAPPER_INTERFACE`, and `MAPPER_XML` remain single files. P41 remains
+`production_ready: false`, with no UI change, public API expansion, DB schema
+change, live MCP public tool expansion, row-data access, procedure execution,
+automatic DDL/DML apply, or generated-source deployment.
 
 ## 한 줄 정의
 

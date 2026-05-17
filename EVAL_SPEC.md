@@ -50,7 +50,7 @@ P40 validates the natural-language and multi-turn layer on top of P38:
 
 ## P41 SP Operation Model Renewal Eval Contract
 
-P41A validates the first operation-model renewal slice for complex SP code generation:
+P41 validates the operation-model renewal path for complex SP code generation:
 
 - `SpOperationModel.v0.1` exists as an internal planning contract separate from
   `CanonicalAnalysisModel.v2`.
@@ -58,10 +58,14 @@ P41A validates the first operation-model renewal slice for complex SP code gener
   `PCO_GU_ManageBond_PRC` with `CRUDFlag` branches `R/A/C/U/D/VENDOR_U/ONLINE_U`.
 - The fixture contains sanitized statement evidence, branch conditions, and at least
   nine DTO blueprints so the desired output cannot collapse into one DTO.
-- Current `JavaMyBatisSpWrapperRenderer` single-DTO behavior is accepted only as a
-  visible gap marker: `SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED`.
-- Public artifact types remain unchanged; `DTO_DRAFT` is the future multi-file bundle
-  carrier and no new public artifact type is introduced.
+- `JavaMyBatisSpWrapperRenderer` single-DTO behavior is accepted only for legacy
+  requests that do not include `operationModel`; the fixture keeps this visible as
+  `SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED`.
+- When `operationModel.dtoBlueprints` is supplied, `JavaMyBatisSpWrapperRenderer`
+  must render a multi-file `DTO_DRAFT` bundle and keep Service, Mapper interface,
+  and Mapper XML as single draft files wired to branch/use-case DTOs.
+- Public artifact types remain unchanged; `DTO_DRAFT` is the internal multi-file
+  bundle carrier for operation-model generation and no new public artifact type is introduced.
 - Cross-DB write, called procedure I/O, and uncertain TVF/procedure kind remain
   `REVIEW_REQUIRED`.
 - raw SP definitions, raw prompts, raw provider responses, row data, secrets,
@@ -69,6 +73,7 @@ P41A validates the first operation-model renewal slice for complex SP code gener
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"` 통과
+- `make test PYTEST_ARGS="tests/unit/generation tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/contract/test_p41_sp_operation_model_prompt_assets.py"` 통과
 - `production_ready: false` 유지
 - 후속 P41B~P41F 순차 작업이 manifest 와 prompt pack 에 연결됨
 

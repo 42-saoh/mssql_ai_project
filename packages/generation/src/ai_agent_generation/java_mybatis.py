@@ -5,7 +5,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from ai_agent_domain import ArtifactStatus, ArtifactType, RequestedOutputType
+from ai_agent_domain import (
+    ArtifactStatus,
+    ArtifactType,
+    RequestedOutputType,
+    SpDtoBlueprintRole,
+    SpOperationModel,
+    SpStatementOperation,
+)
 
 from ai_agent_generation.models import (
     ColumnSpec,
@@ -49,6 +56,38 @@ class _MapperMethodSpec:
     method_name: str
     evidence_refs: tuple[str, ...]
     status: str = "REVIEW_REQUIRED"
+
+
+@dataclass(frozen=True)
+class _OperationFieldSpec:
+    name: str
+    db_type: str
+    source: str
+    required: bool
+    evidence_refs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _OperationDtoSpec:
+    name: str
+    role: str
+    operation_ids: tuple[str, ...]
+    fields: tuple[_OperationFieldSpec, ...]
+    evidence_refs: tuple[str, ...]
+    review_markers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _OperationMethodSpec:
+    method_name: str
+    operation_id: str
+    operation: str
+    target_ref: str
+    parameter_dto: str
+    parameter_name: str
+    result_dto: str | None
+    evidence_refs: tuple[str, ...]
+    review_markers: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1063,6 +1102,10 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
                 "spRebuild, or evidenceReconstructed."
             )
         names = self.names(context)
+        operation_model = self._operation_model(context)
+        if operation_model is not None:
+            return self._render_operation_model_bundle(context, names, operation_model)
+
         files = (
             DraftFile(
                 path=names.source_path("model", names.dto_class_name),
@@ -1104,6 +1147,550 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
             manifest=manifest,
             files=files,
         )
+
+    def _operation_model(self, context: GenerationContext) -> SpOperationModel | None:
+        payload = context.operation_model
+        if not payload:
+            return None
+        return SpOperationModel.model_validate(payload)
+
+    def _render_operation_model_bundle(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+        operation_model: SpOperationModel,
+    ) -> RenderedBundle:
+        dto_specs = self._operation_dto_specs(operation_model)
+        method_specs = self._operation_method_specs(operation_model, dto_specs)
+        dto_files = tuple(
+            DraftFile(
+                path=names.source_path("model", spec.name),
+                content=self._render_operation_dto(context, names, spec),
+                artifact_type=ArtifactType.DTO_DRAFT,
+            )
+            for spec in dto_specs
+        )
+        files = (
+            *dto_files,
+            DraftFile(
+                path=names.source_path("service", names.service_class_name),
+                content=self._render_operation_service(context, names, method_specs),
+                artifact_type=ArtifactType.SERVICE_DRAFT,
+            ),
+            DraftFile(
+                path=names.source_path("mapper", names.mapper_class_name),
+                content=self._render_operation_mapper(context, names, method_specs),
+                artifact_type=ArtifactType.MAPPER_INTERFACE,
+            ),
+            DraftFile(
+                path=names.mapper_xml_path,
+                content=self._render_operation_mapper_xml(context, names, method_specs),
+                artifact_type=ArtifactType.MAPPER_XML,
+            ),
+        )
+        manifest = self._render_bundle_manifest(
+            context,
+            files,
+            names,
+            code_draft_summary=(
+                "operationModel.dtoBlueprints 기준으로 DTO_DRAFT를 multi-file bundle로 "
+                "생성하고 Service / Mapper / Mapper XML은 단일 draft 파일로 생성했다."
+            ),
+        )
+        return RenderedBundle(
+            requested_output_type=self.requested_output_type,
+            manifest=manifest,
+            files=files,
+        )
+
+    def _operation_dto_specs(
+        self,
+        operation_model: SpOperationModel,
+    ) -> tuple[_OperationDtoSpec, ...]:
+        specs: list[_OperationDtoSpec] = []
+        for dto in operation_model.dto_blueprints:
+            fields = tuple(
+                _OperationFieldSpec(
+                    name=field.name,
+                    db_type=field.db_type,
+                    source=field.source,
+                    required=field.required,
+                    evidence_refs=tuple(field.evidence_refs),
+                )
+                for field in dto.fields
+            )
+            specs.append(
+                _OperationDtoSpec(
+                    name=dto.name,
+                    role=self._enum_value(dto.role),
+                    operation_ids=tuple(dto.operation_ids),
+                    fields=fields,
+                    evidence_refs=tuple(dto.evidence_refs),
+                    review_markers=tuple(dto.review_markers),
+                )
+            )
+        return tuple(specs)
+
+    def _operation_method_specs(
+        self,
+        operation_model: SpOperationModel,
+        dto_specs: tuple[_OperationDtoSpec, ...],
+    ) -> tuple[_OperationMethodSpec, ...]:
+        dto_by_name = {dto.name: dto for dto in dto_specs}
+        statement_by_id = {
+            statement.statement_id: statement
+            for statement in operation_model.statement_evidence
+        }
+        method_specs: list[_OperationMethodSpec] = []
+        seen_method_names: set[str] = set()
+
+        for operation in operation_model.operations:
+            referenced_dtos = [
+                dto_by_name[name]
+                for name in operation.dto_blueprint_refs
+                if name in dto_by_name
+            ]
+            statements = [
+                statement_by_id[statement_id]
+                for statement_id in operation.statement_refs
+                if statement_id in statement_by_id
+            ]
+            result_dto = next(
+                (dto for dto in referenced_dtos if dto.role == SpDtoBlueprintRole.RESULT.value),
+                None,
+            )
+            query_dto = next(
+                (dto for dto in referenced_dtos if dto.role == SpDtoBlueprintRole.QUERY.value),
+                None,
+            )
+            if query_dto is not None and result_dto is not None:
+                statement = self._statement_for_dto(query_dto, statements)
+                method_specs.append(
+                    self._operation_method_spec(
+                        method_name=self._unique_method_name(
+                            operation.operation_id,
+                            seen_method_names,
+                        ),
+                        operation_id=operation.operation_id,
+                        dto=query_dto,
+                        statement=statement,
+                        fallback_target_ref=operation_model.target_ref,
+                        result_dto=result_dto.name,
+                        operation_review_markers=tuple(operation.risk_markers),
+                    )
+                )
+
+            for dto in referenced_dtos:
+                if dto.role not in {
+                    SpDtoBlueprintRole.COMMAND.value,
+                    SpDtoBlueprintRole.BATCH_ITEM.value,
+                    SpDtoBlueprintRole.CALL_REQUEST.value,
+                }:
+                    continue
+                statement = self._statement_for_dto(dto, statements)
+                method_specs.append(
+                    self._operation_method_spec(
+                        method_name=self._unique_method_name(
+                            self._method_name_from_dto(dto.name),
+                            seen_method_names,
+                        ),
+                        operation_id=operation.operation_id,
+                        dto=dto,
+                        statement=statement,
+                        fallback_target_ref=operation_model.target_ref,
+                        result_dto=None,
+                        operation_review_markers=tuple(operation.risk_markers),
+                    )
+                )
+
+        return tuple(method_specs)
+
+    def _operation_method_spec(
+        self,
+        *,
+        method_name: str,
+        operation_id: str,
+        dto: _OperationDtoSpec,
+        statement: Any | None,
+        fallback_target_ref: str,
+        result_dto: str | None,
+        operation_review_markers: tuple[str, ...],
+    ) -> _OperationMethodSpec:
+        evidence_refs = list(dto.evidence_refs)
+        review_markers = list(dto.review_markers)
+        operation = "REVIEW_REQUIRED"
+        target_ref = fallback_target_ref
+        if statement is not None:
+            operation = self._enum_value(statement.operation)
+            target_ref = statement.target_ref
+            evidence_refs.extend(statement.evidence_refs)
+            review_markers.extend(statement.review_markers)
+
+        return _OperationMethodSpec(
+            method_name=method_name,
+            operation_id=operation_id,
+            operation=operation,
+            target_ref=target_ref,
+            parameter_dto=dto.name,
+            parameter_name=self._parameter_name_for_role(dto.role),
+            result_dto=result_dto,
+            evidence_refs=self._dedupe(evidence_refs) or ("REVIEW_REQUIRED",),
+            review_markers=(
+                self._dedupe([*review_markers, *operation_review_markers])
+                or ("REVIEW_REQUIRED",)
+            ),
+        )
+
+    def _statement_for_dto(self, dto: _OperationDtoSpec, statements: list[Any]) -> Any | None:
+        if not statements:
+            return None
+        preferred_operations = self._preferred_statement_operations(dto.role)
+        dto_tokens = self._dto_name_tokens(dto.name)
+
+        def score(statement: Any) -> tuple[int, int, int]:
+            operation = self._enum_value(statement.operation)
+            haystack = " ".join(
+                [
+                    statement.statement_id,
+                    statement.phase,
+                    statement.target_ref,
+                ]
+            ).lower()
+            operation_score = 10 if operation in preferred_operations else 0
+            token_score = sum(1 for token in dto_tokens if token and token in haystack)
+            compute_penalty = -5 if operation == SpStatementOperation.COMPUTE.value else 0
+            return (operation_score, token_score, compute_penalty)
+
+        return max(statements, key=score)
+
+    def _preferred_statement_operations(self, role: str) -> set[str]:
+        if role in {SpDtoBlueprintRole.QUERY.value, SpDtoBlueprintRole.RESULT.value}:
+            return {SpStatementOperation.SELECT.value}
+        if role == SpDtoBlueprintRole.CALL_REQUEST.value:
+            return {SpStatementOperation.EXECUTE.value}
+        if role == SpDtoBlueprintRole.BATCH_ITEM.value:
+            return {
+                SpStatementOperation.INSERT.value,
+                SpStatementOperation.UPDATE.value,
+            }
+        return {
+            SpStatementOperation.INSERT.value,
+            SpStatementOperation.UPDATE.value,
+            SpStatementOperation.DELETE.value,
+            SpStatementOperation.EXECUTE.value,
+        }
+
+    def _render_operation_dto(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+        spec: _OperationDtoSpec,
+    ) -> str:
+        java_types = {names.java_type_for_db_type(field.db_type) for field in spec.fields}
+        imports = java_imports_for_types(java_types)
+        label = korean_entity_label(context.description, context.entity_name)
+        evidence = ", ".join(spec.evidence_refs) or "REVIEW_REQUIRED"
+        review_markers = ", ".join(spec.review_markers) or "REVIEW_REQUIRED"
+        lines = [f"package {names.model_package};", ""]
+        for import_name in imports:
+            lines.append(f"import {import_name};")
+        if imports:
+            lines.append("")
+        lines.extend(
+            [
+                "/**",
+                f" * {label} {spec.role} DTO draft for operationModel.",
+                f" * operations: {', '.join(spec.operation_ids) or 'REVIEW_REQUIRED'}",
+                f" * evidence: {evidence}",
+                f" * REVIEW_REQUIRED: {review_markers}",
+                " */",
+                f"public class {spec.name} {{",
+                "",
+            ]
+        )
+        for index, field in enumerate(spec.fields):
+            if index:
+                lines.append("")
+            required = "required" if field.required else "optional"
+            field_evidence = ", ".join(field.evidence_refs) or "REVIEW_REQUIRED"
+            java_type = names.java_type_for_db_type(field.db_type)
+            lines.append(
+                f"    /** {required}; source={field.source}; evidence={field_evidence}; REVIEW_REQUIRED */"
+            )
+            lines.append(f"    private {java_type} {field.name};")
+
+        for field in spec.fields:
+            method_suffix = upper_first(field.name)
+            java_type = names.java_type_for_db_type(field.db_type)
+            lines.extend(
+                [
+                    "",
+                    f"    public {java_type} get{method_suffix}() {{",
+                    f"        return {field.name};",
+                    "    }",
+                    "",
+                    f"    public void set{method_suffix}({java_type} {field.name}) {{",
+                    f"        this.{field.name} = {field.name};",
+                    "    }",
+                ]
+            )
+        lines.append("}")
+        return ensure_trailing_newline("\n".join(lines))
+
+    def _render_operation_service(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+        method_specs: tuple[_OperationMethodSpec, ...],
+    ) -> str:
+        label = korean_entity_label(context.description, context.entity_name)
+        evidence_objects = ", ".join(
+            source.name for source in context.evidence_sources if source.name
+        ) or "REVIEW_REQUIRED"
+        lines = [f"package {names.service_package};", ""]
+        if any(method.result_dto for method in method_specs):
+            lines.extend(["import java.util.List;", ""])
+        lines.append(f"import {names.mapper_package}.{names.mapper_class_name};")
+        for dto_name in self._used_dto_names(method_specs):
+            lines.append(f"import {names.model_package}.{dto_name};")
+        lines.extend(
+            [
+                "",
+                "/**",
+                f" * {label} service draft generated from SpOperationModel.",
+                f" * evidence objects: {evidence_objects}",
+                " * REVIEW_REQUIRED: transaction boundary, branch semantics, and exception policy.",
+                " */",
+                f"public class {names.service_class_name} {{",
+                "",
+                f"    private final {names.mapper_class_name} mapper;",
+                "",
+                f"    public {names.service_class_name}({names.mapper_class_name} mapper) {{",
+                "        this.mapper = mapper;",
+                "    }",
+            ]
+        )
+        for method in method_specs:
+            return_type = (
+                f"List<{method.result_dto}>" if method.result_dto is not None else "int"
+            )
+            evidence = ", ".join(method.evidence_refs) or "REVIEW_REQUIRED"
+            review = ", ".join(method.review_markers) or "REVIEW_REQUIRED"
+            lines.extend(
+                [
+                    "",
+                    "    /**",
+                    f"     * {method.operation_id} / {method.operation} draft for `{method.target_ref}`.",
+                    f"     * evidence: {evidence}",
+                    f"     * REVIEW_REQUIRED: {review}",
+                    "     */",
+                    (
+                        f"    public {return_type} {method.method_name}"
+                        f"({method.parameter_dto} {method.parameter_name}) {{"
+                    ),
+                    "        // REVIEW_REQUIRED: map SP branch semantics before production use.",
+                    f"        return mapper.{method.method_name}({method.parameter_name});",
+                    "    }",
+                ]
+            )
+        lines.append("}")
+        return ensure_trailing_newline("\n".join(lines))
+
+    def _render_operation_mapper(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+        method_specs: tuple[_OperationMethodSpec, ...],
+    ) -> str:
+        label = korean_entity_label(context.description, context.entity_name)
+        evidence_objects = ", ".join(
+            source.name for source in context.evidence_sources if source.name
+        ) or "REVIEW_REQUIRED"
+        lines = [f"package {names.mapper_package};", ""]
+        if any(method.result_dto for method in method_specs):
+            lines.extend(["import java.util.List;", ""])
+        for dto_name in self._used_dto_names(method_specs):
+            lines.append(f"import {names.model_package}.{dto_name};")
+        lines.extend(
+            [
+                "",
+                "/**",
+                f" * {label} mapper draft generated from SpOperationModel.",
+                f" * evidence objects: {evidence_objects}",
+                " * REVIEW_REQUIRED: Mapper XML SQL clauses and binding policy.",
+                " */",
+                f"public interface {names.mapper_class_name} {{",
+            ]
+        )
+        for method in method_specs:
+            return_type = (
+                f"List<{method.result_dto}>" if method.result_dto is not None else "int"
+            )
+            evidence = ", ".join(method.evidence_refs) or "REVIEW_REQUIRED"
+            review = ", ".join(method.review_markers) or "REVIEW_REQUIRED"
+            lines.extend(
+                [
+                    "",
+                    "    /**",
+                    f"     * {method.operation_id} / {method.operation} draft for `{method.target_ref}`.",
+                    f"     * evidence: {evidence}",
+                    f"     * REVIEW_REQUIRED: {review}",
+                    "     */",
+                    (
+                        f"    {return_type} {method.method_name}"
+                        f"({method.parameter_dto} {method.parameter_name});"
+                    ),
+                ]
+            )
+        lines.append("}")
+        return ensure_trailing_newline("\n".join(lines))
+
+    def _render_operation_mapper_xml(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+        method_specs: tuple[_OperationMethodSpec, ...],
+    ) -> str:
+        evidence_objects = ", ".join(
+            source.name for source in context.evidence_sources if source.name
+        ) or "REVIEW_REQUIRED"
+        statement_lines: list[str] = []
+        for method in method_specs:
+            statement_lines.extend(self._operation_mapper_xml_statement(method, names))
+            statement_lines.append("")
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            "<!DOCTYPE mapper",
+            '  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"',
+            '  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">',
+            f'<mapper namespace="{names.mapper_namespace}">',
+            "",
+            (
+                f"  <!-- evidence objects: {evidence_objects}; "
+                "REVIEW_REQUIRED: operationModel SQL skeleton only. -->"
+            ),
+            "",
+            *statement_lines,
+            "</mapper>",
+        ]
+        return ensure_trailing_newline("\n".join(lines))
+
+    def _operation_mapper_xml_statement(
+        self,
+        method: _OperationMethodSpec,
+        names: JavaMyBatisNames,
+    ) -> list[str]:
+        evidence = ", ".join(method.evidence_refs) or "REVIEW_REQUIRED"
+        review = ", ".join(method.review_markers) or "REVIEW_REQUIRED"
+        parameter_type = f"{names.model_package}.{method.parameter_dto}"
+        if method.result_dto is not None:
+            result_type = f"{names.model_package}.{method.result_dto}"
+            return [
+                (
+                    f"  <!-- operationId: {method.operation_id}; evidence: {evidence}; "
+                    f"REVIEW_REQUIRED: {review} -->"
+                ),
+                f'  <select id="{method.method_name}"',
+                f'          parameterType="{parameter_type}"',
+                f'          resultType="{result_type}">',
+                f"    {self._sql_skeleton(method.operation, method.target_ref)}",
+                "  </select>",
+            ]
+        tag = (
+            method.operation.lower()
+            if method.operation in {"INSERT", "UPDATE", "DELETE"}
+            else "update"
+        )
+        return [
+            (
+                f"  <!-- operationId: {method.operation_id}; evidence: {evidence}; "
+                f"REVIEW_REQUIRED: {review} -->"
+            ),
+            f'  <{tag} id="{method.method_name}" parameterType="{parameter_type}">',
+            f"    {self._sql_skeleton(method.operation, method.target_ref)}",
+            f"  </{tag}>",
+        ]
+
+    def _used_dto_names(
+        self,
+        method_specs: tuple[_OperationMethodSpec, ...],
+    ) -> tuple[str, ...]:
+        names: list[str] = []
+        for method in method_specs:
+            names.append(method.parameter_dto)
+            if method.result_dto is not None:
+                names.append(method.result_dto)
+        return self._dedupe(names)
+
+    def _method_name_from_dto(self, dto_name: str) -> str:
+        stem = dto_name
+        for suffix in (
+            "CallRequest",
+            "BatchItem",
+            "Command",
+            "Criteria",
+            "Request",
+            "Row",
+        ):
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        return stem[:1].lower() + stem[1:] if stem else "reviewRequired"
+
+    def _parameter_name_for_role(self, role: str) -> str:
+        if role == SpDtoBlueprintRole.QUERY.value:
+            return "condition"
+        if role == SpDtoBlueprintRole.BATCH_ITEM.value:
+            return "item"
+        if role == SpDtoBlueprintRole.CALL_REQUEST.value:
+            return "request"
+        return "command"
+
+    def _unique_method_name(self, method_name: str, seen: set[str]) -> str:
+        if method_name not in seen:
+            seen.add(method_name)
+            return method_name
+        index = 2
+        while f"{method_name}{index}" in seen:
+            index += 1
+        unique = f"{method_name}{index}"
+        seen.add(unique)
+        return unique
+
+    def _dto_name_tokens(self, dto_name: str) -> tuple[str, ...]:
+        tokens: list[str] = []
+        current = ""
+        for char in dto_name:
+            if char.isupper() and current:
+                tokens.append(current.lower())
+                current = char
+            else:
+                current += char
+        if current:
+            tokens.append(current.lower())
+        ignored = {
+            "bond",
+            "command",
+            "criteria",
+            "row",
+            "batch",
+            "item",
+            "request",
+        }
+        return tuple(token for token in tokens if token not in ignored)
+
+    def _enum_value(self, value: Any) -> str:
+        return str(getattr(value, "value", value))
+
+    def _dedupe(self, values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for value in values:
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            deduped.append(value)
+        return tuple(deduped)
 
     def _render_bundle_manifest(
         self,

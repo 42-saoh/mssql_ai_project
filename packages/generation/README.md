@@ -21,6 +21,13 @@ renderer accepts `spWrapper`, `spRebuild`, and `evidenceReconstructed`; producti
 the evidence reconstruction path. Generated code is draft-only, includes `REVIEW_REQUIRED`
 markers, and must not be auto-applied or deployed.
 
+P41 adds an operation-model generation path without changing public artifact types. When a
+request includes `operationModel` (`SpOperationModel.v0.1`), `JavaMyBatisSpWrapperRenderer`
+renders one `DTO_DRAFT` file per DTO blueprint and still emits exactly one `SERVICE_DRAFT`,
+one `MAPPER_INTERFACE`, and one `MAPPER_XML`. When no `operationModel` is supplied, the
+legacy single DTO draft behavior remains for backward compatibility and is treated as a
+known gap for complex stored procedures.
+
 Retired outputs are no longer public generation targets:
 
 - `DTO_MODEL_DRAFT`

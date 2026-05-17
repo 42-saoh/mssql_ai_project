@@ -242,6 +242,11 @@ class GenerationContext:
         return tuple(str(item) for item in self.value("resultShape", []) or [])
 
     @property
+    def operation_model(self) -> dict[str, Any]:
+        value = self.value("operationModel", self.value("operation_model", {})) or {}
+        return dict(value) if isinstance(value, Mapping) else {}
+
+    @property
     def pk_columns(self) -> tuple[str, ...]:
         return tuple(str(item) for item in self.value("pkColumns", []) or [])
 

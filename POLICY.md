@@ -22,12 +22,18 @@
 - `SpOperationModel.v0.1` is an internal draft planning contract, not production-ready conversion evidence.
 - P41 operation fixtures may store sanitized branch, statement, target, field-candidate, evidence-ref,
   and DTO-blueprint facts only.
+- Deterministic statement evidence and strict structured planner output may feed Java/MyBatis draft
+  generation, but LLM-inferred operation/DTO semantics must not be promoted to metadata facts.
+- `DTO_DRAFT` may be represented internally as a multi-file bundle when an `operationModel` is
+  supplied. This is not a new public artifact type; `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+  `MAPPER_XML` remain single-file draft artifacts.
 - User-provided guide files may be used as quality references, but raw SP definitions, raw guide body
   copies, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets must not
   be persisted in repo fixtures or platform storage.
 - Cross-database writes, uncertain TVF/procedure kind, called procedure I/O, and branch-specific
   result-shape uncertainty must remain `REVIEW_REQUIRED`.
-- P41A does not authorize UI changes, public artifact type expansion, live MCP tool expansion,
+- P41 does not authorize UI changes, public artifact type expansion, public API expansion, DB schema
+  changes, live MCP public tool expansion,
   procedure execution, row-data access, automatic DDL/DML apply, or generated-source deployment.
 
 ## P35 Source Context Policy

@@ -1,7 +1,7 @@
 fixture_suite_id: sp_operation_model_p41_manage_bond_v1
 contract_ref: p41_sp_operation_model@0.1.0
 phase: P41A
-status: authored_p41a_groundwork
+status: p41f_quality_gate_ready
 production_ready: false
 purpose: >
   P41A fixture for PCO_GU_ManageBond_PRC. The fixture captures sanitized
@@ -590,11 +590,23 @@ operation_model:
 generation_readiness:
   current_generator_gap:
     current_renderer: JavaMyBatisSpWrapperRenderer
-    observed_behavior: single_dto_file
-    expected_dto_blueprint_count: 10
+    observed_behavior: single_dto_file_without_operation_model
+    expected_dto_blueprint_count: 11
     single_dto_collapse: true
     marker: SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED
     next_slice_required: P41B
+    resolved_when_operation_model_supplied_by: P41E
+  operation_model_renderer_behavior:
+    current_renderer: JavaMyBatisSpWrapperRenderer
+    introduced_by: P41E
+    input_contract: request.operationModel
+    observed_behavior: multi_file_dto_draft_bundle
+    expected_dto_blueprint_count: 11
+    service_draft_files: 1
+    mapper_interface_files: 1
+    mapper_xml_files: 1
+    public_artifact_types_unchanged: true
+    productionReady: false
   current_renderer_probe:
     sampleId: p41-current-single-dto-gap-probe
     request:
@@ -652,7 +664,7 @@ expected_quality_report:
   productionReady: false
   scores:
     operationCrudFlagCoverage: 1.0
-    dtoBlueprintCount: 10
+    dtoBlueprintCount: 11
     statementEvidenceCount: 22
     reviewRequiredUncertainItems: 8
     currentGeneratorGapVisible: true

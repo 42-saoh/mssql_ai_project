@@ -1,5 +1,22 @@
 # Task 0041: SP Operation Model Renewal
 
+## P41F Status
+
+P41A-F are executed sequentially as groundwork for the SP analysis model renewal.
+The repo now has:
+
+- `SpOperationModel.v0.1` domain and planner validation helpers
+- deterministic sanitized statement evidence extraction in `packages/analysis`
+- strict structured operation planning through the existing Responses/httpx gateway
+- multi-file `DTO_DRAFT` bundle generation when `request.operationModel` is supplied
+- single-file `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML` generation for the same bundle
+
+The legacy single DTO renderer remains available when no `operationModel` is supplied,
+and that path remains a documented gap for complex SPs. P41 keeps
+`production_ready: false` and introduces no UI, public API, DB schema, live MCP public
+tool, procedure execution, row-data query, automatic DDL/DML apply, or generated-source
+deployment.
+
 ## Goal
 P41은 `PCO_GU_ManageBond_PRC` 같은 복잡한 Stored Procedure를 단일 DTO skeleton으로
 축소하지 않고, 업무 분기별 operation contract와 multi-DTO blueprint로 분리하는 리뉴얼이다.
