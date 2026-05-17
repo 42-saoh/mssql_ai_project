@@ -157,19 +157,19 @@ function ProcedureSearchCombobox({
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<ProcedureSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState("Type at least 2 characters.");
+  const [status, setStatus] = useState("Type to search procedures.");
   const normalizedQuery = query.trim();
 
   useEffect(() => {
     setSuggestions([]);
-    setStatus("Type at least 2 characters.");
+    setStatus("Type to search procedures.");
   }, [dbProfileId]);
 
   useEffect(() => {
-    if (normalizedQuery.length < 2) {
+    if (normalizedQuery.length === 0) {
       setSuggestions([]);
       setIsLoading(false);
-      setStatus("Type at least 2 characters.");
+      setStatus("Type to search procedures.");
       return undefined;
     }
 
@@ -181,7 +181,7 @@ function ProcedureSearchCombobox({
         const params = new URLSearchParams({
           dbProfileId,
           query: normalizedQuery,
-          limit: "20",
+          limit: "100",
         });
         const response = await fetch(`/api/metadata/search?${params.toString()}`, {
           signal: controller.signal,
@@ -252,11 +252,12 @@ function ProcedureSearchCombobox({
       <p className="field-hint" aria-live="polite">
         {isLoading ? "Searching procedures..." : status}
       </p>
-      {activeTarget.name ? (
-        <code className="field-code">
-          {activeTarget.schema}.{activeTarget.name}
-        </code>
-      ) : null}
+      <code
+        aria-hidden={!activeTarget.name}
+        className={activeTarget.name ? "field-code" : "field-code field-code--empty"}
+      >
+        {activeTarget.name ? `${activeTarget.schema}.${activeTarget.name}` : "dbo.procedure"}
+      </code>
       {suggestions.length > 0 ? (
         <div className="procedure-suggestions" id={listboxId} role="listbox">
           {suggestions.map((suggestion) => {

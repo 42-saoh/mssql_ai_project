@@ -250,6 +250,7 @@ button:hover,
 
 .form-grid {
   display: grid;
+  align-items: start;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
@@ -968,6 +969,8 @@ input:disabled {
 }
 
 .field-code {
+  display: block;
+  min-height: 24px;
   overflow-wrap: anywhere;
   border-radius: 4px;
   padding: 4px 6px;
@@ -976,10 +979,19 @@ input:disabled {
   font-size: 12px;
 }
 
+.field-code--empty {
+  visibility: hidden;
+}
+
 .procedure-suggestions {
   display: grid;
-  max-height: 280px;
-  overflow: auto;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 30;
+  max-height: min(420px, 45vh);
+  overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #ffffff;

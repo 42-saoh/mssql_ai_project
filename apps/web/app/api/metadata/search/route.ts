@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const query = params.get("query")?.trim() || "";
   const limit = clampLimit(Number(params.get("limit") ?? 20));
 
-  if (query.length < 2) {
+  if (!query) {
     return NextResponse.json({ suggestions: [] });
   }
 
@@ -52,5 +52,5 @@ function clampLimit(value: number): number {
   if (!Number.isFinite(value)) {
     return 20;
   }
-  return Math.min(Math.max(Math.trunc(value), 1), 50);
+  return Math.min(Math.max(Math.trunc(value), 1), 100);
 }

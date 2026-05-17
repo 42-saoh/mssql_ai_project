@@ -265,6 +265,10 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "BatchProcedureTargetsInput" in request_form
     assert "ProcedureSearchCombobox" in source
     assert 'fetch(`/api/metadata/search?' in source
+    assert "normalizedQuery.length === 0" in source
+    assert 'limit: "100"' in source
+    assert "Type at least 2 characters." not in source
+    assert "field-code--empty" in source
     assert "Add to batch" in source
     assert "Search and add PROCEDURE targets one at a time." in source
     assert "required" in _form_control_block(source, "batchTargets")
@@ -272,9 +276,17 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
         WEB_ROOT / "app" / "api" / "metadata" / "search" / "route.ts"
     ).read_text(encoding="utf-8")
     assert 'objectTypes: ["PROCEDURE"]' in procedure_search_route
+    assert "if (!query)" in procedure_search_route
+    assert "Math.min(Math.max(Math.trunc(value), 1), 100)" in procedure_search_route
     assert "api.searchMetadataObjects" in procedure_search_route
     assert "suggestions: response.results.map" in procedure_search_route
     assert "targetKey: result.targetKey" in procedure_search_route
+    global_css = (WEB_ROOT / "app" / "globals.css").read_text(encoding="utf-8")
+    assert "align-items: start;" in global_css
+    assert "position: absolute;" in global_css
+    assert "z-index: 30;" in global_css
+    assert "max-height: min(420px, 45vh);" in global_css
+    assert ".field-code--empty" in global_css
     assert "useLlmAnalysis" in request_page
     assert "useAiToolOrchestration" in request_page
     assert "usePlatformToolOrchestration" in request_page
