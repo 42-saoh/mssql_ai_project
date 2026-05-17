@@ -11,6 +11,9 @@ import type {
   MetadataAnalysisRequest,
   MetadataAnalysisResponse,
   MetadataAnalysisRunStatus,
+  MetadataDesignConversation,
+  MetadataDesignRunRequest,
+  MetadataDesignRunStatus,
   MetadataProfile,
   MetadataSearchRequest,
   MetadataSearchResponse,
@@ -63,5 +66,8 @@ export interface PortalApi {
   analyzeMetadata(request: MetadataAnalysisRequest): Promise<MetadataAnalysisResponse>;
   submitMetadataAnalysisRun(request: MetadataAnalysisRequest): Promise<MetadataAnalysisRunStatus>;
   getMetadataAnalysisRun(runId: string): Promise<MetadataAnalysisRunStatus>;
+  submitMetadataDesignRun(request: MetadataDesignRunRequest): Promise<MetadataDesignRunStatus>;
+  getMetadataDesignRun(runId: string): Promise<MetadataDesignRunStatus>;
+  getMetadataDesignConversation(conversationId: string): Promise<MetadataDesignConversation>;
   listRegistryVersions(): Promise<{ versions: RegistryVersion[] }>;
 }

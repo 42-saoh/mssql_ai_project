@@ -2,6 +2,7 @@ import { readPortalApiError } from "./errors.ts";
 import type { PortalApi } from "./portal-api.ts";
 import type {
   MetadataAnalysisRequest,
+  MetadataDesignRunRequest,
   KnowledgeExportRequest,
   MetadataSearchRequest,
   MetadataToolInvokeRequest,
@@ -217,6 +218,29 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
         fetcher,
         baseUrl,
         `/api/v1/metadata/analysis-runs/${encodeURIComponent(runId)}`,
+      );
+    },
+
+    submitMetadataDesignRun(request: MetadataDesignRunRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/design-runs", {
+        method: "POST",
+        json: request,
+      });
+    },
+
+    getMetadataDesignRun(runId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/metadata/design-runs/${encodeURIComponent(runId)}`,
+      );
+    },
+
+    getMetadataDesignConversation(conversationId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/metadata/design-conversations/${encodeURIComponent(conversationId)}`,
       );
     },
 

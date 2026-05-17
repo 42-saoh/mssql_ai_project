@@ -166,4 +166,6 @@ def test_p36_manifest_wires_sequential_tracks_only() -> None:
     ]
 
     merge_order = manifest["merge_order"]
-    assert merge_order[-5:] == ["P36A", "P36B", "P36C", "P36D", "P36E"]
+    p36_order = ["P36A", "P36B", "P36C", "P36D", "P36E"]
+    p36_start = merge_order.index("P36A")
+    assert merge_order[p36_start : p36_start + len(p36_order)] == p36_order

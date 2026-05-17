@@ -250,6 +250,19 @@ class MetadataAnalysisRunPersistenceError(RuntimeError):
         self.status_code = status_code
 
 
+class MetadataDesignRunPersistenceError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "METADATA_DESIGN_RUN_PERSISTENCE_FAILED",
+        status_code: int = 503,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
+
+
 @dataclass
 class MetadataAnalysisRunRecord:
     run_id: str
@@ -259,6 +272,19 @@ class MetadataAnalysisRunRecord:
     started_at: datetime | None = None
     completed_at: datetime | None = None
     analysis: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+
+
+@dataclass
+class MetadataDesignRunRecord:
+    run_id: str
+    conversation_id: str
+    status: str
+    request: dict[str, Any]
+    submitted_at: datetime = field(default_factory=utc_now)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
 
 
@@ -557,6 +583,61 @@ class WorkflowRepository(Protocol):
         *,
         error: dict[str, Any],
     ) -> MetadataAnalysisRunRecord:
+        ...
+
+    def create_metadata_design_run(
+        self,
+        *,
+        run_id: str,
+        conversation_id: str,
+        request: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        ...
+
+    def get_metadata_design_run(self, run_id: str) -> MetadataDesignRunRecord | None:
+        ...
+
+    def list_metadata_design_runs_for_conversation(
+        self,
+        conversation_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[MetadataDesignRunRecord]:
+        ...
+
+    def list_recoverable_metadata_design_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataDesignRunRecord]:
+        ...
+
+    def claim_metadata_design_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataDesignRunRecord | None:
+        ...
+
+    def mark_metadata_design_run_running(self, run_id: str) -> MetadataDesignRunRecord:
+        ...
+
+    def mark_metadata_design_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        result: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        ...
+
+    def mark_metadata_design_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
         ...
 
 

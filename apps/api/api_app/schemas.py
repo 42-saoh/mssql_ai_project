@@ -616,6 +616,158 @@ class MetadataAnalysisRunStatus(ApiModel):
     error: MetadataAnalysisRunError | None = None
 
 
+class MetadataDesignFieldInput(ApiModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = Field(default=None, min_length=1)
+    db_type: str | None = Field(default=None, alias="dbType", min_length=1)
+    nullable: bool | None = None
+
+
+class MetadataDesignInputs(ApiModel):
+    table_name_hint: str | None = Field(default=None, alias="tableNameHint", min_length=1)
+    table_description: str | None = Field(
+        default=None,
+        alias="tableDescription",
+        min_length=1,
+    )
+    fields: list[MetadataDesignFieldInput] = Field(default_factory=list)
+
+
+class MetadataDesignOptions(ApiModel):
+    use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
+    use_ai_tool_orchestration: bool = Field(default=True, alias="useAiToolOrchestration")
+    llm_profile_id: Literal[
+        "openai_sp_semantic_analysis",
+        "openai_fast_test",
+    ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
+    max_candidates: int = Field(default=5, ge=1, le=10, alias="maxCandidates")
+    generate_dto_draft: bool = Field(default=True, alias="generateDtoDraft")
+
+
+class MetadataDesignRunRequest(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId", min_length=1)
+    message: str = Field(min_length=1, max_length=4000)
+    conversation_id: str | None = Field(default=None, alias="conversationId", min_length=1)
+    design_inputs: MetadataDesignInputs = Field(
+        default_factory=MetadataDesignInputs,
+        alias="designInputs",
+    )
+    options: MetadataDesignOptions = Field(default_factory=MetadataDesignOptions)
+
+    @model_validator(mode="after")
+    def validate_design_input(self) -> MetadataDesignRunRequest:
+        has_field = any(
+            (field.name or field.description or field.db_type)
+            for field in self.design_inputs.fields
+        )
+        if not (
+            self.message.strip()
+            or self.design_inputs.table_name_hint
+            or self.design_inputs.table_description
+            or has_field
+        ):
+            raise ValueError("metadata design request must include message or designInputs.")
+        return self
+
+
+class MetadataRelatedMetadata(ApiModel):
+    kind: Literal["TABLE", "COLUMN", "SIMILAR_TABLE", "TABLE_SCHEMA"]
+    object_ref: str = Field(alias="objectRef")
+    score: int = 0
+    summary: str
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class MetadataStandardizationMapping(ApiModel):
+    input_name: str | None = Field(default=None, alias="inputName")
+    input_description: str | None = Field(default=None, alias="inputDescription")
+    proposed_name: str = Field(alias="proposedName")
+    proposed_type: str = Field(alias="proposedType")
+    source: Literal["METADATA", "STANDARD_POLICY", "REVIEW_REQUIRED"]
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataTableProposalColumn(ApiModel):
+    name: str
+    data_type: str = Field(alias="dataType")
+    nullable: bool = True
+    description: str | None = None
+    source: Literal["METADATA", "STANDARD_POLICY", "USER_INPUT", "REVIEW_REQUIRED"]
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataTableProposal(ApiModel):
+    schema_name: str = Field(default="dbo", alias="schema")
+    table_name: str = Field(alias="tableName")
+    table_description: str | None = Field(default=None, alias="tableDescription")
+    columns: list[MetadataTableProposalColumn] = Field(default_factory=list)
+    create_table_script_preview: str = Field(alias="createTableScriptPreview")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataDesignResult(ApiModel):
+    assistant_message: str = Field(alias="assistantMessage")
+    related_metadata: list[MetadataRelatedMetadata] = Field(
+        default_factory=list,
+        alias="relatedMetadata",
+    )
+    standardization_mappings: list[MetadataStandardizationMapping] = Field(
+        default_factory=list,
+        alias="standardizationMappings",
+    )
+    table_proposal: MetadataTableProposal = Field(alias="tableProposal")
+    dto_draft: MetadataGeneratedDraft | None = Field(default=None, alias="dtoDraft")
+    ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
+    deterministic_facts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="deterministicFacts",
+    )
+    review_markers: list[MetadataAnalysisReviewMarker] = Field(
+        default_factory=list,
+        alias="reviewMarkers",
+    )
+    caveats: list[str] = Field(default_factory=list)
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    model_invocation: ModelInvocationSummary | None = Field(
+        default=None,
+        alias="modelInvocation",
+    )
+    component_invocations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="componentInvocations",
+    )
+
+
+class MetadataDesignRunError(ApiModel):
+    code: str
+    message: str
+    status_code: int = Field(alias="statusCode")
+
+
+class MetadataDesignRunStatus(ApiModel):
+    run_id: str = Field(alias="runId")
+    conversation_id: str = Field(alias="conversationId")
+    status: MetadataAnalysisRunStatusValue
+    submitted_at: datetime = Field(alias="submittedAt")
+    started_at: datetime | None = Field(default=None, alias="startedAt")
+    completed_at: datetime | None = Field(default=None, alias="completedAt")
+    request: MetadataDesignRunRequest
+    result: MetadataDesignResult | None = None
+    error: MetadataDesignRunError | None = None
+
+
+class MetadataDesignConversation(ApiModel):
+    conversation_id: str = Field(alias="conversationId")
+    runs: list[MetadataDesignRunStatus] = Field(default_factory=list)
+
+
 class RegistryVersion(ApiModel):
     registry_type: Literal[
         "PROMPT",

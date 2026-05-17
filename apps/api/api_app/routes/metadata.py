@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from api_app.dependencies import (
     get_metadata_analysis_service,
+    get_metadata_design_service,
     get_repository,
 )
 from api_app.errors import api_http_exception
@@ -12,12 +13,20 @@ from api_app.metadata_analysis_runs import (
     execute_metadata_analysis_run,
     get_metadata_analysis_run as read_metadata_analysis_run,
 )
+from api_app.metadata_design_runs import (
+    create_metadata_design_run,
+    execute_metadata_design_run,
+    get_metadata_design_run as read_metadata_design_run,
+    list_metadata_design_conversation,
+)
 from api_app.repositories import (
     KnowledgePersistenceError,
     MetadataAnalysisRunPersistenceError,
+    MetadataDesignRunPersistenceError,
     WorkflowRepository,
 )
 from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.metadata_design_service import MetadataDesignChatService
 from api_app.metadata_service import (
     DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
     MetadataSearchDependencyError,
@@ -30,6 +39,9 @@ from api_app.schemas import (
     MetadataAnalysisRequest,
     MetadataAnalysisResponse,
     MetadataAnalysisRunStatus,
+    MetadataDesignConversation,
+    MetadataDesignRunRequest,
+    MetadataDesignRunStatus,
     MetadataSearchResponse,
     MetadataToolInvokeRequest,
     MetadataToolInvokeResponse,
@@ -215,3 +227,78 @@ def get_metadata_analysis_run(
             code="METADATA_ANALYSIS_RUN_NOT_FOUND",
         )
     return run
+
+
+@router.post(
+    "/design-runs",
+    response_model=MetadataDesignRunStatus,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def submit_metadata_design_run(
+    request: MetadataDesignRunRequest,
+    background_tasks: BackgroundTasks,
+    service: Annotated[MetadataDesignChatService, Depends(get_metadata_design_service)],
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> MetadataDesignRunStatus:
+    try:
+        run = create_metadata_design_run(repository=repository, request=request)
+    except MetadataDesignRunPersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc
+    background_tasks.add_task(
+        execute_metadata_design_run,
+        run_id=run.run_id,
+        request=request.model_copy(
+            update={"conversation_id": run.conversation_id},
+            deep=True,
+        ),
+        service=service,
+        repository=repository,
+    )
+    return run
+
+
+@router.get("/design-runs/{runId}", response_model=MetadataDesignRunStatus)
+def get_metadata_design_run(
+    run_id: Annotated[str, Path(alias="runId", min_length=1)],
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> MetadataDesignRunStatus:
+    try:
+        run = read_metadata_design_run(repository=repository, run_id=run_id)
+    except MetadataDesignRunPersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc
+    if run is None:
+        raise api_http_exception(
+            status_code=404,
+            detail="Metadata design run was not found.",
+            code="METADATA_DESIGN_RUN_NOT_FOUND",
+        )
+    return run
+
+
+@router.get(
+    "/design-conversations/{conversationId}",
+    response_model=MetadataDesignConversation,
+)
+def get_metadata_design_conversation(
+    conversation_id: Annotated[str, Path(alias="conversationId", min_length=1)],
+    repository: Annotated[WorkflowRepository, Depends(get_repository)],
+) -> MetadataDesignConversation:
+    try:
+        return list_metadata_design_conversation(
+            repository=repository,
+            conversation_id=conversation_id,
+        )
+    except MetadataDesignRunPersistenceError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=str(exc),
+            code=exc.code,
+        ) from exc

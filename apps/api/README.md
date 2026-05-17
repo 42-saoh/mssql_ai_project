@@ -32,6 +32,9 @@
 - `POST /api/v1/metadata/analyze`
 - `POST /api/v1/metadata/analysis-runs`
 - `GET /api/v1/metadata/analysis-runs/{runId}`
+- `POST /api/v1/metadata/design-runs`
+- `GET /api/v1/metadata/design-runs/{runId}`
+- `GET /api/v1/metadata/design-conversations/{conversationId}`
 - `GET /api/v1/knowledge/assets`
 - `GET /api/v1/knowledge/facts/search`
 - `GET /api/v1/knowledge/assets/{assetId}`
@@ -327,6 +330,26 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
   root semantic agent runs, successful dependency child semantic runs by target, artifact rows,
   knowledge content/version links, and validation reports where present; unsafe/missing request
   state fails with `SP_WORKFLOW_RECOVERY_BLOCKED`.
+
+## Metadata design chat
+
+- `POST /api/v1/metadata/design-runs` starts a durable metadata design chat run. The request
+  accepts `message`, optional `conversationId`, `designInputs.tableNameHint`,
+  `designInputs.tableDescription`, and `designInputs.fields[]`.
+- The service uses read-only MCP metadata lookup (`search_columns`, `search_tables`,
+  `find_similar_tables`, and bounded table schema evidence) plus
+  `platform_db_standardization_rules_for_ai.json` to produce `standardizationMappings`,
+  `tableProposal.createTableScriptPreview`, and optional `dtoDraft`.
+- `GET /api/v1/metadata/design-runs/{runId}` polls one run. `GET
+  /api/v1/metadata/design-conversations/{conversationId}` returns recent runs in that
+  conversation.
+- Durable storage requires manual-apply
+  `db/schema/ai_agent_platform_schema_v10_metadata_design_runs.sql`. Missing v10 objects return
+  `503 METADATA_DESIGN_RUN_SCHEMA_REQUIRED`; the API never applies DDL.
+- Table script output is a non-executable preview inside run JSON. It is not a workflow artifact,
+  does not revive retired artifact outputs, and does not authorize row data, procedure execution,
+  business DB DDL/DML, automatic apply, deploy, publish, raw prompt/provider response storage, or
+  secret storage.
 
 ## Knowledge assetization
 

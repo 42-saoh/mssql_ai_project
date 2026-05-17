@@ -26,6 +26,7 @@ from api_app.repositories import (
     KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
     MetadataAnalysisRunRecord,
+    MetadataDesignRunRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkRequestRecord,
@@ -51,6 +52,7 @@ class MemoryWorkflowRepository:
         self.knowledge_exports: dict[str, KnowledgeExportRecord] = {}
         self.knowledge_job_links: set[tuple[str, str, str]] = set()
         self.metadata_analysis_runs: dict[str, MetadataAnalysisRunRecord] = {}
+        self.metadata_design_runs: dict[str, MetadataDesignRunRecord] = {}
         self.audit_events: list[AuditEventRecord] = []
         self.auth_actors: dict[str, Actor] = {}
 
@@ -913,6 +915,111 @@ class MemoryWorkflowRepository:
         record.error = dict(error)
         return replace(record)
 
+    def create_metadata_design_run(
+        self,
+        *,
+        run_id: str,
+        conversation_id: str,
+        request: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        record = MetadataDesignRunRecord(
+            run_id=run_id,
+            conversation_id=conversation_id,
+            status="QUEUED",
+            request=dict(request),
+        )
+        self.metadata_design_runs[run_id] = record
+        return replace(record)
+
+    def get_metadata_design_run(self, run_id: str) -> MetadataDesignRunRecord | None:
+        record = self.metadata_design_runs.get(run_id)
+        return replace(record) if record else None
+
+    def list_metadata_design_runs_for_conversation(
+        self,
+        conversation_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[MetadataDesignRunRecord]:
+        records = sorted(
+            (
+                record
+                for record in self.metadata_design_runs.values()
+                if record.conversation_id == conversation_id
+            ),
+            key=lambda record: (record.submitted_at, record.run_id),
+            reverse=True,
+        )
+        return [replace(record) for record in records[: max(min(int(limit), 100), 1)]]
+
+    def list_recoverable_metadata_design_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataDesignRunRecord]:
+        records = sorted(
+            (
+                record
+                for record in self.metadata_design_runs.values()
+                if _metadata_design_run_is_recoverable(record, stale_before=stale_before)
+            ),
+            key=lambda record: (record.submitted_at, record.run_id),
+        )
+        if limit is not None:
+            records = records[: max(min(int(limit), 100), 1)]
+        return [replace(record) for record in records]
+
+    def claim_metadata_design_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataDesignRunRecord | None:
+        record = self.metadata_design_runs.get(run_id)
+        if record is None or not _metadata_design_run_is_recoverable(
+            record,
+            stale_before=stale_before,
+        ):
+            return None
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        record.completed_at = None
+        record.result = None
+        record.error = None
+        return replace(record)
+
+    def mark_metadata_design_run_running(self, run_id: str) -> MetadataDesignRunRecord:
+        record = self.metadata_design_runs[run_id]
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        return replace(record)
+
+    def mark_metadata_design_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        result: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        record = self.metadata_design_runs[run_id]
+        record.status = "SUCCEEDED"
+        record.completed_at = utc_now()
+        record.result = dict(result)
+        record.error = None
+        return replace(record)
+
+    def mark_metadata_design_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        record = self.metadata_design_runs[run_id]
+        record.status = "FAILED"
+        record.completed_at = utc_now()
+        record.error = dict(error)
+        return replace(record)
+
     def _link_knowledge_asset_to_job(
         self,
         job_id: str | None,
@@ -991,6 +1098,19 @@ def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _metadata_analysis_run_is_recoverable(
     record: MetadataAnalysisRunRecord,
+    *,
+    stale_before: datetime,
+) -> bool:
+    if record.status == "QUEUED":
+        return True
+    if record.status != "RUNNING":
+        return False
+    reference_time = record.started_at or record.submitted_at
+    return reference_time <= stale_before
+
+
+def _metadata_design_run_is_recoverable(
+    record: MetadataDesignRunRecord,
     *,
     stale_before: datetime,
 ) -> bool:

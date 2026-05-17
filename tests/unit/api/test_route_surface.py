@@ -31,6 +31,9 @@ def test_openapi_skeleton_routes_are_registered() -> None:
     assert "/api/v1/metadata/analyze" in routes
     assert "/api/v1/metadata/analysis-runs" in routes
     assert "/api/v1/metadata/analysis-runs/{runId}" in routes
+    assert "/api/v1/metadata/design-runs" in routes
+    assert "/api/v1/metadata/design-runs/{runId}" in routes
+    assert "/api/v1/metadata/design-conversations/{conversationId}" in routes
     assert "/api/v1/knowledge/assets/{assetId}" in routes
     assert "/api/v1/knowledge/assets/{assetId}/versions" in routes
     assert "/api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts" in routes

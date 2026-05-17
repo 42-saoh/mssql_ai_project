@@ -9,7 +9,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from api_app.dependencies import get_metadata_analysis_service, get_repository
+from api_app.dependencies import (
+    get_metadata_analysis_service,
+    get_metadata_design_service,
+    get_repository,
+)
 from api_app.errors import ERROR_CODE_HEADER, error_payload, normalized_http_error_content
 from api_app.platform_db import PlatformPersistenceError
 from api_app.recovery_worker import recovery_worker_loop
@@ -73,6 +77,10 @@ async def _start_recovery_worker(application: FastAPI) -> None:
             metadata_service_factory=lambda: _resolve_dependency(
                 application,
                 get_metadata_analysis_service
+            ),
+            metadata_design_service_factory=lambda: _resolve_dependency(
+                application,
+                get_metadata_design_service,
             ),
         )
     )

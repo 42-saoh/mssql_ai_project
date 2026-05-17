@@ -1,0 +1,30 @@
+scenario_id: metadata_design_chat_p38_v1
+description: Field and description driven table design chat.
+request:
+  dbProfileId: master
+  message: Create an order request table with customer name, customer address, and order date.
+  designInputs:
+    tableNameHint: PPM_ORDER_REQ
+    tableDescription: Order request header
+    fields:
+      - name: CUSTOMER_NM
+        description: Customer name
+      - name: CUSTOMER_ADDR
+        description: Customer address
+      - name: ORDER_DT
+        description: Order date
+  options:
+    llmProfileId: openai_fast_test
+    generateDtoDraft: true
+expected:
+  status: REVIEW_REQUIRED
+  tableScriptField: createTableScriptPreview
+  dtoArtifactType: DTO_DRAFT
+  requiredReviewReasons:
+    - PK/FK and index structure must be confirmed
+    - table script is a non-executable preview
+  forbiddenFragments:
+    - rowData
+    - rawPrompt
+    - rawProvider
+    - DDL_DRAFT

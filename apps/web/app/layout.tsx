@@ -23,6 +23,7 @@ export default function RootLayout({
             <Link href="/requests/new">New request</Link>
             <Link href="/jobs">Analysis history</Link>
             <Link href="/metadata/search">Metadata search</Link>
+            <Link href="/metadata/design">Metadata design</Link>
             <Link href="/metadata/dependencies">Dependency diagnostics</Link>
           </nav>
         </header>

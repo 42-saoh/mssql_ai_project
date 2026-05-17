@@ -29,6 +29,25 @@ are not workflow artifact records, do not create or apply source files, and do n
 row data access, SQL/SP definition storage, procedure execution, DDL/DML, deploy, publish, or
 automatic conversion.
 
+## P38 Metadata Design Chat Architecture
+
+Metadata design chat is a durable run surface separate from workflow artifacts. `POST
+/api/v1/metadata/design-runs` stores sanitized request JSON in manual-apply v10
+`METADATA_DESIGN_RUNS`, runs read-only MCP metadata searches, and stores sanitized result/error
+JSON for polling and conversation replay. `GET /api/v1/metadata/design-runs/{runId}` returns one
+run; `GET /api/v1/metadata/design-conversations/{conversationId}` returns recent runs in the
+conversation.
+
+The generation service normalizes field names, descriptions, and table hints, optionally invokes
+the bounded LLM metadata planner for intent planning, then deterministically calls only read-only
+metadata tools such as `search_columns`, `search_tables`, `find_similar_tables`, and
+`get_table_schema`. It uses `platform_db_standardization_rules_for_ai.json` for standard names and
+types. Unconfirmed metadata, inferred names/types, and PK/FK/index gaps remain `REVIEW_REQUIRED`.
+
+The result contains `createTableScriptPreview` and an optional `DTO_DRAFT` preview. The script is a
+manual-review preview only: it is not persisted as an artifact, does not revive a retired DDL output
+contract, and is never applied by the platform.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates

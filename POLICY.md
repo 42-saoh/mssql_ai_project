@@ -9,6 +9,14 @@
 - `DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, and `DDL_DRAFT` are retired public outputs for new requests.
 - Row-data queries, procedure execution, business DB DDL/DML, automatic DDL apply, automatic source deployment, raw prompt/provider response storage, and secret storage remain forbidden.
 
+## P38 Metadata Design Chat Policy
+
+- Metadata design chat runs may store sanitized request/result/error JSON only in `METADATA_DESIGN_RUNS`.
+- `createTableScriptPreview` is a non-executable manual-review preview, not an artifact and not an apply path.
+- `DTO_DRAFT` in a design result is a preview inside run JSON only; it is not workflow artifact persistence.
+- Metadata lookup remains read-only through MCP tools; row data, procedure execution, business DB DDL/DML, automatic DDL apply, publish/deploy/source apply, raw prompt/provider response storage, and secret storage remain forbidden.
+- Missing or inferred names, types, descriptions, PK/FK, index, or relationship decisions must stay `REVIEW_REQUIRED`.
+
 ## P35 Source Context Policy
 
 - Full stored procedure definitions must not be sent to the model by default. The semantic runtime

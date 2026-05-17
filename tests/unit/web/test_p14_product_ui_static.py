@@ -64,6 +64,8 @@ def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     assert "/api/v1/metadata/analyze" in source
     assert "/api/v1/metadata/tools" in source
     assert "/api/v1/knowledge/" in source
+    assert "/metadata/design" in source
+    assert "/api/metadata/design-runs" in source
     assert "/metadata/dependencies" in source
     assert "/api/v1/artifacts/" in source
     assert "/publish" not in source
@@ -139,6 +141,74 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert "/api/v1/metadata/tools/${encodeURIComponent(toolName)}/invoke" in http_client
     assert "metadataTools.tools.every((tool) => !(\"input\" in tool))" in smoke
     assert "dependencyClosure.data.unresolved" in smoke
+
+
+def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
+    layout = (WEB_ROOT / "app" / "layout.tsx").read_text(encoding="utf-8")
+    page = (WEB_ROOT / "app" / "metadata" / "design" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    component = (WEB_ROOT / "components" / "metadata-design-chat.tsx").read_text(
+        encoding="utf-8"
+    )
+    submit_route = (
+        WEB_ROOT / "app" / "api" / "metadata" / "design-runs" / "route.ts"
+    ).read_text(encoding="utf-8")
+    poll_route = (
+        WEB_ROOT
+        / "app"
+        / "api"
+        / "metadata"
+        / "design-runs"
+        / "[runId]"
+        / "route.ts"
+    ).read_text(encoding="utf-8")
+    conversation_route = (
+        WEB_ROOT
+        / "app"
+        / "api"
+        / "metadata"
+        / "design-conversations"
+        / "[conversationId]"
+        / "route.ts"
+    ).read_text(encoding="utf-8")
+    portal_api = (WEB_ROOT / "lib" / "api" / "portal-api.ts").read_text(
+        encoding="utf-8"
+    )
+    http_client = (WEB_ROOT / "lib" / "api" / "http-client.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'href="/metadata/design"' in layout
+    assert "MetadataDesignChat" in page
+    assert "api.listMetadataProfiles()" in page
+    assert 'fetch("/api/metadata/design-runs"' in component
+    assert "/api/metadata/design-runs/${encodeURIComponent(nextRun.runId)}" in component
+    assert "createTableScriptPreview" in component
+    assert "Download SQL preview" in component
+    assert "Download DTO draft" in component
+    assert "new Blob([content]" in component
+    assert "api.submitMetadataDesignRun(payload)" in submit_route
+    assert "api.getMetadataDesignRun(runId)" in poll_route
+    assert "api.getMetadataDesignConversation(conversationId)" in conversation_route
+    assert "submitMetadataDesignRun" in portal_api
+    assert "getMetadataDesignRun" in portal_api
+    assert "getMetadataDesignConversation" in portal_api
+    assert "/api/v1/metadata/design-runs" in http_client
+    assert (
+        "/api/v1/metadata/design-conversations/${encodeURIComponent(conversationId)}"
+        in http_client
+    )
+    combined = "\n".join([component, submit_route, poll_route, conversation_route]).lower()
+    for forbidden in (
+        "/execute",
+        "/apply",
+        "/deploy",
+        "/publish",
+        "workflow artifact",
+        "artifact-download",
+    ):
+        assert forbidden not in combined
 
 
 def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:

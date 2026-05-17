@@ -568,6 +568,115 @@ export interface MetadataAnalysisRunStatus {
   error?: MetadataAnalysisRunError | null;
 }
 
+export interface MetadataDesignFieldInput {
+  name?: string | null;
+  description?: string | null;
+  dbType?: string | null;
+  nullable?: boolean | null;
+}
+
+export interface MetadataDesignInputs {
+  tableNameHint?: string | null;
+  tableDescription?: string | null;
+  fields?: MetadataDesignFieldInput[];
+}
+
+export interface MetadataDesignOptions {
+  useLlmAnalysis?: boolean;
+  useAiToolOrchestration?: boolean;
+  llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
+  maxCandidates?: number;
+  generateDtoDraft?: boolean;
+}
+
+export interface MetadataDesignRunRequest {
+  dbProfileId: string;
+  message: string;
+  conversationId?: string | null;
+  designInputs?: MetadataDesignInputs;
+  options?: MetadataDesignOptions;
+}
+
+export interface MetadataRelatedMetadata {
+  kind: "TABLE" | "COLUMN" | "SIMILAR_TABLE" | "TABLE_SCHEMA";
+  objectRef: string;
+  score: number;
+  summary: string;
+  evidenceRefs: string[];
+  payload: Record<string, unknown>;
+}
+
+export interface MetadataStandardizationMapping {
+  inputName?: string | null;
+  inputDescription?: string | null;
+  proposedName: string;
+  proposedType: string;
+  source: "METADATA" | "STANDARD_POLICY" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataTableProposalColumn {
+  name: string;
+  dataType: string;
+  nullable: boolean;
+  description?: string | null;
+  source: "METADATA" | "STANDARD_POLICY" | "USER_INPUT" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataTableProposal {
+  schema: string;
+  tableName: string;
+  tableDescription?: string | null;
+  columns: MetadataTableProposalColumn[];
+  createTableScriptPreview: string;
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataDesignResult {
+  assistantMessage: string;
+  relatedMetadata: MetadataRelatedMetadata[];
+  standardizationMappings: MetadataStandardizationMapping[];
+  tableProposal: MetadataTableProposal;
+  dtoDraft?: MetadataGeneratedDraft | null;
+  aiToolEvidence: Record<string, unknown>;
+  deterministicFacts: Record<string, unknown>[];
+  reviewMarkers: MetadataAnalysisReviewMarker[];
+  caveats: string[];
+  reviewRequired: boolean;
+  modelInvocation?: ModelInvocationSummary | null;
+  componentInvocations: Record<string, unknown>[];
+}
+
+export interface MetadataDesignRunError {
+  code: string;
+  message: string;
+  statusCode: number;
+}
+
+export interface MetadataDesignRunStatus {
+  runId: string;
+  conversationId: string;
+  status: MetadataAnalysisRunStatusValue;
+  submittedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  request: MetadataDesignRunRequest;
+  result?: MetadataDesignResult | null;
+  error?: MetadataDesignRunError | null;
+}
+
+export interface MetadataDesignConversation {
+  conversationId: string;
+  runs: MetadataDesignRunStatus[];
+}
+
 export interface RegistryVersion {
   registryType: RegistryType;
   version: string;

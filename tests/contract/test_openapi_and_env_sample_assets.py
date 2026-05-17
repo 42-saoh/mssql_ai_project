@@ -83,10 +83,16 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "/api/v1/metadata/analyze" in data["paths"]
     assert "/api/v1/metadata/analysis-runs" in data["paths"]
     assert "/api/v1/metadata/analysis-runs/{runId}" in data["paths"]
+    assert "/api/v1/metadata/design-runs" in data["paths"]
+    assert "/api/v1/metadata/design-runs/{runId}" in data["paths"]
+    assert "/api/v1/metadata/design-conversations/{conversationId}" in data["paths"]
     assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisRunStatus" in data["components"]["schemas"]
+    assert "MetadataDesignRunRequest" in data["components"]["schemas"]
+    assert "MetadataDesignRunStatus" in data["components"]["schemas"]
+    assert "MetadataDesignResult" in data["components"]["schemas"]
     assert "MetadataToolInvokeResponse" in data["components"]["schemas"]
     assert "KnowledgeAssetSummary" in data["components"]["schemas"]
     assert "KnowledgeExportResponse" in data["components"]["schemas"]
@@ -352,6 +358,92 @@ def test_openapi_metadata_analysis_run_contract_matches_async_polling_surface() 
     ]
 
 
+def test_openapi_metadata_design_chat_contract_matches_p38_surface() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    paths = openapi["paths"]
+    schemas = openapi["components"]["schemas"]
+
+    submit = paths["/api/v1/metadata/design-runs"]["post"]
+    poll = paths["/api/v1/metadata/design-runs/{runId}"]["get"]
+    conversation = paths["/api/v1/metadata/design-conversations/{conversationId}"]["get"]
+
+    assert submit["operationId"] == "submitMetadataDesignRun"
+    assert submit["tags"] == ["metadata"]
+    submit_description = re.sub(r"\s+", " ", submit["description"])
+    assert "durable metadata design chat run" in submit_description
+    assert "read-only" in submit_description
+    assert "workflow artifact persistence" in submit_description
+    assert submit["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataDesignRunRequest"
+    }
+    assert submit["responses"]["202"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataDesignRunStatus"
+    }
+    assert poll["operationId"] == "getMetadataDesignRun"
+    assert poll["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataDesignRunStatus"
+    }
+    assert conversation["operationId"] == "getMetadataDesignConversation"
+    assert conversation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataDesignConversation"
+    }
+
+    request_schema = schemas["MetadataDesignRunRequest"]
+    assert request_schema["required"] == ["dbProfileId", "message"]
+    assert request_schema["properties"]["designInputs"] == {
+        "$ref": "#/components/schemas/MetadataDesignInputs"
+    }
+    assert request_schema["properties"]["options"] == {
+        "$ref": "#/components/schemas/MetadataDesignOptions"
+    }
+    assert schemas["MetadataDesignOptions"]["properties"]["generateDtoDraft"][
+        "default"
+    ] is True
+    assert schemas["MetadataDesignOptions"]["properties"]["maxCandidates"]["maximum"] == 10
+
+    result_schema = schemas["MetadataDesignResult"]
+    result_properties = set(result_schema["properties"])
+    assert {
+        "assistantMessage",
+        "relatedMetadata",
+        "standardizationMappings",
+        "tableProposal",
+        "dtoDraft",
+        "aiToolEvidence",
+        "modelInvocation",
+        "reviewMarkers",
+        "caveats",
+    } <= result_properties
+    table_schema = schemas["MetadataTableProposal"]
+    assert "createTableScriptPreview" in table_schema["properties"]
+    assert "DDL_DRAFT" not in str(result_schema)
+    assert schemas["MetadataGeneratedDraft"]["properties"]["artifactType"]["enum"] == [
+        "DTO_DRAFT"
+    ]
+    run_schema = schemas["MetadataDesignRunStatus"]
+    assert run_schema["properties"]["result"]["oneOf"] == [
+        {"$ref": "#/components/schemas/MetadataDesignResult"},
+        {"type": "null"},
+    ]
+    forbidden_response_fields = {
+        "rowData",
+        "row_data",
+        "rawPrompt",
+        "rawProviderResponse",
+        "providerTrace",
+        "apply",
+        "execute",
+        "deploy",
+        "publish",
+        "artifactId",
+    }
+    assert forbidden_response_fields.isdisjoint(result_properties)
+
+
 def test_openapi_sp_analysis_async_progress_contract() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
@@ -557,6 +649,39 @@ def test_v7_metadata_analysis_run_schema_is_durable_and_draft_only() -> None:
         assert forbidden not in ddl_text.upper()
 
 
+def test_v10_metadata_design_run_schema_is_manual_and_preview_only() -> None:
+    ddl_text = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v10_metadata_design_runs.sql"
+    ).read_text(encoding="utf-8")
+    upper = ddl_text.upper()
+
+    assert "Manual apply only" in ddl_text
+    assert "CREATE TABLE dbo.METADATA_DESIGN_RUNS" in ddl_text
+    assert "CONVERSATION_ID NVARCHAR(80) NOT NULL" in ddl_text
+    assert "REQUEST_JSON NVARCHAR(MAX) NOT NULL" in ddl_text
+    assert "RESULT_JSON NVARCHAR(MAX) NULL" in ddl_text
+    assert "ERR_JSON NVARCHAR(MAX) NULL" in ddl_text
+    assert "STAT_CD IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')" in ddl_text
+    assert "ISJSON(REQUEST_JSON) = 1" in ddl_text
+    assert "IX_METADATA_DESIGN_RUNS_STATUS" in ddl_text
+    assert "IX_METADATA_DESIGN_RUNS_CONVERSATION" in ddl_text
+    assert "IX_METADATA_DESIGN_RUNS_SUBMITTED" in ddl_text
+    assert "non-executable" in ddl_text
+    assert "workflow artifact" in ddl_text
+    assert "DDL_DRAFT artifact" in ddl_text
+    for forbidden in (
+        "RAW_PROMPT",
+        "RAW_PROVIDER",
+        "ROW_DATA",
+        "APPROVAL_DECISIONS",
+        "EXECUTE_SQL",
+        "APPLY_SQL",
+        "PUBLISH_JOB",
+        "DEPLOY_JOB",
+    ):
+        assert forbidden not in upper
+
+
 def test_v8_canonical_target_key_schema_is_manual_and_no_review_surface() -> None:
     ddl_text = (
         ROOT
@@ -611,6 +736,25 @@ def test_platform_repository_checks_v7_metadata_analysis_run_schema() -> None:
         "IX_METADATA_ANALYSIS_RUNS_STATUS",
         "IX_METADATA_ANALYSIS_RUNS_SUBMITTED",
         "METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED",
+    ):
+        assert schema_object in source
+
+
+def test_platform_repository_checks_v10_metadata_design_run_schema() -> None:
+    source = (ROOT / "apps" / "api" / "api_app" / "platform_db.py").read_text(
+        encoding="utf-8"
+    )
+
+    for schema_object in (
+        "METADATA_DESIGN_RUNS",
+        "CONVERSATION_ID",
+        "REQUEST_JSON",
+        "RESULT_JSON",
+        "ERR_JSON",
+        "IX_METADATA_DESIGN_RUNS_STATUS",
+        "IX_METADATA_DESIGN_RUNS_CONVERSATION",
+        "IX_METADATA_DESIGN_RUNS_SUBMITTED",
+        "METADATA_DESIGN_RUN_SCHEMA_REQUIRED",
     ):
         assert schema_object in source
 

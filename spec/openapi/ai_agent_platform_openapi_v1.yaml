@@ -582,6 +582,94 @@ paths:
           $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/design-runs:
+    post:
+      tags: [metadata]
+      summary: Submit an asynchronous metadata design chat run.
+      operationId: submitMetadataDesignRun
+      description: |
+        Starts a durable metadata design chat run. The run accepts field names,
+        descriptions, and table hints, searches related metadata through read-only
+        MCP tools, and returns evidence-bound table script and DTO previews.
+        The v10 `METADATA_DESIGN_RUNS` schema is manual-apply only. Results never
+        include row data, raw SQL/SP definitions, procedure execution output,
+        secrets, raw prompts, raw provider traces, apply controls, or workflow
+        artifact persistence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataDesignRunRequest"
+      responses:
+        "202":
+          description: Metadata design run was accepted for asynchronous execution.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataDesignRunStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/design-runs/{runId}:
+    get:
+      tags: [metadata]
+      summary: Poll an asynchronous metadata design chat run.
+      operationId: getMetadataDesignRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current metadata design run status, result, or failure payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataDesignRunStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/design-conversations/{conversationId}:
+    get:
+      tags: [metadata]
+      summary: List metadata design runs in one conversation.
+      operationId: getMetadataDesignConversation
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Metadata design conversation runs in reverse chronological order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataDesignConversation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/assets:
     get:
       tags: [knowledge]
@@ -1602,6 +1690,306 @@ components:
           oneOf:
             - $ref: "#/components/schemas/MetadataAnalysisRunError"
             - type: "null"
+    MetadataDesignFieldInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        dbType:
+          type: string
+        nullable:
+          type: boolean
+    MetadataDesignInputs:
+      type: object
+      properties:
+        tableNameHint:
+          type: string
+        tableDescription:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDesignFieldInput"
+          default: []
+    MetadataDesignOptions:
+      type: object
+      properties:
+        useLlmAnalysis:
+          type: boolean
+          default: true
+        useAiToolOrchestration:
+          type: boolean
+          default: true
+        llmProfileId:
+          type: string
+          default: openai_sp_semantic_analysis
+          enum:
+            - openai_sp_semantic_analysis
+            - openai_fast_test
+        maxCandidates:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        generateDtoDraft:
+          type: boolean
+          default: true
+    MetadataDesignRunRequest:
+      type: object
+      required: [dbProfileId, message]
+      properties:
+        dbProfileId:
+          type: string
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        conversationId:
+          type: string
+        designInputs:
+          $ref: "#/components/schemas/MetadataDesignInputs"
+        options:
+          $ref: "#/components/schemas/MetadataDesignOptions"
+    MetadataRelatedMetadata:
+      type: object
+      required: [kind, objectRef, score, summary, evidenceRefs, payload]
+      properties:
+        kind:
+          type: string
+          enum: [TABLE, COLUMN, SIMILAR_TABLE, TABLE_SCHEMA]
+        objectRef:
+          type: string
+        score:
+          type: integer
+        summary:
+          type: string
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        payload:
+          type: object
+          additionalProperties: true
+    MetadataStandardizationMapping:
+      type: object
+      required:
+        - proposedName
+        - proposedType
+        - source
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        inputName:
+          type: string
+        inputDescription:
+          type: string
+        proposedName:
+          type: string
+        proposedType:
+          type: string
+        source:
+          type: string
+          enum: [METADATA, STANDARD_POLICY, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataTableProposalColumn:
+      type: object
+      required:
+        - name
+        - dataType
+        - nullable
+        - source
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        name:
+          type: string
+        dataType:
+          type: string
+        nullable:
+          type: boolean
+        description:
+          type: string
+        source:
+          type: string
+          enum: [METADATA, STANDARD_POLICY, USER_INPUT, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataTableProposal:
+      type: object
+      required:
+        - schema
+        - tableName
+        - columns
+        - createTableScriptPreview
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        schema:
+          type: string
+          default: dbo
+        tableName:
+          type: string
+        tableDescription:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataTableProposalColumn"
+        createTableScriptPreview:
+          type: string
+          description: Non-executable table script preview for manual schema review.
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataDesignResult:
+      type: object
+      required:
+        - assistantMessage
+        - relatedMetadata
+        - standardizationMappings
+        - tableProposal
+        - aiToolEvidence
+        - deterministicFacts
+        - reviewMarkers
+        - caveats
+        - reviewRequired
+        - componentInvocations
+      properties:
+        assistantMessage:
+          type: string
+        relatedMetadata:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataRelatedMetadata"
+        standardizationMappings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataStandardizationMapping"
+        tableProposal:
+          $ref: "#/components/schemas/MetadataTableProposal"
+        dtoDraft:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataGeneratedDraft"
+            - type: "null"
+        aiToolEvidence:
+          type: object
+          additionalProperties: true
+        deterministicFacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reviewMarkers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataAnalysisReviewMarker"
+        caveats:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        modelInvocation:
+          oneOf:
+            - $ref: "#/components/schemas/ModelInvocationSummary"
+            - type: "null"
+        componentInvocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    MetadataDesignRunError:
+      type: object
+      required: [code, message, statusCode]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        statusCode:
+          type: integer
+    MetadataDesignRunStatus:
+      type: object
+      required:
+        - runId
+        - conversationId
+        - status
+        - submittedAt
+        - request
+      properties:
+        runId:
+          type: string
+        conversationId:
+          type: string
+        status:
+          type: string
+          enum:
+            - QUEUED
+            - RUNNING
+            - SUCCEEDED
+            - FAILED
+        submittedAt:
+          type: string
+          format: date-time
+        startedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        completedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        request:
+          $ref: "#/components/schemas/MetadataDesignRunRequest"
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataDesignResult"
+            - type: "null"
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataDesignRunError"
+            - type: "null"
+    MetadataDesignConversation:
+      type: object
+      required: [conversationId, runs]
+      properties:
+        conversationId:
+          type: string
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDesignRunStatus"
     MetadataAnalysisInsight:
       type: object
       required: [code, objectRef, summary, status, evidenceRefs]

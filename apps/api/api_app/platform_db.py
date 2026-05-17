@@ -37,6 +37,8 @@ from api_app.repositories import (
     KnowledgePersistenceError,
     MetadataAnalysisRunPersistenceError,
     MetadataAnalysisRunRecord,
+    MetadataDesignRunPersistenceError,
+    MetadataDesignRunRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkflowRepository,
@@ -1754,6 +1756,204 @@ class MssqlPlatformRepository:
             raise KeyError(run_id)
         return record
 
+    def create_metadata_design_run(
+        self,
+        *,
+        run_id: str,
+        conversation_id: str,
+        request: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        self._require_metadata_design_run_schema()
+        record = MetadataDesignRunRecord(
+            run_id=run_id,
+            conversation_id=conversation_id,
+            status="QUEUED",
+            request=request,
+        )
+        self._execute(
+            """
+            INSERT INTO dbo.METADATA_DESIGN_RUNS(
+                RUN_ID, CONVERSATION_ID, STAT_CD, REQUEST_JSON, RESULT_JSON, ERR_JSON,
+                SUBMITTED_DTM, START_DTM, COMPLETED_DTM, UPD_DTM
+            )
+            VALUES (%s, %s, 'QUEUED', %s, NULL, NULL, %s, NULL, NULL, %s)
+            """,
+            (
+                record.run_id,
+                record.conversation_id,
+                json_text(record.request),
+                record.submitted_at,
+                record.submitted_at,
+            ),
+        )
+        return record
+
+    def get_metadata_design_run(self, run_id: str) -> MetadataDesignRunRecord | None:
+        self._require_metadata_design_run_schema()
+        row = self._query_one(
+            """
+            SELECT RUN_ID, CONVERSATION_ID, STAT_CD, REQUEST_JSON, RESULT_JSON, ERR_JSON,
+                   SUBMITTED_DTM, START_DTM, COMPLETED_DTM
+            FROM dbo.METADATA_DESIGN_RUNS
+            WHERE RUN_ID = %s
+            """,
+            (run_id,),
+        )
+        return metadata_design_run_from_row(row) if row else None
+
+    def list_metadata_design_runs_for_conversation(
+        self,
+        conversation_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[MetadataDesignRunRecord]:
+        self._require_metadata_design_run_schema()
+        normalized_limit = normalize_list_limit(limit)
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({normalized_limit})
+                RUN_ID, CONVERSATION_ID, STAT_CD, REQUEST_JSON, RESULT_JSON, ERR_JSON,
+                SUBMITTED_DTM, START_DTM, COMPLETED_DTM
+            FROM dbo.METADATA_DESIGN_RUNS
+            WHERE CONVERSATION_ID = %s
+            ORDER BY SUBMITTED_DTM DESC, RUN_ID DESC
+            """,
+            (conversation_id,),
+        )
+        return [metadata_design_run_from_row(row) for row in rows]
+
+    def list_recoverable_metadata_design_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataDesignRunRecord]:
+        self._require_metadata_design_run_schema()
+        normalized_limit = normalize_list_limit(limit)
+        rows = self._query_all(
+            f"""
+            SELECT TOP ({normalized_limit})
+                RUN_ID, CONVERSATION_ID, STAT_CD, REQUEST_JSON, RESULT_JSON, ERR_JSON,
+                SUBMITTED_DTM, START_DTM, COMPLETED_DTM
+            FROM dbo.METADATA_DESIGN_RUNS
+            WHERE STAT_CD = 'QUEUED'
+               OR (
+                    STAT_CD = 'RUNNING'
+                    AND COALESCE(START_DTM, SUBMITTED_DTM) <= %s
+               )
+            ORDER BY SUBMITTED_DTM ASC, RUN_ID ASC
+            """,
+            (stale_before,),
+        )
+        return [metadata_design_run_from_row(row) for row in rows]
+
+    def claim_metadata_design_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataDesignRunRecord | None:
+        self._require_metadata_design_run_schema()
+        now = utc_now()
+        row = self._query_one(
+            """
+            UPDATE dbo.METADATA_DESIGN_RUNS
+            SET STAT_CD = 'RUNNING',
+                START_DTM = %s,
+                COMPLETED_DTM = NULL,
+                RESULT_JSON = NULL,
+                ERR_JSON = NULL,
+                UPD_DTM = %s
+            OUTPUT
+                INSERTED.RUN_ID,
+                INSERTED.CONVERSATION_ID,
+                INSERTED.STAT_CD,
+                INSERTED.REQUEST_JSON,
+                INSERTED.RESULT_JSON,
+                INSERTED.ERR_JSON,
+                INSERTED.SUBMITTED_DTM,
+                INSERTED.START_DTM,
+                INSERTED.COMPLETED_DTM
+            WHERE RUN_ID = %s
+              AND (
+                    STAT_CD = 'QUEUED'
+                    OR (
+                        STAT_CD = 'RUNNING'
+                        AND COALESCE(START_DTM, SUBMITTED_DTM) <= %s
+                    )
+              )
+            """,
+            (now, now, run_id, stale_before),
+        )
+        return metadata_design_run_from_row(row) if row else None
+
+    def mark_metadata_design_run_running(self, run_id: str) -> MetadataDesignRunRecord:
+        self._require_metadata_design_run_schema()
+        now = utc_now()
+        self._execute(
+            """
+            UPDATE dbo.METADATA_DESIGN_RUNS
+            SET STAT_CD = 'RUNNING',
+                START_DTM = COALESCE(START_DTM, %s),
+                UPD_DTM = %s
+            WHERE RUN_ID = %s
+            """,
+            (now, now, run_id),
+        )
+        record = self.get_metadata_design_run(run_id)
+        if record is None:
+            raise KeyError(run_id)
+        return record
+
+    def mark_metadata_design_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        result: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        self._require_metadata_design_run_schema()
+        now = utc_now()
+        self._execute(
+            """
+            UPDATE dbo.METADATA_DESIGN_RUNS
+            SET STAT_CD = 'SUCCEEDED',
+                RESULT_JSON = %s,
+                ERR_JSON = NULL,
+                COMPLETED_DTM = %s,
+                UPD_DTM = %s
+            WHERE RUN_ID = %s
+            """,
+            (json_text(result), now, now, run_id),
+        )
+        record = self.get_metadata_design_run(run_id)
+        if record is None:
+            raise KeyError(run_id)
+        return record
+
+    def mark_metadata_design_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        self._require_metadata_design_run_schema()
+        now = utc_now()
+        self._execute(
+            """
+            UPDATE dbo.METADATA_DESIGN_RUNS
+            SET STAT_CD = 'FAILED',
+                ERR_JSON = %s,
+                COMPLETED_DTM = %s,
+                UPD_DTM = %s
+            WHERE RUN_ID = %s
+            """,
+            (json_text(error), now, now, run_id),
+        )
+        record = self.get_metadata_design_run(run_id)
+        if record is None:
+            raise KeyError(run_id)
+        return record
+
     def _correlation_for_artifact(self, artifact: ArtifactRecord) -> str | None:
         job = self.get_job(artifact.job_id)
         return job.correlation_id if job else None
@@ -2047,6 +2247,93 @@ class MssqlPlatformRepository:
                     + ", ".join(missing_items)
                 ),
                 code="METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED",
+                status_code=503,
+            )
+
+    def _require_metadata_design_run_schema(self) -> None:
+        rows = self._query_all(
+            """
+            SELECT TABLE_NAME
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'METADATA_DESIGN_RUNS'
+            """,
+            (),
+        )
+        missing_items: list[str] = []
+        if not rows:
+            missing_items.append("table:METADATA_DESIGN_RUNS")
+        required_columns = {
+            "RUN_ID",
+            "CONVERSATION_ID",
+            "STAT_CD",
+            "REQUEST_JSON",
+            "RESULT_JSON",
+            "ERR_JSON",
+            "SUBMITTED_DTM",
+            "START_DTM",
+            "COMPLETED_DTM",
+            "UPD_DTM",
+        }
+        column_rows = self._query_all(
+            """
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'METADATA_DESIGN_RUNS'
+              AND COLUMN_NAME IN (
+                'RUN_ID',
+                'CONVERSATION_ID',
+                'STAT_CD',
+                'REQUEST_JSON',
+                'RESULT_JSON',
+                'ERR_JSON',
+                'SUBMITTED_DTM',
+                'START_DTM',
+                'COMPLETED_DTM',
+                'UPD_DTM'
+              )
+            """,
+            (),
+        )
+        found_columns = {str(row[0]) for row in column_rows}
+        missing_items.extend(
+            f"column:METADATA_DESIGN_RUNS.{column}"
+            for column in sorted(required_columns - found_columns)
+        )
+        index_rows = self._query_all(
+            """
+            SELECT i.name
+            FROM sys.indexes i
+            JOIN sys.objects o ON o.object_id = i.object_id
+            JOIN sys.schemas s ON s.schema_id = o.schema_id
+            WHERE s.name = 'dbo'
+              AND o.name = 'METADATA_DESIGN_RUNS'
+              AND i.name IN (
+                'IX_METADATA_DESIGN_RUNS_STATUS',
+                'IX_METADATA_DESIGN_RUNS_CONVERSATION',
+                'IX_METADATA_DESIGN_RUNS_SUBMITTED'
+              )
+            """,
+            (),
+        )
+        found_indexes = {str(row[0]) for row in index_rows}
+        required_indexes = {
+            "IX_METADATA_DESIGN_RUNS_STATUS",
+            "IX_METADATA_DESIGN_RUNS_CONVERSATION",
+            "IX_METADATA_DESIGN_RUNS_SUBMITTED",
+        }
+        missing_items.extend(
+            f"index:METADATA_DESIGN_RUNS.{index_name}"
+            for index_name in sorted(required_indexes - found_indexes)
+        )
+        if missing_items:
+            raise MetadataDesignRunPersistenceError(
+                (
+                    "Metadata design run polling requires v10 platform schema objects: "
+                    + ", ".join(missing_items)
+                ),
+                code="METADATA_DESIGN_RUN_SCHEMA_REQUIRED",
                 status_code=503,
             )
 
@@ -2551,6 +2838,28 @@ def metadata_analysis_run_from_row(row: tuple[Any, ...]) -> MetadataAnalysisRunR
         submitted_at=as_datetime(row[5]),
         started_at=as_datetime(row[6]) if row[6] else None,
         completed_at=as_datetime(row[7]) if row[7] else None,
+    )
+
+
+def metadata_design_run_from_row(row: tuple[Any, ...]) -> MetadataDesignRunRecord:
+    return MetadataDesignRunRecord(
+        run_id=str(row[0]),
+        conversation_id=str(row[1]),
+        status=str(row[2] or "QUEUED"),
+        request=dict(parse_json(row[3], {})),
+        result=(
+            dict(parse_json(row[4], {}))
+            if row[4] is not None and str(row[4]).strip()
+            else None
+        ),
+        error=(
+            dict(parse_json(row[5], {}))
+            if row[5] is not None and str(row[5]).strip()
+            else None
+        ),
+        submitted_at=as_datetime(row[6]),
+        started_at=as_datetime(row[7]) if row[7] else None,
+        completed_at=as_datetime(row[8]) if row[8] else None,
     )
 
 

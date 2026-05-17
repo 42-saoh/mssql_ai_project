@@ -12,6 +12,11 @@ from api_app.metadata_analysis_runs import (
     metadata_analysis_run_stale_before,
 )
 from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.metadata_design_runs import (
+    execute_metadata_design_run,
+    metadata_design_run_stale_before,
+)
+from api_app.metadata_design_service import MetadataDesignChatService
 from api_app.repositories import WorkflowRepository
 from api_app.workflow import WorkflowService
 
@@ -27,6 +32,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class RecoveryWorkerReport:
     metadata_runs_claimed: int = 0
+    metadata_design_runs_claimed: int = 0
     sp_jobs_recovered: int = 0
     sp_jobs_failed: int = 0
     errors: tuple[str, ...] = ()
@@ -36,11 +42,13 @@ def run_recovery_once(
     *,
     repository: WorkflowRepository,
     metadata_service: MetadataAnalysisService,
+    metadata_design_service: MetadataDesignChatService | None = None,
     workflow_service: WorkflowService | None = None,
     batch_size: int | None = None,
 ) -> RecoveryWorkerReport:
     normalized_batch_size = metadata_analysis_run_worker_batch_size(batch_size)
     metadata_runs_claimed = 0
+    metadata_design_runs_claimed = 0
     sp_jobs_recovered = 0
     sp_jobs_failed = 0
     errors: list[str] = []
@@ -68,6 +76,30 @@ def run_recovery_once(
             continue
         if claimed:
             metadata_runs_claimed += 1
+
+    if metadata_design_service is not None:
+        try:
+            recoverable_design_runs = repository.list_recoverable_metadata_design_runs(
+                stale_before=metadata_design_run_stale_before(),
+                limit=normalized_batch_size,
+            )
+        except Exception as exc:  # noqa: BLE001 - worker logs sanitized blockers and continues
+            errors.append(_safe_error_code(exc))
+            recoverable_design_runs = []
+
+        for record in recoverable_design_runs:
+            try:
+                claimed = execute_metadata_design_run(
+                    run_id=record.run_id,
+                    request=None,
+                    service=metadata_design_service,
+                    repository=repository,
+                )
+            except Exception as exc:  # noqa: BLE001 - next worker tick can retry active runs
+                errors.append(_safe_error_code(exc))
+                continue
+            if claimed:
+                metadata_design_runs_claimed += 1
 
     try:
         stale_jobs = repository.list_stale_active_jobs(
@@ -97,6 +129,7 @@ def run_recovery_once(
 
     return RecoveryWorkerReport(
         metadata_runs_claimed=metadata_runs_claimed,
+        metadata_design_runs_claimed=metadata_design_runs_claimed,
         sp_jobs_recovered=sp_jobs_recovered,
         sp_jobs_failed=sp_jobs_failed,
         errors=tuple(errors),
@@ -107,6 +140,7 @@ async def recovery_worker_loop(
     *,
     repository_factory: Callable[[], WorkflowRepository],
     metadata_service_factory: Callable[[], MetadataAnalysisService],
+    metadata_design_service_factory: Callable[[], MetadataDesignChatService] | None = None,
 ) -> None:
     interval_seconds = metadata_analysis_run_worker_interval_seconds()
     batch_size = metadata_analysis_run_worker_batch_size()
@@ -116,18 +150,22 @@ async def recovery_worker_loop(
                 _run_recovery_tick,
                 repository_factory,
                 metadata_service_factory,
+                metadata_design_service_factory,
                 batch_size,
             )
             if (
                 report.metadata_runs_claimed
+                or report.metadata_design_runs_claimed
                 or report.sp_jobs_recovered
                 or report.sp_jobs_failed
                 or report.errors
             ):
                 logger.info(
                     "Recovery worker tick completed metadataRunsClaimed=%s "
-                    "spJobsRecovered=%s spJobsFailed=%s errors=%s",
+                    "metadataDesignRunsClaimed=%s spJobsRecovered=%s "
+                    "spJobsFailed=%s errors=%s",
                     report.metadata_runs_claimed,
+                    report.metadata_design_runs_claimed,
                     report.sp_jobs_recovered,
                     report.sp_jobs_failed,
                     list(report.errors),
@@ -173,13 +211,18 @@ def sp_workflow_stale_before(now: datetime | None = None) -> datetime:
 def _run_recovery_tick(
     repository_factory: Callable[[], WorkflowRepository],
     metadata_service_factory: Callable[[], MetadataAnalysisService],
+    metadata_design_service_factory: Callable[[], MetadataDesignChatService] | None,
     batch_size: int,
 ) -> RecoveryWorkerReport:
     repository = repository_factory()
     metadata_service = metadata_service_factory()
+    metadata_design_service = (
+        metadata_design_service_factory() if metadata_design_service_factory else None
+    )
     return run_recovery_once(
         repository=repository,
         metadata_service=metadata_service,
+        metadata_design_service=metadata_design_service,
         workflow_service=WorkflowService(repository),
         batch_size=batch_size,
     )

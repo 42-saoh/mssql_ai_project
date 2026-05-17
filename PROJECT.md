@@ -18,6 +18,19 @@ deleted when FK-linked history exists. P36 remains `production_ready: false`; no
 row-data query, procedure execution, business DB DDL/DML, automatic DDL apply, or
 automatic generated-source deployment is authorized.
 
+## P38 Metadata Design Chat Baseline
+
+P38 adds durable metadata design chat runs for table-design assistance. Users can
+submit field names, descriptions, and table hints; the API searches related metadata
+through read-only MCP tools and returns a `createTableScriptPreview` plus optional
+`DTO_DRAFT` preview inside the design run result.
+
+The table script is a non-executable manual-review preview, not a workflow artifact
+and not an automatic migration. P38 does not revive retired public output contracts
+and keeps `production_ready: false`: no row-data query, procedure execution, business
+DB DDL/DML, automatic DDL apply, source deployment, raw prompt/provider response
+storage, or secret storage is authorized.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

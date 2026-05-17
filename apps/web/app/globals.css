@@ -933,6 +933,21 @@ input:disabled {
   max-height: 360px;
 }
 
+.metadata-design-fields {
+  margin-top: 18px;
+}
+
+.metadata-design-field-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.metadata-design-field-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.4fr) minmax(130px, 0.8fr);
+  gap: 10px;
+}
+
 .procedure-combobox {
   position: relative;
   display: grid;
@@ -1205,7 +1220,8 @@ input:disabled {
   .history-meta,
   .metric-grid,
   .timeline,
-  .tool-summary-grid {
+  .tool-summary-grid,
+  .metadata-design-field-row {
     grid-template-columns: 1fr;
   }
 

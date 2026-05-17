@@ -19,12 +19,14 @@ from api_app.platform_db import (
     job_from_row,
     load_platform_db_settings,
     metadata_analysis_run_from_row,
+    metadata_design_run_from_row,
     options_storage_payload,
     storage_uuid,
 )
 from api_app.repositories import (
     ArtifactRecord,
     MetadataAnalysisRunPersistenceError,
+    MetadataDesignRunPersistenceError,
 )
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
@@ -443,6 +445,112 @@ def test_workflow_repository_claims_metadata_analysis_runs_once() -> None:
     assert reclaimed.error is None
 
 
+def test_workflow_repository_contract_persists_metadata_design_runs() -> None:
+    repository = MemoryWorkflowRepository()
+
+    created = repository.create_metadata_design_run(
+        run_id="metadata_design_run_contract",
+        conversation_id="metadata_design_conv_contract",
+        request={
+            "dbProfileId": "master",
+            "message": "customer name",
+            "conversationId": "metadata_design_conv_contract",
+        },
+    )
+    repository.mark_metadata_design_run_running(created.run_id)
+    repository.mark_metadata_design_run_succeeded(
+        created.run_id,
+        result={
+            "assistantMessage": "done",
+            "tableProposal": {
+                "schema": "dbo",
+                "tableName": "PPM_CUSTOMER_ORDER",
+                "columns": [],
+                "createTableScriptPreview": "-- preview",
+            },
+            "dtoDraft": {"artifactType": "DTO_DRAFT"},
+        },
+    )
+
+    record = repository.get_metadata_design_run(created.run_id)
+    listed = repository.list_metadata_design_runs_for_conversation(
+        "metadata_design_conv_contract",
+        limit=5,
+    )
+
+    assert record is not None
+    assert record.status == "SUCCEEDED"
+    assert record.conversation_id == "metadata_design_conv_contract"
+    assert record.request["message"] == "customer name"
+    assert record.result
+    assert record.result["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+    assert listed[0].run_id == created.run_id
+
+
+def test_workflow_repository_claims_metadata_design_runs_once() -> None:
+    repository = MemoryWorkflowRepository()
+    stale_before = datetime.now(UTC) - timedelta(seconds=60)
+
+    created = repository.create_metadata_design_run(
+        run_id="metadata_design_run_claim",
+        conversation_id="metadata_design_conv_claim",
+        request={
+            "dbProfileId": "master",
+            "message": "order date",
+            "conversationId": "metadata_design_conv_claim",
+        },
+    )
+
+    assert repository.list_recoverable_metadata_design_runs(
+        stale_before=stale_before,
+        limit=5,
+    )[0].run_id == created.run_id
+    claimed = repository.claim_metadata_design_run(
+        created.run_id,
+        stale_before=stale_before,
+    )
+
+    assert claimed is not None
+    assert claimed.status == "RUNNING"
+    assert repository.claim_metadata_design_run(
+        created.run_id,
+        stale_before=stale_before,
+    ) is None
+
+    repository.mark_metadata_design_run_succeeded(
+        created.run_id,
+        result={"assistantMessage": "done"},
+    )
+    assert repository.list_recoverable_metadata_design_runs(
+        stale_before=datetime.now(UTC),
+        limit=5,
+    ) == []
+
+    stale = repository.create_metadata_design_run(
+        run_id="metadata_design_run_stale_running",
+        conversation_id="metadata_design_conv_stale",
+        request={
+            "dbProfileId": "master",
+            "message": "customer",
+            "conversationId": "metadata_design_conv_stale",
+        },
+    )
+    repository.mark_metadata_design_run_running(stale.run_id)
+    repository.metadata_design_runs[stale.run_id].started_at = (
+        datetime.now(UTC) - timedelta(seconds=120)
+    )
+
+    reclaimed = repository.claim_metadata_design_run(
+        stale.run_id,
+        stale_before=datetime.now(UTC) - timedelta(seconds=60),
+    )
+
+    assert reclaimed is not None
+    assert reclaimed.status == "RUNNING"
+    assert reclaimed.completed_at is None
+    assert reclaimed.error is None
+
+
 def test_platform_db_metadata_analysis_run_row_mapping() -> None:
     row = (
         "metadata_run_row",
@@ -463,6 +571,30 @@ def test_platform_db_metadata_analysis_run_row_mapping() -> None:
     assert record.analysis is None
     assert record.error
     assert record.error["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+
+
+def test_platform_db_metadata_design_run_row_mapping() -> None:
+    row = (
+        "metadata_design_run_row",
+        "metadata_design_conv_row",
+        "FAILED",
+        '{"dbProfileId": "master", "message": "order"}',
+        None,
+        '{"code": "METADATA_DESIGN_RUN_SCHEMA_REQUIRED", "message": "schema missing", "statusCode": 503}',
+        "2026-05-17T00:00:00Z",
+        "2026-05-17T00:00:01Z",
+        "2026-05-17T00:00:02Z",
+    )
+
+    record = metadata_design_run_from_row(row)
+
+    assert record.run_id == "metadata_design_run_row"
+    assert record.conversation_id == "metadata_design_conv_row"
+    assert record.status == "FAILED"
+    assert record.request["message"] == "order"
+    assert record.result is None
+    assert record.error
+    assert record.error["code"] == "METADATA_DESIGN_RUN_SCHEMA_REQUIRED"
 
 
 def test_platform_db_metadata_analysis_run_claim_is_atomic(
@@ -501,6 +633,44 @@ def test_platform_db_metadata_analysis_run_claim_is_atomic(
     assert "STAT_CD = 'RUNNING'" in sql
     assert "COALESCE(START_DTM, SUBMITTED_DTM) <= %s" in sql
     assert params[2] == "metadata_run_claim_sql"
+
+
+def test_platform_db_metadata_design_run_claim_is_atomic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = PlatformDbSettings(
+        host="127.0.0.1",
+        port=1433,
+        user="sa",
+        password="do-not-echo",
+        database="PLF",
+        requester_login="codex-api-local",
+    )
+    repository = MssqlPlatformRepository(settings)
+    captured: dict[str, object] = {}
+
+    def fake_query_one(sql: str, params: tuple[object, ...]) -> None:
+        captured["sql"] = sql
+        captured["params"] = params
+        return None
+
+    monkeypatch.setattr(repository, "_require_metadata_design_run_schema", lambda: None)
+    monkeypatch.setattr(repository, "_query_one", fake_query_one)
+
+    result = repository.claim_metadata_design_run(
+        "metadata_design_run_claim_sql",
+        stale_before=datetime(2026, 5, 17, tzinfo=UTC),
+    )
+
+    sql = str(captured["sql"])
+    params = captured["params"]
+    assert result is None
+    assert "UPDATE dbo.METADATA_DESIGN_RUNS" in sql
+    assert "OUTPUT" in sql
+    assert "STAT_CD = 'QUEUED'" in sql
+    assert "STAT_CD = 'RUNNING'" in sql
+    assert "COALESCE(START_DTM, SUBMITTED_DTM) <= %s" in sql
+    assert params[2] == "metadata_design_run_claim_sql"
 
 
 def test_platform_db_sp_recovery_contract_uses_conditional_claim_and_artifact_lookup(
@@ -600,6 +770,35 @@ def test_platform_db_metadata_analysis_run_schema_gap_is_explicit() -> None:
 
     assert exc_info.value.code == "METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED"
     assert "METADATA_ANALYSIS_RUNS" in str(exc_info.value)
+    assert "do-not-echo" not in str(exc_info.value)
+
+
+def test_platform_db_metadata_design_run_schema_gap_is_explicit() -> None:
+    settings = PlatformDbSettings(
+        host="127.0.0.1",
+        port=1433,
+        user="sa",
+        password="do-not-echo",
+        database="PLF",
+        requester_login="codex-api-local",
+    )
+    repository = MssqlPlatformRepository(settings)
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(repository, "_query_all", lambda _sql, _params: [])
+        with pytest.raises(MetadataDesignRunPersistenceError) as exc_info:
+            repository.create_metadata_design_run(
+                run_id="metadata_design_run_missing_schema",
+                conversation_id="metadata_design_conv_missing_schema",
+                request={
+                    "dbProfileId": "master",
+                    "message": "order",
+                    "conversationId": "metadata_design_conv_missing_schema",
+                },
+            )
+
+    assert exc_info.value.code == "METADATA_DESIGN_RUN_SCHEMA_REQUIRED"
+    assert "METADATA_DESIGN_RUNS" in str(exc_info.value)
     assert "do-not-echo" not in str(exc_info.value)
 
 

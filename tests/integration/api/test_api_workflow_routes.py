@@ -67,6 +67,55 @@ class ExplodingMetadataAnalysisService(MetadataAnalysisService):
         raise AssertionError("analyze should not run without a metadata run claim")
 
 
+class RouteMetadataDesignRegistry:
+    def invoke_payload(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        data: dict[str, Any]
+        if tool_name == "search_columns":
+            data = {
+                "candidates": [
+                    {
+                        "schema": "dbo",
+                        "tableName": "PPM_CUSTOMER_ORDER",
+                        "columnName": "CUSTOMER_NM",
+                        "logicalName": "customer name",
+                        "description": "Customer name.",
+                        "dataType": "VARCHAR(100)",
+                        "score": 95,
+                    }
+                ]
+            }
+        elif tool_name == "search_tables":
+            data = {
+                "candidates": [
+                    {
+                        "schema": "dbo",
+                        "tableName": "PPM_CUSTOMER_ORDER",
+                        "description": "Customer order.",
+                        "score": 90,
+                    }
+                ]
+            }
+        else:
+            data = {"candidates": []}
+        return {
+            "ok": True,
+            "toolName": tool_name,
+            "dbProfileId": payload["arguments"]["dbProfileId"],
+            "snapshotId": "route-design-snapshot",
+            "collectedAt": "2026-05-17T00:00:00Z",
+            "evidenceRefs": [
+                {
+                    "id": f"mcp.{tool_name}.route",
+                    "source": "fixture",
+                    "path": f"fixtures/mcp/route_design.json#/{tool_name}",
+                    "objectType": "METADATA",
+                    "objectName": "dbo.PPM_CUSTOMER_ORDER",
+                }
+            ],
+            "data": data,
+        }
+
+
 @pytest.fixture
 def client_and_repository(
     monkeypatch: pytest.MonkeyPatch,
@@ -1115,6 +1164,117 @@ def test_metadata_analysis_run_poll_missing_id_returns_404(client: TestClient) -
 
     assert response.status_code == 404
     assert response.json()["code"] == "METADATA_ANALYSIS_RUN_NOT_FOUND"
+
+
+def test_metadata_design_run_submit_poll_and_conversation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: RouteMetadataDesignRegistry(),
+    )
+
+    submit_response = client.post(
+        "/api/v1/metadata/design-runs",
+        json={
+            "dbProfileId": "master",
+            "message": "Create a customer order table.",
+            "designInputs": {
+                "tableNameHint": "PPM_CUSTOMER_ORDER",
+                "fields": [
+                    {
+                        "name": "customer name",
+                        "description": "Customer name",
+                    }
+                ],
+            },
+            "options": {
+                "llmProfileId": "openai_fast_test",
+                "generateDtoDraft": True,
+            },
+        },
+    )
+
+    assert submit_response.status_code == 202
+    submitted = submit_response.json()
+    assert submitted["runId"].startswith("metadata_design_run_")
+    assert submitted["conversationId"].startswith("metadata_design_conv_")
+    assert submitted["request"]["conversationId"] == submitted["conversationId"]
+    assert submitted["request"]["dbProfileId"] == "master"
+    assert submitted["result"] is None
+    assert submitted["error"] is None
+
+    poll_response = client.get(
+        f"/api/v1/metadata/design-runs/{submitted['runId']}"
+    )
+    conversation_response = client.get(
+        f"/api/v1/metadata/design-conversations/{submitted['conversationId']}"
+    )
+
+    assert poll_response.status_code == 200
+    polled = poll_response.json()
+    assert polled["runId"] == submitted["runId"]
+    assert polled["conversationId"] == submitted["conversationId"]
+    assert polled["status"] == "SUCCEEDED"
+    assert "CREATE TABLE [dbo].[PPM_CUSTOMER_ORDER]" in polled["result"][
+        "tableProposal"
+    ]["createTableScriptPreview"]
+    assert polled["result"]["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+    assert polled["result"]["reviewRequired"] is True
+    assert polled["result"]["relatedMetadata"]
+
+    assert conversation_response.status_code == 200
+    conversation = conversation_response.json()
+    assert conversation["conversationId"] == submitted["conversationId"]
+    assert [run["runId"] for run in conversation["runs"]] == [submitted["runId"]]
+
+    forbidden_keys = {
+        "rowdata",
+        "rawprompt",
+        "rawproviderresponse",
+        "providertrace",
+        "ddldraft",
+        "execute",
+        "deploy",
+        "publish",
+    }
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(submitted))
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(polled))
+
+
+def test_metadata_design_run_sanitizes_secret_like_request_before_storage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: RouteMetadataDesignRegistry(),
+    )
+
+    response = client.post(
+        "/api/v1/metadata/design-runs",
+        json={
+            "dbProfileId": "master",
+            "message": "password=do-not-return raw prompt select * from dbo.secret",
+            "designInputs": {
+                "fields": [
+                    {
+                        "name": "api token",
+                        "description": "secret value",
+                    }
+                ]
+            },
+            "options": {"llmProfileId": "openai_fast_test"},
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    serialized = str(payload).lower()
+    assert "redacted_review_required" in serialized
+    for forbidden in ("do-not-return", "raw prompt", "api token", "secret value", "select *"):
+        assert forbidden not in serialized
 
 
 def test_metadata_analysis_run_poll_leaves_active_run_for_worker(

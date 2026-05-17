@@ -24,6 +24,19 @@ P37 validates metadata-analysis DTO previews without changing the artifact persi
 - previews must not include raw SQL/SP definitions, row data, secrets, automatic source apply,
   DDL/DML execution, publish, deploy, or workflow artifact persistence claims.
 
+## P38 Metadata Design Chat Eval Contract
+
+P38 validates durable metadata design chat runs:
+
+- `POST /api/v1/metadata/design-runs`, `GET /api/v1/metadata/design-runs/{runId}`, and
+  `GET /api/v1/metadata/design-conversations/{conversationId}` expose sanitized run submit/polling.
+- v10 `METADATA_DESIGN_RUNS` is manual-apply only and stores sanitized request/result/error JSON.
+- field names, descriptions, and table hints drive read-only metadata lookup and standardization.
+- `createTableScriptPreview` is present, review-required, and non-executable.
+- optional `DTO_DRAFT` preview is returned inside the design result and is not workflow artifact persistence.
+- no raw prompt/provider response, row data, full SQL/SP definition, procedure execution output,
+  automatic DDL apply, publish, deploy, or retired artifact type revival is allowed.
+
 ## P35 Source Context Eval Gate
 
 Required checks for Copilot-style SP analysis:
