@@ -10,7 +10,6 @@ import type {
   RequestedOutputType,
   TargetObjectType,
 } from "@/lib/api/types";
-import { getPilotManifestSummary } from "@/lib/pilot-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -160,11 +159,6 @@ export default async function NewRequestPage({
       </div>
     );
   }
-  const pilotManifest = getPilotManifestSummary();
-  const requestedSampleId = firstParam(params.sample);
-  const selectedSample =
-    pilotManifest.procedureSamples.find((sample) => sample.id === requestedSampleId) ??
-    pilotManifest.procedureSamples[0];
   const batchStatus = firstParam(params.batchStatus);
   const batchId = firstParam(params.batchId);
   const batchJobs = (firstParam(params.batchJobs) ?? "")
@@ -250,8 +244,6 @@ export default async function NewRequestPage({
         <RequestForm
           defaultProfileId={profileResponse.defaultProfileId}
           profiles={profileResponse.profiles}
-          pilotManifest={pilotManifest}
-          selectedSample={selectedSample}
           action={submitRequest}
           batchAction={submitBatchRequest}
         />

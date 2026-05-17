@@ -167,6 +167,12 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
 
     assert "api.createSPAnalysisRequest" in request_page
     assert "api.createSPAnalysisBatchRequest" in request_page
+    assert "getPilotManifestSummary" not in request_page
+    assert "selectedSample" not in request_page
+    assert "Sample request target" not in request_form
+    assert "PPM pilot samples" not in request_form
+    assert "sample-option" not in request_form
+    assert "/requests/new?sample=" not in request_form
     assert "AnalysisHistoryList" in source
     assert "api.listJobs(5)" in source
     assert "api.listJobs(limit, targetKey || undefined)" in source
@@ -177,8 +183,23 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "api.listJobArtifacts(job.jobId)" in source
     assert "View all analysis history" in source
     assert "batchTargets" in source
-    for control_name in ("schema", "name", "batchTargets"):
-        assert "required" in _form_control_block(request_form, control_name)
+    assert 'name="targetType" readOnly type="hidden" value="PROCEDURE"' in source
+    assert 'name="schema" readOnly type="hidden"' in source
+    assert 'name="name" readOnly type="hidden"' in source
+    assert "SingleProcedureTargetInput" in request_form
+    assert "BatchProcedureTargetsInput" in request_form
+    assert "ProcedureSearchCombobox" in source
+    assert 'fetch(`/api/metadata/search?' in source
+    assert "Add to batch" in source
+    assert "Search and add PROCEDURE targets one at a time." in source
+    assert "required" in _form_control_block(source, "batchTargets")
+    procedure_search_route = (
+        WEB_ROOT / "app" / "api" / "metadata" / "search" / "route.ts"
+    ).read_text(encoding="utf-8")
+    assert 'objectTypes: ["PROCEDURE"]' in procedure_search_route
+    assert "api.searchMetadataObjects" in procedure_search_route
+    assert "suggestions: response.results.map" in procedure_search_route
+    assert "targetKey: result.targetKey" in procedure_search_route
     assert "useLlmAnalysis" in request_page
     assert "useAiToolOrchestration" in request_page
     assert "usePlatformToolOrchestration" in request_page
@@ -248,6 +269,9 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     artifact_preview = (WEB_ROOT / "components" / "artifact-preview.tsx").read_text(
         encoding="utf-8"
     )
+    metadata_panel = (WEB_ROOT / "components" / "metadata-analysis-panel.tsx").read_text(
+        encoding="utf-8"
+    )
     artifact_actions = (WEB_ROOT / "components" / "artifact-actions.tsx").read_text(
         encoding="utf-8"
     )
@@ -283,6 +307,13 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     assert 'href={`/api/v1/knowledge/assets/${asset.assetId}`}' not in job_status_view
     assert "knowledgeAssetHref(asset.assetId)" in job_status_view
     assert "knowledgeFactsHref(asset.assetId, asset.currentVersionId)" in job_status_view
+    assert 'href={`/api/v1/knowledge/assets/${asset.assetId}`}' not in metadata_panel
+    assert "`/api/v1/knowledge/assets/${asset.assetId}/versions/" not in metadata_panel
+    assert "knowledgeAssetHref(asset.assetId)" in metadata_panel
+    assert "knowledgeFactsHref(asset.assetId, asset.currentVersionId)" in metadata_panel
+    assert "encodeURIComponent(assetId)" in metadata_panel
+    assert "displayCaveatText(marker.message)" in metadata_panel
+    assert "displayCaveatText(caveat)" in metadata_panel
     assert "api.getKnowledgeAsset(assetId)" in asset_page
     assert "api.listKnowledgeAssetVersions(assetId)" in asset_page
     assert "api.listKnowledgeFacts(assetId, versionId)" in facts_page
@@ -293,6 +324,9 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     assert "Fact graph links" in facts_page
 
     assert "ArtifactActions" in artifact_preview
+    assert "const displayedContent = displayArtifactContent(artifact.content)" in artifact_preview
+    assert "content={displayedContent}" in artifact_preview
+    assert "<pre>{displayedContent}</pre>" in artifact_preview
     assert "Copy content" in artifact_actions
     assert "Download draft file" in artifact_actions
     assert "navigator.clipboard.writeText(content)" in artifact_actions
@@ -300,8 +334,11 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     assert "Download all draft artifacts" in job_status_view
     assert "/artifacts/download" in job_status_view
     assert "api.getArtifact(artifactId)" in single_download_route
+    assert "displayArtifactContent(artifact.content)" in single_download_route
     assert "api.listJobArtifacts(jobId)" in bundle_download_route
     assert "api.getArtifact(artifact.artifactId)" in bundle_download_route
+    assert "displayArtifactContent(artifact.content)" in bundle_download_route
+    assert "displayCaveatText" in bundle_download_route
     assert "createStoreOnlyZip(entries)" in bundle_download_route
     assert "README.md" in bundle_download_route
     assert "manifest.json" in bundle_download_route
@@ -327,6 +364,48 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     assert "README.md" in helper_smoke
     assert "manifest.json" in helper_smoke
     assert "0x06054b50" in helper_smoke
+
+
+def test_validation_and_metadata_caveat_ui_avoids_false_error_states() -> None:
+    artifact_preview = (WEB_ROOT / "components" / "artifact-preview.tsx").read_text(
+        encoding="utf-8"
+    )
+    metadata_search = (WEB_ROOT / "app" / "metadata" / "search" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    display_helpers = (WEB_ROOT / "lib" / "display-caveats.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "StatusPill value={check.result}" in artifact_preview
+    assert "check.result === \"PASS\"" in artifact_preview
+    assert "passedCheckLabel(check.severity)" in artifact_preview
+    assert "ruleLevelLabel(check.severity)" in artifact_preview
+    assert "StatusPill value={check.severity} label={check.severity}" not in artifact_preview
+    assert artifact_preview.index("StatusPill value={check.result}") < artifact_preview.index(
+        "check.result === \"PASS\""
+    )
+    assert "displayCaveatText(check.message" in artifact_preview
+    assert "displayCaveatText(item)" in artifact_preview
+
+    assert "splitMetadataBlockers(response.blockers)" in metadata_search
+    assert "hardBlockers.map" in metadata_search
+    assert "response.blockers.map" not in metadata_search
+    assert "Evidence caveats" in metadata_search
+    assert "metadataCaveatMessages(response.caveats, caveatBlockers)" in metadata_search
+    assert "metadataCaveatMessages(result.caveats, result.blockers)" in metadata_search
+    assert "근거 보강 필요" in metadata_search
+
+    assert "DEPENDENCY_METADATA_INCOMPLETE" in display_helpers
+    assert "의존성 링크 일부는 근거 보강 필요 상태입니다" in display_helpers
+    assert "Evidence caveat: " in display_helpers
+    assert "review_required" in display_helpers
+    assert "evidence_caveat" in display_helpers
+    assert "displayArtifactContent" in display_helpers
+    assert "LLM_INFERENCE_EVIDENCE_CAVEAT" in display_helpers
+    assert "_EVIDENCE_CAVEAT" in display_helpers
+    assert "_EVIDENCE_CAVEATS" in display_helpers
+    assert "status=EVIDENCE_CAVEAT" in display_helpers
 
 
 def test_web_visible_copy_uses_evidence_caveat_language_not_review_actions() -> None:

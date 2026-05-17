@@ -1,0 +1,5 @@
+{
+  "status": "fail",
+  "error": "metadata analysis panel did not expose asset links",
+  "stack": "Error: metadata analysis panel did not expose asset links\n    at assert (D:\\wt\\p35\\.tmp\\metadata-analysis-knowledge-link-smoke.cjs:11:11)\n    at main (D:\\wt\\p35\\.tmp\\metadata-analysis-knowledge-link-smoke.cjs:72:3)"
+}

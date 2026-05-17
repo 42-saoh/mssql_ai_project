@@ -1,0 +1,17 @@
+{
+  "status": "pass",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-validation-caveat-2026-05-17T03-02-57-827Z",
+  "forbiddenRequests": [],
+  "pageErrors": [],
+  "consoleMessages": [],
+  "screenshots": [
+    {
+      "name": "artifact validation caveats",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-validation-caveat-2026-05-17T03-02-57-827Z\\artifact-validation-caveats.png"
+    },
+    {
+      "name": "metadata search caveats",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-validation-caveat-2026-05-17T03-02-57-827Z\\metadata-search-caveats.png"
+    }
+  ]
+}

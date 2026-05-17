@@ -1,6 +1,17 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
 import type { MetadataAnalysisResponse } from "@/lib/api/types";
+import { displayCaveatText } from "@/lib/display-caveats";
+
+function knowledgeAssetHref(assetId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}`;
+}
+
+function knowledgeFactsHref(assetId: string, versionId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(
+    versionId,
+  )}/facts`;
+}
 
 export function MetadataAnalysisPanel({
   analysis,
@@ -81,11 +92,9 @@ export function MetadataAnalysisPanel({
                 {asset.targetKey ? <code>{asset.targetKey}</code> : null}
               </div>
               <div className="metadata-result-detail">
-                <Link href={`/api/v1/knowledge/assets/${asset.assetId}`}>Asset</Link>
+                <Link href={knowledgeAssetHref(asset.assetId)}>Asset</Link>
                 {asset.currentVersionId ? (
-                  <Link
-                    href={`/api/v1/knowledge/assets/${asset.assetId}/versions/${asset.currentVersionId}/facts`}
-                  >
+                  <Link href={knowledgeFactsHref(asset.assetId, asset.currentVersionId)}>
                     Facts
                   </Link>
                 ) : null}
@@ -148,7 +157,7 @@ export function MetadataAnalysisPanel({
               </div>
               <div className="metadata-result-detail">
                 {item.reviewReasons.slice(0, 3).map((reason) => (
-                  <small key={`${item.objectRef}-${reason}`}>{reason}</small>
+                  <small key={`${item.objectRef}-${reason}`}>{displayCaveatText(reason)}</small>
                 ))}
                 {item.evidenceRefs.slice(0, 2).map((ref) => (
                   <code key={`dto-${item.objectRef}-${ref}`}>{ref}</code>
@@ -211,7 +220,7 @@ export function MetadataAnalysisPanel({
           {analysis.reviewMarkers.map((marker) => (
             <article className="blocker-row" key={marker.code}>
               <strong>{marker.code}</strong>
-              <span>{marker.message}</span>
+              <span>{displayCaveatText(marker.message)}</span>
             </article>
           ))}
         </div>
@@ -222,7 +231,7 @@ export function MetadataAnalysisPanel({
           <strong>Caveats</strong>
           <ul>
             {analysis.caveats.map((caveat) => (
-              <li key={caveat}>{caveat}</li>
+              <li key={caveat}>{displayCaveatText(caveat)}</li>
             ))}
           </ul>
         </div>

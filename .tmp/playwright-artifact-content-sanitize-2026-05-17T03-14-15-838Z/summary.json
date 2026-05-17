@@ -1,0 +1,17 @@
+{
+  "status": "pass",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-artifact-content-sanitize-2026-05-17T03-14-15-838Z",
+  "forbiddenRequests": [],
+  "pageErrors": [],
+  "consoleMessages": [],
+  "screenshots": [
+    {
+      "name": "artifact content sanitized",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-artifact-content-sanitize-2026-05-17T03-14-15-838Z\\artifact-content-sanitized.png"
+    }
+  ],
+  "singleDownload": {
+    "filename": "GetInspItemsCd-SP-art_1d85d34240.md",
+    "size": 34764
+  }
+}

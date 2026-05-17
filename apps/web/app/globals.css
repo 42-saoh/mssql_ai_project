@@ -917,6 +917,89 @@ input:disabled {
   font-weight: 800;
 }
 
+.procedure-combobox {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.procedure-combobox label {
+  min-width: 0;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.field-code {
+  overflow-wrap: anywhere;
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: #25313a;
+  background: #e7eef1;
+  font-size: 12px;
+}
+
+.procedure-suggestions {
+  display: grid;
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.procedure-suggestion {
+  display: grid;
+  min-height: 0;
+  justify-items: start;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 12px;
+  color: var(--text);
+  background: #ffffff;
+  text-align: left;
+}
+
+.procedure-suggestion:hover,
+.procedure-suggestion:focus {
+  color: var(--text);
+  background: #edf8f6;
+}
+
+.procedure-suggestion strong,
+.procedure-suggestion code,
+.procedure-suggestion small {
+  overflow-wrap: anywhere;
+}
+
+.procedure-suggestion code {
+  margin-top: 5px;
+  color: #25313a;
+  background: #e7eef1;
+  font-size: 12px;
+}
+
+.procedure-suggestion small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.procedure-batch-picker {
+  display: grid;
+  min-width: 0;
+  align-content: end;
+  gap: 8px;
+}
+
 .content-preview {
   overflow: auto;
   border: 1px solid #25313a;

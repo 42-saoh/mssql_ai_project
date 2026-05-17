@@ -6,6 +6,7 @@ import {
   formatPortalApiError,
   portalApiErrorCode,
 } from "@/lib/api/errors";
+import { displayArtifactContent } from "@/lib/display-caveats";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export async function GET(
     const api = getPortalApi();
     const artifact = await api.getArtifact(artifactId);
     const filename = artifactFilename(artifact);
-    return new Response(artifact.content, {
+    return new Response(displayArtifactContent(artifact.content), {
       headers: {
         "cache-control": "no-store",
         "content-disposition": `attachment; filename="${filename}"`,

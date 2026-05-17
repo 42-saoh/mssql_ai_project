@@ -1,0 +1,16 @@
+{
+  "status": "pass",
+  "baseUrl": "http://localhost:3035",
+  "jobUrl": "http://localhost:3035/jobs/job_ac170c44a5",
+  "batchUrl": "http://localhost:3035/requests/new?batchId=batch_99f6252143&batchStatus=ACCEPTED&batchLimits=20%2F2&batchJobs=job_cf95899056%3Adbo.PAD_GET_BAT_LIST_PRC",
+  "forbiddenRequests": [],
+  "consoleMessages": [],
+  "pageErrors": [],
+  "screenshots": [
+    "batch-result.png",
+    "batch-target-added.png",
+    "new-request-empty-selector.png",
+    "new-request-procedure-selected.png",
+    "single-job-detail.png"
+  ]
+}

@@ -7,6 +7,7 @@ import {
   portalApiErrorCode,
 } from "@/lib/api/errors";
 import type { Artifact } from "@/lib/api/types";
+import { displayArtifactContent, displayCaveatText } from "@/lib/display-caveats";
 import { createStoreOnlyZip, type ZipEntry } from "@/lib/zip-writer";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +59,7 @@ function artifactZipEntries(jobId: string, artifacts: Artifact[]): ZipEntry[] {
       targetKey: artifact.targetKey ?? null,
       filename: artifactFilename(artifact, index + 1),
       evidenceCoverage: artifact.evidenceCoverage ?? null,
-      caveats: artifact.caveats ?? [],
+      caveats: (artifact.caveats ?? []).map(displayCaveatText),
     })),
   };
   return [
@@ -78,7 +79,7 @@ function artifactZipEntries(jobId: string, artifacts: Artifact[]): ZipEntry[] {
     },
     ...artifacts.map((artifact, index) => ({
       name: artifactFilename(artifact, index + 1),
-      content: artifact.content,
+      content: displayArtifactContent(artifact.content),
     })),
   ];
 }

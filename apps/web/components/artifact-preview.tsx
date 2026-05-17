@@ -3,6 +3,13 @@ import { ArtifactActions } from "@/components/artifact-actions";
 import { StatusPill } from "@/components/status-pill";
 import type { AgentRunSummary, Artifact, ValidationReport } from "@/lib/api/types";
 import {
+  displayCaveatText,
+  displayArtifactContent,
+  displayRuleId,
+  passedCheckLabel,
+  ruleLevelLabel,
+} from "@/lib/display-caveats";
+import {
   artifactStatusLabels,
   artifactTypeLabels,
   formatCoverage,
@@ -16,10 +23,6 @@ function sameTargetHref(targetKey: string): string {
   return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
 }
 
-function displayRuleId(ruleId: string): string {
-  return ruleId.replace(/review_required/gi, "evidence_caveat");
-}
-
 export function ArtifactPreview({
   artifact,
   validation,
@@ -31,6 +34,8 @@ export function ArtifactPreview({
   agentRuns?: AgentRunSummary[];
   validateAction?: (formData: FormData) => Promise<void>;
 }>) {
+  const displayedContent = displayArtifactContent(artifact.content);
+
   return (
     <div className="stack">
       <section className="panel">
@@ -77,7 +82,7 @@ export function ArtifactPreview({
           </p>
         </div>
 
-        <ArtifactActions artifactId={artifact.artifactId} content={artifact.content} />
+        <ArtifactActions artifactId={artifact.artifactId} content={displayedContent} />
 
         {artifact.blockers?.length ? (
           <div className="blocker-list">
@@ -95,14 +100,16 @@ export function ArtifactPreview({
             <strong>Caveats</strong>
             <ul>
               {artifact.caveats.map((caveat, index) => (
-                <li key={listItemKey("artifact-caveat", index)}>{caveat}</li>
+                <li key={listItemKey("artifact-caveat", index)}>
+                  {displayCaveatText(caveat)}
+                </li>
               ))}
             </ul>
           </div>
         ) : null}
 
         <div className="content-preview" aria-label="Draft artifact content">
-          <pre>{artifact.content}</pre>
+          <pre>{displayedContent}</pre>
         </div>
       </section>
 
@@ -124,11 +131,15 @@ export function ArtifactPreview({
               <article className="validation-row" key={check.ruleId}>
                 <div>
                   <h3>{displayRuleId(check.ruleId)}</h3>
-                  <p>{check.message ?? "No message provided."}</p>
+                  <p>{displayCaveatText(check.message ?? "No message provided.")}</p>
                 </div>
                 <div className="status-cluster">
-                  <StatusPill value={check.severity} label={check.severity} />
                   <StatusPill value={check.result} label={validationResultLabels[check.result]} />
+                  {check.result === "PASS" ? (
+                    <small>{passedCheckLabel(check.severity)}</small>
+                  ) : (
+                    <StatusPill value={check.severity} label={ruleLevelLabel(check.severity)} />
+                  )}
                 </div>
               </article>
             ))}
@@ -145,7 +156,7 @@ export function ArtifactPreview({
             <strong>Missing evidence</strong>
             <ul>
               {validation?.missingEvidence?.map((item, index) => (
-                <li key={listItemKey("missing-evidence", index)}>{item}</li>
+                <li key={listItemKey("missing-evidence", index)}>{displayCaveatText(item)}</li>
               ))}
             </ul>
           </div>
@@ -225,7 +236,9 @@ export function ArtifactPreview({
               <strong>Quality caveats</strong>
               <ul>
                 {validation?.qualityCaveats?.map((item, index) => (
-                  <li key={listItemKey("quality-caveat", index)}>{item}</li>
+                  <li key={listItemKey("quality-caveat", index)}>
+                    {displayCaveatText(item)}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -236,7 +249,9 @@ export function ArtifactPreview({
               <strong>Assumptions</strong>
               <ul>
                 {artifact.assumptions?.map((item, index) => (
-                  <li key={listItemKey("artifact-assumption", index)}>{item}</li>
+                  <li key={listItemKey("artifact-assumption", index)}>
+                    {displayCaveatText(item)}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -247,7 +262,7 @@ export function ArtifactPreview({
               <strong>근거 보강 필요</strong>
               <ul>
                 {artifact.todos?.map((item, index) => (
-                  <li key={listItemKey("artifact-todo", index)}>{item}</li>
+                  <li key={listItemKey("artifact-todo", index)}>{displayCaveatText(item)}</li>
                 ))}
               </ul>
             </div>

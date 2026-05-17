@@ -6,6 +6,7 @@ import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 import type { MetadataSearchObjectType } from "@/lib/api/types";
+import { metadataCaveatMessages, splitMetadataBlockers } from "@/lib/display-caveats";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,8 @@ export default async function MetadataSearchPage({
 
   const profileResponse = profileResult.value;
   const response = searchResult.value;
+  const { caveatBlockers, hardBlockers } = splitMetadataBlockers(response.blockers);
+  const responseCaveats = metadataCaveatMessages(response.caveats, caveatBlockers);
 
   return (
     <div className="stack">
@@ -190,9 +193,9 @@ export default async function MetadataSearchPage({
           </div>
         </dl>
 
-        {response.blockers.length > 0 ? (
+        {hardBlockers.length > 0 ? (
           <div className="blocker-list">
-            {response.blockers.map((blocker) => (
+            {hardBlockers.map((blocker) => (
               <article className="blocker-row" key={blocker.code}>
                 <strong>{blocker.code}</strong>
                 <span>{blocker.message}</span>
@@ -201,11 +204,11 @@ export default async function MetadataSearchPage({
           </div>
         ) : null}
 
-        {response.caveats.length > 0 ? (
+        {responseCaveats.length > 0 ? (
           <div className="callout">
-            <strong>Caveats</strong>
+            <strong>Evidence caveats</strong>
             <ul>
-              {response.caveats.map((caveat) => (
+              {responseCaveats.map((caveat) => (
                 <li key={caveat}>{caveat}</li>
               ))}
             </ul>
@@ -216,6 +219,7 @@ export default async function MetadataSearchPage({
           {response.results.map((result) => {
             const identity = result.objectIdentity;
             const fullName = `${identity.schema}.${identity.name}`;
+            const resultCaveats = metadataCaveatMessages(result.caveats, result.blockers);
 
             return (
               <article className="metadata-result-row" key={`${identity.type}-${fullName}`}>
@@ -236,8 +240,8 @@ export default async function MetadataSearchPage({
                   {result.evidenceRefs.map((evidence) => (
                     <code key={`${fullName}-${evidence.locator}`}>{evidence.locator}</code>
                   ))}
-                  {result.caveats.length > 0 ? (
-                    <small>{result.caveats.join(", ")}</small>
+                  {resultCaveats.length > 0 ? (
+                    <small>{resultCaveats.join(" · ")}</small>
                   ) : null}
                 </div>
               </article>
