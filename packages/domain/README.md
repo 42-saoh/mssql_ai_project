@@ -10,3 +10,6 @@
   procedure/dependency/pattern/result-set/call-graph/business-rule/modernization/evidence refs 를
   유지하면서 `analysisSubject`, `metadataProfiles`, `dependencyEvidence`, `dtoReadiness`,
   `factGraph`, `knowledgeAssetRefs` 를 추가한다.
+- `SpOperationModel.v0.1` 계약: P41에서 복잡한 SP의 branch-level operation, sanitized
+  statement evidence, DTO blueprint 를 Java/MyBatis 생성 전 단계로 분리한다. 이 계약은
+  internal planning 용도이며 public artifact type 또는 production readiness 를 바꾸지 않는다.

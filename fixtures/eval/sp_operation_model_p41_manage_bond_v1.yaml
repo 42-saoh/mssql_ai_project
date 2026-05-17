@@ -1,0 +1,674 @@
+fixture_suite_id: sp_operation_model_p41_manage_bond_v1
+contract_ref: p41_sp_operation_model@0.1.0
+phase: P41A
+status: authored_p41a_groundwork
+production_ready: false
+purpose: >
+  P41A fixture for PCO_GU_ManageBond_PRC. The fixture captures sanitized
+  operation, statement, and DTO-blueprint expectations derived from the user's
+  MIGRATION_GUIDE.md quality target without storing raw SP text or row data.
+
+artifact_scope:
+  requested_output_groups_unchanged:
+    - JAVA_MYBATIS_DRAFT
+  persisted_artifact_types_unchanged:
+    - DTO_DRAFT
+    - SERVICE_DRAFT
+    - MAPPER_INTERFACE
+    - MAPPER_XML
+  dto_draft_internal_shape: multi_file_bundle_allowed
+  new_public_artifact_type_allowed: false
+  ui_change_allowed: false
+
+source_reference:
+  name: MIGRATION_GUIDE.md
+  path_outside_repo: D:/migration/test_mcp_server_with_codex/MIGRATION_GUIDE.md
+  target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+  usage: sanitized_expectation_reference_only
+  copy_reference_content_to_repo: false
+  copy_raw_sp_text_to_repo: false
+
+model_profiles:
+  structured_operation_planner:
+    profile_id: openai_sp_semantic_analysis
+    default_model: gpt-5.5
+    remote_gate_required: true
+  fixture_test:
+    profile_id: fake_gateway_fixture
+    remote_gate_required: false
+
+storage_policy:
+  forbidden_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - row_data
+    - secrets
+  forbidden_runtime_actions:
+    - row_data_query
+    - procedure_execution
+    - business_db_ddl_or_dml
+    - automatic_ddl_apply
+    - automatic_generated_source_apply
+    - ppm_to_plf_fallback
+
+quality_thresholds:
+  operation_crud_flag_coverage_min: 1.0
+  dto_blueprint_min: 9
+  statement_evidence_min: 10
+  review_required_uncertain_items_min: 2
+  current_generator_gap_must_be_visible: true
+  forbidden_storage_findings_max: 0
+
+operation_model:
+  schemaVersion: SpOperationModel.v0.1
+  contractTarget: SpOperationModel
+  targetRef: PPM.dbo.PCO_GU_ManageBond_PRC
+  sourcePolicy: sanitized_facts_only
+  productionReady: false
+  evidenceRefs:
+    - ev_p41_manage_bond_guide
+    - ev_p41_manage_bond_static_flow
+  reviewMarkers:
+    - SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED
+    - CROSS_DB_WRITE_REVIEW_REQUIRED
+    - TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED
+  assumptions:
+    - User-provided guide is used as a quality target, not copied as source content.
+    - Statement evidence is sanitized and does not contain executable SQL.
+    - Called procedure input/output contracts require P41C metadata evidence.
+  operations:
+    - operationId: readBond
+      crudFlag: R
+      title: 보증정보 조회
+      summary: General bond lookup with flag-specific joins and result shape variants.
+      branchCondition:
+        expression: "@CRUDFlag = 'R'"
+        variables: ["@CRUDFlag", "@flag"]
+        evidenceRefs: [ev_p41_manage_bond_call_flow]
+        status: OBSERVED
+      statementRefs:
+        - stmt.read.pco_guar
+        - stmt.read.advance_context
+        - stmt.read.defect_context
+      dtoBlueprintRefs:
+        - ManageBondSearchCriteria
+        - ManageBondSearchRow
+      stateTransitions: []
+      riskMarkers: [RESULT_SHAPE_BRANCH_VARIANT_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_call_flow]
+      status: OBSERVED
+    - operationId: approveBond
+      crudFlag: A
+      title: 보증승인
+      summary: Approves the bond and updates advance or defect payment state by bond kind.
+      branchCondition:
+        expression: "@CRUDFlag = 'A' and @BondKindCode in ('020','030')"
+        variables: ["@CRUDFlag", "@BondKindCode", "@ApprovalYN", "@Sequence"]
+        evidenceRefs: [ev_p41_manage_bond_approve_phase]
+        status: OBSERVED
+      statementRefs:
+        - stmt.approve.pco_guar
+        - stmt.approve.advance_status
+        - stmt.approve.erp_due_date
+        - stmt.approve.finance_send
+        - stmt.approve.defect_status
+      dtoBlueprintRefs:
+        - ApproveAdvanceBondCommand
+        - ApproveDefectBondCommand
+        - FinanceTransferCommand
+      stateTransitions:
+        - PCO_GUAR.GUAR_APRV_YN -> Y
+        - PCO_GUAR.GUAR_ST_CD -> 060
+        - PCS_ADVM_PAYRPT.ADVM_PRV_ST_CD -> 527/537
+        - PCS_PAY_CMPD_RPT.PAY_CMPD_RPT_ST_CD -> 626/637
+      riskMarkers: [CROSS_DB_WRITE_REVIEW_REQUIRED, TRANSACTION_BOUNDARY_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      status: OBSERVED
+    - operationId: createBond
+      crudFlag: C
+      title: 보증정보 등록
+      summary: Creates one PCO_GUAR row or a retention batch from split reserve values.
+      branchCondition:
+        expression: "@CRUDFlag = 'C' and @SValue controls single versus retention batch"
+        variables: ["@CRUDFlag", "@BondKindCode", "@SValue"]
+        evidenceRefs: [ev_p41_manage_bond_create_phase]
+        status: OBSERVED
+      statementRefs:
+        - stmt.create.sequence
+        - stmt.create.pco_guar.single
+        - stmt.create.pco_guar.retention_batch
+        - stmt.create.retention_update
+      dtoBlueprintRefs:
+        - CreateBondCommand
+        - CreateRetentionBondBatchItem
+      stateTransitions:
+        - PCO_GUAR row inserted
+        - Related payment report guarantee sequence updated by bond kind
+      riskMarkers: [TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_create_phase]
+      status: OBSERVED
+    - operationId: updateBond
+      crudFlag: U
+      title: 보증정보 수정
+      summary: Updates PCO_GUAR and optionally advance payment guarantee amount.
+      branchCondition:
+        expression: "@CRUDFlag = 'U'"
+        variables: ["@CRUDFlag", "@BondKindCode", "@Sequence"]
+        evidenceRefs: [ev_p41_manage_bond_update_phase]
+        status: OBSERVED
+      statementRefs:
+        - stmt.update.pco_guar
+        - stmt.update.advance_amount
+      dtoBlueprintRefs:
+        - UpdateBondCommand
+      stateTransitions:
+        - PCO_GUAR bond fields updated
+      riskMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_update_phase]
+      status: OBSERVED
+    - operationId: deleteBond
+      crudFlag: D
+      title: 보증정보 삭제
+      summary: Deletes attachment rows and PCO_GUAR, with retention cleanup for bond kind 040.
+      branchCondition:
+        expression: "@CRUDFlag = 'D'"
+        variables: ["@CRUDFlag", "@BondKindCode", "@Sequence"]
+        evidenceRefs: [ev_p41_manage_bond_delete_phase]
+        status: OBSERVED
+      statementRefs:
+        - stmt.delete.attachment_detail
+        - stmt.delete.attachment_master
+        - stmt.delete.pco_guar
+        - stmt.delete.retention_cleanup
+      dtoBlueprintRefs:
+        - DeleteBondCommand
+      stateTransitions:
+        - PCO_ATTC_FIL_DTL rows deleted
+        - PCO_ATTC_FIL rows deleted
+        - PCO_GUAR row deleted
+        - PCS_RTNM_PAYRPT guarantee link cleared for retention
+      riskMarkers: [CASCADE_DELETE_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_delete_phase]
+      status: OBSERVED
+    - operationId: updateVendorBond
+      crudFlag: VENDOR_U
+      title: 협력사 보증 업데이트
+      summary: Updates advance or progress payment reports based on GUBUNFlag.
+      branchCondition:
+        expression: "@CRUDFlag = 'VENDOR_U' and @GUBUNFlag in ('J','G')"
+        variables: ["@CRUDFlag", "@GUBUNFlag"]
+        evidenceRefs: [ev_p41_manage_bond_vendor_phase]
+        status: OBSERVED
+      statementRefs:
+        - stmt.vendor.advance_update
+        - stmt.vendor.progress_update
+      dtoBlueprintRefs:
+        - VendorBondUpdateCommand
+      stateTransitions:
+        - Related payment report online/vendor guarantee fields updated
+      riskMarkers: [GUBUN_BRANCH_CONTRACT_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_vendor_phase]
+      status: OBSERVED
+    - operationId: updateOnlineBond
+      crudFlag: ONLINE_U
+      title: 온라인 보증 업데이트
+      summary: Updates online bond fields for advance or progress payment reports.
+      branchCondition:
+        expression: "@CRUDFlag = 'ONLINE_U' and @GUBUNFlag in ('J','G')"
+        variables: ["@CRUDFlag", "@GUBUNFlag"]
+        evidenceRefs: [ev_p41_manage_bond_online_phase]
+        status: OBSERVED
+      statementRefs:
+        - stmt.online.advance_update
+        - stmt.online.progress_update
+      dtoBlueprintRefs:
+        - OnlineBondUpdateCommand
+      stateTransitions:
+        - Online guarantee fields updated by payment report type
+      riskMarkers: [GUBUN_BRANCH_CONTRACT_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_online_phase]
+      status: OBSERVED
+  statementEvidence:
+    - statementId: stmt.read.pco_guar
+      operation: SELECT
+      targetRef: PPM.dbo.PCO_GUAR
+      phase: read_bond
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode", "@Sequence", "@flag"]
+      outputs: [CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_SEQ, GUAR_ST_CD, GUAR_APRV_YN]
+      writes: []
+      crossDatabase: false
+      reviewMarkers: [RESULT_SHAPE_BRANCH_VARIANT_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_call_flow]
+      status: OBSERVED
+    - statementId: stmt.read.advance_context
+      operation: SELECT
+      targetRef: PPM.dbo.PCS_ADVM_PAYRPT
+      phase: read_advance_context
+      inputs: ["@ContractNum", "@OrdNum"]
+      outputs: [ADVM_SEQ, ADVM_PRV_ST_CD, ADVM_GUAR_SEQ_NO]
+      writes: []
+      crossDatabase: false
+      reviewMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_call_flow]
+      status: OBSERVED
+    - statementId: stmt.read.defect_context
+      operation: SELECT
+      targetRef: PPM.dbo.PCS_PAY_CMPD_RPT
+      phase: read_defect_context
+      inputs: ["@ContractNum", "@OrdNum"]
+      outputs: [PAY_CNT, PAY_CMPD_RPT_ST_CD, PRV_GUAR_SEQ_NO]
+      writes: []
+      crossDatabase: false
+      reviewMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_call_flow]
+      status: OBSERVED
+    - statementId: stmt.approve.pco_guar
+      operation: UPDATE
+      targetRef: PPM.dbo.PCO_GUAR
+      phase: approve_bond
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode", "@Sequence", "@UserID"]
+      outputs: []
+      writes: [APRV_DTM, GUAR_APRV_YN, GUAR_ST_CD]
+      crossDatabase: false
+      reviewMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      status: OBSERVED
+    - statementId: stmt.approve.advance_status
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_ADVM_PAYRPT
+      phase: approve_advance_payment
+      inputs: ["@ContractNum", "@OrdNum", "@Sequence", "@BondKindCode"]
+      outputs: []
+      writes: [ADVM_GUAR_SEQ_NO, ADVM_PRV_ST_CD]
+      crossDatabase: false
+      reviewMarkers: [STATE_TRANSITION_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      status: OBSERVED
+    - statementId: stmt.approve.erp_due_date
+      operation: UPDATE
+      targetRef: ERP.dbo.XXEAI_TRX_HEADER_II
+      phase: extend_erp_due_date
+      inputs: [InvoiceNum, BondDelayDays]
+      outputs: []
+      writes: [DUE_DATE]
+      crossDatabase: true
+      reviewMarkers: [CROSS_DB_WRITE_REVIEW_REQUIRED, TRANSACTION_BOUNDARY_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.approve.finance_send
+      operation: EXECUTE
+      targetRef: PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC
+      phase: send_finance_transfer
+      inputs: [InvoiceNum, "@ContractNum", "@OrdNum", "@UserID"]
+      outputs: []
+      writes: []
+      crossDatabase: false
+      reviewMarkers: [CALLED_PROCEDURE_IO_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.approve.defect_status
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_PAY_CMPD_RPT
+      phase: approve_defect_payment
+      inputs: ["@ContractNum", "@OrdNum", "@Sequence"]
+      outputs: []
+      writes: [PAY_CMPD_RPT_ST_CD, PRV_GUAR_SEQ_NO]
+      crossDatabase: false
+      reviewMarkers: [STATE_TRANSITION_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      status: OBSERVED
+    - statementId: stmt.create.sequence
+      operation: COMPUTE
+      targetRef: PPM.dbo.PCO_GUAR.GUAR_SEQ
+      phase: compute_next_sequence
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode"]
+      outputs: [nextGuarSeq]
+      writes: []
+      crossDatabase: false
+      reviewMarkers: [CONCURRENCY_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_create_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.create.pco_guar.single
+      operation: INSERT
+      targetRef: PPM.dbo.PCO_GUAR
+      phase: create_single_bond
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode", "@CurrencyInsureAmt", "@AppendixNum", "@UserID"]
+      outputs: []
+      writes: [CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_SEQ, GUAR_AMT, ATTC_FIL_ID]
+      crossDatabase: false
+      reviewMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_create_phase]
+      status: OBSERVED
+    - statementId: stmt.create.pco_guar.retention_batch
+      operation: INSERT
+      targetRef: PPM.dbo.PCO_GUAR
+      phase: create_retention_batch
+      inputs: ["@SValue", "@ContractNum", "@OrdNum", "@BondKindCode"]
+      outputs: []
+      writes: [CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_SEQ, GUAR_AMT]
+      crossDatabase: false
+      reviewMarkers: [TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_create_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.create.retention_update
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_RTNM_PAYRPT
+      phase: update_retention_payment
+      inputs: ["@ContractNum", "@OrdNum", "@SValue"]
+      outputs: []
+      writes: [RTNM_GUAR_SEQ_NO]
+      crossDatabase: false
+      reviewMarkers: [TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_create_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.update.pco_guar
+      operation: UPDATE
+      targetRef: PPM.dbo.PCO_GUAR
+      phase: update_bond
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode", "@Sequence", "@CurrencyInsureAmt", "@Note", "@UserID"]
+      outputs: []
+      writes: [GUAR_AMT, NOTE, MODF_USR_ID, MODF_DTM]
+      crossDatabase: false
+      reviewMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_update_phase]
+      status: OBSERVED
+    - statementId: stmt.update.advance_amount
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_ADVM_PAYRPT
+      phase: update_advance_amount
+      inputs: ["@ContractNum", "@OrdNum", "@Sequence", "@CurrencyInsureAmt"]
+      outputs: []
+      writes: [ADVM_GUAR_AMT]
+      crossDatabase: false
+      reviewMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_update_phase]
+      status: OBSERVED
+    - statementId: stmt.delete.attachment_detail
+      operation: DELETE
+      targetRef: PPM.dbo.PCO_ATTC_FIL_DTL
+      phase: delete_attachment_detail
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode", "@Sequence"]
+      outputs: []
+      writes: [PCO_ATTC_FIL_DTL]
+      crossDatabase: false
+      reviewMarkers: [CASCADE_DELETE_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_delete_phase]
+      status: OBSERVED
+    - statementId: stmt.delete.attachment_master
+      operation: DELETE
+      targetRef: PPM.dbo.PCO_ATTC_FIL
+      phase: delete_attachment_master
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode", "@Sequence"]
+      outputs: []
+      writes: [PCO_ATTC_FIL]
+      crossDatabase: false
+      reviewMarkers: [CASCADE_DELETE_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_delete_phase]
+      status: OBSERVED
+    - statementId: stmt.delete.pco_guar
+      operation: DELETE
+      targetRef: PPM.dbo.PCO_GUAR
+      phase: delete_bond
+      inputs: ["@ContractNum", "@OrdNum", "@BondKindCode", "@Sequence"]
+      outputs: []
+      writes: [PCO_GUAR]
+      crossDatabase: false
+      reviewMarkers: []
+      evidenceRefs: [ev_p41_manage_bond_delete_phase]
+      status: OBSERVED
+    - statementId: stmt.delete.retention_cleanup
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_RTNM_PAYRPT
+      phase: cleanup_retention_payment
+      inputs: ["@ContractNum", "@OrdNum", "@Sequence", "@BondKindCode"]
+      outputs: []
+      writes: [RTNM_GUAR_SEQ_NO]
+      crossDatabase: false
+      reviewMarkers: [RETENTION_DELETE_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_delete_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.vendor.advance_update
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_ADVM_PAYRPT
+      phase: vendor_advance_update
+      inputs: ["@GUBUNFlag", "@ContractNum", "@OrdNum", "@Sequence"]
+      outputs: []
+      writes: [VNDR_GUAR_FIELDS]
+      crossDatabase: false
+      reviewMarkers: [COLUMN_DETAIL_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_vendor_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.vendor.progress_update
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_PAY_CMPD_RPT
+      phase: vendor_progress_update
+      inputs: ["@GUBUNFlag", "@ContractNum", "@OrdNum", "@Sequence"]
+      outputs: []
+      writes: [VNDR_GUAR_FIELDS]
+      crossDatabase: false
+      reviewMarkers: [COLUMN_DETAIL_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_vendor_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.online.advance_update
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_ADVM_PAYRPT
+      phase: online_advance_update
+      inputs: ["@GUBUNFlag", "@ContractNum", "@OrdNum", "@Sequence"]
+      outputs: []
+      writes: [ONLINE_GUAR_FIELDS]
+      crossDatabase: false
+      reviewMarkers: [COLUMN_DETAIL_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_online_phase]
+      status: REVIEW_REQUIRED
+    - statementId: stmt.online.progress_update
+      operation: UPDATE
+      targetRef: PPM.dbo.PCS_PAY_CMPD_RPT
+      phase: online_progress_update
+      inputs: ["@GUBUNFlag", "@ContractNum", "@OrdNum", "@Sequence"]
+      outputs: []
+      writes: [ONLINE_GUAR_FIELDS]
+      crossDatabase: false
+      reviewMarkers: [COLUMN_DETAIL_REVIEW_REQUIRED]
+      evidenceRefs: [ev_p41_manage_bond_online_phase]
+      status: REVIEW_REQUIRED
+  dtoBlueprints:
+    - name: ManageBondSearchCriteria
+      role: QUERY
+      operationIds: [readBond]
+      fields:
+        - {name: crudFlag, dbType: varchar(20), source: "@CRUDFlag", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: flag, dbType: smallint, source: "@flag", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: bondKindCode, dbType: varchar(3), source: "@BondKindCode", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_params, ev_p41_manage_bond_call_flow]
+      reviewMarkers: [RESULT_SHAPE_BRANCH_VARIANT_REVIEW_REQUIRED]
+    - name: ManageBondSearchRow
+      role: RESULT
+      operationIds: [readBond]
+      fields:
+        - {name: contractNum, dbType: varchar(10), source: PCO_GUAR.CTRT_NO, required: false, evidenceRefs: [ev_p41_manage_bond_call_flow]}
+        - {name: ordNum, dbType: smallint, source: PCO_GUAR.ORDR_NO, required: false, evidenceRefs: [ev_p41_manage_bond_call_flow]}
+        - {name: bondKindCode, dbType: varchar(3), source: PCO_GUAR.GUAR_TP_CD, required: false, evidenceRefs: [ev_p41_manage_bond_call_flow]}
+        - {name: bondStatusCode, dbType: varchar(3), source: PCO_GUAR.GUAR_ST_CD, required: false, evidenceRefs: [ev_p41_manage_bond_call_flow]}
+        - {name: approvalYn, dbType: varchar(1), source: PCO_GUAR.GUAR_APRV_YN, required: false, evidenceRefs: [ev_p41_manage_bond_call_flow]}
+      evidenceRefs: [ev_p41_manage_bond_call_flow]
+      reviewMarkers: [RESULT_SHAPE_BRANCH_VARIANT_REVIEW_REQUIRED]
+    - name: ApproveAdvanceBondCommand
+      role: COMMAND
+      operationIds: [approveBond]
+      fields:
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: sequence, dbType: smallint, source: "@Sequence", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: approvalYn, dbType: varchar(1), source: "@ApprovalYN", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: userId, dbType: varchar(50), source: "@UserID", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      reviewMarkers: [CROSS_DB_WRITE_REVIEW_REQUIRED, CALLED_PROCEDURE_IO_REVIEW_REQUIRED]
+    - name: ApproveDefectBondCommand
+      role: COMMAND
+      operationIds: [approveBond]
+      fields:
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: sequence, dbType: smallint, source: "@Sequence", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: userId, dbType: varchar(50), source: "@UserID", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      reviewMarkers: [STATE_TRANSITION_REVIEW_REQUIRED]
+    - name: FinanceTransferCommand
+      role: CALL_REQUEST
+      operationIds: [approveBond]
+      fields:
+        - {name: invoiceNum, dbType: varchar(50), source: InvoiceNum, required: false, evidenceRefs: [ev_p41_manage_bond_approve_phase]}
+        - {name: userId, dbType: varchar(50), source: "@UserID", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_approve_phase]
+      reviewMarkers: [CALLED_PROCEDURE_IO_REVIEW_REQUIRED]
+    - name: CreateBondCommand
+      role: COMMAND
+      operationIds: [createBond]
+      fields:
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: bondKindCode, dbType: varchar(3), source: "@BondKindCode", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: currencyInsureAmt, dbType: "decimal(18,3)", source: "@CurrencyInsureAmt", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: appendixNum, dbType: int, source: "@AppendixNum", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: userId, dbType: varchar(50), source: "@UserID", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_create_phase]
+      reviewMarkers: [CONCURRENCY_REVIEW_REQUIRED]
+    - name: CreateRetentionBondBatchItem
+      role: BATCH_ITEM
+      operationIds: [createBond]
+      fields:
+        - {name: sValue, dbType: varchar(max), source: "@SValue", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: retentionSeq, dbType: smallint, source: PCS_RTNM_PAYRPT.RTNM_SEQ, required: false, evidenceRefs: [ev_p41_manage_bond_create_phase]}
+        - {name: retentionAmount, dbType: "decimal(18,3)", source: PCS_RTNM_PAYRPT.RTN_PRV_AMT, required: false, evidenceRefs: [ev_p41_manage_bond_create_phase]}
+      evidenceRefs: [ev_p41_manage_bond_create_phase]
+      reviewMarkers: [TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED]
+    - name: UpdateBondCommand
+      role: COMMAND
+      operationIds: [updateBond]
+      fields:
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: sequence, dbType: smallint, source: "@Sequence", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: currencyInsureAmt, dbType: "decimal(18,3)", source: "@CurrencyInsureAmt", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: note, dbType: varchar(500), source: "@Note", required: false, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_update_phase]
+      reviewMarkers: []
+    - name: DeleteBondCommand
+      role: COMMAND
+      operationIds: [deleteBond]
+      fields:
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: bondKindCode, dbType: varchar(3), source: "@BondKindCode", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: sequence, dbType: smallint, source: "@Sequence", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_delete_phase]
+      reviewMarkers: [CASCADE_DELETE_REVIEW_REQUIRED]
+    - name: VendorBondUpdateCommand
+      role: COMMAND
+      operationIds: [updateVendorBond]
+      fields:
+        - {name: gubunFlag, dbType: varchar(1), source: "@GUBUNFlag", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: sequence, dbType: smallint, source: "@Sequence", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_vendor_phase]
+      reviewMarkers: [GUBUN_BRANCH_CONTRACT_REVIEW_REQUIRED, COLUMN_DETAIL_REVIEW_REQUIRED]
+    - name: OnlineBondUpdateCommand
+      role: COMMAND
+      operationIds: [updateOnlineBond]
+      fields:
+        - {name: gubunFlag, dbType: varchar(1), source: "@GUBUNFlag", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: contractNum, dbType: varchar(10), source: "@ContractNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: ordNum, dbType: smallint, source: "@OrdNum", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+        - {name: sequence, dbType: smallint, source: "@Sequence", required: true, evidenceRefs: [ev_p41_manage_bond_params]}
+      evidenceRefs: [ev_p41_manage_bond_online_phase]
+      reviewMarkers: [GUBUN_BRANCH_CONTRACT_REVIEW_REQUIRED, COLUMN_DETAIL_REVIEW_REQUIRED]
+
+generation_readiness:
+  current_generator_gap:
+    current_renderer: JavaMyBatisSpWrapperRenderer
+    observed_behavior: single_dto_file
+    expected_dto_blueprint_count: 10
+    single_dto_collapse: true
+    marker: SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED
+    next_slice_required: P41B
+  current_renderer_probe:
+    sampleId: p41-current-single-dto-gap-probe
+    request:
+      systemCode: PPM
+      businessCodeLv1: guarantee
+      businessCodeLv2: bond
+      entityName: ManageBond
+      resourceName: manage-bond
+      description: 보증관리 Java/MyBatis SP wrapper gap probe
+      generationMode: spRebuild
+      tableName: PPM.dbo.PCO_GUAR
+      spName: PPM.dbo.PCO_GU_ManageBond_PRC
+      inputParams:
+        - {name: "@CRUDFlag", dbType: varchar(20), required: true}
+        - {name: "@GUBUNFlag", dbType: varchar(1), required: false}
+        - {name: "@flag", dbType: smallint, required: false}
+        - {name: "@ContractNum", dbType: varchar(10), required: false}
+        - {name: "@OrdNum", dbType: smallint, required: false}
+        - {name: "@BondKindCode", dbType: varchar(3), required: false}
+        - {name: "@ApprovalYN", dbType: varchar(1), required: false}
+        - {name: "@Sequence", dbType: smallint, required: false}
+        - {name: "@CurrencyInsureAmt", dbType: "decimal(18,3)", required: false}
+        - {name: "@AppendixNum", dbType: int, required: false}
+        - {name: "@SValue", dbType: varchar(max), required: false}
+        - {name: "@UserID", dbType: varchar(50), required: false}
+      columns:
+        - {name: CTRT_NO, dbType: varchar(10), nullable: false, description: 계약번호}
+        - {name: ORDR_NO, dbType: smallint, nullable: false, description: 발주번호}
+        - {name: GUAR_TP_CD, dbType: varchar(3), nullable: false, description: 보증유형코드}
+        - {name: GUAR_SEQ, dbType: smallint, nullable: false, description: 보증순번}
+        - {name: GUAR_ST_CD, dbType: varchar(3), nullable: true, description: 보증상태코드}
+      resultShape: [CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_SEQ, GUAR_ST_CD]
+      authorId: AI
+      migrationGuide:
+        target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+        evidence_refs:
+          - {id: ev_p41_manage_bond_guide, type: USER_REFERENCE, object_ref: MIGRATION_GUIDE.md, locator: external.reference.summary}
+          - {id: ev_p41_manage_bond_static_flow, type: STATIC_ANALYSIS, object_ref: PPM.dbo.PCO_GU_ManageBond_PRC, locator: p41.operation_model.static}
+        dml_matrix:
+          - {operation: SELECT, target_ref: PPM.dbo.PCO_GUAR, phase: readBond, evidence_refs: [stmt.read.pco_guar], status: Confirmed}
+          - {operation: UPDATE, target_ref: PPM.dbo.PCO_GUAR, phase: approveBond, evidence_refs: [stmt.approve.pco_guar], status: Confirmed}
+          - {operation: INSERT, target_ref: PPM.dbo.PCO_GUAR, phase: createBond, evidence_refs: [stmt.create.pco_guar.single], status: Confirmed}
+          - {operation: DELETE, target_ref: PPM.dbo.PCO_GUAR, phase: deleteBond, evidence_refs: [stmt.delete.pco_guar], status: Confirmed}
+    evidence:
+      sources:
+        - type: storedProcedure
+          name: PPM.dbo.PCO_GU_ManageBond_PRC
+          reason: P41 fixture gap probe from sanitized guide expectations
+          locator: p41.manage_bond.fixture
+      assumptions:
+        - REVIEW_REQUIRED: Existing renderer intentionally collapses branch-specific DTOs.
+
+expected_quality_report:
+  status: PASSED
+  productionReady: false
+  scores:
+    operationCrudFlagCoverage: 1.0
+    dtoBlueprintCount: 10
+    statementEvidenceCount: 22
+    reviewRequiredUncertainItems: 8
+    currentGeneratorGapVisible: true
+    forbiddenStorageFindings: 0
+  evidenceRefs:
+    - ev_p41_manage_bond_guide
+    - ev_p41_manage_bond_static_flow
+  reviewRequiredFindings:
+    - SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED
+    - CROSS_DB_WRITE_REVIEW_REQUIRED
+    - TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED
+    - CALLED_PROCEDURE_IO_REVIEW_REQUIRED
+  storageSafetyFindings: []
+
+verification_commands:
+  default_fixture_gate:
+    - make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"
+  diff_check:
+    - git diff --check

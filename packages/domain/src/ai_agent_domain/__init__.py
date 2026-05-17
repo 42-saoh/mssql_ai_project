@@ -1,6 +1,7 @@
 from ai_agent_domain.models import (
     CANONICAL_ANALYSIS_MODEL_SCHEMA_VERSION,
     REQUESTED_OUTPUT_ARTIFACT_TYPES,
+    SP_OPERATION_MODEL_SCHEMA_VERSION,
     ArtifactStatus,
     ArtifactType,
     CanonicalAnalysisModel,
@@ -40,6 +41,14 @@ from ai_agent_domain.models import (
     JobStepStatus,
     JobSummary,
     RequestedOutputType,
+    SpDtoBlueprint,
+    SpDtoBlueprintRole,
+    SpDtoFieldBlueprint,
+    SpOperationCondition,
+    SpOperationContract,
+    SpOperationModel,
+    SpStatementContract,
+    SpStatementOperation,
     WorkflowStepType,
 )
 
@@ -85,5 +94,14 @@ __all__ = [
     "JobSummary",
     "REQUESTED_OUTPUT_ARTIFACT_TYPES",
     "RequestedOutputType",
+    "SP_OPERATION_MODEL_SCHEMA_VERSION",
+    "SpDtoBlueprint",
+    "SpDtoBlueprintRole",
+    "SpDtoFieldBlueprint",
+    "SpOperationCondition",
+    "SpOperationContract",
+    "SpOperationModel",
+    "SpStatementContract",
+    "SpStatementOperation",
     "WorkflowStepType",
 ]

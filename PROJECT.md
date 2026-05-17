@@ -45,6 +45,22 @@ change instructions; missing or ambiguous baselines remain `REVIEW_REQUIRED`.
 `designInputs.fields` remains API-compatible, but the Web UI no longer exposes field
 row inputs. P40 adds no new DDL and keeps `production_ready: false`.
 
+## P41 SP Operation Model Renewal Groundwork
+
+P41 starts the renewal of SP analysis and Java/MyBatis generation for complex
+stored procedures such as `PPM.dbo.PCO_GU_ManageBond_PRC`. P41A adds an internal
+`SpOperationModel.v0.1` contract that separates branch-level operation analysis,
+sanitized statement evidence, and DTO blueprints before source generation.
+
+The current single-DTO Java/MyBatis renderer remains supported as draft behavior,
+but P41A records it as insufficient for complex SPs through fixture-first evals.
+Public output groups and artifact types remain unchanged: `JAVA_MYBATIS_DRAFT`
+still expands to `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+`MAPPER_XML`. The new DTO behavior is an internal multi-file `DTO_DRAFT` bundle
+target for later P41 slices, not a new public artifact type. P41 remains
+`production_ready: false`, with no UI change, row-data access, procedure
+execution, automatic DDL/DML apply, or generated-source deployment.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

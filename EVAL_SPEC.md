@@ -48,6 +48,30 @@ P40 validates the natural-language and multi-turn layer on top of P38:
 - no raw prompt/provider response, row data, full SQL/SP definition, procedure execution output,
   automatic DDL apply, publish, deploy, or retired artifact type revival is allowed.
 
+## P41 SP Operation Model Renewal Eval Contract
+
+P41A validates the first operation-model renewal slice for complex SP code generation:
+
+- `SpOperationModel.v0.1` exists as an internal planning contract separate from
+  `CanonicalAnalysisModel.v2`.
+- `fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml` models
+  `PCO_GU_ManageBond_PRC` with `CRUDFlag` branches `R/A/C/U/D/VENDOR_U/ONLINE_U`.
+- The fixture contains sanitized statement evidence, branch conditions, and at least
+  nine DTO blueprints so the desired output cannot collapse into one DTO.
+- Current `JavaMyBatisSpWrapperRenderer` single-DTO behavior is accepted only as a
+  visible gap marker: `SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED`.
+- Public artifact types remain unchanged; `DTO_DRAFT` is the future multi-file bundle
+  carrier and no new public artifact type is introduced.
+- Cross-DB write, called procedure I/O, and uncertain TVF/procedure kind remain
+  `REVIEW_REQUIRED`.
+- raw SP definitions, raw prompts, raw provider responses, row data, secrets,
+  procedure execution, business DB DDL/DML, source apply, and PLF fallback are forbidden.
+
+통과 기준:
+- `make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"` 통과
+- `production_ready: false` 유지
+- 후속 P41B~P41F 순차 작업이 manifest 와 prompt pack 에 연결됨
+
 ## P35 Source Context Eval Gate
 
 Required checks for Copilot-style SP analysis:

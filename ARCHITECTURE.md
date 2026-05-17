@@ -70,6 +70,26 @@ ambiguous, the service does not silently start over; it returns caveats and revi
 surface removes field-row input controls, leaving message, metadata profile, conversation mode, and
 optional table name hint. No apply/execute/deploy/publish control is introduced.
 
+## P41 SP Operation Model Architecture Groundwork
+
+P41 introduces `SpOperationModel.v0.1` as an internal planning contract between SP
+analysis and Java/MyBatis generation. It does not replace `CanonicalAnalysisModel.v2`;
+it narrows code-generation planning around operation branches, sanitized statement
+evidence, and DTO blueprints.
+
+For `PCO_GU_ManageBond_PRC`, P41A models the `CRUDFlag` branches
+`R/A/C/U/D/VENDOR_U/ONLINE_U`, plus branch variables such as `@BondKindCode`,
+`@GUBUNFlag`, and `@SValue`. The contract records statement ids, operation type,
+target ref, input/output/write field candidates, cross-database flags, evidence refs,
+and `REVIEW_REQUIRED` markers. It also records DTO blueprints by role such as
+`QUERY`, `RESULT`, `COMMAND`, `BATCH_ITEM`, and `CALL_REQUEST`.
+
+The generation boundary remains draft-only. Public artifact types are not expanded:
+`DTO_DRAFT` may later contain a multi-file DTO bundle, while `SERVICE_DRAFT`,
+`MAPPER_INTERFACE`, and `MAPPER_XML` may remain single files. P41A adds no UI,
+OpenAPI, DB schema, live MCP tool, procedure execution, row-data query, automatic
+DDL/DML apply, or generated-source deployment.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates

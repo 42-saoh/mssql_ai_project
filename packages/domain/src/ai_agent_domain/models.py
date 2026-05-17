@@ -85,6 +85,7 @@ class JobSummary(BaseModel):
 
 
 CANONICAL_ANALYSIS_MODEL_SCHEMA_VERSION = "CanonicalAnalysisModel.v2"
+SP_OPERATION_MODEL_SCHEMA_VERSION = "SpOperationModel.v0.1"
 
 
 class CanonicalEvidenceStatus(StrEnum):
@@ -335,6 +336,98 @@ class CanonicalKnowledgeAssetRef(BaseModel):
     version_id: str | None = Field(default=None, alias="versionId")
     asset_kind: str = Field(alias="assetKind")
     content_hash: str | None = Field(default=None, alias="contentHash")
+
+
+class SpStatementOperation(StrEnum):
+    SELECT = "SELECT"
+    INSERT = "INSERT"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+    EXECUTE = "EXECUTE"
+    COMPUTE = "COMPUTE"
+    VALIDATE = "VALIDATE"
+
+
+class SpDtoBlueprintRole(StrEnum):
+    QUERY = "QUERY"
+    RESULT = "RESULT"
+    COMMAND = "COMMAND"
+    BATCH_ITEM = "BATCH_ITEM"
+    CALL_REQUEST = "CALL_REQUEST"
+    CALL_RESULT = "CALL_RESULT"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class SpOperationCondition(BaseModel):
+    expression: str
+    variables: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+
+
+class SpStatementContract(BaseModel):
+    statement_id: str = Field(alias="statementId")
+    operation: SpStatementOperation
+    target_ref: str = Field(alias="targetRef")
+    phase: str
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+    writes: list[str] = Field(default_factory=list)
+    cross_database: bool = Field(default=False, alias="crossDatabase")
+    review_markers: list[str] = Field(default_factory=list, alias="reviewMarkers")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+
+
+class SpDtoFieldBlueprint(BaseModel):
+    name: str
+    db_type: str = Field(alias="dbType")
+    source: str
+    required: bool = False
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class SpDtoBlueprint(BaseModel):
+    name: str
+    role: SpDtoBlueprintRole
+    operation_ids: list[str] = Field(default_factory=list, alias="operationIds")
+    fields: list[SpDtoFieldBlueprint] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_markers: list[str] = Field(default_factory=list, alias="reviewMarkers")
+
+
+class SpOperationContract(BaseModel):
+    operation_id: str = Field(alias="operationId")
+    crud_flag: str = Field(alias="crudFlag")
+    title: str
+    summary: str
+    branch_condition: SpOperationCondition = Field(alias="branchCondition")
+    statement_refs: list[str] = Field(default_factory=list, alias="statementRefs")
+    dto_blueprint_refs: list[str] = Field(default_factory=list, alias="dtoBlueprintRefs")
+    state_transitions: list[str] = Field(default_factory=list, alias="stateTransitions")
+    risk_markers: list[str] = Field(default_factory=list, alias="riskMarkers")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    status: CanonicalEvidenceStatus = CanonicalEvidenceStatus.REVIEW_REQUIRED
+
+
+class SpOperationModel(BaseModel):
+    schema_version: str = Field(
+        default=SP_OPERATION_MODEL_SCHEMA_VERSION,
+        alias="schemaVersion",
+    )
+    contract_target: str = Field(default="SpOperationModel", alias="contractTarget")
+    target_ref: str = Field(alias="targetRef")
+    source_policy: str = Field(default="sanitized_facts_only", alias="sourcePolicy")
+    production_ready: bool = Field(default=False, alias="productionReady")
+    operations: list[SpOperationContract] = Field(min_length=1)
+    statement_evidence: list[SpStatementContract] = Field(
+        default_factory=list,
+        alias="statementEvidence",
+    )
+    dto_blueprints: list[SpDtoBlueprint] = Field(default_factory=list, alias="dtoBlueprints")
+    review_markers: list[str] = Field(default_factory=list, alias="reviewMarkers")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    assumptions: list[str] = Field(default_factory=list)
 
 
 class CanonicalAnalysisModel(BaseModel):

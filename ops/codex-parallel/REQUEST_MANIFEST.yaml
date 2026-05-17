@@ -16,6 +16,7 @@ basis:
   - spec/eval/p36_output_renewal_contract.yaml
   - spec/eval/p38_metadata_design_chat_contract.yaml
   - spec/eval/p40_metadata_design_natural_language_chat_contract.yaml
+  - spec/eval/p41_sp_operation_model_contract.yaml
   - spec/validation/validation_rules.yaml
   - spec/policy/project_ai_java_mybatis_generation_policy.yaml
   - spec/policy/platform_db_standardization_rules_for_ai.json
@@ -24,6 +25,7 @@ basis:
   - config/mssql/local_docker_profiles.yaml
   - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
   - fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml
+  - fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml
 profiles:
   coordinator: safe-explore
   worker: dev-edit
@@ -1360,4 +1362,114 @@ waves:
         verify:
           - make test-core
           - make test-web-smoke
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E, P38A, P38B, P38C, P38D, P38E, P40A, P40B, P40C, P40D, P40E]
+  - wave: W18_P41_sp_operation_model_renewal
+    description: P41 SP operation model and multi-DTO generation renewal, sequential only
+    tracks:
+      - id: P41A
+        branch: feat/p41a-sp-operation-model-contract-assets
+        worktree: ../wt/p41a-sp-operation-model-contract-assets
+        prompt: prompts/41a_sp_operation_model_contract_assets.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, docs-sync]
+        depends_on: [P40E]
+        target_paths:
+          - packages/domain/
+          - spec/eval/p41_sp_operation_model_contract.yaml
+          - fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml
+          - tasks/0041-sp-operation-model-renewal.md
+          - ops/codex-parallel/
+          - tests/contract/test_p41_sp_operation_model_prompt_assets.py
+          - tests/eval/test_p41_sp_operation_model.py
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"
+          - git diff --check
+      - id: P41B
+        branch: feat/p41b-sp-operation-schema-prompt
+        worktree: ../wt/p41b-sp-operation-schema-prompt
+        prompt: prompts/41b_sp_operation_schema_prompt.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P41A]
+        target_paths:
+          - packages/agent-runtime/
+          - packages/domain/
+          - tests/unit/agent_runtime/
+          - tests/eval/
+          - spec/eval/p41_sp_operation_model_contract.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime"
+          - git diff --check
+      - id: P41C
+        branch: feat/p41c-statement-evidence-extractor
+        worktree: ../wt/p41c-statement-evidence-extractor
+        prompt: prompts/41c_statement_evidence_extractor.md
+        role: mcp_engineer
+        skills: [contract-to-code, mcp-tooling-design, eval-fixture-authoring]
+        depends_on: [P41B]
+        target_paths:
+          - packages/analysis/
+          - services/mssql-mcp/
+          - spec/mcp/
+          - tests/unit/analysis/
+          - tests/contract/mcp/
+          - tests/unit/mcp/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/analysis tests/contract/mcp tests/unit/mcp"
+          - git diff --check
+      - id: P41D
+        branch: feat/p41d-structured-semantic-planner
+        worktree: ../wt/p41d-structured-semantic-planner
+        prompt: prompts/41d_structured_semantic_planner.md
+        role: platform_worker
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P41C]
+        target_paths:
+          - packages/agent-runtime/
+          - apps/api/
+          - tests/unit/agent_runtime/
+          - tests/unit/api/
+          - tests/eval/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/api tests/eval/test_p41_sp_operation_model.py"
+          - git diff --check
+      - id: P41E
+        branch: feat/p41e-multi-dto-java-mybatis-generator
+        worktree: ../wt/p41e-multi-dto-java-mybatis-generator
+        prompt: prompts/41e_multi_dto_java_mybatis_generator.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P41D]
+        target_paths:
+          - packages/generation/
+          - fixtures/generation/
+          - tests/unit/generation/
+          - tests/eval/test_p41_sp_operation_model.py
+        verify:
+          - make test PYTEST_ARGS="tests/unit/generation tests/eval/test_p41_sp_operation_model.py"
+          - git diff --check
+      - id: P41F
+        branch: feat/p41f-docs-quality-gate
+        worktree: ../wt/p41f-docs-quality-gate
+        prompt: prompts/41f_docs_quality_gate.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P41E]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+          - docs/
+          - fixtures/eval/README.md
+          - tests/eval/README.md
+          - tasks/0041-sp-operation-model-renewal.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/unit/generation/test_java_mybatis_sp_wrapper_renderer.py tests/eval/test_p36_output_renewal_quality.py"
+          - git diff --check
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E, P38A, P38B, P38C, P38D, P38E, P40A, P40B, P40C, P40D, P40E, P41A, P41B, P41C, P41D, P41E, P41F]

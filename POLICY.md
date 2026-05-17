@@ -17,6 +17,19 @@
 - Metadata lookup remains read-only through MCP tools; row data, procedure execution, business DB DDL/DML, automatic DDL apply, publish/deploy/source apply, raw prompt/provider response storage, and secret storage remain forbidden.
 - Missing or inferred names, types, descriptions, PK/FK, index, or relationship decisions must stay `REVIEW_REQUIRED`.
 
+## P41 SP Operation Model Renewal Policy
+
+- `SpOperationModel.v0.1` is an internal draft planning contract, not production-ready conversion evidence.
+- P41 operation fixtures may store sanitized branch, statement, target, field-candidate, evidence-ref,
+  and DTO-blueprint facts only.
+- User-provided guide files may be used as quality references, but raw SP definitions, raw guide body
+  copies, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets must not
+  be persisted in repo fixtures or platform storage.
+- Cross-database writes, uncertain TVF/procedure kind, called procedure I/O, and branch-specific
+  result-shape uncertainty must remain `REVIEW_REQUIRED`.
+- P41A does not authorize UI changes, public artifact type expansion, live MCP tool expansion,
+  procedure execution, row-data access, automatic DDL/DML apply, or generated-source deployment.
+
 ## P35 Source Context Policy
 
 - Full stored procedure definitions must not be sent to the model by default. The semantic runtime

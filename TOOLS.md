@@ -16,6 +16,19 @@ The v9 DB SQL is manual-review/manual-apply only. It is non-destructive for exis
 FK-linked retired artifact rows and blocks only new retired artifact inserts/type changes.
 Tooling must not apply it automatically.
 
+## P41 Verification Notes
+
+P41A validates the SP operation model groundwork with fixture-first tests only. The
+targeted command is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"
+```
+
+The fixture uses sanitized expectations from the external `MIGRATION_GUIDE.md` reference
+for `PCO_GU_ManageBond_PRC`; it does not store raw SP text and does not require live DB,
+row-data access, procedure execution, OpenAI network calls, or a new MCP tool.
+
 ## 목적
 
 이 문서는 로컬 개발에서 사용할 도구, 명령 규약, MCP 구성을 정의한다.  

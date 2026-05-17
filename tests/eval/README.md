@@ -12,5 +12,9 @@ design chat contract. It checks sanitized interpreted intent, applied changes, n
 refine flows, metadata evidence, table script previews, DTO previews, and no retired artifact
 revival.
 
+P41 adds `test_p41_sp_operation_model.py` for the SP operation-model renewal groundwork. It checks
+the `PCO_GU_ManageBond_PRC` fixture, branch-level operation coverage, multi-DTO blueprint
+expectations, `REVIEW_REQUIRED` markers, storage safety, and the current single-DTO renderer gap.
+
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.
