@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
 
+from ai_agent_generation.utils import (
+    ensure_trailing_newline,
+    java_imports_for_types,
+    java_type_for_db_type,
+    snake_to_lower_camel,
+    upper_first,
+)
 from ai_agent_runtime.gateway import (
     ModelGateway,
     ModelGatewayError,
@@ -57,6 +65,7 @@ from api_app.schemas import (
     MetadataAnalysisReviewMarker,
     MetadataDependencyGraph,
     MetadataDtoReadiness,
+    MetadataGeneratedDraft,
     MetadataInsightGroup,
     MetadataObjectIdentity,
     MetadataObjectProfile,
@@ -69,6 +78,62 @@ from api_app.repositories import WorkflowRepository
 
 AI_METADATA_ANALYSIS_SKIPPED = "AI_METADATA_ANALYSIS_SKIPPED"
 AI_METADATA_ANALYSIS_REVIEW_REQUIRED = "AI_METADATA_ANALYSIS_REVIEW_REQUIRED"
+METADATA_DTO_DRAFT_REVIEW_REQUIRED = "METADATA_DTO_DRAFT_REVIEW_REQUIRED"
+_JAVA_IDENTIFIER_CLEANUP = re.compile(r"[^0-9A-Za-z_]+")
+_JAVA_RESERVED_WORDS = frozenset(
+    {
+        "abstract",
+        "assert",
+        "boolean",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "class",
+        "const",
+        "continue",
+        "default",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "extends",
+        "final",
+        "finally",
+        "float",
+        "for",
+        "goto",
+        "if",
+        "implements",
+        "import",
+        "instanceof",
+        "int",
+        "interface",
+        "long",
+        "native",
+        "new",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "return",
+        "short",
+        "static",
+        "strictfp",
+        "super",
+        "switch",
+        "synchronized",
+        "this",
+        "throw",
+        "throws",
+        "transient",
+        "try",
+        "void",
+        "volatile",
+        "while",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -86,6 +151,7 @@ class MetadataObjectDepth:
     insight_groups: tuple[dict[str, Any], ...]
     dependency_graph: dict[str, Any]
     dto_readiness: tuple[dict[str, Any], ...]
+    table_columns: dict[str, tuple[dict[str, Any], ...]]
     deterministic_facts: tuple[dict[str, Any], ...]
 
 
@@ -155,6 +221,7 @@ class MetadataAnalysisService:
             MetadataDtoReadiness.model_validate(item)
             for item in object_depth.dto_readiness
         ]
+        generated_drafts: list[MetadataGeneratedDraft] = []
         assumptions: list[str] = []
         summary = "결정론적 근거가 없어 metadata analysis를 실행하지 않았습니다."
 
@@ -240,6 +307,30 @@ class MetadataAnalysisService:
             )
             all_caveats = _dedupe_strings([*all_caveats, AI_METADATA_ANALYSIS_SKIPPED])
 
+        if options.generate_dto_drafts:
+            generated_drafts = _build_metadata_generated_drafts(
+                object_profiles=[
+                    dict(profile) for profile in object_depth.object_profiles
+                ],
+                table_columns=object_depth.table_columns,
+                dto_readiness=[item.to_response() for item in dto_readiness],
+            )
+            if not generated_drafts:
+                review_markers.append(
+                    _review_marker(
+                        METADATA_DTO_DRAFT_REVIEW_REQUIRED,
+                        (
+                            "generateDtoDrafts=true request could not produce a "
+                            "DTO_DRAFT preview because TABLE/VIEW column metadata "
+                            "was unavailable."
+                        ),
+                        evidence_refs=_fallback_fact_refs(deterministic_facts),
+                    )
+                )
+                all_caveats = _dedupe_strings(
+                    [*all_caveats, METADATA_DTO_DRAFT_REVIEW_REQUIRED]
+                )
+
         marker_models = [
             MetadataAnalysisReviewMarker.model_validate(marker)
             for marker in _dedupe_markers(review_markers)
@@ -282,6 +373,7 @@ class MetadataAnalysisService:
             insightGroups=insight_groups,
             dependencyGraph=dependency_graph_model,
             dtoReadiness=dto_readiness,
+            generatedDrafts=generated_drafts,
             aiToolEvidence=ai_tool_evidence,
             deterministicFacts=deterministic_facts,
             reviewMarkers=marker_models,
@@ -291,6 +383,7 @@ class MetadataAnalysisService:
                 blockers
                 or all_caveats
                 or marker_models
+                or any(draft.review_required for draft in generated_drafts)
                 or any(target.review_required for target in targets)
             ),
             blockers=blockers,
@@ -361,7 +454,11 @@ def _build_metadata_object_depth(
             if not object_ref:
                 continue
             columns = _safe_dict_list(data.get("columns"))
-            profile = _profile_for(profiles, object_ref, "TABLE")
+            profile = _profile_for(
+                profiles,
+                object_ref,
+                str(data.get("objectType") or "TABLE"),
+            )
             table_columns[object_ref] = columns
             profile["columnCount"] = len(columns)
             profile["descriptionCoverage"] = _description_coverage(data, columns)
@@ -550,6 +647,10 @@ def _build_metadata_object_depth(
         insight_groups=tuple(insight_groups),
         dependency_graph=dependency_graph,
         dto_readiness=tuple(dto_readiness),
+        table_columns={
+            object_ref: tuple(columns)
+            for object_ref, columns in table_columns.items()
+        },
         deterministic_facts=tuple([*profile_facts, *graph_facts]),
     )
 
@@ -1630,6 +1731,270 @@ def _build_dto_readiness(
             }
         )
     return readiness
+
+
+def _build_metadata_generated_drafts(
+    *,
+    object_profiles: list[dict[str, Any]],
+    table_columns: dict[str, tuple[dict[str, Any], ...]],
+    dto_readiness: list[dict[str, Any]],
+) -> list[MetadataGeneratedDraft]:
+    readiness_by_ref = {
+        str(item.get("objectRef") or ""): item
+        for item in dto_readiness
+        if str(item.get("objectRef") or "").strip()
+    }
+    drafts: list[MetadataGeneratedDraft] = []
+    for profile in object_profiles:
+        object_ref = str(profile.get("objectRef") or "").strip()
+        object_type = str(profile.get("objectType") or "").strip()
+        if object_type not in {"TABLE", "VIEW"}:
+            continue
+        columns = [dict(column) for column in table_columns.get(object_ref, ())]
+        if not object_ref or not columns:
+            continue
+        readiness = readiness_by_ref.get(object_ref, {})
+        evidence_refs = _dedupe_strings(
+            [
+                *[str(ref) for ref in profile.get("sourceFactIds", [])],
+                *[str(ref) for ref in profile.get("evidenceRefs", [])],
+                *[str(ref) for ref in readiness.get("evidenceRefs", [])],
+            ]
+        )
+        review_reasons = _metadata_dto_review_reasons(
+            profile=profile,
+            columns=columns,
+            readiness=readiness,
+        )
+        class_name = _metadata_dto_class_name(object_ref)
+        drafts.append(
+            MetadataGeneratedDraft.model_validate(
+                {
+                    "artifactType": "DTO_DRAFT",
+                    "objectRef": object_ref,
+                    "targetKey": profile.get("targetKey"),
+                    "fileName": f"{class_name}.java",
+                    "language": "java",
+                    "content": _render_metadata_dto_draft(
+                        object_ref=object_ref,
+                        target_key=str(profile.get("targetKey") or ""),
+                        object_type=object_type,
+                        class_name=class_name,
+                        columns=columns,
+                        evidence_refs=evidence_refs,
+                        review_reasons=review_reasons,
+                    ),
+                    "evidenceRefs": evidence_refs,
+                    "reviewRequired": bool(review_reasons or profile.get("reviewRequired")),
+                    "reviewReasons": review_reasons,
+                }
+            )
+        )
+    return drafts
+
+
+def _metadata_dto_review_reasons(
+    *,
+    profile: dict[str, Any],
+    columns: list[dict[str, Any]],
+    readiness: dict[str, Any],
+) -> list[str]:
+    reasons = [str(reason) for reason in readiness.get("reviewReasons", [])]
+    object_type = str(profile.get("objectType") or "")
+    if object_type == "VIEW":
+        reasons.append("VIEW DTO draft requires SELECT shape and updateability review.")
+    if object_type == "TABLE" and int(profile.get("primaryKeyCount") or 0) == 0:
+        reasons.append("Primary key metadata is not confirmed.")
+    for column in columns:
+        name = str(column.get("name") or "UNKNOWN_COLUMN")
+        db_type = str(column.get("dataType") or column.get("typeName") or "").strip()
+        if not db_type:
+            reasons.append(f"{name} has no DB type evidence.")
+        elif not _known_metadata_db_type(db_type):
+            reasons.append(f"{name} uses DB type {db_type}; Java type mapping needs review.")
+        if _metadata_bool(column.get("isNullable")):
+            reasons.append(f"{name} is nullable; business null handling needs review.")
+        if not str(column.get("description") or "").strip() and str(
+            column.get("descriptionStatus") or ""
+        ) != "CONFIRMED":
+            reasons.append(f"{name} has no confirmed description.")
+    return _dedupe_strings(reasons)
+
+
+def _render_metadata_dto_draft(
+    *,
+    object_ref: str,
+    target_key: str,
+    object_type: str,
+    class_name: str,
+    columns: list[dict[str, Any]],
+    evidence_refs: list[str],
+    review_reasons: list[str],
+) -> str:
+    field_specs = _metadata_dto_field_specs(columns)
+    java_types = {str(field["javaType"]) for field in field_specs}
+    lines = [
+        "/**",
+        " * Metadata DTO draft generated from sanitized MSSQL metadata.",
+        " * artifactType=DTO_DRAFT",
+        f" * objectRef={_java_comment_text(object_ref)}",
+        f" * objectType={_java_comment_text(object_type)}",
+    ]
+    if target_key:
+        lines.append(f" * targetKey={_java_comment_text(target_key)}")
+    lines.extend(
+        [
+            f" * evidenceRefs={_java_comment_text(', '.join(evidence_refs[:5]) or 'none')}",
+            " * REVIEW_REQUIRED: validate package, naming, domain semantics, "
+            "and null handling before use.",
+            " */",
+        ]
+    )
+    imports = java_imports_for_types(java_types)
+    for import_name in imports:
+        lines.append(f"import {import_name};")
+    if imports:
+        lines.append("")
+    lines.append(f"public class {class_name} {{")
+    if review_reasons:
+        lines.append("")
+        lines.append("    /**")
+        lines.append("     * REVIEW_REQUIRED:")
+        for reason in review_reasons[:8]:
+            lines.append(f"     * - {_java_comment_text(reason)}")
+        lines.append("     */")
+    for field in field_specs:
+        lines.append("")
+        lines.append(
+            "    /** "
+            f"DB column={_java_comment_text(str(field['physicalName']))}; "
+            f"dbType={_java_comment_text(str(field['dbType']))}; "
+            f"nullable={str(field['nullable']).lower()}; "
+            f"primaryKey={str(field['primaryKey']).lower()}; "
+            f"evidence={_java_comment_text(', '.join(evidence_refs[:3]) or 'none')}; "
+            f"{_java_comment_text(str(field['review']))} */"
+        )
+        lines.append(f"    private {field['javaType']} {field['fieldName']};")
+    for field in field_specs:
+        field_name = str(field["fieldName"])
+        java_type = str(field["javaType"])
+        method_suffix = upper_first(field_name)
+        lines.extend(
+            [
+                "",
+                f"    public {java_type} get{method_suffix}() {{",
+                f"        return {field_name};",
+                "    }",
+                "",
+                f"    public void set{method_suffix}({java_type} {field_name}) {{",
+                f"        this.{field_name} = {field_name};",
+                "    }",
+            ]
+        )
+    lines.append("}")
+    return ensure_trailing_newline("\n".join(lines))
+
+
+def _metadata_dto_field_specs(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    specs: list[dict[str, Any]] = []
+    seen_fields: set[str] = set()
+    for index, column in enumerate(columns, start=1):
+        physical_name = str(column.get("name") or f"COLUMN_{index}").strip()
+        field_name = _metadata_java_field_name(physical_name)
+        if field_name in seen_fields:
+            field_name = f"{field_name}{index}"
+        seen_fields.add(field_name)
+        raw_db_type = str(column.get("dataType") or column.get("typeName") or "").strip()
+        db_type = raw_db_type or "nvarchar"
+        review_notes = []
+        if _metadata_bool(column.get("isNullable")):
+            review_notes.append("REVIEW_REQUIRED nullable")
+        if not str(column.get("description") or "").strip() and str(
+            column.get("descriptionStatus") or ""
+        ) != "CONFIRMED":
+            review_notes.append("REVIEW_REQUIRED description")
+        if not raw_db_type:
+            review_notes.append("REVIEW_REQUIRED type missing")
+        elif not _known_metadata_db_type(db_type):
+            review_notes.append("REVIEW_REQUIRED type mapping")
+        specs.append(
+            {
+                "physicalName": physical_name,
+                "fieldName": field_name,
+                "dbType": db_type,
+                "javaType": java_type_for_db_type(db_type),
+                "nullable": _metadata_bool(column.get("isNullable")),
+                "primaryKey": _metadata_bool(column.get("isPrimaryKey")),
+                "review": "; ".join(review_notes) or "metadata-backed candidate",
+            }
+        )
+    return specs
+
+
+def _metadata_dto_class_name(object_ref: str) -> str:
+    object_name = object_ref.rsplit(".", 1)[-1]
+    cleaned = _JAVA_IDENTIFIER_CLEANUP.sub("_", object_name.strip("[]"))
+    parts = [part for part in cleaned.split("_") if part]
+    if not parts:
+        return "MetadataDto"
+    return "".join(part[:1].upper() + part[1:].lower() for part in parts) + "Dto"
+
+
+def _metadata_java_field_name(physical_name: str) -> str:
+    cleaned = _JAVA_IDENTIFIER_CLEANUP.sub("_", physical_name.strip().strip("[]"))
+    if "_" in cleaned or cleaned.isupper():
+        field_name = snake_to_lower_camel(cleaned)
+    else:
+        field_name = cleaned[:1].lower() + cleaned[1:]
+    if not field_name:
+        field_name = "reviewRequiredField"
+    if field_name[0].isdigit():
+        field_name = f"field{field_name}"
+    if field_name in _JAVA_RESERVED_WORDS:
+        field_name = f"{field_name}Value"
+    return field_name
+
+
+def _known_metadata_db_type(db_type: str) -> bool:
+    normalized = db_type.strip().lower().split("(", 1)[0]
+    return normalized in {
+        "bigint",
+        "binary",
+        "bit",
+        "char",
+        "date",
+        "datetime",
+        "datetime2",
+        "decimal",
+        "image",
+        "int",
+        "money",
+        "nchar",
+        "ntext",
+        "numeric",
+        "nvarchar",
+        "smallint",
+        "smallmoney",
+        "smalldatetime",
+        "text",
+        "time",
+        "tinyint",
+        "uniqueidentifier",
+        "varbinary",
+        "varchar",
+    }
+
+
+def _metadata_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
+
+
+def _java_comment_text(value: str) -> str:
+    return value.replace("*/", "* /").replace("\r", " ").replace("\n", " ").strip()
 
 
 def _insight(

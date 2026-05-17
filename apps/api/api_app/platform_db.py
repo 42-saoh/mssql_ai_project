@@ -2609,12 +2609,8 @@ def content_type_for_artifact(record: ArtifactRecord) -> str:
         "MAPPER_INTERFACE",
         "SERVICE_DRAFT",
         "DTO_DRAFT",
-        "VO_DRAFT",
-        "MODEL_DRAFT",
     }:
         return "JAVA"
-    if record.type.value == "DDL_DRAFT":
-        return "SQL"
     if record.type.value in {"METADATA_QUERY_RESULT", "SCHEMA_ENRICHMENT_RESULT"}:
         return "JSON"
     return "MARKDOWN"

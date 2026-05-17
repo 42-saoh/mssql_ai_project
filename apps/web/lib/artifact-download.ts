@@ -9,9 +9,6 @@ const extensionByType: Partial<Record<ArtifactType, string>> = {
   MAPPER_INTERFACE: "java",
   SERVICE_DRAFT: "java",
   DTO_DRAFT: "java",
-  VO_DRAFT: "java",
-  MODEL_DRAFT: "java",
-  DDL_DRAFT: "sql",
   VALIDATION_REPORT: "json",
 };
 

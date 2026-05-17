@@ -12,13 +12,8 @@ JAVA_MYBATIS_POLICY_ARTIFACT_TYPES = (
 REQUESTED_OUTPUT_ALIASES: dict[str, tuple[ArtifactType, ...]] = {
     RequestedOutputType.SP_ANALYSIS_DOCUMENT.value: (ArtifactType.SP_ANALYSIS_DOC,),
     RequestedOutputType.DEPENDENCY_REPORT.value: (ArtifactType.DEPENDENCY_REPORT,),
+    RequestedOutputType.TABLE_COLUMN_METADATA.value: (ArtifactType.METADATA_QUERY_RESULT,),
     RequestedOutputType.JAVA_MYBATIS_DRAFT.value: JAVA_MYBATIS_POLICY_ARTIFACT_TYPES,
-    RequestedOutputType.DTO_MODEL_DRAFT.value: (
-        ArtifactType.DTO_DRAFT,
-        ArtifactType.VO_DRAFT,
-        ArtifactType.MODEL_DRAFT,
-    ),
-    RequestedOutputType.DDL_DRAFT.value: (ArtifactType.DDL_DRAFT,),
 }
 
 def expand_requested_output_type(requested_output_type: str) -> tuple[ArtifactType, ...]:

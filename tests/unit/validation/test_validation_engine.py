@@ -12,6 +12,7 @@ from ai_agent_validation import (
     summarize_validation_report,
     validate_artifact,
 )
+from ai_agent_validation.engine import REQUIRED_SECTIONS_BY_ARTIFACT
 
 ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_DIR = (
@@ -77,7 +78,8 @@ def test_validate_missing_sections_and_evidence_fails() -> None:
     assert report.status == ValidationStatus.FAILED
     assert "artifact.evidence_refs" in report.missing_evidence
     assert any(
-        check.rule_id == "artifact.required_section.evidence_summary"
+        check.rule_id
+        == f"artifact.required_section.{REQUIRED_SECTIONS_BY_ARTIFACT['SP_ANALYSIS_DOC'][0]}"
         and check.result == ValidationCheckResult.FAIL
         for check in report.checks
     )
@@ -91,26 +93,23 @@ def test_llm_inference_evidence_forces_review_required() -> None:
                 [
                     "# Analysis",
                     "",
-                    "## input_interpretation",
+                    f"## {REQUIRED_SECTIONS_BY_ARTIFACT['SP_ANALYSIS_DOC'][0]}",
                     "dbo.usp_demo",
                     "",
-                    "## analysis_summary",
+                    f"## {REQUIRED_SECTIONS_BY_ARTIFACT['SP_ANALYSIS_DOC'][1]}",
                     "LLM Inference enrichment remains REVIEW_REQUIRED.",
                     "",
-                    "## procedure_signature",
+                    f"## {REQUIRED_SECTIONS_BY_ARTIFACT['SP_ANALYSIS_DOC'][2]}",
                     "dbo.usp_demo()",
                     "",
-                    "## evidence_summary",
+                    f"## {REQUIRED_SECTIONS_BY_ARTIFACT['SP_ANALYSIS_DOC'][3]}",
                     "dbo.usp_demo",
                     "agent_123",
                     "",
-                    "## assumptions_and_todo",
+                    f"## {REQUIRED_SECTIONS_BY_ARTIFACT['SP_ANALYSIS_DOC'][4]}",
                     "REVIEW_REQUIRED: LLM inference needs stronger evidence.",
                     "",
-                    "## quality_summary",
-                    "- evidence caveat present",
-                    "",
-                    "## evidence_map",
+                    f"## {REQUIRED_SECTIONS_BY_ARTIFACT['SP_ANALYSIS_DOC'][5]}",
                     "- LLM_INFERENCE: agent_123",
                     "",
                     "## known_caveats",

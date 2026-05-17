@@ -44,9 +44,6 @@ class ArtifactType(StrEnum):
     MAPPER_INTERFACE = "MAPPER_INTERFACE"
     SERVICE_DRAFT = "SERVICE_DRAFT"
     DTO_DRAFT = "DTO_DRAFT"
-    VO_DRAFT = "VO_DRAFT"
-    MODEL_DRAFT = "MODEL_DRAFT"
-    DDL_DRAFT = "DDL_DRAFT"
     VALIDATION_REPORT = "VALIDATION_REPORT"
     APPROVAL_LOG = "APPROVAL_LOG"
 
@@ -66,8 +63,6 @@ class RequestedOutputType(StrEnum):
     DEPENDENCY_REPORT = "DEPENDENCY_REPORT"
     TABLE_COLUMN_METADATA = "TABLE_COLUMN_METADATA"
     JAVA_MYBATIS_DRAFT = "JAVA_MYBATIS_DRAFT"
-    DTO_MODEL_DRAFT = "DTO_MODEL_DRAFT"
-    DDL_DRAFT = "DDL_DRAFT"
 
 
 REQUESTED_OUTPUT_ARTIFACT_TYPES: dict[RequestedOutputType, tuple[ArtifactType, ...]] = {
@@ -80,12 +75,6 @@ REQUESTED_OUTPUT_ARTIFACT_TYPES: dict[RequestedOutputType, tuple[ArtifactType, .
         ArtifactType.MAPPER_INTERFACE,
         ArtifactType.MAPPER_XML,
     ),
-    RequestedOutputType.DTO_MODEL_DRAFT: (
-        ArtifactType.DTO_DRAFT,
-        ArtifactType.VO_DRAFT,
-        ArtifactType.MODEL_DRAFT,
-    ),
-    RequestedOutputType.DDL_DRAFT: (ArtifactType.DDL_DRAFT,),
 }
 
 

@@ -1,5 +1,29 @@
 # EVAL_SPEC.md
 
+## P36 Output Renewal Eval Contract
+
+P36 validates the breaking output renewal:
+
+- final artifact types: `SP_ANALYSIS_DOC`, `DEPENDENCY_REPORT`, `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, `MAPPER_XML`
+- removed public outputs/artifacts: `DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, `DDL_DRAFT`
+- SP analysis document flow: overview, dependency inventory, DML impact matrix, call flow, complexity analysis, appendix
+- dependency report role: evidence dossier with SP analysis, Java/MyBatis, bounded SQL statement evidence, caveats, next evidence
+- Java/MyBatis draft mode: evidence-backed business logic reconstruction with `REVIEW_REQUIRED` uncertainty
+
+Passing P36 tests must not imply production readiness, automatic conversion, DDL apply, row-data access, procedure execution, or generated-source deployment.
+
+## P37 Metadata DTO Draft Preview Eval Contract
+
+P37 validates metadata-analysis DTO previews without changing the artifact persistence contract:
+
+- `generateDtoDrafts` defaults to false and only opts into response/UI preview generation.
+- `generatedDrafts` contains `DTO_DRAFT` preview content backed by sanitized TABLE/VIEW metadata
+  evidence refs.
+- missing PK, nullable columns, uncertain type mapping, description gaps, VIEW semantics, and
+  other incomplete metadata remain `REVIEW_REQUIRED`.
+- previews must not include raw SQL/SP definitions, row data, secrets, automatic source apply,
+  DDL/DML execution, publish, deploy, or workflow artifact persistence claims.
+
 ## P35 Source Context Eval Gate
 
 Required checks for Copilot-style SP analysis:
@@ -84,8 +108,8 @@ Required checks for Copilot-style SP analysis:
 - SP analysis doc
 - dependency report
 - Mapper XML / Interface / Service
-- DTO / VO / Model
-- DDL draft
+- DTO draft
+- bounded SQL evidence dossier (no executable DDL draft output)
 
 필수 체크:
 - artifact type 별 필수 섹션 존재

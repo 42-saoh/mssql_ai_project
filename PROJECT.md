@@ -1,5 +1,23 @@
 # PROJECT.md
 
+## P36 Output Renewal Baseline
+
+P36 redefines generated deliverables as six final artifact types:
+`SP_ANALYSIS_DOC`, `DEPENDENCY_REPORT`, `DTO_DRAFT`, `SERVICE_DRAFT`,
+`MAPPER_INTERFACE`, and `MAPPER_XML`.
+
+`SP_ANALYSIS_DOC` follows the `MIGRATION_GUIDE.md` flow: SP overview, dependency
+inventory, DML impact matrix, call flow, complexity analysis, and appendix.
+`DEPENDENCY_REPORT` is now an evidence dossier for analysis/code generation evidence,
+bounded sanitized SQL statement evidence, caveats, and next evidence to collect.
+
+Retired public outputs are removed from new request/API/UI/generation contracts:
+`DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, and `DDL_DRAFT`. Existing storage rows
+with retired artifact types are historical-only and must be preserved rather than
+deleted when FK-linked history exists. P36 remains `production_ready: false`; no
+row-data query, procedure execution, business DB DDL/DML, automatic DDL apply, or
+automatic generated-source deployment is authorized.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.
@@ -19,9 +37,9 @@ MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, �
 
 - MSSQL Stored Procedure, Table, Column, Index, PK/FK, Extended Property, Function, View 등 관련 메타데이터
 - SP 분석 및 문서화
-- 스키마 탐색, 메타데이터 보강, DTO/VO/Model 초안 생성
+- 스키마 탐색, 메타데이터 보강, DTO 초안 생성
 - Java/MyBatis Mapper XML, Mapper Interface, Service 초안 생성
-- DDL 초안 생성
+- DB 변경은 자동 생성/적용하지 않고 manual SQL review asset 으로만 관리
 - 검증, caveat, 버전 관리, 감사로그
 - 초안 품질 요약, 근거 map, caveat, 다음 근거 수집 항목
 
@@ -38,7 +56,7 @@ MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, �
 - MSSQL Metadata MCP 서버
 - SP 분석 문서 / 호출관계 및 의존성 결과
 - 메타데이터 조회 및 구조 보강 결과
-- Java/MyBatis / DTO/VO/Model / DDL 초안
+- Java/MyBatis DTO/Service/Mapper/Mapper XML 초안
 - 검증/caveat 이력 및 deferred 승인 로그
 - 관리자/사용자 가이드
 - 시범 적용 및 검증 보고서
@@ -116,7 +134,7 @@ repo/
 - ValidationReport 저장과 draft-quality caveat 추적
 
 ### P2. Generation MVP
-- Java/MyBatis / DTO/VO/Model / DDL 초안 생성
+- Java/MyBatis DTO/Service/Mapper/Mapper XML 초안 생성
 - Artifact versioning
 - Preview / validation-complete workflow
 - Draft-quality validation workflow

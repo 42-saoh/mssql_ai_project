@@ -917,6 +917,22 @@ input:disabled {
   font-weight: 800;
 }
 
+.metadata-analyze-controls .inline-control {
+  display: flex;
+  min-width: 180px;
+  align-items: center;
+  gap: 8px;
+}
+
+.metadata-analyze-controls .inline-control input {
+  width: auto;
+}
+
+.metadata-draft-preview {
+  margin-top: 12px;
+  max-height: 360px;
+}
+
 .procedure-combobox {
   position: relative;
   display: grid;

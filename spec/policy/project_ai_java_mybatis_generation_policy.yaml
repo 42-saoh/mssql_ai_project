@@ -25,7 +25,7 @@ forbidden:
 scope:
   include:
     - java_mybatis_draft_generation
-    - dto_vo_model_draft_generation
+    - dto_service_mapper_mybatis_draft_generation
     - mapper_interface_generation
     - mapper_xml_generation
     - optional_controller_generation
@@ -66,11 +66,14 @@ generationModes:
       - mapper_xml_sql_rebuild
       - evidence_summary
       - todo
-  metadataObject:
+  evidenceReconstructed:
     description: 객체 모델만 생성하는 상태
     defaultOutputs:
-      - dto_or_vo_or_model
-      - field_mapping_summary
+      - dto
+      - service
+      - mapper_interface
+      - mapper_xml_sql_rebuild
+      - evidence_summary
       - todo
 
 requiredInput:
@@ -337,7 +340,7 @@ todoRules:
     - base_framework_usage
     - exact_exception_message_codes
     - controller_need
-    - dto_vo_model_final_choice
+    - dto_field_result_shape_mapping
     - sp_rebuild_feasibility
 
 draftQualityChecks:

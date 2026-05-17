@@ -1,0 +1,123 @@
+contract_id: p36_output_renewal@0.1.0
+phase: P36
+title: P36 output renewal contract
+status: contract_ready
+production_ready: false
+
+depends_on:
+  - p12_schema_contract@0.2.0
+  - p24_sp_migration_guide_quality@0.1.0
+  - p27_java_mybatis_generation_policy@0.1.0
+  - p35_refinement_plan
+
+execution_shape:
+  mode: sequential_only
+  required_order:
+    - P36A
+    - P36B
+    - P36C
+    - P36D
+    - P36E
+  parallel_execution_allowed: false
+
+artifact_contract:
+  final_requested_outputs:
+    - SP_ANALYSIS_DOCUMENT
+    - DEPENDENCY_REPORT
+    - JAVA_MYBATIS_DRAFT
+  final_artifact_types:
+    - SP_ANALYSIS_DOC
+    - DEPENDENCY_REPORT
+    - DTO_DRAFT
+    - SERVICE_DRAFT
+    - MAPPER_INTERFACE
+    - MAPPER_XML
+  removed_requested_output_types:
+    - DTO_MODEL_DRAFT
+    - DDL_DRAFT
+  removed_artifact_types:
+    - VO_DRAFT
+    - MODEL_DRAFT
+    - DDL_DRAFT
+
+sp_analysis_doc:
+  renderer: SPAnalysisDocumentRenderer
+  required_flow:
+    - "1. SP 개요 (Overview)"
+    - "2. 의존성 인벤토리 (Dependency Inventory)"
+    - "3. DML 영향도 매트릭스 (Data Change Impact Matrix)"
+    - "4. 호출 흐름 (Call Flow)"
+    - "5. SP 복잡도 분석 (Complexity Analysis)"
+    - "6. Appendix"
+  source_style_reference: MIGRATION_GUIDE.md
+  must_include:
+    - procedure identity and purpose
+    - dependency inventory grouped by table/function/procedure/dynamic sql
+    - DML impact matrix grouped by database or schema scope
+    - high-level and phase-level call flow
+    - complexity metrics and cross-database transaction caveats
+    - parameter and status-code appendices when evidence exists
+
+dependency_report:
+  renderer: DependencyReportRenderer
+  semantic_role: evidence_dossier
+  must_include:
+    - SP analysis evidence
+    - DTO/Service/Mapper/MapperSQL generation evidence
+    - bounded sanitized SQL statement evidence
+    - caveats and REVIEW_REQUIRED items
+    - next evidence to collect
+  must_not_be:
+    - dependency_only_inventory
+
+java_mybatis_draft:
+  renderer: JavaMyBatisSpWrapperRenderer
+  allowed_generation_modes:
+    - spRebuild
+    - evidenceReconstructed
+  semantic_role: evidence_backed_business_logic_draft
+  must_include:
+    DTO_DRAFT:
+      - input parameter fields with evidence refs
+      - result field candidates with evidence refs
+    SERVICE_DRAFT:
+      - business branch sketch
+      - transaction and exception caveats
+      - REVIEW_REQUIRED markers for uncertain rules
+    MAPPER_INTERFACE:
+      - branch or DML-specific mapper methods
+    MAPPER_XML:
+      - evidence-backed SQL skeletons
+      - REVIEW_REQUIRED comments for uncertain SELECT/JOIN/WHERE/UPDATE/DELETE details
+
+sql_statement_evidence_policy:
+  allowed_form: bounded_sanitized_statement_evidence
+  full_sp_definition_allowed: false
+  max_statement_snippet_chars: 320
+  required_sanitization:
+    - remove comments
+    - collapse whitespace
+    - redact literals when policy requires
+    - preserve only statement operation, target, line span, and evidence id
+
+forbidden_behaviors:
+  row_data_query: true
+  procedure_execution: true
+  business_db_ddl_or_dml: true
+  automatic_ddl_apply: true
+  automatic_deploy_or_source_apply: true
+  raw_prompt_storage: true
+  raw_provider_response_storage: true
+  secret_storage: true
+  full_sp_definition_storage: true
+
+verification:
+  contract_assets:
+    - tests/contract/test_p36_output_renewal_contract_prompt_assets.py
+  renderer_eval:
+    - tests/eval/test_p36_output_renewal_quality.py
+  public_contract_cleanup:
+    - tests/contract/test_openapi_and_env_sample_assets.py
+    - tests/unit/api/test_workflow_service.py
+    - tests/integration/api/test_api_workflow_routes.py
+    - tests/unit/web/test_p14_product_ui_static.py

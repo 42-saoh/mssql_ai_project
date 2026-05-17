@@ -13,6 +13,7 @@ basis:
   - spec/eval/p23_llm_sp_analysis_quality_contract.yaml
   - spec/eval/p24_sp_migration_guide_quality_contract.yaml
   - spec/eval/p27_dependency_evidence_tooling_contract.yaml
+  - spec/eval/p36_output_renewal_contract.yaml
   - spec/validation/validation_rules.yaml
   - spec/policy/project_ai_java_mybatis_generation_policy.yaml
   - spec/policy/platform_db_standardization_rules_for_ai.json
@@ -1112,4 +1113,98 @@ waves:
           - git diff --check
         optional_verify:
           - P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27]
+  - wave: W15_P36_output_renewal
+    description: P36 output renewal sequential breaking-contract implementation
+    tracks:
+      - id: P36A
+        branch: feat/p36a-output-renewal-contract-assets
+        worktree: ../wt/p36a-output-renewal-contract-assets
+        prompt: prompts/36a_output_renewal_contract_assets.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: []
+        target_paths:
+          - spec/eval/p36_output_renewal_contract.yaml
+          - tasks/0036-output-renewal.md
+          - ops/codex-parallel/REQUEST_MANIFEST.yaml
+          - ops/codex-parallel/prompts/36a_output_renewal_contract_assets.md
+          - ops/codex-parallel/prompts/36b_output_contract_cleanup.md
+          - ops/codex-parallel/prompts/36c_migration_guide_evidence_renderer.md
+          - ops/codex-parallel/prompts/36d_java_mybatis_business_logic_renderer.md
+          - ops/codex-parallel/prompts/36e_output_renewal_docs_readiness.md
+          - tests/contract/test_p36_output_renewal_contract_prompt_assets.py
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p36_output_renewal_contract_prompt_assets.py"
+      - id: P36B
+        branch: feat/p36b-output-contract-cleanup
+        worktree: ../wt/p36b-output-contract-cleanup
+        prompt: prompts/36b_output_contract_cleanup.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P36A]
+        target_paths:
+          - packages/domain/
+          - packages/generation/
+          - packages/validation/
+          - apps/api/
+          - apps/web/
+          - spec/openapi/
+          - spec/validation/
+          - db/schema/
+          - tests/contract/
+          - tests/unit/api/
+          - tests/integration/api/
+          - tests/unit/web/
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_openapi_and_env_sample_assets.py tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/unit/web/test_p14_product_ui_static.py"
+      - id: P36C
+        branch: feat/p36c-migration-guide-evidence-renderer
+        worktree: ../wt/p36c-migration-guide-evidence-renderer
+        prompt: prompts/36c_migration_guide_evidence_renderer.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P36B]
+        target_paths:
+          - packages/generation/
+          - packages/validation/
+          - fixtures/eval/
+          - tests/eval/
+          - tests/unit/generation/
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p36_output_renewal_quality.py tests/unit/generation"
+      - id: P36D
+        branch: feat/p36d-java-mybatis-business-logic-renderer
+        worktree: ../wt/p36d-java-mybatis-business-logic-renderer
+        prompt: prompts/36d_java_mybatis_business_logic_renderer.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P36C]
+        target_paths:
+          - packages/generation/
+          - fixtures/generation/
+          - tests/unit/generation/
+          - tests/contract/test_generation_goldens_and_repro_assets.py
+        verify:
+          - make test PYTEST_ARGS="tests/unit/generation tests/contract/test_generation_goldens_and_repro_assets.py"
+      - id: P36E
+        branch: feat/p36e-output-renewal-docs-readiness
+        worktree: ../wt/p36e-output-renewal-docs-readiness
+        prompt: prompts/36e_output_renewal_docs_readiness.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P36D]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - EVAL_SPEC.md
+          - TOOLS.md
+          - docs/
+          - fixtures/eval/README.md
+          - fixtures/generation/README.md
+          - tests/eval/README.md
+        verify:
+          - make test-core
+          - make test-quality
+          - make test-web-smoke
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E]

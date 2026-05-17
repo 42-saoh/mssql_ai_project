@@ -34,6 +34,7 @@ export function MetadataAnalyzeAction({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [maxTargets, setMaxTargets] = useState(String(clampMaxTargets(defaultMaxTargets)));
+  const [generateDtoDrafts, setGenerateDtoDrafts] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<string | null>(null);
 
@@ -47,9 +48,10 @@ export function MetadataAnalyzeAction({
         useAiToolOrchestration: true,
         llmProfileId: "openai_sp_semantic_analysis",
         maxTargets: clampMaxTargets(Number(maxTargets)),
+        generateDtoDrafts,
       },
     }),
-    [dbProfileId, maxTargets, objectTypes, query],
+    [dbProfileId, generateDtoDrafts, maxTargets, objectTypes, query],
   );
 
   useEffect(() => {
@@ -139,6 +141,16 @@ export function MetadataAnalyzeAction({
               onChange={(event) => setMaxTargets(event.target.value)}
               disabled={isLoading}
             />
+          </label>
+          <label className="inline-control">
+            <input
+              name="generateDtoDrafts"
+              type="checkbox"
+              checked={generateDtoDrafts}
+              onChange={(event) => setGenerateDtoDrafts(event.target.checked)}
+              disabled={isLoading}
+            />
+            <span>Generate DTO draft</span>
           </label>
           <div className="form-actions">
             <button type="button" onClick={runAnalysis} disabled={isLoading}>

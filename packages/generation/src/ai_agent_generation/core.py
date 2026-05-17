@@ -3,10 +3,7 @@ from __future__ import annotations
 from ai_agent_domain import ArtifactType, RequestedOutputType
 
 from ai_agent_generation.documents import DependencyReportRenderer, SPAnalysisDocumentRenderer
-from ai_agent_generation.java_mybatis import (
-    JavaMyBatisDtoModelRenderer,
-    JavaMyBatisSpWrapperRenderer,
-)
+from ai_agent_generation.java_mybatis import JavaMyBatisSpWrapperRenderer
 from ai_agent_generation.models import GenerationContext, RenderedArtifact, RenderedBundle
 
 
@@ -26,16 +23,12 @@ def render_artifact(
 
 
 def render_java_mybatis_sp_wrapper(context: GenerationContext) -> RenderedBundle:
-    if context.generation_mode != "spWrapper":
+    if context.generation_mode not in {"spWrapper", "spRebuild", "evidenceReconstructed"}:
         raise ValueError(
-            "JavaMyBatisSpWrapperRenderer only supports generationMode=spWrapper. "
-            "Other modes remain TODO/REVIEW_REQUIRED."
+            "JavaMyBatisSpWrapperRenderer supports generationMode=spWrapper, "
+            "spRebuild, or evidenceReconstructed."
         )
     return JavaMyBatisSpWrapperRenderer().render_bundle(context)
-
-
-def render_java_mybatis_dto_model(context: GenerationContext) -> RenderedBundle:
-    return JavaMyBatisDtoModelRenderer().render_bundle(context)
 
 
 def render_requested_output(
@@ -53,6 +46,4 @@ def render_requested_output(
         return (render_artifact(ArtifactType.DEPENDENCY_REPORT, context),)
     if output_value == RequestedOutputType.JAVA_MYBATIS_DRAFT.value:
         return (render_java_mybatis_sp_wrapper(context),)
-    if output_value == RequestedOutputType.DTO_MODEL_DRAFT.value:
-        return (render_java_mybatis_dto_model(context),)
     raise ValueError(f"Unsupported requested output type: {output_value}")

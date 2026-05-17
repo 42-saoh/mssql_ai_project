@@ -25,6 +25,7 @@ def test_java_mybatis_policy_exists_and_parses() -> None:
     assert "metadataCrud" in data["generationModes"]
     assert "spWrapper" in data["generationModes"]
     assert "spRebuild" in data["generationModes"]
+    assert "evidenceReconstructed" in data["generationModes"]
 
 
 def test_platform_db_rules_exist_and_parse() -> None:

@@ -4,9 +4,7 @@ export type RequestedOutputType =
   | "SP_ANALYSIS_DOCUMENT"
   | "DEPENDENCY_REPORT"
   | "TABLE_COLUMN_METADATA"
-  | "JAVA_MYBATIS_DRAFT"
-  | "DTO_MODEL_DRAFT"
-  | "DDL_DRAFT";
+  | "JAVA_MYBATIS_DRAFT";
 
 export type JobStatus =
   | "SUBMITTED"
@@ -33,9 +31,6 @@ export type ArtifactType =
   | "MAPPER_INTERFACE"
   | "SERVICE_DRAFT"
   | "DTO_DRAFT"
-  | "VO_DRAFT"
-  | "MODEL_DRAFT"
-  | "DDL_DRAFT"
   | "VALIDATION_REPORT";
 
 export type ArtifactStatus =
@@ -302,6 +297,7 @@ export interface MetadataAnalysisOptions {
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   maxTargets?: number;
   persistKnowledge?: boolean;
+  generateDtoDrafts?: boolean;
 }
 
 export interface MetadataAnalysisRequest {
@@ -379,6 +375,18 @@ export interface MetadataDtoReadiness {
   fieldCount: number;
   reviewReasons: string[];
   evidenceRefs: string[];
+}
+
+export interface MetadataGeneratedDraft {
+  artifactType: "DTO_DRAFT";
+  objectRef: string;
+  targetKey?: string | null;
+  fileName: string;
+  language: "java";
+  content: string;
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
 }
 
 export interface MetadataAnalysisReviewMarker {
@@ -528,6 +536,7 @@ export interface MetadataAnalysisResponse {
   insightGroups: MetadataInsightGroup[];
   dependencyGraph: MetadataDependencyGraph;
   dtoReadiness: MetadataDtoReadiness[];
+  generatedDrafts: MetadataGeneratedDraft[];
   aiToolEvidence: AiToolEvidenceSummary;
   deterministicFacts: Record<string, unknown>[];
   reviewMarkers: MetadataAnalysisReviewMarker[];

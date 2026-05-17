@@ -9,7 +9,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 GENERATION_GOLDENS = (
     ("java_mybatis_sp_wrapper_order_request_v1", "spWrapper", "OrderRequest"),
-    ("java_mybatis_dto_model_order_metadata_v1", "metadataObject", "OrderMetadata"),
 )
 
 

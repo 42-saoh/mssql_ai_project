@@ -61,7 +61,7 @@
 
 - PK/FK/index/constraint 가 있는 테이블
 - extended property 또는 컬럼 설명이 있는 테이블
-- Java DTO/VO/Model 생성 테스트에 적합한 컬럼 구성을 가진 테이블
+- Java DTO 생성 테스트에 적합한 컬럼 구성을 가진 테이블
 - SP 후보와 실제 의존 관계가 있는 테이블 우선
 
 ### View / Function

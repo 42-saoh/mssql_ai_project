@@ -95,7 +95,7 @@ selection_rules:
     preferred_features:
       - pk_fk_index_constraint
       - extended_property_or_column_description
-      - dto_vo_model_friendly_columns
+      - dto_friendly_columns
       - related_to_selected_procedures
   views:
     minimum_recommended_if_available: 1

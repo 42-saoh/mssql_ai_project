@@ -1,5 +1,21 @@
 # TOOLS.md
 
+## P36 Verification Notes
+
+P36 uses the normal dockerized test interface when available. The key targeted suites are:
+
+- `tests/contract/test_p36_output_renewal_contract_prompt_assets.py`
+- `tests/eval/test_p36_output_renewal_quality.py`
+- `tests/unit/generation`
+- `tests/contract/test_openapi_and_env_sample_assets.py`
+- `tests/unit/api/test_workflow_service.py`
+- `tests/integration/api/test_api_workflow_routes.py`
+- `tests/unit/web/test_p14_product_ui_static.py`
+
+The v9 DB SQL is manual-review/manual-apply only. It is non-destructive for existing
+FK-linked retired artifact rows and blocks only new retired artifact inserts/type changes.
+Tooling must not apply it automatically.
+
 ## 목적
 
 이 문서는 로컬 개발에서 사용할 도구, 명령 규약, MCP 구성을 정의한다.  

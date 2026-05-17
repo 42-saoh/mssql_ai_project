@@ -13,7 +13,7 @@ info:
     policies:
 
     - metadata access is read-only and routed through the MSSQL Metadata MCP boundary;
-    - generated documentation, Java/MyBatis code, DTO/VO/Model, and DDL are draft artifacts;
+    - generated documentation and Java/MyBatis DTO/Service/Mapper drafts are draft artifacts;
     - worker-facing analysis text is Korean (ko-KR), while JSON keys, enum/status/code values,
       artifact types, rule ids, section ids, evidence refs, and SQL/Java identifiers remain the
       stable English machine contract;
@@ -1170,9 +1170,6 @@ components:
         - MAPPER_INTERFACE
         - SERVICE_DRAFT
         - DTO_DRAFT
-        - VO_DRAFT
-        - MODEL_DRAFT
-        - DDL_DRAFT
         - VALIDATION_REPORT
     RequestedOutputType:
       type: string
@@ -1182,8 +1179,6 @@ components:
         - DEPENDENCY_REPORT
         - TABLE_COLUMN_METADATA
         - JAVA_MYBATIS_DRAFT
-        - DTO_MODEL_DRAFT
-        - DDL_DRAFT
     ArtifactStatus:
       type: string
       enum:
@@ -1535,6 +1530,9 @@ components:
         persistKnowledge:
           type: boolean
           default: true
+        generateDtoDrafts:
+          type: boolean
+          default: false
     MetadataAnalysisRequest:
       type: object
       required: [dbProfileId]
@@ -1761,6 +1759,43 @@ components:
           items:
             type: string
         evidenceRefs:
+          type: array
+          items:
+            type: string
+    MetadataGeneratedDraft:
+      type: object
+      required:
+        - artifactType
+        - objectRef
+        - fileName
+        - language
+        - content
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        artifactType:
+          type: string
+          enum: [DTO_DRAFT]
+        objectRef:
+          type: string
+        targetKey:
+          type: string
+        fileName:
+          type: string
+        language:
+          type: string
+          enum: [java]
+        content:
+          type: string
+          description: Non-persisted DTO_DRAFT preview generated from sanitized metadata evidence.
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
           type: array
           items:
             type: string
@@ -2144,6 +2179,7 @@ components:
         - insightGroups
         - dependencyGraph
         - dtoReadiness
+        - generatedDrafts
         - aiToolEvidence
         - deterministicFacts
         - reviewMarkers
@@ -2200,6 +2236,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetadataDtoReadiness"
+        generatedDrafts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataGeneratedDraft"
         aiToolEvidence:
           $ref: "#/components/schemas/AiToolEvidenceSummary"
         deterministicFacts:

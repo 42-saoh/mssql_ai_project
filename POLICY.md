@@ -1,5 +1,14 @@
 # POLICY.md
 
+## P36 Output Renewal Policy
+
+- P36 deliverables stay `production_ready: false`.
+- SQL evidence in generated artifacts must be bounded sanitized statement evidence, never a full SP definition.
+- `DEPENDENCY_REPORT` is an evidence dossier and must keep caveats and next-evidence items visible.
+- Java/MyBatis drafts are review-required reconstruction aids, not deployable source.
+- `DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, and `DDL_DRAFT` are retired public outputs for new requests.
+- Row-data queries, procedure execution, business DB DDL/DML, automatic DDL apply, automatic source deployment, raw prompt/provider response storage, and secret storage remain forbidden.
+
 ## P35 Source Context Policy
 
 - Full stored procedure definitions must not be sent to the model by default. The semantic runtime

@@ -14,6 +14,7 @@ Rules:
 - `ai_agent_platform_schema_v6_draft_quality_no_review.sql`: draft-quality knowledge assets without human review/approval product tables.
 - `ai_agent_platform_schema_v7_metadata_analysis_runs.sql`: durable metadata analysis run submit/polling storage.
 - `ai_agent_platform_schema_v8_canonical_target_keys_consolidated.sql`: canonical target key columns and indexes for requests, jobs, agent runs, artifacts, and knowledge assets.
+- `ai_agent_platform_schema_v9_output_renewal_artifact_types.sql`: P36 manual storage renewal. It preserves FK-linked historical `VO_DRAFT` / `MODEL_DRAFT` / `DDL_DRAFT` rows, keeps them in the storage CHECK as historical-only values, and adds a trigger that blocks new retired artifact types.
 
 `CANON_TRGT_KEY_TXT` stores the server-derived key in the format
 `mssql:<dbProfileId>:<database|->:<objectType>:<schema>.<name>`.

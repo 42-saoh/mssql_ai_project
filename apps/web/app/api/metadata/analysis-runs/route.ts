@@ -37,6 +37,7 @@ function normalizeRequest(request: MetadataAnalysisRequest): MetadataAnalysisReq
       useAiToolOrchestration: request.options?.useAiToolOrchestration ?? true,
       llmProfileId: request.options?.llmProfileId ?? "openai_sp_semantic_analysis",
       maxTargets,
+      generateDtoDrafts: request.options?.generateDtoDrafts ?? false,
     },
   };
 }

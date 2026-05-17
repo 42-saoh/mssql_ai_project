@@ -297,6 +297,7 @@ class MetadataAnalysisOptions(ApiModel):
     ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
     max_targets: int = Field(default=3, ge=1, le=5, alias="maxTargets")
     persist_knowledge: bool = Field(default=True, alias="persistKnowledge")
+    generate_dto_drafts: bool = Field(default=False, alias="generateDtoDrafts")
 
 
 class MetadataAnalysisRequest(ApiModel):
@@ -389,6 +390,18 @@ class MetadataDtoReadiness(ApiModel):
     field_count: int = Field(default=0, alias="fieldCount")
     review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataGeneratedDraft(ApiModel):
+    artifact_type: Literal["DTO_DRAFT"] = Field(default="DTO_DRAFT", alias="artifactType")
+    object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
+    file_name: str = Field(alias="fileName")
+    language: Literal["java"] = "java"
+    content: str
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
 
 
 class MetadataAnalysisReviewMarker(ApiModel):
@@ -551,6 +564,10 @@ class MetadataAnalysisResponse(ApiModel):
     dto_readiness: list[MetadataDtoReadiness] = Field(
         default_factory=list,
         alias="dtoReadiness",
+    )
+    generated_drafts: list[MetadataGeneratedDraft] = Field(
+        default_factory=list,
+        alias="generatedDrafts",
     )
     ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
     deterministic_facts: list[dict[str, Any]] = Field(

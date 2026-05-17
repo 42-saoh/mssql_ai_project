@@ -13,25 +13,19 @@ export const outputLabels: Record<RequestedOutputType, string> = {
   DEPENDENCY_REPORT: "Dependency report",
   TABLE_COLUMN_METADATA: "Table/column metadata",
   JAVA_MYBATIS_DRAFT: "Java/MyBatis draft",
-  DTO_MODEL_DRAFT: "DTO/model draft",
-  DDL_DRAFT: "DDL draft file",
 };
 
 export const outputDescriptions: Record<RequestedOutputType, string> = {
   SP_ANALYSIS_DOCUMENT: "Procedure summary, behavior notes, assumptions, and evidence references.",
   DEPENDENCY_REPORT: "Procedure, table, view, function, and call relationship preview.",
   TABLE_COLUMN_METADATA: "Read-only metadata shape needed for field and result set caveats.",
-  JAVA_MYBATIS_DRAFT: "Mapper XML, mapper interface, and service draft grouping.",
-  DTO_MODEL_DRAFT: "DTO/VO/model draft grouping with evidence caveats.",
-  DDL_DRAFT: "Draft SQL file; no execution path is exposed.",
+  JAVA_MYBATIS_DRAFT: "Evidence-backed DTO, service, mapper interface, and mapper XML drafts.",
 };
 
 export const requestedOutputOptions: RequestedOutputType[] = [
   "SP_ANALYSIS_DOCUMENT",
   "DEPENDENCY_REPORT",
   "JAVA_MYBATIS_DRAFT",
-  "DTO_MODEL_DRAFT",
-  "DDL_DRAFT",
 ];
 
 export const jobStatusLabels: Record<JobStatus, string> = {
@@ -61,9 +55,6 @@ export const artifactTypeLabels: Record<ArtifactType, string> = {
   MAPPER_INTERFACE: "Mapper interface",
   SERVICE_DRAFT: "Service draft",
   DTO_DRAFT: "DTO draft",
-  VO_DRAFT: "VO draft",
-  MODEL_DRAFT: "Model draft",
-  DDL_DRAFT: "DDL draft",
   VALIDATION_REPORT: "Validation report",
 };
 

@@ -253,6 +253,7 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
     assert options["useLlmAnalysis"]["default"] is True
     assert options["useAiToolOrchestration"]["default"] is True
     assert options["persistKnowledge"]["default"] is True
+    assert options["generateDtoDrafts"]["default"] is False
     assert options["maxTargets"]["maximum"] == 5
     response_properties = set(schemas["MetadataAnalysisResponse"]["properties"])
     assert {
@@ -263,10 +264,18 @@ def test_openapi_metadata_analysis_contract_matches_bounded_ai_mcp_surface() -> 
         "insightGroups",
         "dependencyGraph",
         "dtoReadiness",
+        "generatedDrafts",
         "reviewMarkers",
         "componentInvocations",
         "knowledgeAssets",
     } <= response_properties
+    assert schemas["MetadataGeneratedDraft"]["properties"]["artifactType"]["enum"] == [
+        "DTO_DRAFT"
+    ]
+    assert schemas["MetadataAnalysisResponse"]["properties"]["generatedDrafts"] == {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/MetadataGeneratedDraft"},
+    }
     assert schemas["AiToolEvidenceSummary"]["properties"]["plannerMetrics"] == {
         "$ref": "#/components/schemas/PlannerMetrics"
     }
@@ -616,6 +625,9 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
     ddl_text = (ROOT / "db" / "schema" / "ai_agent_platform_schema_v2_dbo_prefix.sql").read_text(
         encoding="utf-8"
     )
+    output_renewal_ddl = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v9_output_renewal_artifact_types.sql"
+    ).read_text(encoding="utf-8")
     validation_complete_ddl = (
         ROOT / "db" / "schema" / "ai_agent_platform_schema_v4_validation_complete_status.sql"
     ).read_text(encoding="utf-8")
@@ -660,7 +672,13 @@ def test_openapi_domain_and_ddl_enums_share_baseline_names() -> None:
     assert _enum_values(JobStatus) == _ddl_check_values(
         validation_complete_ddl, "CHK_CORE_JOBS_CURRENT_STATUS_CD"
     )
-    assert _enum_values(ArtifactType) == _ddl_check_values(ddl_text, "CHK_ARTIFACTS_TYPE_CD")
+    artifact_storage_values = _ddl_check_values(
+        output_renewal_ddl, "CHK_ARTIFACTS_TYPE_CD"
+    )
+    assert set(_enum_values(ArtifactType)) <= set(artifact_storage_values)
+    assert {"VO_DRAFT", "MODEL_DRAFT", "DDL_DRAFT"} <= set(artifact_storage_values)
+    assert "TRG_ARTIFACTS_BLOCK_P36_RETIRED_TYPES" in output_renewal_ddl
+    assert "historical-only" in output_renewal_ddl
     assert _enum_values(ArtifactStatus) == _ddl_check_values(
         ddl_text, "CHK_ARTIFACTS_STATUS_CD"
     )

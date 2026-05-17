@@ -31,7 +31,24 @@ from ai_agent_generation.utils import (
 )
 
 SP_WRAPPER_TEMPLATE_ID = "java_mybatis_sp_wrapper"
-DTO_MODEL_TEMPLATE_ID = "java_mybatis_dto_model_bundle"
+
+
+@dataclass(frozen=True)
+class _JavaFieldSpec:
+    physical_name: str
+    db_type: str
+    description: str
+    evidence_ref: str
+    role: str
+
+
+@dataclass(frozen=True)
+class _MapperMethodSpec:
+    operation: str
+    target_ref: str
+    method_name: str
+    evidence_refs: tuple[str, ...]
+    status: str = "REVIEW_REQUIRED"
 
 
 @dataclass(frozen=True)
@@ -46,14 +63,6 @@ class JavaMyBatisNames:
     @property
     def dto_class_name(self) -> str:
         return self.class_name("dto")
-
-    @property
-    def vo_class_name(self) -> str:
-        return self.class_name("vo")
-
-    @property
-    def model_class_name(self) -> str:
-        return self.class_name("model")
 
     @property
     def service_class_name(self) -> str:
@@ -349,7 +358,8 @@ class JavaMyBatisDraftRendererBase:
         class_name: str,
         object_type_label: str,
     ) -> str:
-        java_types = {names.java_type_for_db_type(column.db_type) for column in context.columns}
+        field_specs = self._field_specs(context, names)
+        java_types = {names.java_type_for_db_type(field.db_type) for field in field_specs}
         imports = java_imports_for_types(java_types)
         label = korean_entity_label(context.description, context.entity_name)
         evidence = ", ".join(
@@ -372,16 +382,117 @@ class JavaMyBatisDraftRendererBase:
             ]
         )
 
-        for index, column in enumerate(context.columns):
+        for index, field in enumerate(field_specs):
             if index:
                 lines.append("")
-            self._append_field(lines, column, names)
+            self._append_field_spec(lines, field, names)
 
-        for column in context.columns:
-            self._append_accessor(lines, column, names)
+        for field in field_specs:
+            self._append_accessor_spec(lines, field, names)
 
         lines.append("}")
-        return ensure_trailing_newline(draft_quality_text("\n".join(lines)))
+        return ensure_trailing_newline("\n".join(lines))
+
+    def _field_specs(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+    ) -> tuple[_JavaFieldSpec, ...]:
+        specs: list[_JavaFieldSpec] = []
+        seen: set[str] = set()
+        primary_ref = self._primary_evidence_ref(context)
+
+        for param in context.input_params:
+            field_name = names.field_name(param.name)
+            if not field_name or field_name in seen:
+                continue
+            seen.add(field_name)
+            specs.append(
+                _JavaFieldSpec(
+                    physical_name=param.name,
+                    db_type=param.db_type,
+                    description="input parameter",
+                    evidence_ref=primary_ref,
+                    role="INPUT_PARAM",
+                )
+            )
+
+        for column in context.columns:
+            field_name = names.field_name(column.name)
+            if not field_name or field_name in seen:
+                continue
+            seen.add(field_name)
+            specs.append(
+                _JavaFieldSpec(
+                    physical_name=column.name,
+                    db_type=column.db_type,
+                    description=column.description or "result field candidate",
+                    evidence_ref=primary_ref,
+                    role="RESULT_FIELD",
+                )
+            )
+
+        for field in context.result_shape:
+            field_name = names.field_name(field)
+            if not field_name or field_name in seen:
+                continue
+            seen.add(field_name)
+            specs.append(
+                _JavaFieldSpec(
+                    physical_name=field,
+                    db_type="nvarchar",
+                    description="result shape candidate",
+                    evidence_ref="static.analysis.migration_guide",
+                    role="RESULT_FIELD_CANDIDATE",
+                )
+            )
+
+        if specs:
+            return tuple(specs)
+        return (
+            _JavaFieldSpec(
+                physical_name="review_required",
+                db_type="nvarchar",
+                description="REVIEW_REQUIRED: no field evidence",
+                evidence_ref=primary_ref,
+                role="REVIEW_REQUIRED",
+            ),
+        )
+
+    def _append_field_spec(
+        self,
+        lines: list[str],
+        field: _JavaFieldSpec,
+        names: JavaMyBatisNames,
+    ) -> None:
+        java_type = names.java_type_for_db_type(field.db_type)
+        field_name = names.field_name(field.physical_name)
+        lines.append(
+            f"    /** {field.role}: {field.description}; evidence={field.evidence_ref}; REVIEW_REQUIRED */"
+        )
+        lines.append(f"    private {java_type} {field_name};")
+
+    def _append_accessor_spec(
+        self,
+        lines: list[str],
+        field: _JavaFieldSpec,
+        names: JavaMyBatisNames,
+    ) -> None:
+        field_name = names.field_name(field.physical_name)
+        method_suffix = upper_first(field_name)
+        java_type = names.java_type_for_db_type(field.db_type)
+        lines.extend(
+            [
+                "",
+                f"    public {java_type} get{method_suffix}() {{",
+                f"        return {field_name};",
+                "    }",
+                "",
+                f"    public void set{method_suffix}({java_type} {field_name}) {{",
+                f"        this.{field_name} = {field_name};",
+                "    }",
+            ]
+        )
 
     def render_service(
         self,
@@ -390,6 +501,65 @@ class JavaMyBatisDraftRendererBase:
     ) -> str:
         names = names or self.names(context)
         label = korean_entity_label(context.description, context.entity_name)
+        evidence_objects = ", ".join(source.name for source in context.evidence_sources if source.name) or "REVIEW_REQUIRED"
+        method_specs = self._mapper_method_specs(context, names)
+        branch_lines: list[str] = []
+        for spec in method_specs:
+            branch_lines.extend(
+                [
+                    "",
+                    "    /**",
+                    f"     * {spec.operation} draft for `{spec.target_ref}`.",
+                    f"     * evidence: {', '.join(spec.evidence_refs) or 'REVIEW_REQUIRED'}",
+                    "     * REVIEW_REQUIRED: confirm branch condition, transaction boundary, and exception policy.",
+                    "     */",
+                ]
+            )
+            if spec.operation == "SELECT":
+                branch_lines.extend(
+                    [
+                        (
+                            f"    public List<{names.dto_class_name}> {names.service_method_name}"
+                            f"({names.dto_class_name} condition) {{"
+                        ),
+                        "        // REVIEW_REQUIRED: map SP branch semantics before production use.",
+                        f"        return mapper.{spec.method_name}(condition);",
+                        "    }",
+                    ]
+                )
+            else:
+                branch_lines.extend(
+                    [
+                        f"    public int {spec.method_name}({names.dto_class_name} command) {{",
+                        "        // REVIEW_REQUIRED: write operation is a draft only; no automatic apply path.",
+                        f"        return mapper.{spec.method_name}(command);",
+                        "    }",
+                    ]
+                )
+        lines = [
+            f"package {names.service_package};",
+            "",
+            "import java.util.List;",
+            "",
+            f"import {names.mapper_package}.{names.mapper_class_name};",
+            f"import {names.model_package}.{names.dto_class_name};",
+            "",
+            "/**",
+            f" * {label} service draft reconstructed from bounded evidence.",
+            f" * evidence objects: {evidence_objects}",
+            " * REVIEW_REQUIRED: transaction boundary, branch semantics, and exception mapping need review.",
+            " */",
+            f"public class {names.service_class_name} {{",
+            "",
+            f"    private final {names.mapper_class_name} mapper;",
+            "",
+            f"    public {names.service_class_name}({names.mapper_class_name} mapper) {{",
+            "        this.mapper = mapper;",
+            "    }",
+            *branch_lines,
+            "}",
+        ]
+        return ensure_trailing_newline("\n".join(lines))
         lines = [
             f"package {names.service_package};",
             "",
@@ -424,6 +594,45 @@ class JavaMyBatisDraftRendererBase:
     ) -> str:
         names = names or self.names(context)
         label = korean_entity_label(context.description, context.entity_name)
+        evidence_objects = ", ".join(source.name for source in context.evidence_sources if source.name) or "REVIEW_REQUIRED"
+        method_specs = self._mapper_method_specs(context, names)
+        method_lines: list[str] = []
+        for spec in method_specs:
+            method_lines.extend(
+                [
+                    "",
+                    "    /**",
+                    f"     * {spec.operation} draft for `{spec.target_ref}`.",
+                    f"     * evidence: {', '.join(spec.evidence_refs) or 'REVIEW_REQUIRED'}",
+                    "     * REVIEW_REQUIRED: method granularity and parameter binding need review.",
+                    "     */",
+                ]
+            )
+            if spec.operation == "SELECT":
+                method_lines.append(
+                    f"    List<{names.dto_class_name}> {spec.method_name}({names.dto_class_name} condition);"
+                )
+            else:
+                method_lines.append(
+                    f"    int {spec.method_name}({names.dto_class_name} command);"
+                )
+        lines = [
+            f"package {names.mapper_package};",
+            "",
+            "import java.util.List;",
+            "",
+            f"import {names.model_package}.{names.dto_class_name};",
+            "",
+            "/**",
+            f" * {label} Mapper draft reconstructed from DML evidence.",
+            f" * evidence objects: {evidence_objects}",
+            " * REVIEW_REQUIRED: Mapper XML namespace/sql id and SQL clauses need review.",
+            " */",
+            f"public interface {names.mapper_class_name} {{",
+            *method_lines,
+            "}",
+        ]
+        return ensure_trailing_newline("\n".join(lines))
         lines = [
             f"package {names.mapper_package};",
             "",
@@ -457,6 +666,27 @@ class JavaMyBatisDraftRendererBase:
         names: JavaMyBatisNames | None = None,
     ) -> str:
         names = names or self.names(context)
+        if context.generation_mode == "spWrapper":
+            return self._render_sp_wrapper_mapper_xml(context, names)
+
+        evidence_objects = ", ".join(source.name for source in context.evidence_sources if source.name) or "REVIEW_REQUIRED"
+        statement_lines: list[str] = []
+        for spec in self._mapper_method_specs(context, names):
+            statement_lines.extend(self._mapper_xml_statement_lines(spec, names))
+            statement_lines.append("")
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            "<!DOCTYPE mapper",
+            '  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"',
+            '  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">',
+            f'<mapper namespace="{names.mapper_namespace}">',
+            "",
+            f"  <!-- evidence objects: {evidence_objects}; REVIEW_REQUIRED: draft SQL only. -->",
+            "",
+            *statement_lines,
+            "</mapper>",
+        ]
+        return ensure_trailing_newline("\n".join(lines))
         param_lines = []
         for index, param in enumerate(context.input_params):
             comma = "," if index < len(context.input_params) - 1 else ""
@@ -514,6 +744,154 @@ class JavaMyBatisDraftRendererBase:
                 "    }",
             ]
         )
+
+    def _migration_guide(self, context: GenerationContext) -> dict[str, Any]:
+        payload = context.value("migrationGuide", {}) or {}
+        return dict(payload) if isinstance(payload, Mapping) else {}
+
+    def _primary_evidence_ref(self, context: GenerationContext) -> str:
+        guide = self._migration_guide(context)
+        refs = guide.get("evidence_refs")
+        if isinstance(refs, list) and refs and isinstance(refs[0], Mapping):
+            return str(refs[0].get("id") or "ev_request_target")
+        if context.evidence_sources:
+            return context.evidence_sources[0].name
+        return "REVIEW_REQUIRED"
+
+    def _mapper_method_specs(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+    ) -> tuple[_MapperMethodSpec, ...]:
+        guide = self._migration_guide(context)
+        specs: list[_MapperMethodSpec] = []
+        seen: set[tuple[str, str]] = set()
+        for index, item in enumerate(guide.get("dml_matrix", []) or [], start=1):
+            if not isinstance(item, Mapping):
+                continue
+            operation = str(item.get("operation") or "REVIEW_REQUIRED").upper()
+            target_ref = str(item.get("target_ref") or context.table_name or "REVIEW_REQUIRED")
+            key = (operation, target_ref)
+            if key in seen:
+                continue
+            seen.add(key)
+            evidence_refs = tuple(
+                str(ref) for ref in (item.get("evidence_refs") or []) if str(ref)
+            ) or ("static.analysis.migration_guide",)
+            specs.append(
+                _MapperMethodSpec(
+                    operation=operation,
+                    target_ref=target_ref,
+                    method_name=self._mapper_method_name(operation, target_ref, names, index),
+                    evidence_refs=evidence_refs,
+                    status=str(item.get("status") or "REVIEW_REQUIRED"),
+                )
+            )
+        if specs:
+            return tuple(specs)
+        return (
+            _MapperMethodSpec(
+                operation="SELECT",
+                target_ref=context.table_name or context.sp_name or "REVIEW_REQUIRED",
+                method_name=names.mapper_method_name,
+                evidence_refs=(self._primary_evidence_ref(context),),
+            ),
+        )
+
+    def _mapper_method_name(
+        self,
+        operation: str,
+        target_ref: str,
+        names: JavaMyBatisNames,
+        index: int,
+    ) -> str:
+        if operation == "SELECT":
+            return names.mapper_method_name
+        target_name = target_ref.rsplit(".", 1)[-1]
+        suffix = upper_first(names.field_name(target_name)) or f"Target{index}"
+        return f"{operation.lower()}{names.context.entity_name}{suffix}"
+
+    def _mapper_xml_statement_lines(
+        self,
+        spec: _MapperMethodSpec,
+        names: JavaMyBatisNames,
+    ) -> list[str]:
+        evidence = ", ".join(spec.evidence_refs) or "REVIEW_REQUIRED"
+        parameter_type = f"{names.model_package}.{names.dto_class_name}"
+        if spec.operation == "SELECT":
+            return [
+                f"  <!-- evidence: {evidence}; REVIEW_REQUIRED: SELECT columns/JOIN/WHERE need confirmation. -->",
+                f'  <select id="{spec.method_name}"',
+                f'          parameterType="{parameter_type}"',
+                f'          resultType="{parameter_type}">',
+                f"    {self._sql_skeleton(spec.operation, spec.target_ref)}",
+                "  </select>",
+            ]
+        tag = spec.operation.lower() if spec.operation in {"INSERT", "UPDATE", "DELETE"} else "update"
+        return [
+            f"  <!-- evidence: {evidence}; REVIEW_REQUIRED: {spec.operation} statement is a sanitized skeleton only. -->",
+            f'  <{tag} id="{spec.method_name}" parameterType="{parameter_type}">',
+            f"    {self._sql_skeleton(spec.operation, spec.target_ref)}",
+            f"  </{tag}>",
+        ]
+
+    def _sql_skeleton(self, operation: str, target_ref: str) -> str:
+        if operation == "SELECT":
+            return (
+                f"SELECT /* REVIEW_REQUIRED columns */ FROM {target_ref} "
+                "WHERE /* REVIEW_REQUIRED predicates */"
+            )
+        if operation == "INSERT":
+            return (
+                f"INSERT INTO {target_ref} (/* REVIEW_REQUIRED columns */) "
+                "VALUES (/* REVIEW_REQUIRED values */)"
+            )
+        if operation == "UPDATE":
+            return (
+                f"UPDATE {target_ref} SET /* REVIEW_REQUIRED assignments */ "
+                "WHERE /* REVIEW_REQUIRED predicates */"
+            )
+        if operation == "DELETE":
+            return f"DELETE FROM {target_ref} WHERE /* REVIEW_REQUIRED predicates */"
+        if operation == "MERGE":
+            return (
+                f"MERGE {target_ref} USING /* REVIEW_REQUIRED source */ "
+                "ON /* REVIEW_REQUIRED match */"
+            )
+        return f"/* REVIEW_REQUIRED {operation} skeleton for {target_ref} */"
+
+    def _render_sp_wrapper_mapper_xml(
+        self,
+        context: GenerationContext,
+        names: JavaMyBatisNames,
+    ) -> str:
+        evidence_objects = ", ".join(source.name for source in context.evidence_sources if source.name) or "REVIEW_REQUIRED"
+        param_lines = []
+        for index, param in enumerate(context.input_params):
+            comma = "," if index < len(context.input_params) - 1 else ""
+            field_name = names.field_name(param.name)
+            param_name = names.db_parameter_name(param.name)
+            param_lines.append(f"      {param_name} = #{{{field_name}}}{comma}")
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            "<!DOCTYPE mapper",
+            '  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"',
+            '  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">',
+            f'<mapper namespace="{names.mapper_namespace}">',
+            "",
+            f"  <!-- evidence objects: {evidence_objects}; REVIEW_REQUIRED: SP wrapper draft only. -->",
+            "",
+            f"  <!-- {names.sql_comment()} -->",
+            f'  <select id="{names.mapper_sql_id}"',
+            f'          parameterType="{names.model_package}.{names.dto_class_name}"',
+            f'          resultType="{names.model_package}.{names.dto_class_name}">',
+            f"    EXEC {context.sp_name}",
+            *param_lines,
+            "  </select>",
+            "",
+            "</mapper>",
+        ]
+        return ensure_trailing_newline("\n".join(lines))
 
     def _evidence_summary_lines(self, context: GenerationContext) -> list[str]:
         lines = [
@@ -679,10 +1057,10 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
         )
 
     def render_bundle(self, context: GenerationContext) -> RenderedBundle:
-        if context.generation_mode != "spWrapper":
+        if context.generation_mode not in {"spWrapper", "spRebuild", "evidenceReconstructed"}:
             raise ValueError(
-                "JavaMyBatisSpWrapperRenderer only supports generationMode=spWrapper. "
-                "Other modes remain TODO/REVIEW_REQUIRED."
+                "JavaMyBatisSpWrapperRenderer supports generationMode=spWrapper, "
+                "spRebuild, or evidenceReconstructed."
             )
         names = self.names(context)
         files = (
@@ -758,75 +1136,4 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
                 "policyVersion": self.assets.policy_version,
                 "templateVersion": self.assets.template_version(self.template_id),
             },
-        )
-
-
-class JavaMyBatisDtoModelRenderer(JavaMyBatisDraftRendererBase):
-    template_id = DTO_MODEL_TEMPLATE_ID
-    requested_output_type = RequestedOutputType.DTO_MODEL_DRAFT.value
-
-    def render_bundle(self, context: GenerationContext) -> RenderedBundle:
-        names = self.names(context)
-        files = (
-            DraftFile(
-                path=names.source_path("model", names.dto_class_name),
-                content=self.render_data_class(
-                    context,
-                    names,
-                    class_name=names.dto_class_name,
-                    object_type_label="DTO",
-                ),
-                artifact_type=ArtifactType.DTO_DRAFT,
-            ),
-            DraftFile(
-                path=names.source_path("model", names.vo_class_name),
-                content=self.render_data_class(
-                    context,
-                    names,
-                    class_name=names.vo_class_name,
-                    object_type_label="VO",
-                ),
-                artifact_type=ArtifactType.VO_DRAFT,
-            ),
-            DraftFile(
-                path=names.source_path("model", names.model_class_name),
-                content=self.render_data_class(
-                    context,
-                    names,
-                    class_name=names.model_class_name,
-                    object_type_label="Model",
-                ),
-                artifact_type=ArtifactType.MODEL_DRAFT,
-            ),
-        )
-        manifest = RenderedArtifact(
-            artifact_type=self.requested_output_type,
-            title=context.sample_id or f"{context.entity_name} DTO/VO/Model 초안",
-            content=self.render_manifest(
-                context,
-                files,
-                names,
-                code_draft_summary=(
-                    "DTO / VO / Model 초안은 metadata-only field evidence 를 기준으로 한다."
-                ),
-            ),
-            evidence_refs=context.evidence_refs,
-            registry_refs=(
-                self.assets.policy_ref,
-                self.assets.template_ref(self.template_id),
-            ),
-            assumptions=context.evidence_assumptions,
-            review_required=True,
-            extra={
-                "artifactTypes": [file.artifact_type.value for file in files],
-                "generationMode": context.generation_mode,
-                "inputSnapshotHash": context.input_snapshot_hash,
-                "policyVersion": self.assets.policy_version,
-                "templateVersion": self.assets.template_version(self.template_id),
-            },
-        )
-        return RenderedBundle(
-            requested_output_type=self.requested_output_type,
-            manifest=manifest,
-            files=files,
         )

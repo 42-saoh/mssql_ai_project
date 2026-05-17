@@ -1036,14 +1036,14 @@ class WorkflowService:
                     artifact_type=file.artifact_type,
                     title=file.path,
                     content=file.content,
-                    evidence_refs=[],
+                    evidence_refs=[ref.as_dict() for ref in bundle.manifest.evidence_refs],
                     generator_version=bundle.manifest.generator_version,
                     registry_refs=tuple(bundle.manifest.registry_refs),
                     assumptions=assumptions,
                     review_required=True,
                     extra={
                         "requestedOutputType": bundle.requested_output_type,
-                        "source": "java_mybatis_sp_wrapper_bundle",
+                        "source": "java_mybatis_evidence_reconstructed_bundle",
                     },
                 )
             )
@@ -1187,7 +1187,7 @@ def generation_context_from_request(
                 "entityName": entity_name,
                 "resourceName": kebab_case(entity_name),
                 "description": f"{sp_name} draft workflow output",
-                "generationMode": "spWrapper",
+                "generationMode": "spRebuild",
                 "tableName": table_name,
                 "spName": sp_name,
                 "columns": columns,
@@ -1243,10 +1243,6 @@ def validation_record_to_report(record: ValidationReportRecord) -> ValidationRep
 def artifact_types_for_requested_output(output: str) -> tuple[ArtifactType, ...]:
     if output == RequestedOutputType.TABLE_COLUMN_METADATA.value:
         return (ArtifactType.METADATA_QUERY_RESULT,)
-    if output == RequestedOutputType.DTO_MODEL_DRAFT.value:
-        return (ArtifactType.DTO_DRAFT, ArtifactType.VO_DRAFT, ArtifactType.MODEL_DRAFT)
-    if output == RequestedOutputType.DDL_DRAFT.value:
-        return (ArtifactType.DDL_DRAFT,)
     raise ValueError(f"Unsupported requested output type: {output}")
 
 

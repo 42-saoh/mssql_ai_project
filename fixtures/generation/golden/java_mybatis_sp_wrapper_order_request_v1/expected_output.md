@@ -11,7 +11,7 @@
 
 ## registry_versions
 - policy: `policy:project_ai_java_mybatis_generation_policy.yaml@1.0.0`
-- template: `template:java_mybatis_sp_wrapper@0.2.0`
+- template: `template:java_mybatis_sp_wrapper@0.3.0`
 - registry: `java_mybatis_templates_v1`
 
 ## generator_metadata
@@ -182,7 +182,7 @@
 - 근거 보강 필요: `base_framework_usage` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
 - 근거 보강 필요: `exact_exception_message_codes` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
 - 근거 보강 필요: `controller_need` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
-- 근거 보강 필요: `dto_vo_model_final_choice` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
+- 근거 보강 필요: `dto_field_result_shape_mapping` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
 - 근거 보강 필요: `sp_rebuild_feasibility` 항목은 추가 근거 확보 전까지 caveat로 유지합니다.
 
 ## message_and_config_examples
@@ -206,7 +206,7 @@ pem:
 - TODO(policy.mustMarkUnknown): base_framework_usage
 - TODO(policy.mustMarkUnknown): exact_exception_message_codes
 - TODO(policy.mustMarkUnknown): controller_need
-- TODO(policy.mustMarkUnknown): dto_vo_model_final_choice
+- TODO(policy.mustMarkUnknown): dto_field_result_shape_mapping
 - TODO(policy.mustMarkUnknown): sp_rebuild_feasibility
 
 ## quality_summary
@@ -230,7 +230,7 @@ pem:
 - TODO(policy.mustMarkUnknown): base_framework_usage
 - TODO(policy.mustMarkUnknown): exact_exception_message_codes
 - TODO(policy.mustMarkUnknown): controller_need
-- TODO(policy.mustMarkUnknown): dto_vo_model_final_choice
+- TODO(policy.mustMarkUnknown): dto_field_result_shape_mapping
 - TODO(policy.mustMarkUnknown): sp_rebuild_feasibility
 
 ## next_evidence_to_collect

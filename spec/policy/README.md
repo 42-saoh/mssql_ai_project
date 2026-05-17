@@ -37,7 +37,7 @@
 
 - 생성 결과는 항상 draft 로 취급한다.
 - evidence, assumption, TODO, review checklist 를 함께 남긴다.
-- `metadataCrud`, `spWrapper`, `spRebuild`, `metadataObject` 중 generation mode 를 명시한다.
+- `metadataCrud`, `spWrapper`, `spRebuild`, `evidenceReconstructed` 중 generation mode 를 명시한다.
 - 확인되지 않은 프레임워크/공통 컴포넌트는 가정하지 않고 TODO 로 남긴다.
 
 ### 플랫폼 DB / 메타데이터 표준화

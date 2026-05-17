@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
-import type { MetadataAnalysisResponse } from "@/lib/api/types";
+import type {
+  MetadataAnalysisResponse,
+  MetadataGeneratedDraft,
+} from "@/lib/api/types";
 import { displayCaveatText } from "@/lib/display-caveats";
 
 function knowledgeAssetHref(assetId: string): string {
@@ -168,6 +173,38 @@ export function MetadataAnalysisPanel({
         </div>
       ) : null}
 
+      {analysis.generatedDrafts.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.generatedDrafts.map((draft) => (
+            <article className="metadata-result-row" key={`draft-${draft.objectRef}`}>
+              <div>
+                <p className="eyebrow">{draft.artifactType}</p>
+                <h3>{draft.fileName}</h3>
+                <p>
+                  {draft.objectRef} - {draft.language}
+                </p>
+                {draft.targetKey ? <code>{draft.targetKey}</code> : null}
+                <div className="content-preview metadata-draft-preview">
+                  <pre>{draft.content}</pre>
+                </div>
+              </div>
+              <div className="metadata-result-detail">
+                <StatusPill
+                  value={draft.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+                  label={draft.reviewRequired ? "draft caveat" : "metadata backed"}
+                />
+                <button type="button" onClick={() => downloadGeneratedDraft(draft)}>
+                  Download DTO draft
+                </button>
+                {draft.evidenceRefs.slice(0, 2).map((ref) => (
+                  <code key={`draft-${draft.objectRef}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
       {analysis.insightGroups.length > 0 ? (
         <div className="metadata-result-list">
           {analysis.insightGroups.map((group) => (
@@ -252,4 +289,14 @@ function evidenceStatusLabel(status: string): string {
     return "근거 보강 필요";
   }
   return status.replaceAll("_", " ");
+}
+
+function downloadGeneratedDraft(draft: MetadataGeneratedDraft) {
+  const blob = new Blob([draft.content], { type: "text/x-java-source;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = draft.fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

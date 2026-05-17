@@ -318,7 +318,7 @@ def test_p24c_renderer_and_quality_evaluator_score_rendered_artifacts() -> None:
         assert report["storageSafetyFindings"] == []
         assert "generated_source_application: `not_performed`" in serialized_artifacts
         assert "<!-- section:sp_overview -->" in serialized_artifacts
-        assert "## 1. SP 개요 및 기본 정보" in serialized_artifacts
+        assert "## 1. SP 개요 (Overview)" in serialized_artifacts
         assert "## sp_overview" not in serialized_artifacts
         assert "| 항목 | 값 | 상태 | 근거 |" in serialized_artifacts
         assert "| Phase | 주요 읽기 | 주요 쓰기 | 위험/검토점 | 상태 | 근거 |" in serialized_artifacts

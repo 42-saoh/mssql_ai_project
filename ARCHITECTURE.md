@@ -1,5 +1,34 @@
 # ARCHITECTURE.md
 
+## P36 Output Contract Architecture
+
+The public generation contract now exposes six final artifact types only:
+`SP_ANALYSIS_DOC`, `DEPENDENCY_REPORT`, `DTO_DRAFT`, `SERVICE_DRAFT`,
+`MAPPER_INTERFACE`, and `MAPPER_XML`. `JAVA_MYBATIS_DRAFT` remains a request group,
+but it expands only to the four Java/MyBatis file artifacts.
+
+`SP_ANALYSIS_DOC` renders the same six-step flow as `MIGRATION_GUIDE.md`.
+`DEPENDENCY_REPORT` is an evidence dossier rather than a dependency-only inventory.
+Java/MyBatis generation uses `spRebuild`/`evidenceReconstructed` semantics for
+evidence-backed business logic drafts while keeping uncertainty as `REVIEW_REQUIRED`.
+
+`DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, and `DDL_DRAFT` are retired from new
+public request/API/UI/validation/generation contracts. Historical `VO_DRAFT`,
+`MODEL_DRAFT`, and `DDL_DRAFT` storage rows are preserved because they can be
+referenced by versions, validation reports, approval records, exports, and audit/history
+surfaces. The manual v9 SQL keeps those type codes as historical-only storage values and
+adds a trigger to block new retired artifact inserts/type changes.
+
+## P37 Metadata DTO Draft Preview Architecture
+
+Metadata analysis can optionally emit non-persisted `DTO_DRAFT` previews from sanitized
+TABLE/VIEW column metadata. `MetadataAnalysisOptions.generateDtoDrafts` defaults to false;
+when enabled, `MetadataAnalysisResponse.generatedDrafts` returns Java DTO preview content,
+file name, object ref, target key, evidence refs, and `REVIEW_REQUIRED` reasons. These previews
+are not workflow artifact records, do not create or apply source files, and do not authorize
+row data access, SQL/SP definition storage, procedure execution, DDL/DML, deploy, publish, or
+automatic conversion.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates
@@ -160,8 +189,9 @@ flowchart LR
 - SP 분석 문서
 - 의존성 보고서
 - Mapper XML / Interface / Service
-- DTO / VO / Model
-- DDL 초안
+- DTO draft
+- evidence-backed Mapper XML / Interface / Service drafts
+- bounded SQL statement evidence, not executable DDL draft output
 - 사람이 읽는 문서 본문과 표 헤더는 한국어로 렌더링하되 section id, artifact type,
   registry ref, SQL/Java 식별자는 번역하지 않음
 

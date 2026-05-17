@@ -69,7 +69,6 @@ assert.equal(artifactFileExtension("MAPPER_XML"), "xml");
 assert.equal(artifactFileExtension("MAPPER_INTERFACE"), "java");
 assert.equal(artifactFileExtension("SERVICE_DRAFT"), "java");
 assert.equal(artifactFileExtension("DTO_DRAFT"), "java");
-assert.equal(artifactFileExtension("DDL_DRAFT"), "sql");
 assert.equal(artifactFileExtension("VALIDATION_REPORT"), "json");
 assert.equal(artifactFileExtension("FUTURE_ARTIFACT_TYPE"), "txt");
 assert.equal(artifactContentType("MAPPER_XML"), "application/xml; charset=utf-8");

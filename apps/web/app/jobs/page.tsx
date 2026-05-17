@@ -29,8 +29,6 @@ const outputOptions: RequestedOutputType[] = [
   "DEPENDENCY_REPORT",
   "TABLE_COLUMN_METADATA",
   "JAVA_MYBATIS_DRAFT",
-  "DTO_MODEL_DRAFT",
-  "DDL_DRAFT",
 ];
 
 function firstParam(value: string | string[] | undefined): string | undefined {

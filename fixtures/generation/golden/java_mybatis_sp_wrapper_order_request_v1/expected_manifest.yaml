@@ -1,6 +1,6 @@
 sampleId: golden-java-mybatis-sp-wrapper-order-request-v1
 generationMode: spWrapper
-templateVersion: 0.2.0
+templateVersion: 0.3.0
 inputSnapshotHash: 9a64f54f70ebdb4a7bfd17b80da9388827abb111e358a0433d20a61433af92f5
 expectedFiles:
 - src/main/java/com/pec/pem/order/request/model/OrderRequestDTO.java

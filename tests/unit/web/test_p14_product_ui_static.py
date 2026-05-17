@@ -112,6 +112,8 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert "/api/metadata/analysis-runs/${encodeURIComponent(run.runId)}" in analyze_action
     assert "AI_METADATA_ANALYSIS_TIMEOUT" in analyze_action
     assert "Analysis target limit" in analyze_action
+    assert 'name="generateDtoDrafts"' in analyze_action
+    assert "Generate DTO draft" in analyze_action
     assert "api.submitMetadataAnalysisRun(payload)" in (
         WEB_ROOT / "app" / "api" / "metadata" / "analysis-runs" / "route.ts"
     ).read_text(encoding="utf-8")
@@ -127,6 +129,9 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert "api.analyzeMetadata(payload)" in analyze_route
     assert "evidenceStatusLabel(item.status)" in _web_source()
     assert "DTO {item.status}" not in _web_source()
+    assert "generatedDrafts" in _web_source()
+    assert "downloadGeneratedDraft" in _web_source()
+    assert "Download DTO draft" in _web_source()
     assert "inputSchema" not in page
     assert "input schema" not in page.lower()
     assert "listMetadataTools" in portal_api
@@ -349,7 +354,9 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     assert 'MAPPER_XML: "xml"' in artifact_download
     assert 'MAPPER_INTERFACE: "java"' in artifact_download
     assert 'SERVICE_DRAFT: "java"' in artifact_download
-    assert 'DDL_DRAFT: "sql"' in artifact_download
+    assert "DDL_DRAFT" not in artifact_download
+    assert "VO_DRAFT" not in artifact_download
+    assert "MODEL_DRAFT" not in artifact_download
     assert "sanitizeFilePart" in artifact_download
     assert "0x04034b50" in zip_writer
     assert "0x02014b50" in zip_writer

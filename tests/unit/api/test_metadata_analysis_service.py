@@ -148,6 +148,7 @@ def test_metadata_analysis_request_requires_query_xor_target_and_defaults() -> N
     assert request.options.use_llm_analysis is True
     assert request.options.use_ai_tool_orchestration is True
     assert request.options.max_targets == 3
+    assert request.options.generate_dto_drafts is False
 
     with pytest.raises(ValidationError):
         MetadataAnalysisRequest.model_validate({"dbProfileId": "master"})
@@ -230,6 +231,70 @@ def test_metadata_analysis_uses_internal_mcp_tool_and_sanitized_fact_ids(
         ref.startswith("mcp.get_table_schema.")
         for ref in response["dtoReadiness"][0]["evidenceRefs"]
     )
+    serialized = str(response).lower()
+    for forbidden in ("create procedure", "rowdata", "row_data", "do-not-return"):
+        assert forbidden not in serialized
+
+
+def test_metadata_analysis_generates_sanitized_dto_draft_from_table_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = SpyRegistry()
+    monkeypatch.setattr(
+        "api_app.metadata_analysis_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    service = MetadataAnalysisService(
+        model_gateway=FakeModelGateway(
+            tool_plan_by_target_ref={
+                "dbo.TB_ORDER": {
+                    "toolRequests": [
+                        {
+                            "toolName": "get_table_schema",
+                            "arguments": {
+                                "dbProfileId": "master",
+                                "schema": "dbo",
+                                "tableName": "TB_ORDER",
+                            },
+                            "reason": "Need table schema evidence.",
+                            "expectedEvidenceUse": "Anchor DTO_DRAFT fields.",
+                        }
+                    ],
+                    "assumptions": [],
+                    "reviewMarkers": [],
+                }
+            }
+        )
+    )
+
+    response = service.analyze(
+        MetadataAnalysisRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+                "options": {
+                    "llmProfileId": "openai_fast_test",
+                    "generateDtoDrafts": True,
+                },
+            }
+        )
+    ).to_response()
+
+    assert len(response["generatedDrafts"]) == 1
+    draft = response["generatedDrafts"][0]
+    assert draft["artifactType"] == "DTO_DRAFT"
+    assert draft["objectRef"] == "dbo.TB_ORDER"
+    assert draft["fileName"] == "TbOrderDto.java"
+    assert draft["language"] == "java"
+    assert draft["reviewRequired"] is True
+    assert any(ref.startswith("mcp.get_table_schema.") for ref in draft["evidenceRefs"])
+    assert "Primary key metadata is not confirmed." in draft["reviewReasons"]
+    assert "STATUS_CD has no confirmed description." in draft["reviewReasons"]
+    assert "public class TbOrderDto" in draft["content"]
+    assert "private Integer orderId;" in draft["content"]
+    assert "private String statusCd;" in draft["content"]
+    assert "getOrderId()" in draft["content"]
+    assert "REVIEW_REQUIRED" in draft["content"]
     serialized = str(response).lower()
     for forbidden in ("create procedure", "rowdata", "row_data", "do-not-return"):
         assert forbidden not in serialized

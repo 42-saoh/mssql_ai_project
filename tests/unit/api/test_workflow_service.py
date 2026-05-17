@@ -1515,18 +1515,14 @@ def test_artifact_publish_state_blocks_validation_mutation() -> None:
         service.validate_artifact(artifact.artifact_id)
 
 
-def test_requested_output_placeholders_use_persisted_artifact_enums() -> None:
+def test_table_metadata_placeholder_uses_persisted_artifact_enum() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(repository)
 
-    service.submit_sp_analysis(_request(["TABLE_COLUMN_METADATA", "DTO_MODEL_DRAFT", "DDL_DRAFT"]))
+    service.submit_sp_analysis(_request(["TABLE_COLUMN_METADATA"]))
 
     assert {artifact.type for artifact in repository.artifacts.values()} == {
         ArtifactType.METADATA_QUERY_RESULT,
-        ArtifactType.DTO_DRAFT,
-        ArtifactType.VO_DRAFT,
-        ArtifactType.MODEL_DRAFT,
-        ArtifactType.DDL_DRAFT,
     }
     assert all("quality_summary" in artifact.content for artifact in repository.artifacts.values())
     assert all("evidence caveat" in artifact.content for artifact in repository.artifacts.values())

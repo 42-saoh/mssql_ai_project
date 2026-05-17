@@ -1,5 +1,15 @@
 # Integration Eval Status
 
+P36 update: output renewal is implemented as a breaking draft contract. New public
+generation exposes `SP_ANALYSIS_DOC`, `DEPENDENCY_REPORT`, `DTO_DRAFT`,
+`SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML`. `SP_ANALYSIS_DOC` now follows
+the `MIGRATION_GUIDE.md` flow, while `DEPENDENCY_REPORT` is an evidence dossier.
+`DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, and `DDL_DRAFT` are retired from new
+public request/API/UI/validation/generation contracts. v9 DB SQL is manual-apply only
+and preserves FK-linked historical retired artifact rows as historical-only storage
+values while blocking new retired artifact inserts/type changes. The platform remains
+`production_ready: false`.
+
 ## Summary
 
 P24C update: the generation package now renders the P24 migration guide section
@@ -34,7 +44,7 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | P35 knowledge live confidence | explicit optional live | `P35_KNOWLEDGE_LIVE_GATE=1` runs one bounded live PPM SP workflow with OpenAI semantic analysis and live PLF v6 knowledge persistence, then verifies job-linked assets, fact-edge integrity, search, and GRAPH_JSON export. PPM remains metadata-only/read-only; PLF receives normal test workflow/knowledge/export/audit writes without review records. Success is confidence evidence only and does not imply production readiness or conversion approval. |
 | P27 dependency evidence tooling | fixture-first hardened | `spec/eval/p27_dependency_evidence_tooling_contract.yaml` and the MCP catalog define active read-only dependency closure/resolution tools plus optional dependency resolution evidence fields. P28 safe API invocation, P29 Web diagnostics, and workflow closure evidence wiring are fixture-first enabled; persisted artifact type and DB schema changes remain deferred. Ambiguous/dynamic/unresolved/cross-server/caller-dependent references stay `REVIEW_REQUIRED`. Explicit hard-live evidence runs only with `P27_HARD_LIVE_GATE=1`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
-| DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
+| DDL | manual only | P36 retires DDL draft output from new public generation. v9 schema SQL is a manual review/apply asset only, preserves historical FK-linked retired artifacts, and blocks new retired artifact inserts/type changes. Automatic DDL execution remains forbidden. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
 
 ## Eval Assets
