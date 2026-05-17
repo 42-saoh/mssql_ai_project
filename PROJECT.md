@@ -53,12 +53,22 @@ such as `PPM.dbo.PCO_GU_ManageBond_PRC`. P41A-F now connect an internal
 strict structured planning, and Java/MyBatis generation that can keep branch-level
 DTO blueprints separate before source drafting.
 
+The SP workflow now builds a sanitized operation-model AgentRun for
+`JAVA_MYBATIS_DRAFT`: raw procedure definition text is used only as transient input
+to the deterministic statement-evidence extractor, the planner output is validated
+as `SpOperationModel.v0.1`, and `GenerationContext.request.operationModel` drives
+multi-DTO rendering. If operation-model planning is disabled, unavailable, or fails,
+the workflow records `P41_OPERATION_MODEL_REVIEW_REQUIRED` and renders an explicit
+`OperationModelReviewRequired` DTO instead of silently falling back to the legacy
+single procedure DTO.
+
 The legacy single-DTO Java/MyBatis renderer remains supported when no
 `operationModel` is supplied, and that path is still recorded as insufficient for
 complex SPs through fixture-first evals. When `operationModel.dtoBlueprints` is
 present, `JAVA_MYBATIS_DRAFT` keeps the same public artifact types while
-rendering `DTO_DRAFT` as an internal multi-file bundle; `SERVICE_DRAFT`,
-`MAPPER_INTERFACE`, and `MAPPER_XML` remain single files. P41 remains
+rendering `DTO_DRAFT` as an internal multi-file bundle stored one artifact row per
+DTO file path; `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML` remain single
+files. P41 remains
 `production_ready: false`, with no UI change, public API expansion, DB schema
 change, live MCP public tool expansion, row-data access, procedure execution,
 automatic DDL/DML apply, or generated-source deployment.

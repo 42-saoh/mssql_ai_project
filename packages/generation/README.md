@@ -28,6 +28,14 @@ one `MAPPER_INTERFACE`, and one `MAPPER_XML`. When no `operationModel` is suppli
 legacy single DTO draft behavior remains for backward compatibility and is treated as a
 known gap for complex stored procedures.
 
+The API workflow now supplies `operationModel` for `JAVA_MYBATIS_DRAFT` by running the
+sanitized statement-evidence extractor and structured operation planner before rendering.
+Persisted Java/MyBatis bundles store each DTO file as its own `DTO_DRAFT` artifact keyed by
+`bundleFilePath`; the service, mapper interface, and mapper XML artifacts remain singletons.
+If the planner cannot produce a branch-level model, the workflow emits
+`OperationModelReviewRequired` with `P41_OPERATION_MODEL_REVIEW_REQUIRED` instead of treating
+the legacy single DTO as adequate.
+
 Retired outputs are no longer public generation targets:
 
 - `DTO_MODEL_DRAFT`

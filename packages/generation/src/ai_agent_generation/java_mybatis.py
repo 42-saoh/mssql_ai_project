@@ -1162,32 +1162,57 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
     ) -> RenderedBundle:
         dto_specs = self._operation_dto_specs(operation_model)
         method_specs = self._operation_method_specs(operation_model, dto_specs)
-        dto_files = tuple(
-            DraftFile(
-                path=names.source_path("model", spec.name),
-                content=self._render_operation_dto(context, names, spec),
-                artifact_type=ArtifactType.DTO_DRAFT,
+        dto_files: list[DraftFile] = []
+        bundle_file_manifest: dict[str, dict[str, Any]] = {}
+        for spec in dto_specs:
+            path = names.source_path("model", spec.name)
+            dto_files.append(
+                DraftFile(
+                    path=path,
+                    content=self._render_operation_dto(context, names, spec),
+                    artifact_type=ArtifactType.DTO_DRAFT,
+                )
             )
-            for spec in dto_specs
-        )
+            bundle_file_manifest[path] = {
+                "bundleFilePath": path,
+                "bundleRole": ArtifactType.DTO_DRAFT.value,
+                "operationModelSchema": operation_model.schema_version,
+                "operationModelTargetRef": operation_model.target_ref,
+                "operationIds": list(spec.operation_ids),
+                "dtoRole": spec.role,
+            }
+        service_path = names.source_path("service", names.service_class_name)
+        mapper_path = names.source_path("mapper", names.mapper_class_name)
+        mapper_xml_path = names.mapper_xml_path
         files = (
-            *dto_files,
+            *tuple(dto_files),
             DraftFile(
-                path=names.source_path("service", names.service_class_name),
+                path=service_path,
                 content=self._render_operation_service(context, names, method_specs),
                 artifact_type=ArtifactType.SERVICE_DRAFT,
             ),
             DraftFile(
-                path=names.source_path("mapper", names.mapper_class_name),
+                path=mapper_path,
                 content=self._render_operation_mapper(context, names, method_specs),
                 artifact_type=ArtifactType.MAPPER_INTERFACE,
             ),
             DraftFile(
-                path=names.mapper_xml_path,
+                path=mapper_xml_path,
                 content=self._render_operation_mapper_xml(context, names, method_specs),
                 artifact_type=ArtifactType.MAPPER_XML,
             ),
         )
+        for path, artifact_type in (
+            (service_path, ArtifactType.SERVICE_DRAFT),
+            (mapper_path, ArtifactType.MAPPER_INTERFACE),
+            (mapper_xml_path, ArtifactType.MAPPER_XML),
+        ):
+            bundle_file_manifest[path] = {
+                "bundleFilePath": path,
+                "bundleRole": artifact_type.value,
+                "operationModelSchema": operation_model.schema_version,
+                "operationModelTargetRef": operation_model.target_ref,
+            }
         manifest = self._render_bundle_manifest(
             context,
             files,
@@ -1196,6 +1221,11 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
                 "operationModel.dtoBlueprints 기준으로 DTO_DRAFT를 multi-file bundle로 "
                 "생성하고 Service / Mapper / Mapper XML은 단일 draft 파일로 생성했다."
             ),
+            extra={
+                "operationModelSchema": operation_model.schema_version,
+                "operationModelTargetRef": operation_model.target_ref,
+                "bundleFiles": bundle_file_manifest,
+            },
         )
         return RenderedBundle(
             requested_output_type=self.requested_output_type,
@@ -1400,6 +1430,7 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
             [
                 "/**",
                 f" * {label} {spec.role} DTO draft for operationModel.",
+                f" * source SP: {context.sp_name}",
                 f" * operations: {', '.join(spec.operation_ids) or 'REVIEW_REQUIRED'}",
                 f" * evidence: {evidence}",
                 f" * REVIEW_REQUIRED: {review_markers}",
@@ -1699,7 +1730,17 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
         names: JavaMyBatisNames,
         *,
         code_draft_summary: str,
+        extra: Mapping[str, Any] | None = None,
     ) -> RenderedArtifact:
+        manifest_extra = {
+            "artifactTypes": [file.artifact_type.value for file in files],
+            "generationMode": context.generation_mode,
+            "inputSnapshotHash": context.input_snapshot_hash,
+            "policyVersion": self.assets.policy_version,
+            "templateVersion": self.assets.template_version(self.template_id),
+        }
+        if extra:
+            manifest_extra.update(dict(extra))
         return RenderedArtifact(
             artifact_type=self.requested_output_type,
             title=context.sample_id or f"{context.entity_name} Java/MyBatis 초안",
@@ -1716,11 +1757,5 @@ class JavaMyBatisSpWrapperRenderer(JavaMyBatisDraftRendererBase):
             ),
             assumptions=context.evidence_assumptions,
             review_required=True,
-            extra={
-                "artifactTypes": [file.artifact_type.value for file in files],
-                "generationMode": context.generation_mode,
-                "inputSnapshotHash": context.input_snapshot_hash,
-                "policyVersion": self.assets.policy_version,
-                "templateVersion": self.assets.template_version(self.template_id),
-            },
+            extra=manifest_extra,
         )

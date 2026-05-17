@@ -12,6 +12,7 @@ from ai_agent_analysis import (
     analyze_stored_procedure,
     build_context_packs,
     build_procedure_source_map,
+    extract_statement_evidence,
     migration_guide_static_metrics,
 )
 from ai_agent_domain import ArtifactType, JobStatus, RequestedOutputType, WorkflowStepType
@@ -30,9 +31,13 @@ from ai_agent_runtime import (
     ModelGateway,
     ModelGatewayError,
     ModelInvocationRecord,
+    SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
+    SP_OPERATION_PLANNER_PROMPT_VERSION,
     attach_planner_metrics_to_ai_tool_evidence,
     build_model_gateway_from_env,
     build_semantic_analysis_run,
+    build_sp_operation_model_run,
+    validate_sp_operation_model_output,
 )
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import (
@@ -77,8 +82,10 @@ WORKFLOW_METADATA_NOTE = (
     "이 integration slice에서는 platform DB workflow repository에 저장됩니다."
 )
 DEPENDENCY_AGENT_TYPE = "LLM_SEMANTIC_ANALYST_DEPENDENCY"
+OPERATION_MODEL_AGENT_TYPE = "LLM_SP_OPERATION_PLANNER"
 SOURCE_DEPENDENCY_MODE_CONFIRMED = "CONFIRMED_PROCEDURES"
 SP_WORKFLOW_RECOVERY_BLOCKED = "SP_WORKFLOW_RECOVERY_BLOCKED"
+P41_OPERATION_MODEL_REVIEW_REQUIRED = "P41_OPERATION_MODEL_REVIEW_REQUIRED"
 RECOVERABLE_SP_JOB_STATUSES = frozenset(
     {
         JobStatus.SUBMITTED,
@@ -310,6 +317,12 @@ class WorkflowService:
             ai_tool_component_invocations=orchestration.component_invocations,
             platform_tool_component_invocations=platform_orchestration.component_invocations,
         )
+        operation_model_run = self._run_sp_operation_model_planning(
+            job_id,
+            request_record=request,
+            metadata=metadata,
+            static_analysis=static_analysis,
+        )
         persist_sp_workflow_knowledge(
             repository=self.repository,
             job_id=job_id,
@@ -334,6 +347,7 @@ class WorkflowService:
             metadata,
             agent_run,
             static_analysis=static_analysis,
+            operation_model_run=operation_model_run,
         )
 
         self.repository.transition_job(
@@ -390,6 +404,7 @@ class WorkflowService:
         metadata: MetadataCollectionResult | None = None
         static_analysis: dict[str, object] | None = None
         agent_run = self._existing_successful_root_agent_run(job.job_id)
+        operation_model_run = self._existing_successful_operation_model_agent_run(job.job_id)
         if job.status in {
             JobStatus.SUBMITTED,
             JobStatus.COLLECTING_METADATA,
@@ -457,6 +472,13 @@ class WorkflowService:
                 ai_tool_component_invocations=(),
                 platform_tool_component_invocations=(),
             )
+            if operation_model_run is None:
+                operation_model_run = self._run_sp_operation_model_planning(
+                    job.job_id,
+                    request_record=request,
+                    metadata=metadata,
+                    static_analysis=static_analysis,
+                )
             persist_sp_workflow_knowledge(
                 repository=self.repository,
                 job_id=job.job_id,
@@ -486,12 +508,20 @@ class WorkflowService:
                     source_name=f"{request.target['schema']}.{request.target['name']}",
                     snapshot_id=metadata.snapshot_id,
                 )
+            if operation_model_run is None:
+                operation_model_run = self._run_sp_operation_model_planning(
+                    job.job_id,
+                    request_record=request,
+                    metadata=metadata,
+                    static_analysis=static_analysis,
+                )
             artifacts = self._generate_artifacts(
                 job.job_id,
                 request,
                 metadata,
                 agent_run,
                 static_analysis=static_analysis,
+                operation_model_run=operation_model_run,
             )
             if not artifacts:
                 raise WorkflowRecoveryBlocked(
@@ -569,12 +599,14 @@ class WorkflowService:
         metadata: MetadataCollectionResult,
         agent_run: AgentRunRecord | None = None,
         static_analysis: dict[str, object] | None = None,
+        operation_model_run: AgentRunRecord | None = None,
     ) -> list[ArtifactRecord]:
         context = generation_context_from_request(
             request,
             metadata,
             agent_run,
             static_analysis=static_analysis,
+            operation_model_run=operation_model_run,
         )
         artifacts: list[ArtifactRecord] = []
         for output in request.outputs:
@@ -617,6 +649,146 @@ class WorkflowService:
                     for artifact_type in artifact_types_for_requested_output(output)
                 )
         return artifacts
+
+    def _run_sp_operation_model_planning(
+        self,
+        job_id: str,
+        *,
+        request_record: WorkRequestRecord,
+        metadata: MetadataCollectionResult,
+        static_analysis: dict[str, object] | None,
+    ) -> AgentRunRecord | None:
+        if not java_mybatis_output_requested(request_record):
+            return None
+        target_ref = operation_model_target_ref(request_record, metadata)
+        definition_text = procedure_definition_text(metadata)
+        evidence_payload: dict[str, Any] | None = None
+        if not definition_text:
+            payload = operation_model_review_required_payload(
+                target_ref=target_ref,
+                reason="PROCEDURE_DEFINITION_UNAVAILABLE",
+            )
+            return self._save_operation_model_run(
+                job_id=job_id,
+                request_record=request_record,
+                payload=payload,
+                target_ref=target_ref,
+                reason="PROCEDURE_DEFINITION_UNAVAILABLE",
+                evidence_payload=None,
+            )
+        try:
+            extraction = extract_statement_evidence(
+                definition_text,
+                target_ref=target_ref,
+                source_name=target_ref,
+            )
+            evidence_payload = operation_model_evidence_summary(extraction.to_storage_dict())
+        except Exception as exc:  # noqa: BLE001 - workflow keeps sanitized review fallback
+            payload = operation_model_review_required_payload(
+                target_ref=target_ref,
+                reason="STATEMENT_EVIDENCE_EXTRACTION_FAILED",
+            )
+            return self._save_operation_model_run(
+                job_id=job_id,
+                request_record=request_record,
+                payload=payload,
+                target_ref=target_ref,
+                reason=f"STATEMENT_EVIDENCE_EXTRACTION_FAILED:{exc.__class__.__name__}",
+                evidence_payload=None,
+            )
+        if not extraction.statement_evidence:
+            payload = operation_model_review_required_payload(
+                target_ref=target_ref,
+                reason="STATEMENT_EVIDENCE_EMPTY",
+                evidence_refs=extraction.evidence_refs,
+            )
+            return self._save_operation_model_run(
+                job_id=job_id,
+                request_record=request_record,
+                payload=payload,
+                target_ref=target_ref,
+                reason="STATEMENT_EVIDENCE_EMPTY",
+                evidence_payload=evidence_payload,
+            )
+        if not bool(request_record.options.get("useLlmAnalysis", False)):
+            payload = operation_model_review_required_payload(
+                target_ref=target_ref,
+                reason="LLM_OPERATION_MODEL_DISABLED",
+                evidence_refs=extraction.evidence_refs,
+            )
+            return self._save_operation_model_run(
+                job_id=job_id,
+                request_record=request_record,
+                payload=payload,
+                target_ref=target_ref,
+                reason="LLM_OPERATION_MODEL_DISABLED",
+                evidence_payload=evidence_payload,
+            )
+        try:
+            run_payload = build_sp_operation_model_run(
+                target_ref=target_ref,
+                statement_evidence=extraction.statement_evidence,
+                model_gateway=self.model_gateway,
+                profile_id=str(request_record.options.get("llmProfileId") or ""),
+                allowed_evidence_refs=extraction.evidence_refs,
+            )
+            if evidence_payload:
+                run_payload = _append_operation_model_evidence_component(
+                    run_payload,
+                    evidence_payload=evidence_payload,
+                )
+            return self.repository.save_agent_run(
+                job_id=job_id,
+                agent_type=run_payload.agent_type,
+                status=run_payload.status.value,
+                target_ref=run_payload.target_ref,
+                summary=run_payload.summary,
+                structured_output=run_payload.structured_output,
+                model_invocation=run_payload.model_invocation.to_storage_dict(),
+                target_key=request_record.target_key,
+            )
+        except Exception as exc:  # noqa: BLE001 - operation planning must not fail the job
+            payload = operation_model_review_required_payload(
+                target_ref=target_ref,
+                reason="SP_OPERATION_MODEL_PLANNER_FAILED",
+                evidence_refs=extraction.evidence_refs,
+            )
+            return self._save_operation_model_run(
+                job_id=job_id,
+                request_record=request_record,
+                payload=payload,
+                target_ref=target_ref,
+                reason=f"SP_OPERATION_MODEL_PLANNER_FAILED:{exc.__class__.__name__}",
+                evidence_payload=evidence_payload,
+            )
+
+    def _save_operation_model_run(
+        self,
+        *,
+        job_id: str,
+        request_record: WorkRequestRecord,
+        payload: dict[str, Any],
+        target_ref: str,
+        reason: str,
+        evidence_payload: dict[str, Any] | None,
+    ) -> AgentRunRecord:
+        validated = validate_sp_operation_model_output(payload).to_storage_dict()
+        model_invocation = operation_model_fallback_invocation(
+            payload=validated,
+            profile_id=str(request_record.options.get("llmProfileId") or ""),
+            reason=reason,
+            evidence_payload=evidence_payload,
+        )
+        return self.repository.save_agent_run(
+            job_id=job_id,
+            agent_type=OPERATION_MODEL_AGENT_TYPE,
+            status=AgentRunStatus.SUCCEEDED.value,
+            target_ref=target_ref,
+            summary=f"SP operation model requires review before multi-DTO generation: {reason}.",
+            structured_output=validated,
+            model_invocation=model_invocation.to_storage_dict(),
+            target_key=request_record.target_key,
+        )
 
     def _run_llm_semantic_analysis(
         self,
@@ -960,6 +1132,21 @@ class WorkflowService:
                 return run
         return None
 
+    def _existing_successful_operation_model_agent_run(
+        self,
+        job_id: str,
+    ) -> AgentRunRecord | None:
+        runs = self.repository.list_agent_runs(job_id, limit=100)
+        if not runs:
+            return None
+        for run in runs:
+            if (
+                run.agent_type == OPERATION_MODEL_AGENT_TYPE
+                and run.status == AgentRunStatus.SUCCEEDED.value
+            ):
+                return run
+        return None
+
     def _existing_successful_dependency_agent_run(
         self,
         job_id: str,
@@ -1023,10 +1210,7 @@ class WorkflowService:
         )
         artifacts = []
         for file in bundle.files:
-            existing = self.repository.find_job_artifact_by_type(
-                job_id,
-                file.artifact_type,
-            )
+            existing = self._find_existing_java_bundle_artifact(job_id, file)
             if existing is not None:
                 artifacts.append(existing)
                 continue
@@ -1036,18 +1220,29 @@ class WorkflowService:
                     artifact_type=file.artifact_type,
                     title=file.path,
                     content=file.content,
-                    evidence_refs=[ref.as_dict() for ref in bundle.manifest.evidence_refs],
+                    evidence_refs=java_bundle_file_evidence_refs(bundle, file),
                     generator_version=bundle.manifest.generator_version,
                     registry_refs=tuple(bundle.manifest.registry_refs),
                     assumptions=assumptions,
                     review_required=True,
-                    extra={
-                        "requestedOutputType": bundle.requested_output_type,
-                        "source": "java_mybatis_evidence_reconstructed_bundle",
-                    },
+                    extra=java_bundle_file_extra(bundle, file),
                 )
             )
         return artifacts
+
+    def _find_existing_java_bundle_artifact(
+        self,
+        job_id: str,
+        file: Any,
+    ) -> ArtifactRecord | None:
+        if file.artifact_type != ArtifactType.DTO_DRAFT:
+            return self.repository.find_job_artifact_by_type(job_id, file.artifact_type)
+        for artifact in self.repository.list_job_artifacts(job_id) or []:
+            if artifact.type != ArtifactType.DTO_DRAFT:
+                continue
+            if artifact.extra.get("bundleFilePath") == file.path:
+                return artifact
+        return None
 
     def _store_contract_placeholder_artifact(
         self,
@@ -1140,6 +1335,7 @@ def generation_context_from_request(
     metadata: MetadataCollectionResult | None = None,
     agent_run: AgentRunRecord | None = None,
     static_analysis: dict[str, object] | None = None,
+    operation_model_run: AgentRunRecord | None = None,
 ) -> GenerationContext:
     target = request.target
     schema = str(target["schema"])
@@ -1167,6 +1363,8 @@ def generation_context_from_request(
     dependency_evidence = dependency_evidence_for_generation(metadata)
     ai_tool_evidence = ai_tool_evidence_for_generation(metadata)
     platform_tool_evidence = platform_tool_evidence_for_generation(metadata)
+    operation_model = operation_model_for_generation(operation_model_run)
+    entity_name = operation_model_entity_name(operation_model) or entity_name
     migration_guide = build_migration_guide_payload(
         target_ref=sp_name,
         db_profile_id=request.db_profile_id,
@@ -1177,37 +1375,331 @@ def generation_context_from_request(
         result_shape=result_shape,
         sample_id=request.request_id,
     )
+    request_payload: dict[str, object] = {
+        "systemCode": system_code(request.db_profile_id),
+        "businessCodeLv1": "workflow",
+        "businessCodeLv2": "draft",
+        "entityName": entity_name,
+        "resourceName": kebab_case(entity_name),
+        "description": f"{sp_name} draft workflow output",
+        "generationMode": "spRebuild",
+        "tableName": table_name,
+        "spName": sp_name,
+        "columns": columns,
+        "inputParams": input_params,
+        "resultShape": result_shape,
+        "pkColumns": [],
+        "authorId": "AI",
+        "llmAnalysis": llm_analysis,
+        "llmTrace": llm_trace_summary(agent_run),
+        "dependencyEvidence": dependency_evidence,
+        "aiToolEvidence": ai_tool_evidence,
+        "platformToolEvidence": platform_tool_evidence,
+        "migrationGuide": migration_guide,
+    }
+    if operation_model:
+        request_payload["operationModel"] = operation_model
+        request_payload["operationModelTrace"] = llm_trace_summary(operation_model_run)
     return GenerationContext.from_mapping(
         {
             "sampleId": request.request_id,
-            "request": {
-                "systemCode": system_code(request.db_profile_id),
-                "businessCodeLv1": "workflow",
-                "businessCodeLv2": "draft",
-                "entityName": entity_name,
-                "resourceName": kebab_case(entity_name),
-                "description": f"{sp_name} draft workflow output",
-                "generationMode": "spRebuild",
-                "tableName": table_name,
-                "spName": sp_name,
-                "columns": columns,
-                "inputParams": input_params,
-                "resultShape": result_shape,
-                "pkColumns": [],
-                "authorId": "AI",
-                "llmAnalysis": llm_analysis,
-                "llmTrace": llm_trace_summary(agent_run),
-                "dependencyEvidence": dependency_evidence,
-                "aiToolEvidence": ai_tool_evidence,
-                "platformToolEvidence": platform_tool_evidence,
-                "migrationGuide": migration_guide,
-            },
+            "request": request_payload,
             "evidence": {
-                "sources": generation_evidence_sources(metadata, sp_name, agent_run),
-                "assumptions": generation_assumptions(agent_run),
+                "sources": generation_evidence_sources(
+                    metadata,
+                    sp_name,
+                    agent_run,
+                    operation_model_run=operation_model_run,
+                ),
+                "assumptions": generation_assumptions(
+                    agent_run,
+                    operation_model=operation_model,
+                ),
             },
         }
     )
+
+
+def java_mybatis_output_requested(request: WorkRequestRecord) -> bool:
+    return RequestedOutputType.JAVA_MYBATIS_DRAFT.value in set(request.outputs)
+
+
+def operation_model_for_generation(
+    operation_model_run: AgentRunRecord | None,
+) -> dict[str, Any] | None:
+    if operation_model_run is None:
+        return None
+    payload = operation_model_run.structured_output
+    if not isinstance(payload, Mapping):
+        return None
+    return validate_sp_operation_model_output(payload).to_storage_dict()
+
+
+def operation_model_entity_name(operation_model: Mapping[str, Any] | None) -> str | None:
+    if not operation_model:
+        return None
+    dto_blueprints = operation_model.get("dtoBlueprints")
+    if not isinstance(dto_blueprints, list):
+        return None
+    preferred_roles = {"QUERY", "RESULT"}
+    candidates = [
+        item
+        for item in dto_blueprints
+        if isinstance(item, Mapping) and str(item.get("role") or "") in preferred_roles
+    ] or [item for item in dto_blueprints if isinstance(item, Mapping)]
+    for dto in candidates:
+        dto_name = str(dto.get("name") or "")
+        stem = operation_model_entity_stem(dto_name)
+        if stem:
+            return stem
+    return None
+
+
+def operation_model_entity_stem(dto_name: str) -> str | None:
+    for suffix in (
+        "SearchCriteria",
+        "SearchRow",
+        "Criteria",
+        "Command",
+        "BatchItem",
+        "CallRequest",
+        "CallResult",
+        "Request",
+        "Row",
+    ):
+        if dto_name.endswith(suffix) and len(dto_name) > len(suffix):
+            return dto_name[: -len(suffix)]
+    return dto_name or None
+
+
+def operation_model_target_ref(
+    request: WorkRequestRecord,
+    metadata: MetadataCollectionResult | None,
+) -> str:
+    if metadata and metadata.object_ref:
+        return metadata.object_ref
+    target = request.target
+    return f"{target['schema']}.{target['name']}"
+
+
+def operation_model_review_required_payload(
+    *,
+    target_ref: str,
+    reason: str,
+    evidence_refs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    refs = [str(ref) for ref in (evidence_refs or ()) if str(ref).strip()]
+    refs = refs or ["metadata.operation_model.review_required"]
+    markers = list(dict.fromkeys([P41_OPERATION_MODEL_REVIEW_REQUIRED, reason]))
+    statement_target_ref = operation_model_review_statement_target_ref(target_ref)
+    return {
+        "schemaVersion": "SpOperationModel.v0.1",
+        "contractTarget": "SpOperationModel",
+        "targetRef": target_ref or "sp.operation.review_required",
+        "sourcePolicy": "sanitized_facts_only",
+        "productionReady": False,
+        "operations": [
+            {
+                "operationId": "reviewRequiredOperation",
+                "crudFlag": "REVIEW_REQUIRED",
+                "title": "Operation model review required",
+                "summary": "Workflow could not build a branch-level SP operation model.",
+                "branchCondition": {
+                    "expression": "REVIEW_REQUIRED",
+                    "variables": [],
+                    "evidenceRefs": refs,
+                    "status": "REVIEW_REQUIRED",
+                },
+                "statementRefs": ["stmt.operation_model.review_required"],
+                "dtoBlueprintRefs": ["OperationModelReviewRequired"],
+                "stateTransitions": [],
+                "riskMarkers": markers,
+                "evidenceRefs": refs,
+                "status": "REVIEW_REQUIRED",
+            }
+        ],
+        "statementEvidence": [
+            {
+                "statementId": "stmt.operation_model.review_required",
+                "operation": "VALIDATE",
+                "targetRef": statement_target_ref,
+                "phase": "review_required",
+                "inputs": [],
+                "outputs": [],
+                "writes": [],
+                "crossDatabase": False,
+                "reviewMarkers": markers,
+                "evidenceRefs": refs,
+                "status": "REVIEW_REQUIRED",
+            }
+        ],
+        "dtoBlueprints": [
+            {
+                "name": "OperationModelReviewRequired",
+                "role": "REVIEW_REQUIRED",
+                "operationIds": ["reviewRequiredOperation"],
+                "fields": [
+                    {
+                        "name": "reviewRequired",
+                        "dbType": "varchar(4000)",
+                        "source": reason,
+                        "required": False,
+                        "evidenceRefs": refs,
+                    }
+                ],
+                "evidenceRefs": refs,
+                "reviewMarkers": markers,
+            }
+        ],
+        "reviewMarkers": markers,
+        "evidenceRefs": refs,
+        "assumptions": [
+            f"{reason}: branch-level DTO blueprint planning requires review.",
+            "Fallback operation model prevents legacy single-DTO collapse for complex SP drafts.",
+        ],
+    }
+
+
+def operation_model_review_statement_target_ref(target_ref: str) -> str:
+    normalized = str(target_ref or "").upper()
+    if any(keyword in normalized for keyword in ("SELECT", "UPDATE", "INSERT", "DELETE")):
+        return "operation_model.review_required_target"
+    return target_ref or "operation_model.review_required_target"
+
+
+def operation_model_evidence_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    statements = payload.get("statementEvidence") if isinstance(payload, Mapping) else []
+    statement_items = [item for item in statements if isinstance(item, Mapping)]
+    return {
+        "version": str(payload.get("version") or ""),
+        "targetRef": str(payload.get("targetRef") or ""),
+        "sourceMapVersion": str(payload.get("sourceMapVersion") or ""),
+        "statementCount": len(statement_items),
+        "operationTypes": sorted(
+            {
+                str(item.get("operation") or "")
+                for item in statement_items
+                if str(item.get("operation") or "")
+            }
+        ),
+        "reviewMarkers": [str(item) for item in payload.get("reviewMarkers", []) if str(item)],
+        "evidenceRefs": [str(item) for item in payload.get("evidenceRefs", []) if str(item)],
+        "productionReady": False,
+    }
+
+
+def operation_model_fallback_invocation(
+    *,
+    payload: Mapping[str, Any],
+    profile_id: str,
+    reason: str,
+    evidence_payload: Mapping[str, Any] | None,
+) -> ModelInvocationRecord:
+    profile = model_profile_from_env(profile_id)
+    invocation_input = {
+        "reason": reason,
+        "targetRef": payload.get("targetRef"),
+        "evidenceSummary": dict(evidence_payload or {}),
+    }
+    return ModelInvocationRecord(
+        provider="workflow",
+        model="deterministic-operation-model-fallback",
+        model_profile_id=profile.profile_id,
+        model_registry_ref=profile.registry_ref,
+        reasoning_effort="none",
+        prompt_version=SP_OPERATION_PLANNER_PROMPT_VERSION,
+        output_schema_version=SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
+        input_hash=stable_json_hash(invocation_input),
+        prompt_hash=text_hash(f"{SP_OPERATION_PLANNER_PROMPT_VERSION}:{reason}"),
+        output_hash=stable_json_hash(payload),
+        status=AgentRunStatus.SUCCEEDED,
+        structured_output=dict(payload),
+        token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+        latency_ms=0,
+        provider_request_id=None,
+        component_invocations=(
+            {
+                "component": "sp_operation_model_workflow_gate",
+                "status": "REVIEW_REQUIRED",
+                "reviewMarker": P41_OPERATION_MODEL_REVIEW_REQUIRED,
+                "reason": reason,
+                "evidenceSummary": dict(evidence_payload or {}),
+            },
+        ),
+    )
+
+
+def _append_operation_model_evidence_component(
+    run_payload: AgentRunPayload,
+    *,
+    evidence_payload: Mapping[str, Any],
+) -> AgentRunPayload:
+    invocation = dataclass_replace(
+        run_payload.model_invocation,
+        component_invocations=(
+            *run_payload.model_invocation.component_invocations,
+            {
+                "component": "sp_statement_evidence_extractor",
+                "status": "SUCCEEDED",
+                "evidenceSummary": dict(evidence_payload),
+            },
+        ),
+    )
+    return dataclass_replace(run_payload, model_invocation=invocation)
+
+
+def java_bundle_file_extra(bundle: RenderedBundle, file: Any) -> dict[str, Any]:
+    manifest_extra = dict(bundle.manifest.extra)
+    bundle_files = manifest_extra.get("bundleFiles")
+    file_extra: dict[str, Any] = {}
+    if isinstance(bundle_files, Mapping):
+        metadata = bundle_files.get(file.path)
+        if isinstance(metadata, Mapping):
+            file_extra = dict(metadata)
+    extra = {
+        "requestedOutputType": bundle.requested_output_type,
+        "source": "java_mybatis_evidence_reconstructed_bundle",
+        "bundleFilePath": file.path,
+        "bundleRole": file_extra.get("bundleRole") or file.artifact_type.value,
+    }
+    for key in (
+        "operationModelSchema",
+        "operationModelTargetRef",
+        "operationIds",
+        "dtoRole",
+    ):
+        if key in file_extra:
+            extra[key] = file_extra[key]
+    return extra
+
+
+def java_bundle_file_evidence_refs(bundle: RenderedBundle, file: Any) -> list[dict[str, Any]]:
+    refs = [
+        ref.as_dict()
+        for ref in bundle.manifest.evidence_refs
+        if ref.object_ref and ref.object_ref in file.content
+    ]
+    if refs:
+        return refs
+    fallback_ref = java_bundle_file_evidence_object_ref(file)
+    return [
+        {
+            "type": "GENERATION_EVIDENCE",
+            "objectRef": fallback_ref,
+            "locator": f"java-mybatis-bundle#{file.path}",
+        }
+    ]
+
+
+def java_bundle_file_evidence_object_ref(file: Any) -> str:
+    file_name = str(file.path).rsplit("/", 1)[-1]
+    if file_name.endswith(".java"):
+        return file_name[:-5]
+    if file_name.endswith("MapperSQL.xml"):
+        return file_name[: -len("SQL.xml")]
+    if file_name.endswith(".xml"):
+        return file_name[:-4]
+    return "REVIEW_REQUIRED"
 
 
 def validation_record_to_report(record: ValidationReportRecord) -> ValidationReport:
@@ -1365,6 +1857,7 @@ def generation_evidence_sources(
     metadata: MetadataCollectionResult | None,
     sp_name: str,
     agent_run: AgentRunRecord | None = None,
+    operation_model_run: AgentRunRecord | None = None,
 ) -> list[dict[str, str | None]]:
     if not metadata:
         sources: list[dict[str, str | None]] = [
@@ -1489,13 +1982,27 @@ def _safe_dict_list(value: object) -> list[dict[str, object]]:
     return [dict(item) for item in value if isinstance(item, dict)]
 
 
-def generation_assumptions(agent_run: AgentRunRecord | None) -> list[str]:
+def generation_assumptions(
+    agent_run: AgentRunRecord | None,
+    *,
+    operation_model: Mapping[str, Any] | None = None,
+) -> list[str]:
     assumptions = [WORKFLOW_METADATA_NOTE]
     if agent_run:
         assumptions.append(
             "근거 보강 필요: LLM semantic analysis is inferred; treat it as an evidence caveat."
         )
         assumptions.extend(str(item) for item in agent_run.structured_output.get("assumptions", []))
+    if operation_model:
+        assumptions.append(
+            "REVIEW_REQUIRED: SpOperationModel.v0.1 is an internal draft planning contract."
+        )
+        assumptions.extend(str(item) for item in operation_model.get("assumptions", []))
+        assumptions.extend(
+            f"REVIEW_REQUIRED: {marker}"
+            for marker in operation_model.get("reviewMarkers", [])
+            if str(marker)
+        )
     return list(dedupe_strings(assumptions))
 
 

@@ -1407,6 +1407,8 @@ def test_recovery_worker_reuses_existing_artifact_and_generates_missing_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     repository = MemoryWorkflowRepository()
     request = repository.create_request(
         db_profile_id="master",
@@ -1462,6 +1464,8 @@ def test_recovery_worker_reuses_existing_validation_reports(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     repository = CountingValidationRepository()
     request = repository.create_request(
         db_profile_id="master",

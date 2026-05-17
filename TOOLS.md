@@ -18,25 +18,28 @@ Tooling must not apply it automatically.
 
 ## P41 Verification Notes
 
-P41 validates the SP operation model renewal with fixture-first tests only. The
-baseline P41A contract/fixture gate is:
+P41 validates the SP operation model renewal with fixture-first tests plus workflow
+wiring tests for `JAVA_MYBATIS_DRAFT`. The baseline P41A contract/fixture gate is:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"
 ```
 
 The full P41A-F targeted quality gate adds the schema, deterministic extractor,
-structured planner, multi-DTO Java/MyBatis renderer, and P36 generation regression:
+structured planner, workflow `operationModel` injection, multi-DTO artifact storage,
+multi-DTO Java/MyBatis renderer, and P36 generation regression:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/unit/generation tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/contract/test_p41_sp_operation_model_prompt_assets.py"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/contract/test_p41_sp_operation_model_prompt_assets.py"
 ```
 
 The fixture uses sanitized expectations from the external `MIGRATION_GUIDE.md` reference
 for `PCO_GU_ManageBond_PRC`; it does not store raw SP text and does not require live DB,
 row-data access, procedure execution, OpenAI network calls, public API expansion, DB schema
 changes, or a new public MCP invoke tool. `DTO_DRAFT` may be a multi-file bundle only inside
-the unchanged `JAVA_MYBATIS_DRAFT` artifact contract.
+the unchanged `JAVA_MYBATIS_DRAFT` artifact contract. Workflow tests verify that a new
+manage-bond job stores DTO bundle files individually and preserves a review-required fallback
+operation model when planning is disabled or unavailable.
 
 ## 목적
 

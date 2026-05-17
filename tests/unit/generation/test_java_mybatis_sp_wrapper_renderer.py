@@ -191,6 +191,14 @@ def test_p41_operation_model_renders_multi_dto_java_mybatis_bundle() -> None:
     assert bundle.artifact_types.count(ArtifactType.SERVICE_DRAFT.value) == 1
     assert bundle.artifact_types.count(ArtifactType.MAPPER_INTERFACE.value) == 1
     assert bundle.artifact_types.count(ArtifactType.MAPPER_XML.value) == 1
+    assert bundle.manifest.extra["operationModelSchema"] == "SpOperationModel.v0.1"
+    bundle_files = bundle.manifest.extra["bundleFiles"]
+    assert bundle_files[
+        "src/main/java/com/pec/ppm/guarantee/bond/model/ManageBondSearchCriteria.java"
+    ]["dtoRole"] == "QUERY"
+    assert bundle_files[
+        "src/main/java/com/pec/ppm/guarantee/bond/model/ManageBondSearchCriteria.java"
+    ]["operationIds"] == ["readBond"]
 
     service = bundle.file_map[
         "src/main/java/com/pec/ppm/guarantee/bond/service/ManageBondService.java"

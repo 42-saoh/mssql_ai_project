@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
+import yaml
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
+from ai_agent_runtime import FakeModelGateway
 from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from api_app.lifecycle import WorkflowStateError
@@ -12,12 +15,71 @@ from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
 from api_app.workflow import (
     DEPENDENCY_AGENT_TYPE,
+    OPERATION_MODEL_AGENT_TYPE,
+    P41_OPERATION_MODEL_REVIEW_REQUIRED,
     WORKFLOW_METADATA_NOTE,
     WorkflowService,
     dependency_procedure_candidates,
 )
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
+
+
+ROOT = Path(__file__).resolve().parents[3]
+P41_FIXTURE_PATH = ROOT / "fixtures" / "eval" / "sp_operation_model_p41_manage_bond_v1.yaml"
+SANITIZED_MANAGE_BOND_SQL = """
+CREATE PROCEDURE PPM.dbo.PCO_GU_ManageBond_PRC
+    @CRUDFlag varchar(20),
+    @GUBUNFlag varchar(1),
+    @ContractNum varchar(10),
+    @OrdNum smallint,
+    @BondKindCode varchar(3),
+    @Sequence smallint,
+    @ApprovalYN varchar(1),
+    @CurrencyInsureAmt decimal(18,3),
+    @UserID varchar(50),
+    @SValue varchar(max)
+AS
+BEGIN
+    IF @CRUDFlag = 'R'
+    BEGIN
+        SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD
+        FROM PPM.dbo.PCO_GUAR
+        WHERE CTRT_NO = @ContractNum AND ORDR_NO = @OrdNum;
+    END
+    IF @CRUDFlag = 'A'
+    BEGIN
+        UPDATE PPM.dbo.PCO_GUAR
+        SET GUAR_APRV_YN = @ApprovalYN
+        WHERE CTRT_NO = @ContractNum;
+        UPDATE ERP.dbo.XXEAI_TRX_HEADER_II
+        SET DUE_DATE = GETDATE()
+        WHERE INVOICE_NUM = @Sequence;
+        EXEC PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC @ContractNum, @OrdNum, @UserID;
+    END
+    IF @CRUDFlag = 'C'
+    BEGIN
+        INSERT INTO PPM.dbo.PCO_GUAR (CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_AMT)
+        SELECT @ContractNum, @OrdNum, @BondKindCode, @CurrencyInsureAmt;
+    END
+    IF @CRUDFlag = 'U'
+    BEGIN
+        UPDATE PPM.dbo.PCO_GUAR SET GUAR_AMT = @CurrencyInsureAmt WHERE GUAR_SEQ = @Sequence;
+    END
+    IF @CRUDFlag = 'D'
+    BEGIN
+        DELETE FROM PPM.dbo.PCO_GUAR WHERE CTRT_NO = @ContractNum AND GUAR_SEQ = @Sequence;
+    END
+    IF @CRUDFlag = 'VENDOR_U'
+    BEGIN
+        UPDATE PPM.dbo.PCS_ADVM_PAYRPT SET VNDR_GUAR_NO = @SValue WHERE @GUBUNFlag = 'J';
+    END
+    IF @CRUDFlag = 'ONLINE_U'
+    BEGIN
+        UPDATE PPM.dbo.PCS_PAY_CMPD_RPT SET ONLINE_GUAR_NO = @SValue WHERE @GUBUNFlag = 'G';
+    END
+END
+""".strip()
 
 
 @pytest.fixture(autouse=True)
@@ -80,6 +142,96 @@ def _fixture_request(outputs: list[str] | None = None) -> SPAnalysisRequest:
             "options": {"includeEvidenceRefs": True},
         }
     )
+
+
+def _manage_bond_request(*, use_llm_analysis: bool = True) -> SPAnalysisRequest:
+    return SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "ppm",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "PCO_GU_ManageBond_PRC",
+            },
+            "outputs": ["JAVA_MYBATIS_DRAFT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": use_llm_analysis,
+                "llmProfileId": "openai_fast_test",
+                "allowSpDefinitionToModel": True,
+            },
+        }
+    )
+
+
+def _p41_operation_model_fixture() -> dict:
+    return yaml.safe_load(P41_FIXTURE_PATH.read_text(encoding="utf-8"))["operation_model"]
+
+
+class ManageBondMetadataGateway:
+    def __init__(self, *, definition: str | None = SANITIZED_MANAGE_BOND_SQL) -> None:
+        self.definition = definition
+
+    def collect_procedure_metadata(
+        self,
+        *,
+        db_profile_id: str,
+        schema: str,
+        procedure_name: str,
+    ) -> MetadataCollectionResult:
+        definition_payload = (
+            {
+                "definition": self.definition,
+                "definitionHash": "sha256:sanitized-manage-bond",
+                "hasDefinitionAccess": True,
+            }
+            if self.definition is not None
+            else None
+        )
+        return MetadataCollectionResult(
+            db_profile_id=db_profile_id,
+            object_ref="PPM.dbo.PCO_GU_ManageBond_PRC",
+            snapshot_id="snapshot-p41-manage-bond",
+            collected_at="2026-05-18T00:00:00Z",
+            evidence_refs=(
+                {
+                    "type": "MSSQL_METADATA",
+                    "objectRef": "PPM.dbo.PCO_GU_ManageBond_PRC",
+                    "locator": "fixture#/p41/manage-bond",
+                    "snapshotId": "snapshot-p41-manage-bond",
+                },
+            ),
+            procedure_definition=definition_payload,
+            procedure_parameters={
+                "parameters": [
+                    {"name": "@CRUDFlag", "dataType": "varchar(20)", "hasDefault": False},
+                    {"name": "@GUBUNFlag", "dataType": "varchar(1)", "hasDefault": False},
+                    {"name": "@ContractNum", "dataType": "varchar(10)", "hasDefault": False},
+                    {"name": "@BondKindCode", "dataType": "varchar(3)", "hasDefault": False},
+                    {"name": "@SValue", "dataType": "varchar(max)", "hasDefault": True},
+                ]
+            },
+            table_schemas=(),
+        )
+
+    def collect_procedure_definition(
+        self,
+        *,
+        db_profile_id: str,
+        schema: str,
+        procedure_name: str,
+        referenced_database: str | None = None,
+    ) -> dict[str, object] | None:
+        if self.definition is None:
+            return None
+        return {
+            "data": {
+                "definition": self.definition,
+                "definitionHash": "sha256:sanitized-manage-bond",
+                "hasDefinitionAccess": True,
+            },
+            "evidenceRefs": [],
+        }
 
 
 def _passed_sp_analysis_content() -> str:
@@ -188,6 +340,146 @@ def test_sp_analysis_can_be_submitted_then_executed_later() -> None:
     assert second_execution.status == JobStatus.VALIDATION_COMPLETE
     assert repository.claim_submitted_job(submitted.job_id) is None
     assert repository.list_job_artifacts(submitted.job_id)
+
+
+def test_p41_manage_bond_workflow_wires_operation_model_into_multi_dto_artifacts() -> None:
+    operation_model = _p41_operation_model_fixture()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+        ),
+    )
+
+    _request_record, job = service.submit_sp_analysis(_manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
+    service_artifacts = [
+        artifact for artifact in artifacts if artifact.type == ArtifactType.SERVICE_DRAFT
+    ]
+    mapper_artifacts = [
+        artifact for artifact in artifacts if artifact.type == ArtifactType.MAPPER_INTERFACE
+    ]
+    mapper_xml_artifacts = [
+        artifact for artifact in artifacts if artifact.type == ArtifactType.MAPPER_XML
+    ]
+    dto_titles = {artifact.title for artifact in dto_artifacts}
+
+    validation_debug = [
+        (
+            artifact.title,
+            repository.latest_validation_for(artifact.artifact_id).status,
+            repository.latest_validation_for(artifact.artifact_id).checks,
+        )
+        for artifact in artifacts
+    ]
+    assert job.status == JobStatus.VALIDATION_COMPLETE, validation_debug
+    assert len(dto_artifacts) == len(operation_model["dtoBlueprints"])
+    assert len(service_artifacts) == 1
+    assert len(mapper_artifacts) == 1
+    assert len(mapper_xml_artifacts) == 1
+    assert not any(title.endswith("/ManageBondDTO.java") for title in dto_titles)
+    assert {
+        "ManageBondSearchCriteria.java",
+        "ManageBondSearchRow.java",
+        "ApproveAdvanceBondCommand.java",
+        "CreateBondCommand.java",
+        "CreateRetentionBondBatchItem.java",
+        "VendorBondUpdateCommand.java",
+        "OnlineBondUpdateCommand.java",
+    } <= {title.rsplit("/", 1)[-1] for title in dto_titles}
+    for artifact in dto_artifacts:
+        assert artifact.extra["bundleFilePath"] == artifact.title
+        assert artifact.extra["bundleRole"] == ArtifactType.DTO_DRAFT.value
+        assert artifact.extra["operationModelSchema"] == "SpOperationModel.v0.1"
+        assert artifact.extra["operationIds"]
+        assert artifact.extra["dtoRole"]
+
+    service = service_artifacts[0].content
+    mapper = mapper_artifacts[0].content
+    mapper_xml = mapper_xml_artifacts[0].content
+    assert "public class ManageBondService" in service
+    assert "List<ManageBondSearchRow> readBond(ManageBondSearchCriteria condition)" in service
+    assert "int vendorBondUpdate(VendorBondUpdateCommand command)" in mapper
+    assert "int onlineBondUpdate(OnlineBondUpdateCommand command)" in mapper
+    assert (
+        'parameterType="com.pec.ppm.workflow.draft.model.ManageBondSearchCriteria"'
+        in mapper_xml
+    )
+    assert (
+        'resultType="com.pec.ppm.workflow.draft.model.ManageBondSearchRow"'
+        in mapper_xml
+    )
+    assert (
+        'parameterType="com.pec.ppm.workflow.draft.model.VendorBondUpdateCommand"'
+        in mapper_xml
+    )
+    assert (
+        'parameterType="com.pec.ppm.workflow.draft.model.OnlineBondUpdateCommand"'
+        in mapper_xml
+    )
+    operation_runs = [
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == OPERATION_MODEL_AGENT_TYPE
+    ]
+    assert len(operation_runs) == 1
+    assert operation_runs[0].structured_output["targetRef"] == operation_model["targetRef"]
+    assert "CREATE PROCEDURE" not in str(operation_runs[0].structured_output)
+    assert "SET GUAR_APRV_YN" not in str(operation_runs[0].model_invocation)
+
+
+def test_p41_workflow_uses_review_required_operation_model_when_planner_is_disabled() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(),
+    )
+
+    _request_record, job = service.submit_sp_analysis(
+        _manage_bond_request(use_llm_analysis=False)
+    )
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
+    runs = repository.list_agent_runs(job.job_id) or []
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE, (job.error_code, job.error_message)
+    assert len(dto_artifacts) == 1
+    assert dto_artifacts[0].title.endswith("/OperationModelReviewRequired.java")
+    assert P41_OPERATION_MODEL_REVIEW_REQUIRED in operation_run.structured_output["reviewMarkers"]
+    assert "LLM_OPERATION_MODEL_DISABLED" in operation_run.structured_output["reviewMarkers"]
+    assert not any(artifact.title.endswith("/PcoGuManagebondPrcDTO.java") for artifact in artifacts)
+
+
+def test_p41_workflow_uses_review_required_operation_model_without_definition() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(definition=None),
+        model_gateway=FakeModelGateway(),
+    )
+
+    _request_record, job = service.submit_sp_analysis(_manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
+    operation_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == OPERATION_MODEL_AGENT_TYPE
+    )
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE, (job.error_code, job.error_message)
+    assert len(dto_artifacts) == 1
+    assert dto_artifacts[0].title.endswith("/OperationModelReviewRequired.java")
+    assert P41_OPERATION_MODEL_REVIEW_REQUIRED in operation_run.structured_output["reviewMarkers"]
+    assert "PROCEDURE_DEFINITION_UNAVAILABLE" in operation_run.structured_output["reviewMarkers"]
 
 
 def test_llm_prompt_uses_retrieved_source_context_without_full_definition() -> None:
@@ -703,8 +995,11 @@ def test_submit_runs_initial_workflow_and_exposes_persisted_artifact_types() -> 
 
     request_record, job = service.submit_sp_analysis(_request())
 
-    assert request_record.status == JobStatus.VALIDATION_COMPLETE
-    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert request_record.status == JobStatus.VALIDATION_COMPLETE, (
+        job.error_code,
+        job.error_message,
+    )
+    assert job.status == JobStatus.VALIDATION_COMPLETE, (job.error_code, job.error_message)
     assert [status.value for status, _step in job.transitions] == [
         "COLLECTING_METADATA",
         "ANALYZING",

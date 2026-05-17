@@ -27,6 +27,10 @@
 - `DTO_DRAFT` may be represented internally as a multi-file bundle when an `operationModel` is
   supplied. This is not a new public artifact type; `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
   `MAPPER_XML` remain single-file draft artifacts.
+- Workflow operation-model planning must store only sanitized `SpOperationModel.v0.1` payloads
+  and sanitized extractor summaries. If planning cannot produce a branch-level model, generated
+  Java/MyBatis output must carry `P41_OPERATION_MODEL_REVIEW_REQUIRED` rather than presenting the
+  legacy single DTO as adequate for a complex SP.
 - User-provided guide files may be used as quality references, but raw SP definitions, raw guide body
   copies, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets must not
   be persisted in repo fixtures or platform storage.

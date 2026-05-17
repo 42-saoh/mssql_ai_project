@@ -91,10 +91,25 @@ uses the existing Responses/httpx gateway and strict JSON schema to produce
 deterministically. `OperationModel` inference is not promoted to metadata fact; weak
 branch/DTO naming and uncertain dependencies stay `REVIEW_REQUIRED`.
 
+In the workflow orchestrator, `JAVA_MYBATIS_DRAFT` now has an operation-model
+planning stage between semantic analysis and artifact generation. The stage calls the
+deterministic extractor with transient procedure definition text, stores only
+sanitized statement evidence summaries and validated operation-model payloads, and
+injects the resulting `operationModel` into `GenerationContext.request`. Recovery
+reuses an existing successful `LLM_SP_OPERATION_PLANNER` AgentRun when present. If
+the definition is unavailable, LLM planning is disabled, or the planner fails, the
+workflow stores a review-required fallback operation model with
+`P41_OPERATION_MODEL_REVIEW_REQUIRED` so generated Java/MyBatis output does not
+collapse back to the legacy single DTO silently.
+
 The generation boundary remains draft-only. Public artifact types are not expanded:
 `DTO_DRAFT` can contain a multi-file DTO bundle when `operationModel.dtoBlueprints`
 is supplied, while `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML` remain
-single files. Without `operationModel`, the legacy single DTO path remains for
+single files. Workflow persistence stores each DTO bundle file as a separate
+`DTO_DRAFT` artifact keyed by `bundleFilePath`; service, mapper interface, and mapper
+XML remain one artifact each. DTO artifact `extra` records `bundleFilePath`,
+`bundleRole`, `operationModelSchema`, `operationIds`, and `dtoRole` when available.
+Without `operationModel`, the legacy single DTO path remains for direct renderer
 backward compatibility and is still considered insufficient for complex SPs. P41 adds
 no UI, OpenAPI, DB schema, live MCP public tool, procedure execution, row-data query,
 automatic DDL/DML apply, or generated-source deployment.

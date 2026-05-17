@@ -64,6 +64,12 @@ P41 validates the operation-model renewal path for complex SP code generation:
 - When `operationModel.dtoBlueprints` is supplied, `JavaMyBatisSpWrapperRenderer`
   must render a multi-file `DTO_DRAFT` bundle and keep Service, Mapper interface,
   and Mapper XML as single draft files wired to branch/use-case DTOs.
+- The SP workflow must create or reuse an `LLM_SP_OPERATION_PLANNER` AgentRun for
+  `JAVA_MYBATIS_DRAFT`, inject the validated `operationModel` into
+  `GenerationContext.request`, and persist one `DTO_DRAFT` artifact row per DTO file.
+- Workflow fallback cases such as missing procedure definition, disabled LLM planning,
+  or planner failure must emit `P41_OPERATION_MODEL_REVIEW_REQUIRED` and an explicit
+  `OperationModelReviewRequired` DTO instead of silently producing the legacy single DTO.
 - Public artifact types remain unchanged; `DTO_DRAFT` is the internal multi-file
   bundle carrier for operation-model generation and no new public artifact type is introduced.
 - Cross-DB write, called procedure I/O, and uncertain TVF/procedure kind remain
@@ -73,7 +79,7 @@ P41 validates the operation-model renewal path for complex SP code generation:
 
 통과 기준:
 - `make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"` 통과
-- `make test PYTEST_ARGS="tests/unit/generation tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/contract/test_p41_sp_operation_model_prompt_assets.py"` 통과
+- `make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/contract/test_p41_sp_operation_model_prompt_assets.py"` 통과
 - `production_ready: false` 유지
 - 후속 P41B~P41F 순차 작업이 manifest 와 prompt pack 에 연결됨
 
