@@ -23,33 +23,36 @@ async function submitRequest(formData: FormData) {
 
   const outputs = formData.getAll("outputs").map(String) as RequestedOutputType[];
   const api = getPortalApi();
-  const response = await api.createSPAnalysisRequest({
-    dbProfileId: String(formData.get("dbProfileId") ?? "ppm"),
-    target: {
-      type: String(formData.get("targetType") ?? "PROCEDURE") as TargetObjectType,
-      schema: String(formData.get("schema") ?? "dbo"),
-      name: String(formData.get("name") ?? ""),
+  const response = await api.createSPAnalysisRequest(
+    {
+      dbProfileId: String(formData.get("dbProfileId") ?? "ppm"),
+      target: {
+        type: String(formData.get("targetType") ?? "PROCEDURE") as TargetObjectType,
+        schema: String(formData.get("schema") ?? "dbo"),
+        name: String(formData.get("name") ?? ""),
+      },
+      outputs: outputs.length > 0 ? outputs : ["SP_ANALYSIS_DOCUMENT"],
+      options: {
+        includeEvidenceRefs: formData.get("includeEvidenceRefs") === "on",
+        includeModernizationHints: formData.get("includeModernizationHints") === "on",
+        useLlmAnalysis: formData.get("useLlmAnalysis") === "on",
+        llmProfileId: String(formData.get("llmProfileId") ?? "openai_sp_semantic_analysis") as
+          | "openai_sp_semantic_analysis"
+          | "openai_fast_test",
+        allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
+        sourceContextMode: String(formData.get("sourceContextMode") ?? "RETRIEVED_SPANS") as
+          | "NONE"
+          | "RETRIEVED_SPANS",
+        sourceDependencyMode: String(
+          formData.get("sourceDependencyMode") ?? "CONFIRMED_PROCEDURES",
+        ) as "NONE" | "CONFIRMED_PROCEDURES",
+        useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
+        usePlatformToolOrchestration:
+          formData.get("usePlatformToolOrchestration") === "on",
+      },
     },
-    outputs: outputs.length > 0 ? outputs : ["SP_ANALYSIS_DOCUMENT"],
-    options: {
-      includeEvidenceRefs: formData.get("includeEvidenceRefs") === "on",
-      includeModernizationHints: formData.get("includeModernizationHints") === "on",
-      useLlmAnalysis: formData.get("useLlmAnalysis") === "on",
-      llmProfileId: String(formData.get("llmProfileId") ?? "openai_sp_semantic_analysis") as
-        | "openai_sp_semantic_analysis"
-        | "openai_fast_test",
-      allowSpDefinitionToModel: formData.get("allowSpDefinitionToModel") === "on",
-      sourceContextMode: String(formData.get("sourceContextMode") ?? "RETRIEVED_SPANS") as
-        | "NONE"
-        | "RETRIEVED_SPANS",
-      sourceDependencyMode: String(
-        formData.get("sourceDependencyMode") ?? "CONFIRMED_PROCEDURES",
-      ) as "NONE" | "CONFIRMED_PROCEDURES",
-      useAiToolOrchestration: formData.get("useAiToolOrchestration") === "on",
-      usePlatformToolOrchestration:
-        formData.get("usePlatformToolOrchestration") === "on",
-    },
-  });
+    { runAsync: true },
+  );
   redirect(`/jobs/${response.jobId}`);
 }
 

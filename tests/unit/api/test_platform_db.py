@@ -332,6 +332,29 @@ def test_workflow_repository_contract_claims_stale_job_and_finds_artifact_by_typ
     assert found_artifact.artifact_id == artifact.artifact_id
 
 
+def test_workflow_repository_contract_claims_submitted_job_once() -> None:
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="plf",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_demo"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-submitted-claim",
+        correlation_id="corr-submitted-claim",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+
+    claimed = repository.claim_submitted_job(job.job_id)
+    second_claim = repository.claim_submitted_job(job.job_id)
+
+    assert claimed is not None
+    assert claimed.status == JobStatus.COLLECTING_METADATA
+    assert claimed.current_step == WorkflowStepType.COLLECT_METADATA
+    assert second_claim is None
+    assert repository.requests[request.request_id].status == JobStatus.COLLECTING_METADATA
+
+
 def test_workflow_repository_contract_persists_metadata_analysis_runs() -> None:
     repository = MemoryWorkflowRepository()
 
@@ -521,6 +544,39 @@ def test_platform_db_sp_recovery_contract_uses_conditional_claim_and_artifact_lo
     assert claim_params[1] == "job_recover"
     assert "ARTF_TP_CD = %s" in artifact_sql
     assert artifact_params == (storage_uuid("job_recover"), ArtifactType.SP_ANALYSIS_DOC.value)
+
+
+def test_platform_db_submitted_job_claim_is_conditional(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = PlatformDbSettings(
+        host="127.0.0.1",
+        port=1433,
+        user="sa",
+        password="do-not-echo",
+        database="PLF",
+        requester_login="codex-api-local",
+    )
+    repository = MssqlPlatformRepository(settings)
+    captured: dict[str, object] = {}
+
+    def fake_query_one(sql: str, params: tuple[object, ...]) -> None:
+        captured["sql"] = sql
+        captured["params"] = params
+        return None
+
+    monkeypatch.setattr(repository, "_query_one", fake_query_one)
+
+    assert repository.claim_submitted_job("job_submitted") is None
+
+    claim_sql = str(captured["sql"])
+    claim_params = captured["params"]
+    assert "UPDATE dbo.CORE_JOBS" in claim_sql
+    assert "CUR_STAT_CD = 'SUBMITTED'" in claim_sql
+    assert "CUR_STAT_CD = 'COLLECTING_METADATA'" in claim_sql
+    assert "CUR_STEP_TP_CD = 'COLLECT_METADATA'" in claim_sql
+    assert claim_params[0] == "job_submitted"
+    assert claim_params[2] == "job_submitted"
 
 
 def test_platform_db_metadata_analysis_run_schema_gap_is_explicit() -> None:

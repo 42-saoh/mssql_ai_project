@@ -12,6 +12,15 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `/metadata/search` - read-only metadata identity/evidence search plus client-side async metadata analysis.
 - `/metadata/dependencies` - read-only dependency closure and reference resolver diagnostics.
 
+## SP Request Progress
+
+- The single SP request form submits with `runAsync=true`, receives a `jobId` immediately, and
+  redirects to `/jobs/[jobId]` while the API runs the workflow in the background.
+- `/jobs/[jobId]` shows `Estimated progress`, a status-based progress bar, and auto-refreshes every
+  1.5 seconds while the job is active. The percentage is a visibility estimate, not exact work
+  completion.
+- Batch request submission keeps the existing accepted/rejected summary behavior.
+
 ## API Boundary
 
 - `lib/api/portal-api.ts` defines the UI-facing portal API contract.

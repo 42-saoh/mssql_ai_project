@@ -263,6 +263,63 @@ def test_pgpt_text_wrappers_with_json_strings_are_adapted(
     )
 
 
+def test_pgpt_prose_wrapped_semantic_json_is_adapted(monkeypatch: Any) -> None:
+    wrapped_output = "아래 JSON 객체만 사용하세요:\n" + json.dumps(SEMANTIC_OUTPUT) + "\n완료."
+    _capture_post(monkeypatch, _pgpt_response({"output_text": wrapped_output}))
+    _set_pgpt_env(monkeypatch)
+
+    result = OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+        prompt=_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    assert result.provider == "pgpt"
+    assert result.structured_output["businessRules"][0]["category"] == "TEST_RULE"
+    assert result.component_invocations == (
+        {
+            "component": "pgpt_structured_output_adapter",
+            "status": "SUCCEEDED",
+            "action": "adapted_pgpt_semantic_output",
+        },
+    )
+
+
+def test_pgpt_invalid_structured_output_retries_json_only_without_raw_output(
+    monkeypatch: Any,
+) -> None:
+    raw_output = "I cannot produce the requested JSON for dbo.usp_Demo."
+    captured = _capture_post_sequence(
+        monkeypatch,
+        [
+            _pgpt_response({"output_text": raw_output}),
+            _pgpt_response({"output_text": json.dumps(SEMANTIC_OUTPUT)}),
+        ],
+    )
+    _set_pgpt_env(monkeypatch)
+
+    result = OpenAIModelGateway(timeout_seconds=1).invoke_semantic_analysis(
+        prompt=_prompt(),
+        profile=model_profile_from_env(SEMANTIC_MODEL_PROFILE_ID),
+    )
+
+    assert len(captured["calls"]) == 2
+    assert "previous provider response could not be parsed" in captured["calls"][1]["json"][
+        "instructions"
+    ]
+    assert raw_output not in json.dumps(captured["calls"][1]["json"])
+    assert result.structured_output["businessRules"][0]["category"] == "TEST_RULE"
+    assert result.component_invocations[0] == {
+        "component": "pgpt_structured_output_retry",
+        "status": "SUCCEEDED",
+        "action": "retried_json_only_after_invalid_output",
+    }
+    assert result.component_invocations[1] == {
+        "component": "pgpt_structured_output_adapter",
+        "status": "SUCCEEDED",
+        "action": "adapted_pgpt_semantic_output",
+    }
+
+
 @pytest.mark.parametrize("wrapper_key", ["structuredOutput", "llmSemanticAnalysis"])
 def test_pgpt_semantic_wrapper_objects_are_adapted(
     monkeypatch: Any,
@@ -583,6 +640,34 @@ def _capture_post(monkeypatch: Any, response: httpx.Response) -> dict[str, Any]:
         captured["json"] = dict(json)
         captured["timeout"] = timeout
         return response
+
+    monkeypatch.setattr("ai_agent_runtime.gateway.httpx.post", fake_post)
+    return captured
+
+
+def _capture_post_sequence(
+    monkeypatch: Any,
+    responses: list[httpx.Response],
+) -> dict[str, Any]:
+    captured: dict[str, Any] = {"calls": []}
+
+    def fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, Any],
+        timeout: float,
+    ) -> httpx.Response:
+        captured["calls"].append(
+            {
+                "url": url,
+                "headers": dict(headers),
+                "json": dict(json),
+                "timeout": timeout,
+            }
+        )
+        index = min(len(captured["calls"]) - 1, len(responses) - 1)
+        return responses[index]
 
     monkeypatch.setattr("ai_agent_runtime.gateway.httpx.post", fake_post)
     return captured

@@ -45,8 +45,13 @@ async function readJson<T>(
 
 export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiOptions): PortalApi {
   return {
-    createSPAnalysisRequest(request: SPAnalysisRequest) {
-      return readJson(fetcher, baseUrl, "/api/v1/requests/sp-analysis", {
+    createSPAnalysisRequest(request: SPAnalysisRequest, options?: { runAsync?: boolean }) {
+      const params = new URLSearchParams();
+      if (options?.runAsync) {
+        params.set("runAsync", "true");
+      }
+      const suffix = params.size > 0 ? `?${params.toString()}` : "";
+      return readJson(fetcher, baseUrl, `/api/v1/requests/sp-analysis${suffix}`, {
         method: "POST",
         json: request,
       });

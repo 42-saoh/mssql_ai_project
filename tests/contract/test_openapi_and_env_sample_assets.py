@@ -343,6 +343,27 @@ def test_openapi_metadata_analysis_run_contract_matches_async_polling_surface() 
     ]
 
 
+def test_openapi_sp_analysis_async_progress_contract() -> None:
+    openapi = yaml.safe_load(
+        (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    operation = openapi["paths"]["/api/v1/requests/sp-analysis"]["post"]
+    job_schema = openapi["components"]["schemas"]["Job"]
+
+    run_async = next(
+        parameter for parameter in operation["parameters"] if parameter["name"] == "runAsync"
+    )
+
+    assert run_async["in"] == "query"
+    assert run_async["schema"] == {"type": "boolean", "default": False}
+    assert "returns after job creation" in run_async["description"]
+    progress_description = job_schema["properties"]["progress"]["description"].lower()
+    assert "estimated status-based progress" in progress_description
+    assert "not exact work completion" in progress_description
+
+
 def test_openapi_sp_batch_contract_matches_p33_scale_surface() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(

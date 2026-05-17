@@ -191,6 +191,16 @@ class MemoryWorkflowRepository:
         )
         return replace(job)
 
+    def claim_submitted_job(self, job_id: str) -> JobRecord | None:
+        job = self.jobs.get(job_id)
+        if job is None or job.status != JobStatus.SUBMITTED:
+            return None
+        return self.transition_job(
+            job_id,
+            status=JobStatus.COLLECTING_METADATA,
+            current_step=WorkflowStepType.COLLECT_METADATA,
+        )
+
     def fail_job(self, job_id: str, *, code: str, message: str) -> JobRecord:
         job = self.jobs[job_id]
         ensure_job_transition(job.status, JobStatus.FAILED)

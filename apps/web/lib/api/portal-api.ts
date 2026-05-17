@@ -27,7 +27,10 @@ import type {
 } from "./types.ts";
 
 export interface PortalApi {
-  createSPAnalysisRequest(request: SPAnalysisRequest): Promise<SubmitRequestResponse>;
+  createSPAnalysisRequest(
+    request: SPAnalysisRequest,
+    options?: { runAsync?: boolean },
+  ): Promise<SubmitRequestResponse>;
   createSPAnalysisBatchRequest(
     request: SPAnalysisBatchRequest,
   ): Promise<SPAnalysisBatchResponse>;

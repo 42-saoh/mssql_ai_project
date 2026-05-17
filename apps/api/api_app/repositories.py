@@ -304,6 +304,9 @@ class WorkflowRepository(Protocol):
     ) -> JobRecord:
         ...
 
+    def claim_submitted_job(self, job_id: str) -> JobRecord | None:
+        ...
+
     def fail_job(self, job_id: str, *, code: str, message: str) -> JobRecord:
         ...
 

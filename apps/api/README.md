@@ -68,6 +68,11 @@ knowledge payloads.
 - `GET /api/v1/jobs` and `GET /api/v1/jobs/{jobId}` include optional request context
   (`dbProfileId`, `target`, `targetKey`, `outputs`) so Web history can show previous analyses
   and exact same-target runs without exposing raw SQL, row data, or new storage tables.
+- `POST /api/v1/requests/sp-analysis?runAsync=true` is a Web opt-in path that returns after
+  request/job creation and runs the SP workflow in a background task. Omitting `runAsync` keeps the
+  existing synchronous behavior and returns after validation completes.
+- `Job.progress` is an estimated status-based progress value for UI visibility, not exact work
+  completion.
 - Default workflow stops at `VALIDATION_COMPLETE` after validation. Artifacts remain
   draft/validated outputs; human decision gates and publish transitions are not exposed.
 

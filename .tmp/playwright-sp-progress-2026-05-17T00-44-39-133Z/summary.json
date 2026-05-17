@@ -1,0 +1,285 @@
+{
+  "baseUrl": "http://localhost:3035",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-2026-05-17T00-44-39-133Z",
+  "startTime": "2026-05-17T00:44:39.141Z",
+  "status": "pass",
+  "screenshots": [
+    {
+      "name": "request form before submit",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-2026-05-17T00-44-39-133Z\\request-form-before-submit.png"
+    },
+    {
+      "name": "job detail initial progress",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-2026-05-17T00-44-39-133Z\\job-progress-initial.png"
+    },
+    {
+      "name": "job detail final",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-2026-05-17T00-44-39-133Z\\job-progress-final.png"
+    }
+  ],
+  "forbiddenRequests": [],
+  "pageErrors": [],
+  "consoleMessages": [],
+  "networkSamples": [
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/requests/new"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_globals_0xyo3ls.css"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0nl5nyk._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_next-devtools_index_0qazoug.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-dom_0.5peo5._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_react-server-dom-turbopack_0txct.y._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_compiled_0h59esx._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_0fgv188._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0mf9ihx._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0i4a_%40swc_helpers_cjs_0hvz.20._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_0rqeker._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/turbopack-apps_web_0e51cef._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_0po4.y7._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_layout_tsx_0l39p75._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/0.b9_next_dist_client_components_builtin_global-error_0n3mc-c.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_11zwo9j._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/icon.svg?icon.0q-uqo6xdt29w.svg"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3035/requests/new"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/__nextjs_font/geist-latin.woff2"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/_0~gtut6._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_jobs_%5BjobId%5D_page_tsx_0n3mc-c._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/_0~gtut6._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/_next/static/chunks/apps_web_app_jobs_%5BjobId%5D_page_tsx_0n3mc-c._.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/icon.svg?icon.0q-uqo6xdt29w.svg"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5?_rsc=xv8sl"
+    }
+  ],
+  "events": [
+    {
+      "step": "request_page_loaded",
+      "url": "http://localhost:3035/requests/new"
+    },
+    {
+      "step": "redirected_to_job",
+      "url": "http://localhost:3035/jobs/job_f427f8edb5",
+      "elapsedMs": 1687,
+      "jobId": "job_f427f8edb5"
+    },
+    {
+      "step": "auto_refresh_window",
+      "autoRefreshNetworkCount": 6,
+      "statusAfterWindow": null,
+      "bodyChanged": true
+    }
+  ],
+  "jobId": "job_f427f8edb5",
+  "initialProgress": {
+    "ariaValueNow": "20",
+    "ariaValueMin": "0",
+    "ariaValueMax": "100",
+    "classification": {
+      "status": null,
+      "hasEstimatedProgress": true,
+      "hasAutoRefreshCopy": true,
+      "hasArtifactList": true,
+      "hasTargetKey": true,
+      "hasForbiddenCopy": false
+    }
+  },
+  "finalProgress": {
+    "ariaValueNow": "45",
+    "classification": {
+      "status": "FAILED",
+      "hasEstimatedProgress": true,
+      "hasAutoRefreshCopy": false,
+      "hasArtifactList": true,
+      "hasTargetKey": true,
+      "hasForbiddenCopy": false
+    }
+  },
+  "terminalStatus": "FAILED",
+  "redirectElapsedMs": 1687,
+  "autoRefreshNetworkCount": 28,
+  "artifactPreviewLinks": [],
+  "endTime": "2026-05-17T00:45:30.467Z"
+}

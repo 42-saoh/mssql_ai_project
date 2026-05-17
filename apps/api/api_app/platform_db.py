@@ -388,6 +388,43 @@ class MssqlPlatformRepository:
         )
         return job
 
+    def claim_submitted_job(self, job_id: str) -> JobRecord | None:
+        row = self._query_one(
+            """
+            UPDATE dbo.CORE_JOBS
+            SET CUR_STAT_CD = 'COLLECTING_METADATA',
+                CUR_STEP_TP_CD = 'COLLECT_METADATA',
+                WRKR_REF_ID = COALESCE(WRKR_REF_ID, %s),
+                UPD_DTM = SYSUTCDATETIME()
+            OUTPUT COALESCE(INSERTED.WRKR_REF_ID, CONVERT(NVARCHAR(36), INSERTED.JOB_ID))
+            WHERE (JOB_ID = %s OR WRKR_REF_ID = %s)
+              AND CUR_STAT_CD = 'SUBMITTED'
+            """,
+            (job_id, storage_uuid(job_id), job_id),
+        )
+        if row is None:
+            return None
+        claimed = self.get_job(str(row[0]))
+        if claimed is None:
+            return None
+        self.update_request_status(claimed.request_id, JobStatus.COLLECTING_METADATA)
+        self._insert_job_step(
+            claimed.job_id,
+            WorkflowStepType.COLLECT_METADATA,
+            JobStatus.COLLECTING_METADATA,
+        )
+        self.record_audit_event(
+            action="JOB_TRANSITIONED",
+            target_type="JOB",
+            target_ref_id=claimed.job_id,
+            payload={
+                "status": JobStatus.COLLECTING_METADATA.value,
+                "currentStep": WorkflowStepType.COLLECT_METADATA.value,
+            },
+            correlation_id=claimed.correlation_id,
+        )
+        return claimed
+
     def fail_job(self, job_id: str, *, code: str, message: str) -> JobRecord:
         job = self.get_job(job_id)
         if job is None:

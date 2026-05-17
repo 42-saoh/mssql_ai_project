@@ -167,6 +167,28 @@ def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
     assert request.options.llm_profile_id == "openai_sp_semantic_analysis"
 
 
+def test_sp_analysis_can_be_submitted_then_executed_later() -> None:
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(repository)
+
+    request_record, submitted = service.submit_sp_analysis(
+        _request(["SP_ANALYSIS_DOCUMENT"]),
+        run_async=True,
+    )
+
+    assert submitted.status == JobStatus.SUBMITTED
+    assert repository.requests[request_record.request_id].status == JobStatus.SUBMITTED
+    assert repository.list_job_artifacts(submitted.job_id) == []
+
+    completed = service.execute_submitted_sp_analysis(submitted.job_id)
+    second_execution = service.execute_submitted_sp_analysis(submitted.job_id)
+
+    assert completed.status == JobStatus.VALIDATION_COMPLETE
+    assert second_execution.status == JobStatus.VALIDATION_COMPLETE
+    assert repository.claim_submitted_job(submitted.job_id) is None
+    assert repository.list_job_artifacts(submitted.job_id)
+
+
 def test_llm_prompt_uses_retrieved_source_context_without_full_definition() -> None:
     class SourceContextSpyGateway:
         def __init__(self) -> None:

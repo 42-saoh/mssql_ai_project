@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from dataclasses import replace as dataclass_replace
 from typing import Any
@@ -150,6 +151,8 @@ class WorkflowService:
         self,
         request: SPAnalysisRequest,
         tracking: RequestTrackingContext | None = None,
+        *,
+        run_async: bool = False,
     ) -> tuple[WorkRequestRecord, JobRecord]:
         request_hash = request_payload_hash(request.to_response())
         tracking = (
@@ -176,47 +179,95 @@ class WorkflowService:
                 )
                 existing_request.status = job.status
                 return existing_request, job
-        with workflow_admission():
-            target_key = target_key_for_target(
-                request.db_profile_id,
-                request.target.to_response(),
-            )
-            request_record = self.repository.create_request(
-                db_profile_id=request.db_profile_id,
-                target=request.target.to_response(),
-                outputs=tuple(output.value for output in request.outputs),
-                options=request.options.to_response(),
-                request_hash=request_hash,
-                correlation_id=tracking.correlation_id,
-                idempotency_key=tracking.idempotency_key,
-                target_key=target_key,
-            )
-            job = self.repository.create_job(
-                request_record.request_id,
-                correlation_id=tracking.correlation_id,
-            )
-
-            try:
-                job = self.run_initial_workflow(job.job_id, request_record)
-            except Exception as exc:  # pragma: no cover - defensive failure state
-                job = self.repository.fail_job(
+        admission = workflow_admission() if not run_async else nullcontext()
+        with admission:
+            request_record, job = self.create_sp_analysis_job(request, tracking, request_hash)
+            if not run_async:
+                job = self.execute_submitted_sp_analysis(
                     job.job_id,
-                    code=str(getattr(exc, "code", exc.__class__.__name__)),
-                    message=str(exc),
+                    request_record=request_record,
+                    acquire_admission=False,
                 )
         request_record.status = job.status
         return request_record, job
+
+    def create_sp_analysis_job(
+        self,
+        request: SPAnalysisRequest,
+        tracking: RequestTrackingContext,
+        request_hash: str | None = None,
+    ) -> tuple[WorkRequestRecord, JobRecord]:
+        request_hash = request_hash or request_payload_hash(request.to_response())
+        target_key = target_key_for_target(
+            request.db_profile_id,
+            request.target.to_response(),
+        )
+        request_record = self.repository.create_request(
+            db_profile_id=request.db_profile_id,
+            target=request.target.to_response(),
+            outputs=tuple(output.value for output in request.outputs),
+            options=request.options.to_response(),
+            request_hash=request_hash,
+            correlation_id=tracking.correlation_id,
+            idempotency_key=tracking.idempotency_key,
+            target_key=target_key,
+        )
+        job = self.repository.create_job(
+            request_record.request_id,
+            correlation_id=tracking.correlation_id,
+        )
+        return request_record, job
+
+    def execute_submitted_sp_analysis(
+        self,
+        job_id: str,
+        request_record: WorkRequestRecord | None = None,
+        *,
+        acquire_admission: bool = True,
+    ) -> JobRecord:
+        job = self.repository.get_job(job_id)
+        if job is None:
+            raise KeyError(job_id)
+        request = request_record or self.repository.get_request(job.request_id)
+        if request is None:
+            return self.repository.fail_job(
+                job_id,
+                code=SP_WORKFLOW_RECOVERY_BLOCKED,
+                message="SP workflow could not restore the original work request.",
+            )
+        try:
+            return self.run_initial_workflow(
+                job_id,
+                request,
+                acquire_admission=acquire_admission,
+            )
+        except Exception as exc:  # noqa: BLE001 - stored failure must stay sanitized
+            return self.repository.fail_job(
+                job_id,
+                code=str(getattr(exc, "code", exc.__class__.__name__)),
+                message=str(exc)[:2000],
+            )
 
     def run_initial_workflow(
         self,
         job_id: str,
         request: WorkRequestRecord,
+        *,
+        acquire_admission: bool = True,
     ) -> JobRecord:
-        self.repository.transition_job(
-            job_id,
-            status=JobStatus.COLLECTING_METADATA,
-            current_step=WorkflowStepType.COLLECT_METADATA,
-        )
+        if acquire_admission:
+            with workflow_admission():
+                return self.run_initial_workflow(
+                    job_id,
+                    request,
+                    acquire_admission=False,
+                )
+        claimed = self.repository.claim_submitted_job(job_id)
+        if claimed is None:
+            current = self.repository.get_job(job_id)
+            if current is None:
+                raise KeyError(job_id)
+            return current
         metadata = self._collect_metadata(job_id, request)
         self.repository.transition_job(
             job_id,

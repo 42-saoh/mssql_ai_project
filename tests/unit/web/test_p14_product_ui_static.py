@@ -146,6 +146,13 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     artifact_page = (
         WEB_ROOT / "app" / "artifacts" / "[artifactId]" / "page.tsx"
     ).read_text(encoding="utf-8")
+    job_status_view = (WEB_ROOT / "components" / "job-status-view.tsx").read_text(
+        encoding="utf-8"
+    )
+    job_auto_refresh = (WEB_ROOT / "components" / "job-auto-refresh.tsx").read_text(
+        encoding="utf-8"
+    )
+    http_client = (WEB_ROOT / "lib" / "api" / "http-client.ts").read_text(encoding="utf-8")
     source = _web_source()
 
     assert not (WEB_ROOT / "app" / "review" / "decision" / "page.tsx").exists()
@@ -189,7 +196,14 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "api.listJobAgentRuns" in source
     assert "api.listJobKnowledgeAssets" in source
     assert "createKnowledgeExport" in source
+    assert "runAsync" in request_page
+    assert 'params.set("runAsync", "true")' in http_client
     assert "redirect(`/jobs/${response.jobId}`)" in request_page
+    assert "Estimated progress" in job_status_view
+    assert 'role="progressbar"' in job_status_view
+    assert "aria-valuenow={progressPercent}" in job_status_view
+    assert "router.refresh()" in job_auto_refresh
+    assert "작업 진행 중 - 자동 새로고침 중" in job_auto_refresh
     assert "objectProfiles" in source
     assert "insightGroups" in source
     assert "dependencyGraph" in source

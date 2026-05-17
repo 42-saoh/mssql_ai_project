@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_agent_domain import RequestedOutputType
+from ai_agent_domain import JobStatus, RequestedOutputType, WorkflowStepType
 
 from api_app.repositories import (
     AgentRunRecord,
@@ -36,10 +36,34 @@ def present_job(job: JobRecord) -> Job:
         currentStep=job.current_step,
         createdAt=job.created_at,
         updatedAt=job.updated_at,
+        progress=estimated_job_progress(job),
         blockers=blockers,
         caveats=caveats,
         failureReason=job.error_message,
     )
+
+
+def estimated_job_progress(job: JobRecord) -> float:
+    status_progress = {
+        JobStatus.SUBMITTED: 0.05,
+        JobStatus.COLLECTING_METADATA: 0.20,
+        JobStatus.ANALYZING: 0.45,
+        JobStatus.GENERATING: 0.72,
+        JobStatus.VALIDATING: 0.90,
+        JobStatus.VALIDATION_COMPLETE: 1.0,
+    }
+    if job.status in status_progress:
+        return status_progress[job.status]
+    if job.status in {JobStatus.FAILED, JobStatus.CANCELED}:
+        if job.current_step is None:
+            return 1.0
+        return {
+            WorkflowStepType.COLLECT_METADATA: 0.20,
+            WorkflowStepType.ANALYZE: 0.45,
+            WorkflowStepType.GENERATE: 0.72,
+            WorkflowStepType.VALIDATE: 0.90,
+        }.get(job.current_step, 1.0)
+    return 1.0
 
 
 def _present_target(target: dict[str, object] | None) -> dict[str, object] | None:

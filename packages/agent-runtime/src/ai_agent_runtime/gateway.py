@@ -537,24 +537,55 @@ class OpenAIModelGateway:
             )
 
         started = time.monotonic()
+        retry_component: dict[str, Any] | None = None
         try:
-            response = self._post_with_retry(
+            (
+                response_payload,
+                output,
+                normalizer_components,
+                provider_request_id,
+            ) = self._post_and_parse_structured(
                 responses_url=responses_url,
                 api_key=api_key,
                 payload=payload,
-            )
-            response.raise_for_status()
-            if self.provider == REMOTE_PROVIDER_PGPT:
-                response_payload, output_text = _pgpt_response_payload_and_output_text(response)
-            else:
-                response_payload, output_text = _response_payload_and_output_text(response)
-            output, normalizer_components = _parse_structured_output(
-                output_text=output_text,
                 parser=parser,
                 schema_name=schema_name,
                 allowed_tool_names=prompt.metadata.get("toolNames") or (),
-                provider=self.provider,
             )
+        except (json.JSONDecodeError, ValueError) as exc:
+            if self.provider != REMOTE_PROVIDER_PGPT:
+                raise ModelGatewayError(
+                    "OpenAI response did not match the required structured output schema.",
+                    code=invalid_code,
+                ) from exc
+            try:
+                retry_component = {
+                    "component": "pgpt_structured_output_retry",
+                    "status": "SUCCEEDED",
+                    "action": "retried_json_only_after_invalid_output",
+                }
+                (
+                    response_payload,
+                    output,
+                    normalizer_components,
+                    provider_request_id,
+                ) = self._post_and_parse_structured(
+                    responses_url=responses_url,
+                    api_key=api_key,
+                    payload=_pgpt_retry_payload(
+                        prompt=prompt,
+                        profile=profile,
+                        schema_name=schema_name,
+                    ),
+                    parser=parser,
+                    schema_name=schema_name,
+                    allowed_tool_names=prompt.metadata.get("toolNames") or (),
+                )
+            except (json.JSONDecodeError, ValueError) as retry_exc:
+                raise ModelGatewayError(
+                    "OpenAI response did not match the required structured output schema.",
+                    code=invalid_code,
+                ) from retry_exc
         except httpx.HTTPStatusError as exc:
             raise ModelGatewayError(
                 "OpenAI Responses API returned an error.",
@@ -571,13 +602,10 @@ class OpenAIModelGateway:
                 "OpenAI Responses API request failed.",
                 code="OPENAI_REQUEST_FAILED",
             ) from exc
-        except (json.JSONDecodeError, ValueError) as exc:
-            raise ModelGatewayError(
-                "OpenAI response did not match the required structured output schema.",
-                code=invalid_code,
-            ) from exc
 
         structured_output = output.to_storage_dict()
+        if retry_component is not None:
+            normalizer_components = [retry_component, *normalizer_components]
         return ModelInvocationRecord(
             provider=self.provider,
             model=profile.model,
@@ -593,12 +621,41 @@ class OpenAIModelGateway:
             structured_output=structured_output,
             token_usage=_usage(response_payload),
             latency_ms=int((time.monotonic() - started) * 1000),
-            provider_request_id=str(
-                response_payload.get("id") or response.headers.get("x-request-id") or ""
-            )
-            or None,
+            provider_request_id=provider_request_id,
             component_invocations=tuple(normalizer_components),
         )
+
+    def _post_and_parse_structured(
+        self,
+        *,
+        responses_url: str,
+        api_key: str,
+        payload: dict[str, Any],
+        parser,
+        schema_name: str,
+        allowed_tool_names: Sequence[str],
+    ) -> tuple[dict[str, Any], Any, list[dict[str, Any]], str | None]:
+        response = self._post_with_retry(
+            responses_url=responses_url,
+            api_key=api_key,
+            payload=payload,
+        )
+        response.raise_for_status()
+        if self.provider == REMOTE_PROVIDER_PGPT:
+            response_payload, output_text = _pgpt_response_payload_and_output_text(response)
+        else:
+            response_payload, output_text = _response_payload_and_output_text(response)
+        output, normalizer_components = _parse_structured_output(
+            output_text=output_text,
+            parser=parser,
+            schema_name=schema_name,
+            allowed_tool_names=allowed_tool_names,
+            provider=self.provider,
+        )
+        provider_request_id = str(
+            response_payload.get("id") or response.headers.get("x-request-id") or ""
+        ) or None
+        return response_payload, output, normalizer_components, provider_request_id
 
     def _post_with_retry(
         self,
@@ -708,6 +765,45 @@ def _pgpt_payload(*, prompt: RenderedPrompt, profile: ModelProfile) -> dict[str,
         "instructions": prompt.system_prompt,
         "input": [{"role": "user", "content": prompt.user_prompt}],
     }
+
+
+def _pgpt_retry_payload(
+    *,
+    prompt: RenderedPrompt,
+    profile: ModelProfile,
+    schema_name: str,
+) -> dict[str, Any]:
+    root_keys = _retry_root_keys(schema_name)
+    root_key_text = ", ".join(root_keys)
+    retry_instruction = (
+        "The previous provider response could not be parsed as the required JSON object. "
+        "Return exactly one JSON object and no prose, markdown fence, heading, or explanation. "
+        f"The object must include these top-level keys: {root_key_text}. "
+        "Use empty arrays when a section has no supported claim. Preserve machine identifiers "
+        "and evidenceRefs exactly."
+    )
+    return {
+        "model": profile.model,
+        "instructions": f"{prompt.system_prompt}\n\n{retry_instruction}",
+        "input": [{"role": "user", "content": prompt.user_prompt}],
+    }
+
+
+def _retry_root_keys(schema_name: str) -> tuple[str, ...]:
+    if schema_name == "llm_semantic_analysis":
+        return _SEMANTIC_ROOT_KEYS
+    if schema_name in {"metadata_tool_plan", "platform_tool_plan"}:
+        return ("toolRequests", "assumptions", "reviewMarkers")
+    if schema_name == "metadata_analysis":
+        return (
+            "summary",
+            "objectInsights",
+            "insightGroups",
+            "dtoReadiness",
+            "reviewMarkers",
+            "assumptions",
+        )
+    return ("structuredOutput",)
 
 
 def _provider_error_summary(response: httpx.Response) -> dict[str, str]:
@@ -939,6 +1035,7 @@ def _pgpt_semantic_payload_from_text(output_text: str, *, depth: int) -> dict[st
         return None
     candidates = [output_text.strip()]
     candidates.extend(match.group(1).strip() for match in _JSON_FENCE_RE.finditer(output_text))
+    candidates.extend(_embedded_json_object_candidates(output_text))
     for candidate in candidates:
         if not candidate:
             continue
@@ -950,6 +1047,22 @@ def _pgpt_semantic_payload_from_text(output_text: str, *, depth: int) -> dict[st
         if payload is not None:
             return payload
     return None
+
+
+def _embedded_json_object_candidates(output_text: str) -> list[str]:
+    decoder = json.JSONDecoder()
+    candidates: list[str] = []
+    for match in re.finditer(r"\{", output_text):
+        try:
+            value, end_index = decoder.raw_decode(output_text[match.start() :])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict):
+            continue
+        candidates.append(output_text[match.start() : match.start() + end_index])
+        if len(candidates) >= 8:
+            break
+    return candidates
 
 
 def _pgpt_semantic_payload_from_value(value: Any, *, depth: int) -> dict[str, Any] | None:

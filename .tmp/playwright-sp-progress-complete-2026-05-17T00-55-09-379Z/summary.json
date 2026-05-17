@@ -1,0 +1,62 @@
+{
+  "jobId": "job_bf27659ae6",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-complete-2026-05-17T00-55-09-379Z",
+  "screenshots": [
+    {
+      "name": "completed job detail",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-complete-2026-05-17T00-55-09-379Z\\job-progress-complete.png"
+    },
+    {
+      "name": "completed artifact preview",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-complete-2026-05-17T00-55-09-379Z\\artifact-preview-complete.png"
+    }
+  ],
+  "forbiddenRequests": [],
+  "pageErrors": [],
+  "consoleMessages": [],
+  "status": "pass",
+  "jobDetail": {
+    "url": "http://localhost:3035/jobs/job_bf27659ae6",
+    "hasEstimatedProgress": true,
+    "progressNow": "100",
+    "progressMin": "0",
+    "progressMax": "100",
+    "hasValidationComplete": true,
+    "hasTargetKey": true,
+    "previewLinks": [
+      {
+        "text": "Preview",
+        "href": "/artifacts/art_caa2130e7c"
+      },
+      {
+        "text": "Preview",
+        "href": "/artifacts/art_cffdd488db"
+      },
+      {
+        "text": "Preview",
+        "href": "/artifacts/art_09a26c9570"
+      },
+      {
+        "text": "Preview",
+        "href": "/artifacts/art_c5319a7416"
+      },
+      {
+        "text": "Preview",
+        "href": "/artifacts/art_4d916c6109"
+      },
+      {
+        "text": "Preview",
+        "href": "/artifacts/art_da4cf4f918"
+      }
+    ],
+    "forbiddenControls": []
+  },
+  "artifact": {
+    "url": "http://localhost:3035/artifacts/art_caa2130e7c",
+    "hasEvidenceRefs": true,
+    "hasCaveats": true,
+    "hasTargetKey": true,
+    "hasValidationPanel": true,
+    "forbiddenControls": []
+  }
+}

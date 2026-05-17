@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { JobAutoRefresh } from "@/components/job-auto-refresh";
 import { StatusPill } from "@/components/status-pill";
 import type {
   AgentRunSummary,
@@ -126,6 +127,7 @@ export function JobStatusView({
   const skippedTargets = recordsFrom(dependencyAnalysis?.skippedTargets);
   const visibleSkippedTargets = skippedTargets.slice(0, skippedDependencyDisplayLimit);
   const hiddenSkippedCount = Math.max(skippedTargets.length - visibleSkippedTargets.length, 0);
+  const progressPercent = Math.round((job.progress ?? 0) * 100);
 
   return (
     <div className="stack">
@@ -166,6 +168,26 @@ export function JobStatusView({
             </div>
           ) : null}
         </dl>
+
+        <div className="progress-block">
+          <div className="progress-label">
+            <strong>Estimated progress</strong>
+            <span>{progressPercent}%</span>
+          </div>
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="Estimated progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressPercent}
+          >
+            <span className="progress-fill" style={{ width: `${progressPercent}%` }} />
+          </div>
+          <p>Status-based estimate for visibility while the draft workflow runs.</p>
+          <JobAutoRefresh status={job.status} />
+        </div>
+
         {job.targetKey ? (
           <div className="form-actions">
             <Link className="secondary-action" href={sameTargetHref(job.targetKey)}>

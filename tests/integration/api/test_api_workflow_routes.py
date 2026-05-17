@@ -266,6 +266,29 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
 
 
+def test_sp_analysis_request_can_return_before_background_workflow_completes(
+    client: TestClient,
+) -> None:
+    submit = client.post(
+        "/api/v1/requests/sp-analysis",
+        params={"runAsync": "true"},
+        json=_sp_analysis_payload(["SP_ANALYSIS_DOCUMENT"]),
+    )
+
+    assert submit.status_code == 202
+    submitted = submit.json()
+    assert submitted["status"] == "SUBMITTED"
+    assert submitted["requestId"].startswith("req_")
+    assert submitted["jobId"].startswith("job_")
+
+    job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
+
+    assert job.status_code == 200
+    assert job.json()["status"] == "VALIDATION_COMPLETE"
+    assert job.json()["progress"] == 1.0
+    assert job.json()["currentStep"] == "VALIDATE"
+
+
 def test_sp_analysis_batch_route_returns_accepted_and_duplicate_rejections(
     client: TestClient,
 ) -> None:

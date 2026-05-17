@@ -1,0 +1,75 @@
+{
+  "baseUrl": "http://localhost:3035",
+  "outDir": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-fast-2026-05-17T00-46-35-998Z",
+  "startTime": "2026-05-17T00:46:35.998Z",
+  "status": "pass",
+  "profile": "openai_fast_test",
+  "screenshots": [
+    {
+      "name": "request form fast profile before submit",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-fast-2026-05-17T00-46-35-998Z\\request-form-fast-before-submit.png"
+    },
+    {
+      "name": "job progress fast initial",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-fast-2026-05-17T00-46-35-998Z\\job-progress-fast-initial.png"
+    },
+    {
+      "name": "job progress fast final",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-fast-2026-05-17T00-46-35-998Z\\job-progress-fast-final.png"
+    },
+    {
+      "name": "artifact preview fast",
+      "path": "D:\\wt\\p35\\.tmp\\playwright-sp-progress-fast-2026-05-17T00-46-35-998Z\\artifact-preview-fast.png"
+    }
+  ],
+  "forbiddenRequests": [],
+  "pageErrors": [],
+  "consoleMessages": [],
+  "events": [],
+  "jobId": "job_bf27659ae6",
+  "redirectElapsedMs": 798,
+  "initialProgress": {
+    "ariaValueNow": "20",
+    "textHasEstimatedProgress": true
+  },
+  "finalProgress": {
+    "ariaValueNow": "100",
+    "hasTargetKey": true,
+    "hasHistoryLink": true,
+    "hasForbiddenCopy": true
+  },
+  "terminalStatus": "not-terminal-before-timeout",
+  "artifactPreviewLinks": [
+    {
+      "text": "Preview",
+      "href": "/artifacts/art_caa2130e7c"
+    },
+    {
+      "text": "Preview",
+      "href": "/artifacts/art_cffdd488db"
+    },
+    {
+      "text": "Preview",
+      "href": "/artifacts/art_09a26c9570"
+    },
+    {
+      "text": "Preview",
+      "href": "/artifacts/art_c5319a7416"
+    },
+    {
+      "text": "Preview",
+      "href": "/artifacts/art_4d916c6109"
+    },
+    {
+      "text": "Preview",
+      "href": "/artifacts/art_da4cf4f918"
+    }
+  ],
+  "artifact": {
+    "url": "http://localhost:3035/artifacts/art_caa2130e7c",
+    "hasEvidenceRefs": true,
+    "hasCaveats": true,
+    "hasTargetKey": true
+  },
+  "endTime": "2026-05-17T00:53:44.861Z"
+}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from ai_agent_domain import ArtifactStatus, JobStatus
+from ai_agent_domain import ArtifactStatus, JobStatus, WorkflowStepType
 from api_app.contracts import (
     registry_storage_type,
     validation_storage_result,
@@ -51,3 +51,34 @@ def test_job_presenter_omits_malformed_optional_history_context() -> None:
     assert response["dbProfileId"] == "ppm"
     assert "target" not in response
     assert response["outputs"] == ["SP_ANALYSIS_DOCUMENT"]
+    assert response["progress"] == 1.0
+
+
+@pytest.mark.parametrize(
+    ("status", "current_step", "expected_progress"),
+    [
+        (JobStatus.SUBMITTED, None, 0.05),
+        (JobStatus.COLLECTING_METADATA, WorkflowStepType.COLLECT_METADATA, 0.20),
+        (JobStatus.ANALYZING, WorkflowStepType.ANALYZE, 0.45),
+        (JobStatus.GENERATING, WorkflowStepType.GENERATE, 0.72),
+        (JobStatus.VALIDATING, WorkflowStepType.VALIDATE, 0.90),
+        (JobStatus.VALIDATION_COMPLETE, WorkflowStepType.VALIDATE, 1.0),
+        (JobStatus.FAILED, WorkflowStepType.GENERATE, 0.72),
+        (JobStatus.CANCELED, None, 1.0),
+    ],
+)
+def test_job_presenter_progress_is_status_based_estimate(
+    status: JobStatus,
+    current_step: WorkflowStepType | None,
+    expected_progress: float,
+) -> None:
+    response = present_job(
+        JobRecord(
+            job_id=f"job_{status.value.lower()}",
+            request_id="req_progress",
+            status=status,
+            current_step=current_step,
+        )
+    ).to_response()
+
+    assert response["progress"] == expected_progress

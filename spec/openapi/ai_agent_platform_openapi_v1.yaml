@@ -69,6 +69,16 @@ paths:
         Starts a draft-only analysis workflow for one stored procedure. The resulting job is
         expected to collect metadata through the MCP boundary, build a canonical analysis
         model, generate requested artifacts, and stop at the validation-complete draft gate.
+        By default the workflow completes before the response is returned. Web clients can
+        opt into immediate navigation by setting runAsync=true and polling the returned job.
+      parameters:
+        - name: runAsync
+          in: query
+          required: false
+          description: When true, the API returns after job creation and runs the SP workflow in a background task.
+          schema:
+            type: boolean
+            default: false
       requestBody:
         required: true
         content:
@@ -1070,6 +1080,7 @@ components:
           type: number
           minimum: 0
           maximum: 1
+          description: Estimated status-based progress for UI visibility; not exact work completion.
         blockers:
           type: array
           items:

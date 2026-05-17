@@ -23,7 +23,8 @@ from api_app.tracking import (
     tracking_context_from_request,
 )
 from api_app.workflow import WorkflowService
-from fastapi import APIRouter, Depends, Request, status
+from ai_agent_domain import JobStatus
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 
 router = APIRouter(prefix="/api/v1/requests", tags=["requests"])
 
@@ -49,11 +50,17 @@ def _env_int(name: str, default: int) -> int:
 def create_sp_analysis(
     req: SPAnalysisRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     service: Annotated[WorkflowService, Depends(get_workflow_service)],
+    run_async: Annotated[bool, Query(alias="runAsync")] = False,
 ) -> SubmitRequestResponse:
     try:
         tracking = tracking_context_from_request(request)
-        request_record, job = service.submit_sp_analysis(req, tracking=tracking)
+        request_record, job = service.submit_sp_analysis(
+            req,
+            tracking=tracking,
+            run_async=run_async,
+        )
     except WorkflowBackpressureError as exc:
         raise api_http_exception(
             status_code=429,
@@ -68,6 +75,8 @@ def create_sp_analysis(
         ) from exc
     except ValueError as exc:
         raise api_http_exception(status_code=400, detail=str(exc), code="BAD_REQUEST") from exc
+    if run_async and job.status == JobStatus.SUBMITTED:
+        background_tasks.add_task(service.execute_submitted_sp_analysis, job.job_id)
     return SubmitRequestResponse(
         requestId=request_record.request_id,
         jobId=job.job_id,
