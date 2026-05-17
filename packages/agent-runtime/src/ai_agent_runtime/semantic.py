@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -63,6 +65,26 @@ KEY_FIELDS = {
     "conversionGuidance": "code",
     "migrationGuideInsights": "section",
 }
+CONTEXT_BUDGET_MARKER_CODE = "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED"
+PROMPT_COMPACTION_MARKER_CODE = "LLM_PROMPT_COMPACTED_FOR_CONTEXT"
+_COMPACTION_NONE = "none"
+_COMPACTION_COMPACT = "compact"
+_COMPACTION_MINIMUM = "minimum"
+
+
+@dataclass(frozen=True)
+class _PromptAttempt:
+    prompt: Any
+    metadata: dict[str, Any]
+    static_analysis: dict[str, Any] | None
+    source_context: dict[str, Any] | None
+    allowed_evidence_refs: tuple[str, ...]
+    compaction_level: str = _COMPACTION_NONE
+    compaction_summary: dict[str, Any] | None = None
+
+    @property
+    def estimated_tokens(self) -> int:
+        return _estimated_prompt_tokens(self.prompt)
 
 
 @dataclass(frozen=True)
@@ -289,7 +311,7 @@ def _invoke_stage_with_context_fallback(
     repair_context: dict[str, Any] | None = None,
 ) -> tuple[ModelInvocationRecord, dict[str, Any], list[dict[str, Any]]]:
     source_context = _source_context_for_stage(task.source_context_packs, stage)
-    prompt = _render_stage_prompt(
+    attempt = _build_prompt_attempt(
         task=task,
         stage=stage,
         source_context=source_context,
@@ -297,25 +319,54 @@ def _invoke_stage_with_context_fallback(
         required_review_markers=required_review_markers,
         repair_context=repair_context,
     )
-    if _estimated_prompt_tokens(prompt) > _semantic_input_token_budget():
-        source_context = shrink_context_pack(source_context, status="PRE_PROVIDER_SHRINK")
-        prompt = _render_stage_prompt(
+    if attempt.estimated_tokens > _semantic_input_token_budget():
+        shrunk_context = shrink_context_pack(source_context, status="PRE_PROVIDER_SHRINK")
+        attempt = _build_prompt_attempt(
+            task=task,
+            stage=stage,
+            source_context=shrunk_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+        )
+    if attempt.estimated_tokens > _semantic_input_token_budget():
+        attempt = _build_prompt_attempt(
             task=task,
             stage=stage,
             source_context=source_context,
             allowed_evidence_refs=allowed_evidence_refs,
             required_review_markers=required_review_markers,
             repair_context=repair_context,
+            compaction_level=_COMPACTION_COMPACT,
+            source_context_status="COMPACT_NO_SOURCE_TEXT",
+        )
+    if attempt.estimated_tokens > _semantic_input_token_budget():
+        attempt = _build_prompt_attempt(
+            task=task,
+            stage=stage,
+            source_context=source_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+            compaction_level=_COMPACTION_MINIMUM,
+            source_context_status="MINIMUM_EVIDENCE_DIGEST",
         )
     try:
-        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
-        return invocation, context_pack_summary(source_context), _context_markers(source_context)
+        invocation = model_gateway.invoke_semantic_analysis(
+            prompt=attempt.prompt,
+            profile=profile,
+        )
+        return (
+            invocation,
+            _attempt_source_summary(attempt),
+            _attempt_budget_markers(attempt),
+        )
     except ModelGatewayError as exc:
         if not _is_context_length_error(exc):
             raise
 
     shrunk_context = shrink_context_pack(source_context, status="SHRUNK_RETRY")
-    prompt = _render_stage_prompt(
+    attempt = _build_prompt_attempt(
         task=task,
         stage=stage,
         source_context=shrunk_context,
@@ -324,11 +375,14 @@ def _invoke_stage_with_context_fallback(
         repair_context=repair_context,
     )
     try:
-        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
-        markers = _context_markers(shrunk_context) or _context_length_review_markers(
-            allowed_evidence_refs
+        invocation = model_gateway.invoke_semantic_analysis(
+            prompt=attempt.prompt,
+            profile=profile,
         )
-        return invocation, context_pack_summary(shrunk_context), markers
+        markers = _attempt_budget_markers(attempt) or _context_length_review_markers(
+            attempt.allowed_evidence_refs
+        )
+        return invocation, _attempt_source_summary(attempt), markers
     except ModelGatewayError as exc:
         if not _is_context_length_error(exc):
             raise
@@ -337,7 +391,7 @@ def _invoke_stage_with_context_fallback(
         source_context,
         status="FALLBACK_NO_SOURCE",
     )
-    prompt = _render_stage_prompt(
+    attempt = _build_prompt_attempt(
         task=task,
         stage=stage,
         source_context=fallback_context,
@@ -345,14 +399,52 @@ def _invoke_stage_with_context_fallback(
         required_review_markers=required_review_markers,
         repair_context=repair_context,
     )
-    invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
-    markers = _context_markers(fallback_context) or _context_length_review_markers(
-        allowed_evidence_refs
-    )
-    return invocation, context_pack_summary(fallback_context), markers
+    try:
+        invocation = model_gateway.invoke_semantic_analysis(
+            prompt=attempt.prompt,
+            profile=profile,
+        )
+        markers = _attempt_budget_markers(attempt) or _context_length_review_markers(
+            attempt.allowed_evidence_refs
+        )
+        return invocation, _attempt_source_summary(attempt), markers
+    except ModelGatewayError as exc:
+        if not _is_context_length_error(exc):
+            raise
+
+    for level, status in (
+        (_COMPACTION_COMPACT, "COMPACT_NO_SOURCE_TEXT"),
+        (_COMPACTION_MINIMUM, "MINIMUM_EVIDENCE_DIGEST"),
+    ):
+        attempt = _build_prompt_attempt(
+            task=task,
+            stage=stage,
+            source_context=source_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+            compaction_level=level,
+            source_context_status=status,
+        )
+        try:
+            invocation = model_gateway.invoke_semantic_analysis(
+                prompt=attempt.prompt,
+                profile=profile,
+            )
+            markers = _attempt_budget_markers(attempt) or _context_length_review_markers(
+                attempt.allowed_evidence_refs
+            )
+            return invocation, _attempt_source_summary(attempt), markers
+        except ModelGatewayError as exc:
+            if not _is_context_length_error(exc):
+                raise
+            if level == _COMPACTION_MINIMUM:
+                raise _context_length_error_with_attempt_summary(exc, attempt) from exc
+
+    raise AssertionError("unreachable context fallback path")
 
 
-def _render_stage_prompt(
+def _build_prompt_attempt(
     *,
     task: SemanticAnalysisTask,
     stage: str,
@@ -360,11 +452,76 @@ def _render_stage_prompt(
     allowed_evidence_refs: Sequence[str],
     required_review_markers: Sequence[Mapping[str, Any]],
     repair_context: dict[str, Any] | None,
+    compaction_level: str = _COMPACTION_NONE,
+    source_context_status: str | None = None,
+) -> _PromptAttempt:
+    metadata: dict[str, Any] = dict(task.metadata)
+    static_analysis = (
+        dict(task.static_analysis)
+        if isinstance(task.static_analysis, Mapping)
+        else None
+    )
+    attempt_source_context = source_context
+    attempt_allowed_refs = tuple(str(ref) for ref in allowed_evidence_refs if str(ref).strip())
+    compaction_summary: dict[str, Any] | None = None
+    if compaction_level != _COMPACTION_NONE:
+        compacted = _compact_semantic_inputs(
+            metadata=metadata,
+            static_analysis=static_analysis,
+            source_context=source_context,
+            allowed_evidence_refs=attempt_allowed_refs,
+            stage=stage,
+            level=compaction_level,
+            source_context_status=source_context_status or "COMPACT_NO_SOURCE_TEXT",
+        )
+        metadata = compacted["metadata"]
+        static_analysis = compacted["static_analysis"]
+        attempt_source_context = compacted["source_context"]
+        attempt_allowed_refs = compacted["allowed_evidence_refs"]
+        compaction_summary = compacted["summary"]
+    prompt = _render_stage_prompt(
+        task=task,
+        stage=stage,
+        metadata=metadata,
+        static_analysis=static_analysis,
+        source_context=attempt_source_context,
+        allowed_evidence_refs=attempt_allowed_refs,
+        required_review_markers=_markers_for_allowed_refs(
+            required_review_markers,
+            attempt_allowed_refs,
+        ),
+        repair_context=repair_context,
+    )
+    return _PromptAttempt(
+        prompt=prompt,
+        metadata=metadata,
+        static_analysis=static_analysis,
+        source_context=attempt_source_context,
+        allowed_evidence_refs=attempt_allowed_refs,
+        compaction_level=compaction_level,
+        compaction_summary=compaction_summary,
+    )
+
+
+def _render_stage_prompt(
+    *,
+    task: SemanticAnalysisTask,
+    stage: str,
+    metadata: Mapping[str, Any] | None = None,
+    static_analysis: Mapping[str, Any] | None = None,
+    source_context: dict[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+    required_review_markers: Sequence[Mapping[str, Any]],
+    repair_context: dict[str, Any] | None,
 ) -> Any:
     return render_semantic_analysis_prompt(
         target_ref=task.target_ref,
-        metadata=task.metadata,
-        static_analysis=task.static_analysis,
+        metadata=dict(metadata) if metadata is not None else task.metadata,
+        static_analysis=(
+            dict(static_analysis)
+            if static_analysis is not None
+            else task.static_analysis
+        ),
         procedure_definition=task.procedure_definition,
         source_context=source_context,
         stage=stage,
@@ -384,6 +541,584 @@ def _source_context_for_stage(
     if isinstance(value, Mapping):
         return dict(value)
     return None
+
+
+def _compact_semantic_inputs(
+    *,
+    metadata: Mapping[str, Any],
+    static_analysis: Mapping[str, Any] | None,
+    source_context: Mapping[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+    stage: str,
+    level: str,
+    source_context_status: str,
+) -> dict[str, Any]:
+    minimum = level == _COMPACTION_MINIMUM
+    fact_limit = _compact_limit("LLM_SEMANTIC_COMPACT_FACT_LIMIT", 80, 24, minimum)
+    ref_limit = _compact_limit("LLM_SEMANTIC_COMPACT_REF_LIMIT", 96, 32, minimum)
+    compact_metadata = _compact_metadata(
+        metadata,
+        stage=stage,
+        fact_limit=fact_limit,
+        minimum=minimum,
+    )
+    compact_static = _compact_static_analysis(static_analysis, minimum=minimum)
+    compact_refs = tuple(
+        _ranked_evidence_refs(
+            _allowed_evidence_refs(
+                metadata=compact_metadata,
+                static_analysis=compact_static,
+            )
+            or [str(ref) for ref in allowed_evidence_refs if str(ref).strip()],
+            stage=stage,
+        )[:ref_limit]
+    )
+    compact_source_context = without_source_text_context_pack(
+        source_context,
+        status=source_context_status,
+    )
+    if minimum and isinstance(compact_source_context, Mapping):
+        compact_source_context = {
+            key: value
+            for key, value in dict(compact_source_context).items()
+            if key
+            in {
+                "version",
+                "targetRef",
+                "stage",
+                "mode",
+                "budgetStatus",
+                "tokenBudget",
+                "estimatedSourceTokens",
+                "skippedSpanCount",
+                "analysisCoverage",
+                "reviewMarkers",
+            }
+        }
+        compact_source_context["selectedSpans"] = []
+    summary = {
+        "applied": True,
+        "level": level,
+        "stage": stage,
+        "reason": "CONTEXT_LENGTH_BUDGET",
+        "allowedEvidenceRefCount": len(compact_refs),
+        "deterministicFactCount": len(_mapping_items(compact_metadata.get("deterministicFacts"))),
+        "dependencyNodeCount": len(
+            _mapping_items(_get_nested(compact_metadata, "dependencyEvidence", "nodes"))
+        ),
+        "dependencyEdgeCount": len(
+            _mapping_items(_get_nested(compact_metadata, "dependencyEvidence", "edges"))
+        ),
+        "tableSchemaCount": len(_mapping_items(compact_metadata.get("tableSchemas"))),
+    }
+    compact_metadata["promptCompaction"] = dict(summary)
+    return {
+        "metadata": compact_metadata,
+        "static_analysis": compact_static,
+        "source_context": compact_source_context,
+        "allowed_evidence_refs": compact_refs,
+        "summary": summary,
+    }
+
+
+def _compact_metadata(
+    metadata: Mapping[str, Any],
+    *,
+    stage: str,
+    fact_limit: int,
+    minimum: bool,
+) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in ("dbProfileId", "objectRef", "snapshotId", "collectedAt", "status"):
+        if metadata.get(key) is not None:
+            compact[key] = metadata.get(key)
+    definition = _mapping(metadata.get("procedureDefinition"))
+    if definition:
+        compact["procedureDefinition"] = {
+            key: _safe_compact_value(value)
+            for key, value in definition.items()
+            if _safe_prompt_key(key)
+        }
+    parameters = _mapping(metadata.get("procedureParameters"))
+    if parameters:
+        compact["procedureParameters"] = _compact_parameters(parameters, minimum=minimum)
+    dependencies = _mapping(metadata.get("procedureDependencies"))
+    if dependencies and not minimum:
+        compact["procedureDependencies"] = _compact_procedure_dependencies(dependencies)
+    dependency_evidence = _mapping(metadata.get("dependencyEvidence"))
+    if dependency_evidence:
+        compact["dependencyEvidence"] = _compact_dependency_evidence(
+            dependency_evidence,
+            stage=stage,
+            minimum=minimum,
+        )
+    facts = _ranked_facts(
+        _mapping_items(metadata.get("deterministicFacts")),
+        stage=stage,
+    )[:fact_limit]
+    if facts:
+        compact["deterministicFacts"] = [_compact_fact(fact) for fact in facts]
+    evidence_refs = _mapping_items(metadata.get("evidenceRefs"))
+    ref_limit = _compact_limit("LLM_SEMANTIC_COMPACT_METADATA_REF_LIMIT", 48, 16, minimum)
+    if evidence_refs:
+        compact["evidenceRefs"] = [_compact_evidence_ref(ref) for ref in evidence_refs[:ref_limit]]
+    tables = _mapping_items(metadata.get("tableSchemas"))
+    if tables:
+        compact["tableSchemas"] = _compact_table_schemas(tables, minimum=minimum)
+    for key in ("aiToolEvidence", "platformToolEvidence"):
+        evidence = _mapping(metadata.get(key))
+        if evidence:
+            compact[key] = _compact_tool_evidence(evidence, stage=stage, minimum=minimum)
+    for key in ("notes", "errors"):
+        values = _sequence(metadata.get(key))
+        if values:
+            compact[key] = [_safe_compact_value(item) for item in values[:6 if not minimum else 3]]
+    return compact
+
+
+def _compact_static_analysis(
+    static_analysis: Mapping[str, Any] | None,
+    *,
+    minimum: bool,
+) -> dict[str, Any] | None:
+    if not isinstance(static_analysis, Mapping):
+        return None
+    compact: dict[str, Any] = {}
+    for key in ("patterns", "analysisCoverage", "migrationGuideStaticMetrics", "fact_ids"):
+        if static_analysis.get(key) is not None:
+            compact[key] = _safe_compact_value(static_analysis.get(key))
+    source_map = _mapping(static_analysis.get("sourceMap"))
+    if source_map:
+        span_limit = _compact_limit("LLM_SEMANTIC_COMPACT_SOURCE_SPAN_LIMIT", 40, 12, minimum)
+        compact["sourceMap"] = {
+            "version": source_map.get("version"),
+            "sourceName": source_map.get("sourceName"),
+            "sourceHashSha256": source_map.get("sourceHashSha256"),
+            "totalLines": source_map.get("totalLines"),
+            "spans": [
+                {
+                    key: _safe_compact_value(span.get(key))
+                    for key in (
+                        "spanId",
+                        "kind",
+                        "startLine",
+                        "endLine",
+                        "referencedObjects",
+                        "riskTags",
+                        "evidenceRefs",
+                    )
+                    if span.get(key) is not None
+                }
+                for span in _mapping_items(source_map.get("spans"))[:span_limit]
+            ],
+        }
+    return compact or None
+
+
+def _compact_parameters(value: Mapping[str, Any], *, minimum: bool) -> dict[str, Any]:
+    params = _mapping_items(value.get("parameters"))
+    limit = _compact_limit("LLM_SEMANTIC_COMPACT_PARAMETER_LIMIT", 40, 12, minimum)
+    return {
+        "parameterCount": len(params),
+        "parameters": [
+            {
+                key: _safe_compact_value(item.get(key))
+                for key in ("name", "dataType", "direction", "isNullable", "hasDefault")
+                if item.get(key) is not None
+            }
+            for item in params[:limit]
+        ],
+    }
+
+
+def _compact_procedure_dependencies(value: Mapping[str, Any]) -> dict[str, Any]:
+    dependencies = _mapping_items(value.get("dependencies"))
+    return {
+        "dependencyCount": len(dependencies),
+        "dependencies": [
+            {
+                key: _safe_compact_value(item.get(key))
+                for key in ("schema", "name", "objectType", "dependencyType")
+                if item.get(key) is not None
+            }
+            for item in dependencies[:24]
+        ],
+    }
+
+
+def _compact_dependency_evidence(
+    value: Mapping[str, Any],
+    *,
+    stage: str,
+    minimum: bool,
+) -> dict[str, Any]:
+    node_limit = _compact_limit("LLM_SEMANTIC_COMPACT_DEP_NODE_LIMIT", 24, 8, minimum)
+    edge_limit = _compact_limit("LLM_SEMANTIC_COMPACT_DEP_EDGE_LIMIT", 32, 12, minimum)
+    unresolved_limit = _compact_limit("LLM_SEMANTIC_COMPACT_DEP_UNRESOLVED_LIMIT", 12, 6, minimum)
+    nodes = _ranked_dependency_items(_mapping_items(value.get("nodes")), stage=stage)[:node_limit]
+    edges = _ranked_dependency_items(_mapping_items(value.get("edges")), stage=stage)[:edge_limit]
+    unresolved = _ranked_dependency_items(
+        _mapping_items(value.get("unresolved")),
+        stage=stage,
+    )[:unresolved_limit]
+    return {
+        "toolName": value.get("toolName") or "get_dependency_closure",
+        "dbProfileId": value.get("dbProfileId"),
+        "snapshotId": value.get("snapshotId"),
+        "rootObject": _safe_compact_value(value.get("rootObject")),
+        "summary": _safe_compact_value(value.get("summary")),
+        "nodes": [_compact_dependency_node(item) for item in nodes],
+        "edges": [_compact_dependency_edge(item) for item in edges],
+        "unresolved": [_compact_dependency_unresolved(item) for item in unresolved],
+        "evidenceRefs": [
+            _compact_evidence_ref(ref)
+            for ref in _mapping_items(value.get("evidenceRefs"))[: 16 if minimum else 48]
+        ],
+        "caveats": [str(item)[:240] for item in _sequence(value.get("caveats"))[:8]],
+        "reviewRequired": bool(value.get("reviewRequired")),
+        "originalCounts": {
+            "nodes": len(_mapping_items(value.get("nodes"))),
+            "edges": len(_mapping_items(value.get("edges"))),
+            "unresolved": len(_mapping_items(value.get("unresolved"))),
+        },
+    }
+
+
+def _compact_dependency_node(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(item.get(key))
+        for key in (
+            "id",
+            "database",
+            "schema",
+            "name",
+            "objectType",
+            "sourceScope",
+            "reviewStatus",
+            "evidenceRefs",
+        )
+        if item.get(key) is not None
+    }
+
+
+def _compact_dependency_edge(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(item.get(key))
+        for key in (
+            "from",
+            "to",
+            "dependencyType",
+            "resolutionStatus",
+            "resolutionStrategy",
+            "resolutionConfidence",
+            "unresolvedReason",
+            "evidenceRefs",
+        )
+        if item.get(key) is not None
+    }
+
+
+def _compact_dependency_unresolved(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(item.get(key))
+        for key in (
+            "database",
+            "schema",
+            "name",
+            "objectType",
+            "dependencyType",
+            "resolutionStatus",
+            "resolutionStrategy",
+            "unresolvedReason",
+            "evidenceRefs",
+        )
+        if item.get(key) is not None
+    }
+
+
+def _compact_table_schemas(
+    tables: Sequence[Mapping[str, Any]],
+    *,
+    minimum: bool,
+) -> list[dict[str, Any]]:
+    table_limit = _compact_limit("LLM_SEMANTIC_COMPACT_TABLE_LIMIT", 8, 3, minimum)
+    column_limit = _compact_limit("LLM_SEMANTIC_COMPACT_COLUMN_LIMIT", 16, 6, minimum)
+    compacted: list[dict[str, Any]] = []
+    for table in tables[:table_limit]:
+        columns = _mapping_items(table.get("columns"))
+        compacted.append(
+            {
+                "schema": table.get("schema"),
+                "tableName": table.get("tableName"),
+                "columnCount": len(columns),
+                "columns": [
+                    {
+                        key: _safe_compact_value(column.get(key))
+                        for key in ("name", "dataType", "isNullable", "logicalName", "description")
+                        if column.get(key) is not None
+                    }
+                    for column in columns[:column_limit]
+                ],
+            }
+        )
+    return compacted
+
+
+def _compact_tool_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    stage: str,
+    minimum: bool,
+) -> dict[str, Any]:
+    result_limit = _compact_limit("LLM_SEMANTIC_COMPACT_TOOL_RESULT_LIMIT", 12, 4, minimum)
+    results = _ranked_dependency_items(_mapping_items(evidence.get("toolResults")), stage=stage)
+    return {
+        "status": evidence.get("status"),
+        "toolCallCount": evidence.get("toolCallCount"),
+        "toolResults": [
+            {
+                key: _safe_compact_value(result.get(key))
+                for key in ("factId", "toolName", "summary", "status", "evidenceRefs")
+                if result.get(key) is not None
+            }
+            for result in results[:result_limit]
+        ],
+        "blockedRequests": [
+            {
+                key: _safe_compact_value(item.get(key))
+                for key in ("toolName", "code", "message", "reason")
+                if item.get(key) is not None
+            }
+            for item in _mapping_items(evidence.get("blockedRequests"))[: 4 if minimum else 8]
+        ],
+        "reviewMarkers": [
+            _compact_review_marker(marker)
+            for marker in _mapping_items(evidence.get("reviewMarkers"))[: 4 if minimum else 12]
+        ],
+        "caveats": [str(item)[:240] for item in _sequence(evidence.get("caveats"))[:8]],
+        "plannerMetrics": _safe_compact_value(evidence.get("plannerMetrics")),
+    }
+
+
+def _compact_fact(fact: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(fact.get(key))
+        for key in ("id", "fact_type", "type", "summary", "status", "evidenceRefs")
+        if fact.get(key) is not None
+    }
+
+
+def _compact_evidence_ref(ref: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(ref.get(key))
+        for key in ("type", "objectRef", "locator", "snapshotId")
+        if ref.get(key) is not None
+    }
+
+
+def _compact_review_marker(marker: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(marker.get(key))
+        for key in ("code", "message", "status", "evidenceRefs")
+        if marker.get(key) is not None
+    }
+
+
+def _ranked_facts(items: Sequence[Mapping[str, Any]], *, stage: str) -> list[Mapping[str, Any]]:
+    keywords = _stage_keywords(stage)
+    return sorted(
+        items,
+        key=lambda item: (
+            -_keyword_score(item, keywords),
+            str(item.get("id") or ""),
+        ),
+    )
+
+
+def _ranked_dependency_items(
+    items: Sequence[Mapping[str, Any]],
+    *,
+    stage: str,
+) -> list[Mapping[str, Any]]:
+    keywords = _stage_keywords(stage)
+    return sorted(
+        items,
+        key=lambda item: (
+            -_keyword_score(item, keywords),
+            str(item.get("id") or item.get("to") or item.get("name") or ""),
+        ),
+    )
+
+
+def _ranked_evidence_refs(items: Sequence[str], *, stage: str) -> list[str]:
+    keywords = _stage_keywords(stage)
+    deduped = _dedupe([str(item) for item in items if str(item).strip()])
+    return sorted(deduped, key=lambda item: (-_keyword_score({"ref": item}, keywords), item))
+
+
+def _stage_keywords(stage: str) -> tuple[str, ...]:
+    if stage == "business_rule_extraction":
+        return ("business", "parameter", "result", "select", "insert", "update", "delete", "branch")
+    if stage == "conversion_readiness":
+        return ("dto", "java", "mybatis", "parameter", "result", "transaction", "dml", "dependency")
+    if stage == "migration_guide_insights":
+        return ("migration", "dml", "dependency", "call", "result", "risk", "dynamic", "cross")
+    if stage == "evidence_critic":
+        return ("dynamic", "cross", "unresolved", "ambiguous", "review", "caveat", "dependency")
+    return ("procedure", "parameter", "dependency", "source", "metadata", "result", "dml")
+
+
+def _keyword_score(item: Mapping[str, Any], keywords: Sequence[str]) -> int:
+    text = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str).lower()
+    return sum(1 for keyword in keywords if keyword in text)
+
+
+def _safe_compact_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _safe_compact_value(item)
+            for key, item in value.items()
+            if _safe_prompt_key(str(key))
+        }
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return [_safe_compact_value(item) for item in list(value)[:32]]
+    if isinstance(value, str):
+        return value[:240]
+    return value
+
+
+def _safe_prompt_key(key: str) -> bool:
+    normalized = key.replace("-", "_").lower()
+    return normalized not in {
+        "definition",
+        "raw_definition",
+        "raw_definition_text",
+        "rawsql",
+        "raw_sql",
+        "sqltext",
+        "sql_text",
+        "statement",
+        "command",
+        "rowdata",
+        "row_data",
+        "rows",
+        "records",
+        "password",
+        "secret",
+        "token",
+        "apikey",
+        "api_key",
+        "connectionstring",
+        "connection_string",
+        "prompt",
+        "raw_prompt",
+        "provider_response",
+    }
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _mapping_items(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
+
+def _sequence(value: Any) -> list[Any]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return list(value)
+
+
+def _get_nested(value: Mapping[str, Any], *path: str) -> Any:
+    current: Any = value
+    for key in path:
+        if not isinstance(current, Mapping):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _compact_limit(name: str, compact_default: int, minimum_default: int, minimum: bool) -> int:
+    return max(1, _env_int(name, minimum_default if minimum else compact_default))
+
+
+def _markers_for_allowed_refs(
+    markers: Sequence[Mapping[str, Any]],
+    allowed_evidence_refs: Sequence[str],
+) -> list[dict[str, Any]]:
+    allowed = set(allowed_evidence_refs)
+    repaired = []
+    for marker in markers:
+        item = dict(marker)
+        refs = [ref for ref in _evidence_refs(item) if ref in allowed]
+        if not refs:
+            refs = _fallback_evidence_refs(item, allowed_evidence_refs)
+        item["evidenceRefs"] = refs
+        repaired.append(item)
+    return repaired
+
+
+def _attempt_source_summary(attempt: _PromptAttempt) -> dict[str, Any]:
+    summary = context_pack_summary(attempt.source_context)
+    if attempt.compaction_summary:
+        summary["promptCompaction"] = dict(attempt.compaction_summary)
+    return summary
+
+
+def _attempt_budget_markers(attempt: _PromptAttempt) -> list[dict[str, Any]]:
+    markers = _context_markers(attempt.source_context)
+    if attempt.compaction_summary:
+        markers.append(_prompt_compaction_marker(attempt))
+    return markers
+
+
+def _prompt_compaction_marker(attempt: _PromptAttempt) -> dict[str, Any]:
+    return {
+        "code": PROMPT_COMPACTION_MARKER_CODE,
+        "message": (
+            "Semantic model input was compacted to a bounded evidence digest after "
+            "context budget pressure."
+        ),
+        "status": "REVIEW_REQUIRED",
+        "evidenceRefs": _fallback_evidence_refs(
+            {"code": PROMPT_COMPACTION_MARKER_CODE},
+            attempt.allowed_evidence_refs,
+        ),
+    }
+
+
+def _context_length_error_with_attempt_summary(
+    exc: ModelGatewayError,
+    attempt: _PromptAttempt,
+) -> ModelGatewayError:
+    provider_error = {
+        key: _sanitize_provider_error_text(value)
+        for key, value in exc.provider_error.items()
+        if value is not None
+    }
+    provider_error.update(
+        {
+            "semanticCompactionLevel": attempt.compaction_level,
+            "semanticCompactionApplied": "true",
+            "semanticEstimatedPromptTokens": str(attempt.estimated_tokens),
+            "semanticAllowedEvidenceRefCount": str(len(attempt.allowed_evidence_refs)),
+        }
+    )
+    return ModelGatewayError(str(exc), code=exc.code, provider_error=provider_error)
+
+
+def _sanitize_provider_error_text(value: Any) -> str:
+    text = str(sanitize_value_for_storage(str(value), procedure_definition=""))
+    text = re.sub(r"(?i)\bbearer\s+[^\s,}]+", "Bearer [REDACTED]", text)
+    text = re.sub(
+        r"(?i)\b(access[_-]?token|api[_-]?key|password|secret)\s*=\s*[^\s,}]+",
+        lambda match: f"{match.group(1)}=[REDACTED]",
+        text,
+    )
+    return text[:500]
 
 
 def _is_context_length_error(exc: ModelGatewayError) -> bool:
@@ -422,13 +1157,13 @@ def _context_length_review_markers(
 ) -> list[dict[str, Any]]:
     return [
         {
-            "code": "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED",
+            "code": CONTEXT_BUDGET_MARKER_CODE,
             "message": (
-                "Model input exceeded provider context and analysis used reduced source context."
+                "Model input exceeded provider context and analysis used reduced evidence context."
             ),
             "status": "REVIEW_REQUIRED",
             "evidenceRefs": _fallback_evidence_refs(
-                {"code": "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED"},
+                {"code": CONTEXT_BUDGET_MARKER_CODE},
                 allowed_evidence_refs,
             ),
         }

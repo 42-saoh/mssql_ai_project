@@ -7,6 +7,7 @@ from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowSte
 from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from api_app.lifecycle import WorkflowStateError
+from api_app.metadata_gateway import MetadataCollectionResult
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
 from api_app.workflow import (
@@ -805,19 +806,207 @@ def test_submit_with_llm_records_failed_agent_run_when_gateway_fails() -> None:
     assert len(runs) == 1
     run = runs[0]
     assert run.status == AgentRunStatus.FAILED.value
+    assert run.target_key == "mssql:master:-:procedure:dbo.usp_getordersummary"
     assert run.model_invocation["provider"] == "pgpt"
     assert run.model_invocation["status"] == AgentRunStatus.FAILED.value
     assert run.model_invocation["componentInvocations"][0]["errorCode"] == (
         "OPENAI_STRUCTURED_OUTPUT_INVALID"
     )
-    assert run.model_invocation["componentInvocations"][0]["providerError"] == {
+    provider_error = run.model_invocation["componentInvocations"][0]["providerError"]
+    assert {
+        "type": provider_error["type"],
+        "code": provider_error["code"],
+        "param": provider_error["param"],
+        "message": provider_error["message"],
+    } == {
         "type": "invalid_request_error",
         "code": "context_length_exceeded",
         "param": "input",
         "message": "Input exceeded provider limit.",
     }
+    assert provider_error["semanticCompactionApplied"] == "true"
+    assert provider_error["semanticCompactionLevel"] == "minimum"
     assert "raw_openai_response_text" not in str(run.model_invocation)
     assert any(event.action == "AGENT_RUN_RECORDED" for event in repository.audit_events)
+
+
+def test_workflow_recovers_large_semantic_prompt_with_compacted_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_SEMANTIC_INPUT_TOKEN_BUDGET", "1400")
+
+    class LargeMetadataGateway:
+        def collect_procedure_metadata(
+            self,
+            *,
+            db_profile_id: str,
+            schema: str,
+            procedure_name: str,
+        ) -> MetadataCollectionResult:
+            return MetadataCollectionResult(
+                db_profile_id=db_profile_id,
+                object_ref=f"{schema}.{procedure_name}",
+                snapshot_id="snapshot-large-workflow",
+                collected_at="2026-05-17T00:00:00Z",
+                evidence_refs=tuple(
+                    {
+                        "type": "MSSQL_METADATA",
+                        "objectRef": f"dbo.InvoiceNode{i}",
+                        "locator": f"mssql-mcp#/dependencies/{i}",
+                    }
+                    for i in range(180)
+                ),
+                procedure_definition={
+                    "definitionHash": "hash-large-workflow",
+                    "definition": (
+                        "CREATE PROCEDURE dbo.usp_GetOrderSummary AS\n"
+                        "SELECT OrderId FROM dbo.InvoiceSchedule;"
+                    ),
+                    "hasDefinitionAccess": True,
+                },
+                deterministic_facts=tuple(
+                    {
+                        "id": f"fact.invoice.{i}",
+                        "fact_type": "TABLE_READ" if i % 2 else "TABLE_WRITE",
+                        "summary": f"Invoice schedule deterministic fact {i}",
+                    }
+                    for i in range(240)
+                ),
+                dependency_evidence={
+                    "toolName": "get_dependency_closure",
+                    "rootObject": {
+                        "database": "master",
+                        "schema": schema,
+                        "name": procedure_name,
+                        "objectType": "PROCEDURE",
+                    },
+                    "summary": {"maxDepth": 2, "nodeCount": 400, "edgeCount": 600},
+                    "nodes": [
+                        {
+                            "id": f"master.dbo.InvoiceNode{i}:TABLE",
+                            "schema": "dbo",
+                            "name": f"InvoiceNode{i}",
+                            "objectType": "TABLE",
+                            "evidenceRefs": [
+                                {
+                                    "objectRef": f"dbo.InvoiceNode{i}",
+                                    "locator": f"mssql-mcp#/nodes/{i}",
+                                }
+                            ],
+                        }
+                        for i in range(400)
+                    ],
+                    "edges": [
+                        {
+                            "from": "master.dbo.usp_GetOrderSummary:PROCEDURE",
+                            "to": f"master.dbo.InvoiceNode{i}:TABLE",
+                            "dependencyType": "REFERENCE",
+                            "resolutionStatus": "CONFIRMED",
+                            "evidenceRefs": [
+                                {
+                                    "objectRef": f"dbo.InvoiceNode{i}",
+                                    "locator": f"mssql-mcp#/edges/{i}",
+                                }
+                            ],
+                        }
+                        for i in range(600)
+                    ],
+                    "unresolved": [],
+                    "evidenceRefs": [],
+                },
+                table_schemas=tuple(
+                    {
+                        "schema": "dbo",
+                        "tableName": f"InvoiceTable{table}",
+                        "columns": [
+                            {
+                                "name": f"Column{column}",
+                                "dataType": "nvarchar(200)",
+                                "description": "Invoice schedule description " * 8,
+                            }
+                            for column in range(60)
+                        ],
+                    }
+                    for table in range(16)
+                ),
+            )
+
+        def collect_procedure_definition(
+            self,
+            *,
+            db_profile_id: str,
+            schema: str,
+            procedure_name: str,
+            referenced_database: str | None = None,
+        ) -> dict[str, object]:
+            return {
+                "data": {
+                    "definition": "CREATE PROCEDURE dbo.usp_Child AS SELECT 1;",
+                    "definitionHash": "hash-child",
+                    "hasDefinitionAccess": True,
+                },
+                "evidenceRefs": [],
+            }
+
+    class CompactRetryGateway:
+        provider = "pgpt"
+
+        def __init__(self) -> None:
+            self.payloads: list[dict[str, object]] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.payloads.append(payload)
+            if not payload["metadata"].get("promptCompaction"):
+                raise ModelGatewayError(
+                    "OpenAI Responses API returned an error.",
+                    code="OPENAI_HTTP_400",
+                    provider_error={"code": "context_length_exceeded"},
+                )
+            assert "CREATE PROCEDURE" not in prompt.user_prompt
+            ref = payload["evidenceRefContract"]["allowedFactIds"][0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "WORKFLOW_COMPACT_RETRY_RULE",
+                        "summary": "압축된 근거로 초안 분석을 진행했습니다.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider=self.provider,
+                structured_output=structured_output,
+            )
+
+    repository = MemoryWorkflowRepository()
+    gateway = CompactRetryGateway()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=LargeMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(_llm_request(["SP_ANALYSIS_DOCUMENT"]))
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert any(payload["metadata"].get("promptCompaction") for payload in gateway.payloads)
+    run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id)
+        if run.agent_type == "LLM_SEMANTIC_ANALYST"
+    )
+    assert run.model_invocation["sourceContextSummary"]["promptCompaction"]["applied"] is True
+    assert repository.list_job_artifacts(job.job_id)
 
 
 def test_llm_prompt_receives_dependency_evidence_and_can_bind_claim_refs() -> None:

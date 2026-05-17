@@ -302,7 +302,14 @@ def _model_source_context_summary(
     budget_status = (
         "REVIEW_REQUIRED"
         if any(
-            status in {"PRE_PROVIDER_SHRINK", "SHRUNK_RETRY", "FALLBACK_NO_SOURCE"}
+            status
+            in {
+                "PRE_PROVIDER_SHRINK",
+                "SHRUNK_RETRY",
+                "FALLBACK_NO_SOURCE",
+                "COMPACT_NO_SOURCE_TEXT",
+                "MINIMUM_EVIDENCE_DIGEST",
+            }
             for status in budget_statuses
         )
         else (
@@ -321,12 +328,15 @@ def _model_source_context_summary(
     )
     markers: list[dict[str, Any]] = []
     dependency_analysis: dict[str, Any] | None = None
+    prompt_compaction: dict[str, Any] | None = None
     for item in summaries:
         for marker in item.get("reviewMarkers", []):
             if isinstance(marker, Mapping):
                 markers.append(dict(marker))
         if isinstance(item.get("dependencyAnalysis"), Mapping):
             dependency_analysis = dict(item["dependencyAnalysis"])
+        if isinstance(item.get("promptCompaction"), Mapping):
+            prompt_compaction = dict(item["promptCompaction"])
     result = {
         "mode": "RETRIEVED_SPANS"
         if any(item.get("mode") == "RETRIEVED_SPANS" for item in summaries)
@@ -339,6 +349,8 @@ def _model_source_context_summary(
     }
     if dependency_analysis is not None:
         result["dependencyAnalysis"] = dependency_analysis
+    if prompt_compaction is not None:
+        result["promptCompaction"] = prompt_compaction
     return result
 
 

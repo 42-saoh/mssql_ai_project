@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -251,6 +252,268 @@ def test_context_length_error_retries_with_shrunk_context_marker() -> None:
     )
     assert storage["sourceContextSummary"]["budgetStatus"] == "REVIEW_REQUIRED"
     assert storage["analysisCoverage"]["spanCount"] == 2
+
+
+def test_oversized_semantic_metadata_is_compacted_before_provider(monkeypatch: Any) -> None:
+    monkeypatch.setenv("LLM_SEMANTIC_INPUT_TOKEN_BUDGET", "1400")
+
+    class CompactSpyGateway:
+        provider = "spy"
+
+        def __init__(self) -> None:
+            self.payloads: list[dict[str, Any]] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.payloads.append(payload)
+            assert payload["metadata"]["promptCompaction"]["applied"] is True
+            assert len(payload["metadata"]["dependencyEvidence"]["nodes"]) < 500
+            assert len(payload["evidenceRefContract"]["allowedFactIds"]) <= 96
+            assert "raw_openai_response_text" not in prompt.user_prompt
+            assert "SELECT * FROM dbo.SecretInvoiceRows" not in prompt.user_prompt
+            ref = payload["evidenceRefContract"]["allowedFactIds"][0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "COMPACTED_CONTEXT_RULE",
+                        "summary": "Compacted evidence still supports the draft insight.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return ModelInvocationRecord(
+                provider=self.provider,
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+                token_usage={"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+                latency_ms=1,
+            )
+
+    metadata = _large_semantic_metadata()
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        metadata=metadata,
+        static_analysis=None,
+        procedure_definition=None,
+        model_gateway=CompactSpyGateway(),
+        profile_id="openai_fast_test",
+    )
+
+    assert payload.status == AgentRunStatus.SUCCEEDED
+    assert any(
+        marker["code"] == "LLM_PROMPT_COMPACTED_FOR_CONTEXT"
+        for marker in payload.structured_output["reviewMarkers"]
+    )
+    assert (
+        payload.model_invocation.to_storage_dict()["sourceContextSummary"]["promptCompaction"][
+            "applied"
+        ]
+        is True
+    )
+
+
+def test_context_length_error_retries_with_compacted_metadata() -> None:
+    class ContextCompactGateway:
+        provider = "spy"
+
+        def __init__(self) -> None:
+            self.payloads: list[dict[str, Any]] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.payloads.append(payload)
+            if not payload["metadata"].get("promptCompaction"):
+                raise ModelGatewayError(
+                    "OpenAI Responses API returned an error.",
+                    code="OPENAI_HTTP_400",
+                    provider_error={
+                        "code": "context_length_exceeded",
+                        "message": "input too large",
+                    },
+                )
+            ref = payload["evidenceRefContract"]["allowedFactIds"][0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "COMPACT_RETRY_RULE",
+                        "summary": "Context retry used compacted deterministic evidence.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return ModelInvocationRecord(
+                provider=self.provider,
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+                token_usage={"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+                latency_ms=1,
+            )
+
+    gateway = ContextCompactGateway()
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        metadata=_large_semantic_metadata(),
+        static_analysis=None,
+        procedure_definition=None,
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    assert len(gateway.payloads) >= 4
+    assert any(item["metadata"].get("promptCompaction") for item in gateway.payloads)
+    assert any(
+        marker["code"] == "LLM_PROMPT_COMPACTED_FOR_CONTEXT"
+        for marker in payload.structured_output["reviewMarkers"]
+    )
+
+
+def test_context_length_final_failure_reports_sanitized_compaction_summary() -> None:
+    class AlwaysTooLargeGateway:
+        provider = "spy"
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            raise ModelGatewayError(
+                "OpenAI Responses API returned an error.",
+                code="OPENAI_HTTP_400",
+                provider_error={
+                    "code": "context_length_exceeded",
+                    "message": "Bearer secret-token-123 input too large",
+                },
+            )
+
+    with pytest.raises(ModelGatewayError) as exc_info:
+        build_semantic_analysis_run(
+            target_ref="dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+            metadata=_large_semantic_metadata(),
+            static_analysis=None,
+            procedure_definition=None,
+            model_gateway=AlwaysTooLargeGateway(),
+            profile_id="openai_fast_test",
+        )
+
+    provider_error = exc_info.value.provider_error
+    assert provider_error["semanticCompactionApplied"] == "true"
+    assert provider_error["semanticCompactionLevel"] == "minimum"
+    serialized = str(provider_error)
+    assert "SELECT * FROM dbo.SecretInvoiceRows" not in serialized
+    assert "raw_openai_response_text" not in serialized
+
+
+def _large_semantic_metadata() -> dict[str, Any]:
+    return {
+        "dbProfileId": "ppm",
+        "objectRef": "dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        "snapshotId": "snapshot-large",
+        "procedureDefinition": {
+            "definitionHash": "hash-large",
+            "definition": "CREATE PROCEDURE dbo.PCS AS SELECT * FROM dbo.SecretInvoiceRows;",
+        },
+        "evidenceRefs": [
+            {
+                "type": "MSSQL_METADATA",
+                "objectRef": f"dbo.Invoice{i}",
+                "locator": f"mssql-mcp#/dependency/{i}",
+            }
+            for i in range(180)
+        ],
+        "deterministicFacts": [
+            {
+                "id": f"fact.invoice.{i}",
+                "fact_type": "TABLE_READ" if i % 2 else "TABLE_WRITE",
+                "summary": f"Invoice schedule deterministic fact {i}",
+            }
+            for i in range(300)
+        ],
+        "dependencyEvidence": {
+            "toolName": "get_dependency_closure",
+            "rootObject": {
+                "database": "ppm",
+                "schema": "dbo",
+                "name": "PCS_PY_ManageInvoiceFldSchd_PRC",
+                "objectType": "PROCEDURE",
+            },
+            "summary": {"maxDepth": 2, "nodeCount": 500, "edgeCount": 800},
+            "nodes": [
+                {
+                    "id": f"ppm.dbo.InvoiceNode{i}:TABLE",
+                    "schema": "dbo",
+                    "name": f"InvoiceNode{i}",
+                    "objectType": "TABLE",
+                    "evidenceRefs": [
+                        {
+                            "objectRef": f"dbo.InvoiceNode{i}",
+                            "locator": f"mssql-mcp#/nodes/{i}",
+                        }
+                    ],
+                }
+                for i in range(500)
+            ],
+            "edges": [
+                {
+                    "from": "ppm.dbo.PCS_PY_ManageInvoiceFldSchd_PRC:PROCEDURE",
+                    "to": f"ppm.dbo.InvoiceNode{i}:TABLE",
+                    "dependencyType": "REFERENCE",
+                    "resolutionStatus": "CONFIRMED",
+                    "evidenceRefs": [
+                        {
+                            "objectRef": f"dbo.InvoiceNode{i}",
+                            "locator": f"mssql-mcp#/edges/{i}",
+                        }
+                    ],
+                }
+                for i in range(800)
+            ],
+            "unresolved": [],
+            "evidenceRefs": [],
+        },
+        "tableSchemas": [
+            {
+                "schema": "dbo",
+                "tableName": f"InvoiceTable{table}",
+                "columns": [
+                    {
+                        "name": f"Column{column}",
+                        "dataType": "nvarchar(200)",
+                        "description": f"Invoice schedule column description {column}" * 8,
+                    }
+                    for column in range(80)
+                ],
+            }
+            for table in range(20)
+        ],
+    }
 
 
 def test_fast_test_profile_defaults_to_gpt_5_nano(monkeypatch: Any) -> None:

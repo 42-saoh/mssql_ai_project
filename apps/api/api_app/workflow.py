@@ -669,6 +669,7 @@ class WorkflowService:
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
                 error_code=exc.code,
                 provider_error=exc.provider_error,
+                target_key=request_record.target_key,
             )
             raise
         dependency_analysis = self._run_dependency_semantic_analyses(
