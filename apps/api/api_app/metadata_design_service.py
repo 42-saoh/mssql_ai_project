@@ -35,7 +35,10 @@ from api_app.metadata_service import MetadataSearchDependencyError, repo_root
 from api_app.repositories import WorkflowRepository
 from api_app.schemas import (
     MetadataAnalysisReviewMarker,
+    MetadataDesignAppliedChange,
     MetadataDesignFieldInput,
+    MetadataDesignIntentChange,
+    MetadataDesignInterpretedIntent,
     MetadataDesignResult,
     MetadataDesignRunRequest,
     MetadataGeneratedDraft,
@@ -61,6 +64,41 @@ FORBIDDEN_TEXT_RE = re.compile(
 )
 IDENTIFIER_CLEANUP_RE = re.compile(r"[^0-9A-Za-z_]+")
 MESSAGE_SPLIT_RE = re.compile(r"[\n,;/]+")
+FIELD_CONNECTOR_RE = re.compile(
+    r"\s*(?:,|/|;|\n|\r|와|과|및|하고|이랑|랑|and|with)\s*",
+    re.IGNORECASE,
+)
+KNOWN_FIELD_TERMS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
+    (
+        ("고객명", "고객 이름", "customer name", "customer_nm"),
+        "CUSTOMER_NM",
+        "Customer name",
+        "VARCHAR(100)",
+    ),
+    (
+        ("고객주소", "고객 주소", "customer address", "customer_addr"),
+        "CUSTOMER_ADDR",
+        "Customer address",
+        "VARCHAR(500)",
+    ),
+    (("주소", "address", "addr"), "ADDR", "Address", "VARCHAR(500)"),
+    (("주문일", "주문 일자", "order date", "order_dt"), "ORDER_DT", "Order date", "VARCHAR(8)"),
+    (
+        ("배송메모", "배송 메모", "delivery memo", "shipping memo", "dlv_memo"),
+        "DLV_MEMO",
+        "Delivery memo",
+        "VARCHAR(500)",
+    ),
+    (("메모", "memo"), "MEMO", "Memo", "VARCHAR(500)"),
+)
+KNOWN_TABLE_TERMS: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (("주문 요청", "order request"), "PPM_ORDER_REQ", "Order request table"),
+    (("고객 주문", "customer order"), "PPM_CUSTOMER_ORDER", "Customer order table"),
+)
+DATE_TYPE_HINTS = ("날짜", "일자", "date")
+ADD_HINTS = ("추가", "넣어", "add", "include")
+REMOVE_HINTS = ("빼", "삭제", "제거", "remove", "exclude", "drop")
+CHANGE_HINTS = ("변경", "바꿔", "수정", "change", "convert")
 
 
 @dataclass(frozen=True)
@@ -93,16 +131,22 @@ class MetadataDesignChatService:
         self._policy = _load_standardization_policy()
 
     def design(self, request: MetadataDesignRunRequest) -> MetadataDesignResult:
-        fields = _normalized_field_inputs(request)
-        model_invocation, planner_component, planner_caveats = _run_design_planner(
+        intent = _interpret_design_intent(request)
+        effective_request, fields, applied_changes, intent_caveats = _effective_request_for_intent(
             request,
+            intent=intent,
+            repository=self.repository,
+            policy=self._policy,
+        )
+        model_invocation, planner_component, planner_caveats = _run_design_planner(
+            effective_request,
             fields=fields,
             model_gateway=self.model_gateway,
         )
         candidate_context = _collect_metadata_candidates(
-            request,
+            effective_request,
             fields=fields,
-            max_candidates=request.options.max_candidates,
+            max_candidates=effective_request.options.max_candidates,
         )
         mappings = _build_standardization_mappings(
             fields,
@@ -110,22 +154,23 @@ class MetadataDesignChatService:
             policy=self._policy,
         )
         table_proposal = _build_table_proposal(
-            request,
+            effective_request,
             mappings=mappings,
             policy=self._policy,
         )
         dto_draft = (
             _build_dto_draft(table_proposal)
-            if request.options.generate_dto_draft
+            if effective_request.options.generate_dto_draft
             else None
         )
         caveats = _dedupe_strings(
             [
+                *intent_caveats,
                 *candidate_context.caveats,
                 *planner_caveats,
                 *(
                     ["METADATA_DESIGN_DTO_SKIPPED"]
-                    if not request.options.generate_dto_draft
+                    if not effective_request.options.generate_dto_draft
                     else []
                 ),
             ]
@@ -189,6 +234,8 @@ class MetadataDesignChatService:
                 table_proposal=table_proposal,
                 dto_draft=dto_draft,
             ),
+            interpretedIntent=intent,
+            appliedChanges=list(applied_changes),
             relatedMetadata=list(candidate_context.related_metadata),
             standardizationMappings=list(mappings),
             tableProposal=table_proposal,
@@ -204,6 +251,601 @@ class MetadataDesignChatService:
             modelInvocation=model_invocation,
             componentInvocations=component_invocations,
         )
+
+
+def _interpret_design_intent(request: MetadataDesignRunRequest) -> MetadataDesignInterpretedIntent:
+    message = _safe_text(request.message)
+    fields = _fields_from_request_or_message(request)
+    modifications = _modifications_from_message(message, fields=fields)
+    table_name = _safe_text(request.design_inputs.table_name_hint) or _table_name_from_message(message)
+    table_description = (
+        _safe_text(request.design_inputs.table_description)
+        or _table_description_from_message(message)
+    )
+    mode = request.options.conversation_mode
+    review_reasons: list[str] = []
+    if not fields and not modifications:
+        review_reasons.append(
+            "REVIEW_REQUIRED: natural language intent did not identify field candidates."
+        )
+    if mode == "REFINE_CURRENT" and not modifications:
+        review_reasons.append(
+            "REVIEW_REQUIRED: refine mode needs an add, remove, rename, or type-change instruction."
+        )
+    return MetadataDesignInterpretedIntent(
+        intent="REFINE_TABLE" if mode == "REFINE_CURRENT" else "CREATE_TABLE",
+        tableNameCandidate=table_name or None,
+        tableDescription=table_description or None,
+        fields=fields,
+        modifications=modifications,
+        confidence=0.78 if not review_reasons else 0.42,
+        reviewRequired=bool(review_reasons),
+        reviewReasons=review_reasons,
+    )
+
+
+def _effective_request_for_intent(
+    request: MetadataDesignRunRequest,
+    *,
+    intent: MetadataDesignInterpretedIntent,
+    repository: WorkflowRepository | None,
+    policy: dict[str, Any],
+) -> tuple[MetadataDesignRunRequest, list[MetadataDesignFieldInput], list[MetadataDesignAppliedChange], list[str]]:
+    if request.options.conversation_mode == "REFINE_CURRENT":
+        return _refine_request_from_baseline(
+            request,
+            intent=intent,
+            repository=repository,
+            policy=policy,
+        )
+    fields = intent.fields or _normalized_field_inputs(request)
+    design_inputs = request.design_inputs.model_copy(
+        update={
+            "table_name_hint": request.design_inputs.table_name_hint
+            or intent.table_name_candidate,
+            "table_description": request.design_inputs.table_description
+            or intent.table_description,
+            "fields": fields,
+        }
+    )
+    applied = [
+        MetadataDesignAppliedChange(
+            action="ADD_FIELD",
+            target=_safe_text(field.name or field.description),
+            summary=(
+                "Accepted natural-language field candidate "
+                f"{_safe_text(field.name or field.description)}."
+            ),
+            reviewRequired=False,
+            reviewReasons=[],
+        )
+        for field in fields
+    ]
+    return request.model_copy(update={"design_inputs": design_inputs}), fields, applied, []
+
+
+def _refine_request_from_baseline(
+    request: MetadataDesignRunRequest,
+    *,
+    intent: MetadataDesignInterpretedIntent,
+    repository: WorkflowRepository | None,
+    policy: dict[str, Any],
+) -> tuple[MetadataDesignRunRequest, list[MetadataDesignFieldInput], list[MetadataDesignAppliedChange], list[str]]:
+    baseline = _latest_successful_table_proposal(
+        repository,
+        conversation_id=request.conversation_id,
+    )
+    if baseline is None:
+        caveat = "METADATA_DESIGN_REFINE_BASELINE_REQUIRED"
+        design_inputs = request.design_inputs.model_copy(
+            update={
+                "table_name_hint": request.design_inputs.table_name_hint
+                or intent.table_name_candidate,
+                "table_description": request.design_inputs.table_description
+                or intent.table_description,
+                "fields": [],
+            }
+        )
+        return (
+            request.model_copy(update={"design_inputs": design_inputs}),
+            [],
+            [
+                MetadataDesignAppliedChange(
+                    action="REVIEW_REQUIRED",
+                    target=request.conversation_id,
+                    summary="Refine mode could not find a previous successful design result.",
+                    reviewRequired=True,
+                    reviewReasons=["REVIEW_REQUIRED: baseline table proposal is required."],
+                )
+            ],
+            [caveat],
+        )
+    fields = _baseline_fields_from_table(baseline, policy)
+    applied: list[MetadataDesignAppliedChange] = []
+    for change in intent.modifications:
+        fields, applied_change = _apply_intent_change(fields, change)
+        applied.append(applied_change)
+    if not intent.modifications and intent.fields:
+        for field in intent.fields:
+            fields = _upsert_field(fields, field)
+            applied.append(
+                MetadataDesignAppliedChange(
+                    action="ADD_FIELD",
+                    target=_safe_text(field.name or field.description),
+                    summary=f"Added field candidate {_safe_text(field.name or field.description)}.",
+                    reviewRequired=False,
+                    reviewReasons=[],
+                )
+            )
+    caveats = []
+    if not applied:
+        caveats.append("METADATA_DESIGN_REFINE_AMBIGUOUS")
+        applied.append(
+            MetadataDesignAppliedChange(
+                action="REVIEW_REQUIRED",
+                target=request.message[:80],
+                summary="Refine instruction was not specific enough to alter the baseline.",
+                reviewRequired=True,
+                reviewReasons=["REVIEW_REQUIRED: specify a field add/remove/type change."],
+            )
+        )
+    table_name = intent.table_name_candidate or baseline.table_name
+    table_description = intent.table_description or baseline.table_description
+    design_inputs = request.design_inputs.model_copy(
+        update={
+            "table_name_hint": table_name,
+            "table_description": table_description,
+            "fields": fields,
+        }
+    )
+    return request.model_copy(update={"design_inputs": design_inputs}), fields, applied, caveats
+
+
+def _latest_successful_table_proposal(
+    repository: WorkflowRepository | None,
+    *,
+    conversation_id: str | None,
+) -> MetadataTableProposal | None:
+    if repository is None or not conversation_id:
+        return None
+    records = repository.list_metadata_design_runs_for_conversation(conversation_id, limit=20)
+    candidates = [
+        record
+        for record in records
+        if record.status == "SUCCEEDED" and isinstance(record.result, dict)
+    ]
+    candidates.sort(
+        key=lambda record: record.completed_at or record.started_at or record.submitted_at,
+        reverse=True,
+    )
+    for record in candidates:
+        try:
+            return MetadataDesignResult.model_validate(record.result).table_proposal
+        except ValueError:
+            continue
+    return None
+
+
+def _baseline_fields_from_table(
+    table_proposal: MetadataTableProposal,
+    policy: dict[str, Any],
+) -> list[MetadataDesignFieldInput]:
+    common_names = {
+        _standard_identifier(str(item.get("name") or ""))
+        for item in policy.get("common_columns", {}).get("required_for_new_tables", [])
+        if isinstance(item, dict)
+    }
+    fields = []
+    for column in table_proposal.columns:
+        if column.name in common_names:
+            continue
+        fields.append(
+            MetadataDesignFieldInput(
+                name=column.name,
+                description=column.description,
+                dbType=column.data_type,
+                nullable=column.nullable,
+            )
+        )
+    return fields
+
+
+def _apply_intent_change(
+    fields: list[MetadataDesignFieldInput],
+    change: MetadataDesignIntentChange,
+) -> tuple[list[MetadataDesignFieldInput], MetadataDesignAppliedChange]:
+    target = change.target or change.value or ""
+    if change.action == "ADD_FIELD":
+        field = _field_from_change(change)
+        return _upsert_field(fields, field), MetadataDesignAppliedChange(
+            action=change.action,
+            target=field.name or field.description,
+            summary=change.summary,
+            reviewRequired=change.review_required,
+            reviewReasons=change.review_reasons,
+        )
+    if change.action == "REMOVE_FIELD":
+        remaining = [field for field in fields if not _field_matches_target(field, target)]
+        removed = len(remaining) != len(fields)
+        return remaining, MetadataDesignAppliedChange(
+            action=change.action,
+            target=target,
+            summary=change.summary if removed else "No baseline field matched the remove instruction.",
+            reviewRequired=not removed,
+            reviewReasons=[] if removed else ["REVIEW_REQUIRED: field removal target was not found."],
+        )
+    if change.action == "CHANGE_TYPE":
+        changed = False
+        next_fields = []
+        for field in fields:
+            if _field_matches_target(field, target):
+                changed = True
+                next_fields.append(field.model_copy(update={"db_type": change.value}))
+            else:
+                next_fields.append(field)
+        return next_fields, MetadataDesignAppliedChange(
+            action=change.action,
+            target=target,
+            summary=change.summary if changed else "No baseline field matched the type change.",
+            reviewRequired=not changed,
+            reviewReasons=[] if changed else ["REVIEW_REQUIRED: type-change target was not found."],
+        )
+    return fields, MetadataDesignAppliedChange(
+        action=change.action,
+        target=_safe_text(target),
+        summary=change.summary,
+        reviewRequired=True,
+        reviewReasons=change.review_reasons
+        or ["REVIEW_REQUIRED: refine instruction requires manual confirmation."],
+    )
+
+
+def _fields_from_request_or_message(
+    request: MetadataDesignRunRequest,
+) -> list[MetadataDesignFieldInput]:
+    fields = [
+        _sanitized_field_input(field)
+        for field in request.design_inputs.fields
+        if field.name or field.description or field.db_type
+    ]
+    if fields:
+        return fields[:20]
+    return _fields_from_message(request.message)
+
+
+def _fields_from_message(message: str) -> list[MetadataDesignFieldInput]:
+    text = _safe_text(message)
+    known = _known_fields_from_text(text)
+    if known:
+        return known[:20]
+
+    inferred: list[MetadataDesignFieldInput] = []
+    for part in FIELD_CONNECTOR_RE.split(text):
+        candidate = _field_text_from_fragment(part)
+        if not candidate:
+            continue
+        inferred.append(_field_input_from_text(candidate))
+    return _dedupe_field_inputs(inferred)[:20]
+
+
+def _modifications_from_message(
+    message: str,
+    *,
+    fields: list[MetadataDesignFieldInput],
+) -> list[MetadataDesignIntentChange]:
+    text = _safe_text(message)
+    folded = _normalize_match_text(text)
+    if not folded:
+        return []
+    clause_modifications: list[MetadataDesignIntentChange] = []
+    for clause in _message_action_clauses(text):
+        if clause == text:
+            continue
+        clause_fields = _fields_from_message(clause)
+        clause_modifications.extend(
+            _modifications_from_message(clause, fields=clause_fields)
+        )
+    if clause_modifications:
+        return _dedupe_intent_changes(clause_modifications)
+
+    has_remove = any(token in folded for token in REMOVE_HINTS)
+    has_add = any(token in folded for token in ADD_HINTS)
+    has_change = any(token in folded for token in CHANGE_HINTS)
+    type_hint = _type_hint_from_message(text)
+    modifications: list[MetadataDesignIntentChange] = []
+
+    if has_remove:
+        targets = fields or [_field_input_from_text(_remove_target_text(text))]
+        for field in targets:
+            target = _safe_text(field.name or field.description)
+            if not target:
+                continue
+            modifications.append(
+                MetadataDesignIntentChange(
+                    action="REMOVE_FIELD",
+                    target=target,
+                    summary=f"Remove field candidate {target}.",
+                )
+            )
+        return modifications
+
+    if has_change and type_hint:
+        targets = fields or [_field_input_from_text(text)]
+        for field in targets:
+            target = _safe_text(field.name or field.description)
+            if not target:
+                continue
+            modifications.append(
+                MetadataDesignIntentChange(
+                    action="CHANGE_TYPE",
+                    target=target,
+                    value=type_hint,
+                    summary=f"Change {target} to {type_hint}.",
+                )
+            )
+        return modifications
+
+    if has_add:
+        targets = fields or [_field_input_from_text(text)]
+        for field in targets:
+            target = _safe_text(field.name or field.description)
+            if not target:
+                continue
+            modifications.append(
+                MetadataDesignIntentChange(
+                    action="ADD_FIELD",
+                    target=target,
+                    value=field.db_type,
+                    summary=f"Add field candidate {target}.",
+                )
+            )
+    return modifications
+
+
+def _message_action_clauses(message: str) -> list[str]:
+    parts = [
+        part.strip()
+        for part in re.split(r"(?:,|;|\n|\r|하고|그리고|\band\b)", message, flags=re.IGNORECASE)
+        if part.strip()
+    ]
+    return parts if len(parts) > 1 else [message]
+
+
+def _dedupe_intent_changes(
+    changes: list[MetadataDesignIntentChange],
+) -> list[MetadataDesignIntentChange]:
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[MetadataDesignIntentChange] = []
+    for change in changes:
+        key = (
+            change.action,
+            _standard_identifier(change.target or ""),
+            _safe_text(change.value),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(change)
+    return deduped
+
+
+def _table_name_from_message(message: str) -> str:
+    text = _safe_text(message)
+    folded = _normalize_match_text(text)
+    for terms, table_name, _description in KNOWN_TABLE_TERMS:
+        if any(_normalize_match_text(term) in folded for term in terms):
+            return table_name
+    explicit = re.search(r"\b([A-Za-z][A-Za-z0-9_]{2,})\b", text)
+    if explicit and "_" in explicit.group(1):
+        return _standard_identifier(explicit.group(1))
+    return ""
+
+
+def _table_description_from_message(message: str) -> str:
+    text = _safe_text(message)
+    folded = _normalize_match_text(text)
+    for terms, _table_name, description in KNOWN_TABLE_TERMS:
+        if any(_normalize_match_text(term) in folded for term in terms):
+            return description
+    return text[:200]
+
+
+def _field_from_change(change: MetadataDesignIntentChange) -> MetadataDesignFieldInput:
+    source = change.target or change.value or change.summary
+    field = _field_input_from_text(source)
+    if change.value and change.action in {"ADD_FIELD", "CHANGE_TYPE"}:
+        field = field.model_copy(update={"db_type": _safe_text(change.value)})
+    return field
+
+
+def _upsert_field(
+    fields: list[MetadataDesignFieldInput],
+    field: MetadataDesignFieldInput,
+) -> list[MetadataDesignFieldInput]:
+    replacement = _sanitized_field_input(field)
+    replaced = False
+    next_fields: list[MetadataDesignFieldInput] = []
+    for existing in fields:
+        if _field_matches_target(existing, replacement.name or replacement.description or ""):
+            next_fields.append(
+                existing.model_copy(
+                    update={
+                        "name": replacement.name or existing.name,
+                        "description": replacement.description or existing.description,
+                        "db_type": replacement.db_type or existing.db_type,
+                        "nullable": replacement.nullable
+                        if replacement.nullable is not None
+                        else existing.nullable,
+                    }
+                )
+            )
+            replaced = True
+        else:
+            next_fields.append(existing)
+    if not replaced:
+        next_fields.append(replacement)
+    return _dedupe_field_inputs(next_fields)[:20]
+
+
+def _field_matches_target(field: MetadataDesignFieldInput, target: str) -> bool:
+    target_text = _safe_text(target)
+    if not target_text:
+        return False
+    target_known = _known_field_for_text(target_text)
+    target_names = {
+        _standard_identifier(target_text),
+        _normalize_match_text(target_text),
+    }
+    if target_known:
+        target_names.add(target_known[0])
+        target_names.add(_normalize_match_text(target_known[1]))
+
+    candidates = {
+        _standard_identifier(field.name or ""),
+        _standard_identifier(field.description or ""),
+        _normalize_match_text(field.name),
+        _normalize_match_text(field.description),
+    }
+    field_known = _known_field_for_text(" ".join([field.name or "", field.description or ""]))
+    if field_known:
+        candidates.add(field_known[0])
+        candidates.add(_normalize_match_text(field_known[1]))
+    return bool((target_names - {""}) & (candidates - {""}))
+
+
+def _known_fields_from_text(text: str) -> list[MetadataDesignFieldInput]:
+    folded = _normalize_match_text(text)
+    matches: list[tuple[int, str, str, str]] = []
+    for terms, name, description, db_type in KNOWN_FIELD_TERMS:
+        positions = [
+            folded.find(_normalize_match_text(term))
+            for term in terms
+            if _normalize_match_text(term) and _normalize_match_text(term) in folded
+        ]
+        if positions:
+            matches.append((min(positions), name, description, db_type))
+    matches.sort(key=lambda item: item[0])
+
+    fields: list[MetadataDesignFieldInput] = []
+    seen: set[str] = set()
+    for _position, name, description, db_type in matches:
+        if name == "ADDR" and "CUSTOMER_ADDR" in seen:
+            continue
+        if name == "MEMO" and "DLV_MEMO" in seen:
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        fields.append(
+            MetadataDesignFieldInput(
+                name=name,
+                description=description,
+                dbType=db_type,
+            )
+        )
+    return fields
+
+
+def _field_input_from_text(text: str) -> MetadataDesignFieldInput:
+    source = _safe_text(text)
+    known = _known_field_for_text(source)
+    if known:
+        return MetadataDesignFieldInput(
+            name=known[0],
+            description=known[1],
+            dbType=known[2],
+        )
+    return MetadataDesignFieldInput(
+        name=_safe_text(source),
+        description=_safe_text(source),
+        dbType=_type_hint_from_message(source) or None,
+    )
+
+
+def _known_field_for_text(text: str) -> tuple[str, str, str] | None:
+    folded = _normalize_match_text(text)
+    if not folded:
+        return None
+    for terms, name, description, db_type in KNOWN_FIELD_TERMS:
+        if any(_normalize_match_text(term) in folded for term in terms):
+            return name, description, db_type
+    return None
+
+
+def _type_hint_from_message(text: str) -> str:
+    folded = _normalize_match_text(text)
+    if any(token in folded for token in ("datetime", "timestamp", "일시")):
+        return "DATETIME2"
+    if any(token in folded for token in DATE_TYPE_HINTS):
+        return "VARCHAR(8)"
+    if any(token in folded for token in ("amount", "amt", "금액")):
+        return "NUMERIC(18,3)"
+    if any(token in folded for token in ("quantity", "qty", "수량")):
+        return "NUMERIC(18,5)"
+    if any(token in folded for token in ("count", "cnt", "건수")):
+        return "INT"
+    if any(token in folded for token in ("code", "코드")):
+        return "VARCHAR(20)"
+    return ""
+
+
+def _field_text_from_fragment(fragment: str) -> str:
+    text = _safe_text(fragment).strip(" .:()[]{}")
+    if not text:
+        return ""
+    folded = _normalize_match_text(text)
+    blocked_terms = (
+        "table",
+        "create",
+        "make",
+        "generate",
+        "테이블",
+        "생성",
+        "만들",
+        "목적",
+    )
+    if any(term in folded for term in blocked_terms):
+        return ""
+    text = re.sub(r"\b(field|column|type)\b", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"(필드|컬럼|타입|으로|로|은|는|을|를|이|가)$", "", text).strip()
+    return text[:80]
+
+
+def _remove_target_text(message: str) -> str:
+    text = _safe_text(message)
+    for token in REMOVE_HINTS:
+        index = _normalize_match_text(text).find(_normalize_match_text(token))
+        if index > 0:
+            return text[:index].strip()
+    return text
+
+
+def _dedupe_field_inputs(
+    fields: list[MetadataDesignFieldInput],
+) -> list[MetadataDesignFieldInput]:
+    seen: set[str] = set()
+    deduped: list[MetadataDesignFieldInput] = []
+    for field in fields:
+        sanitized = _sanitized_field_input(field)
+        key = (
+            _standard_identifier(sanitized.name or "")
+            or _standard_identifier(sanitized.description or "")
+            or _normalize_match_text(sanitized.description)
+        )
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(sanitized)
+    return deduped
+
+
+def _sanitized_field_input(field: MetadataDesignFieldInput) -> MetadataDesignFieldInput:
+    return MetadataDesignFieldInput(
+        name=_safe_text(field.name) or None,
+        description=_safe_text(field.description) or None,
+        dbType=_safe_text(field.db_type) or None,
+        nullable=field.nullable,
+    )
 
 
 def _run_design_planner(
@@ -777,24 +1419,15 @@ def _assistant_message(
 
 
 def _normalized_field_inputs(request: MetadataDesignRunRequest) -> list[MetadataDesignFieldInput]:
-    fields = [
-        field
-        for field in request.design_inputs.fields
-        if field.name or field.description or field.db_type
-    ]
+    fields = _fields_from_request_or_message(request)
     if fields:
         return fields[:20]
-    inferred = []
-    for part in MESSAGE_SPLIT_RE.split(request.message):
-        text = part.strip()
-        if not text or len(text) > 80:
-            continue
-        if any(keyword in text.lower() for keyword in ("table", "create", "make")):
-            continue
-        inferred.append(MetadataDesignFieldInput(name=text))
-    if inferred:
-        return inferred[:20]
-    return [MetadataDesignFieldInput(name="FIELD", description=request.message[:200])]
+    return [
+        MetadataDesignFieldInput(
+            name="FIELD",
+            description=_safe_text(request.message[:200]) or "Unspecified field",
+        )
+    ]
 
 
 def _best_column_candidate(
@@ -827,6 +1460,9 @@ def _standardize_field(
     policy: dict[str, Any],
 ) -> tuple[str, str, list[str]]:
     source = _safe_text(field.name or field.description or f"FIELD_{index + 1}")
+    known = _known_field_for_text(source)
+    if known:
+        return known[0], field.db_type or known[2], []
     normalized = _standard_identifier(source)
     reasons: list[str] = []
     if not normalized or _contains_non_ascii(source):
@@ -858,18 +1494,21 @@ def _standard_table_name(
 
 
 def _name_from_description(source: str, policy: dict[str, Any], index: int) -> str:
-    text = source.lower()
-    if any(token in text for token in ("datetime", "timestamp")):
+    known = _known_field_for_text(source)
+    if known:
+        return known[0]
+    text = _normalize_match_text(source)
+    if any(token in text for token in ("datetime", "timestamp", "일시")):
         return f"FIELD_{index + 1}_DTM"
-    if any(token in text for token in ("date",)):
+    if any(token in text for token in ("date", "날짜", "일자")):
         return f"FIELD_{index + 1}_DT"
-    if any(token in text for token in ("amount", "amt")):
+    if any(token in text for token in ("amount", "amt", "금액")):
         return f"FIELD_{index + 1}_AMT"
-    if any(token in text for token in ("quantity", "qty")):
+    if any(token in text for token in ("quantity", "qty", "수량")):
         return f"FIELD_{index + 1}_QTY"
-    if any(token in text for token in ("code",)):
+    if any(token in text for token in ("code", "코드")):
         return f"FIELD_{index + 1}_CD"
-    if any(token in text for token in ("name",)):
+    if any(token in text for token in ("name", "이름", "명")):
         return f"FIELD_{index + 1}_NM"
     preferred = policy.get("preferred_term_columns", {})
     if "VAL" in preferred:
@@ -878,23 +1517,26 @@ def _name_from_description(source: str, policy: dict[str, Any], index: int) -> s
 
 
 def _type_from_text(source: str, policy: dict[str, Any]) -> str:
-    text = source.lower()
+    known = _known_field_for_text(source)
+    if known:
+        return known[2]
+    text = _normalize_match_text(source)
     class_words = policy.get("column_naming", {}).get("class_words", {})
-    if any(token in text for token in ("datetime", "timestamp")):
+    if any(token in text for token in ("datetime", "timestamp", "일시")):
         return str(class_words.get("DTM", {}).get("standard_type") or "DATETIME2")
-    if any(token in text for token in ("date",)):
+    if any(token in text for token in ("date", "날짜", "일자")):
         return str(class_words.get("DT", {}).get("standard_type") or "VARCHAR(8)")
-    if any(token in text for token in ("amount", "amt")):
+    if any(token in text for token in ("amount", "amt", "금액")):
         return str(class_words.get("AMT", {}).get("standard_type") or "NUMERIC(18,3)")
-    if any(token in text for token in ("quantity", "qty")):
+    if any(token in text for token in ("quantity", "qty", "수량")):
         return str(class_words.get("QTY", {}).get("standard_type") or "NUMERIC(18,5)")
-    if any(token in text for token in ("count", "cnt")):
+    if any(token in text for token in ("count", "cnt", "건수")):
         return str(class_words.get("CNT", {}).get("standard_type") or "INT")
     if any(token in text for token in ("id", "identifier")):
         return str(class_words.get("ID", {}).get("standard_type") or "UNIQUEIDENTIFIER")
-    if any(token in text for token in ("code",)):
+    if any(token in text for token in ("code", "코드")):
         return str(class_words.get("CD", {}).get("standard_type") or "VARCHAR(20)")
-    if any(token in text for token in ("description", "desc")):
+    if any(token in text for token in ("description", "desc", "설명", "메모")):
         return str(class_words.get("DESC", {}).get("standard_type") or "VARCHAR(500)")
     return "VARCHAR(500)"
 

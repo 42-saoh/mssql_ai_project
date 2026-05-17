@@ -1,0 +1,39 @@
+scenario_id: metadata_design_natural_language_chat_p40_v1
+description: Natural-language metadata design chat and multi-turn refinement.
+newDesignRequest:
+  dbProfileId: master
+  message: 고객명, 주소, 주문일이 있는 주문 요청 테이블을 만들어줘.
+  options:
+    llmProfileId: openai_fast_test
+    useLlmAnalysis: false
+    generateDtoDraft: true
+    conversationMode: NEW_DESIGN
+refineRequest:
+  dbProfileId: master
+  message: 배송메모 추가하고, 주문일은 날짜 타입으로 바꿔줘.
+  conversationId: metadata_design_conv_p40_eval
+  options:
+    llmProfileId: openai_fast_test
+    useLlmAnalysis: false
+    generateDtoDraft: true
+    conversationMode: REFINE_CURRENT
+expected:
+  tableName: PPM_ORDER_REQ
+  newDesignFields:
+    - CUSTOMER_NM
+    - ADDR
+    - ORDER_DT
+  refineColumns:
+    - DLV_MEMO
+    - ORDER_DT
+  tableScriptField: createTableScriptPreview
+  dtoArtifactType: DTO_DRAFT
+  requiredAppliedActions:
+    - ADD_FIELD
+    - CHANGE_TYPE
+  forbiddenFragments:
+    - rowData
+    - rawPrompt
+    - rawProvider
+    - DDL_DRAFT
+    - DTO_MODEL_DRAFT

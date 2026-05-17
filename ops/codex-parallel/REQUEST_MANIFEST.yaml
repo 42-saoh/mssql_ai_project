@@ -15,6 +15,7 @@ basis:
   - spec/eval/p27_dependency_evidence_tooling_contract.yaml
   - spec/eval/p36_output_renewal_contract.yaml
   - spec/eval/p38_metadata_design_chat_contract.yaml
+  - spec/eval/p40_metadata_design_natural_language_chat_contract.yaml
   - spec/validation/validation_rules.yaml
   - spec/policy/project_ai_java_mybatis_generation_policy.yaml
   - spec/policy/platform_db_standardization_rules_for_ai.json
@@ -1284,4 +1285,79 @@ waves:
         verify:
           - make test-core
           - make test-web-smoke
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E, P38A, P38B, P38C, P38D, P38E]
+  - wave: W17_P40_metadata_design_natural_language_chat
+    description: P40 metadata design natural-language chat sequential implementation
+    tracks:
+      - id: P40A
+        branch: feat/p40a-metadata-design-nl-contract-assets
+        worktree: ../wt/p40a-metadata-design-nl-contract-assets
+        prompt: prompts/40a_metadata_design_nl_contract_assets.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P38E]
+        target_paths:
+          - tasks/0040-metadata-design-natural-language-chat.md
+          - spec/eval/p40_metadata_design_natural_language_chat_contract.yaml
+          - spec/openapi/
+          - ops/codex-parallel/
+          - tests/contract/
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_openapi_and_env_sample_assets.py tests/contract/test_p40_metadata_design_natural_language_chat_prompt_assets.py"
+      - id: P40B
+        branch: feat/p40b-metadata-design-intent-refine
+        worktree: ../wt/p40b-metadata-design-intent-refine
+        prompt: prompts/40b_metadata_design_backend_intent_refine.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P40A]
+        target_paths:
+          - apps/api/
+          - tests/unit/api/
+          - tests/integration/api/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/api/test_metadata_design_service.py tests/integration/api/test_api_workflow_routes.py"
+      - id: P40C
+        branch: feat/p40c-metadata-design-eval-generation
+        worktree: ../wt/p40c-metadata-design-eval-generation
+        prompt: prompts/40c_metadata_design_eval_generation.md
+        role: template_engineer
+        skills: [mcp-tooling-design, contract-to-code, eval-fixture-authoring]
+        depends_on: [P40B]
+        target_paths:
+          - apps/api/
+          - fixtures/eval/
+          - tests/eval/
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p40_metadata_design_natural_language_chat.py"
+      - id: P40D
+        branch: feat/p40d-metadata-design-chat-ui
+        worktree: ../wt/p40d-metadata-design-chat-ui
+        prompt: prompts/40d_metadata_design_web_chat_ui.md
+        role: platform_worker
+        skills: [contract-to-code, browser-automation-smoke]
+        depends_on: [P40C]
+        target_paths:
+          - apps/web/
+          - tests/unit/web/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/web/test_p14_product_ui_static.py"
+          - make test-web-smoke
+      - id: P40E
+        branch: feat/p40e-metadata-design-docs-readiness
+        worktree: ../wt/p40e-metadata-design-docs-readiness
+        prompt: prompts/40e_metadata_design_docs_readiness.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P40D]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - EVAL_SPEC.md
+          - apps/api/README.md
+          - apps/web/README.md
+          - tests/
+        verify:
+          - make test-core
+          - make test-web-smoke
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E, P38A, P38B, P38C, P38D, P38E, P40A, P40B, P40C, P40D, P40E]

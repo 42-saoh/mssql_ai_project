@@ -642,6 +642,10 @@ class MetadataDesignOptions(ApiModel):
     ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
     max_candidates: int = Field(default=5, ge=1, le=10, alias="maxCandidates")
     generate_dto_draft: bool = Field(default=True, alias="generateDtoDraft")
+    conversation_mode: Literal["NEW_DESIGN", "REFINE_CURRENT"] = Field(
+        default="NEW_DESIGN",
+        alias="conversationMode",
+    )
 
 
 class MetadataDesignRunRequest(ApiModel):
@@ -712,8 +716,53 @@ class MetadataTableProposal(ApiModel):
     review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
 
 
+class MetadataDesignIntentChange(ApiModel):
+    action: Literal[
+        "ADD_FIELD",
+        "REMOVE_FIELD",
+        "RENAME_FIELD",
+        "CHANGE_TYPE",
+        "CHANGE_NULLABILITY",
+        "SET_TABLE_NAME",
+        "SET_TABLE_DESCRIPTION",
+        "REVIEW_REQUIRED",
+    ]
+    target: str | None = None
+    value: str | None = None
+    summary: str
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataDesignInterpretedIntent(ApiModel):
+    intent: Literal["CREATE_TABLE", "REFINE_TABLE", "UNKNOWN"] = "UNKNOWN"
+    table_name_candidate: str | None = Field(default=None, alias="tableNameCandidate")
+    table_description: str | None = Field(default=None, alias="tableDescription")
+    fields: list[MetadataDesignFieldInput] = Field(default_factory=list)
+    modifications: list[MetadataDesignIntentChange] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0, le=1)
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataDesignAppliedChange(ApiModel):
+    action: str
+    target: str | None = None
+    summary: str
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
 class MetadataDesignResult(ApiModel):
     assistant_message: str = Field(alias="assistantMessage")
+    interpreted_intent: MetadataDesignInterpretedIntent = Field(
+        default_factory=MetadataDesignInterpretedIntent,
+        alias="interpretedIntent",
+    )
+    applied_changes: list[MetadataDesignAppliedChange] = Field(
+        default_factory=list,
+        alias="appliedChanges",
+    )
     related_metadata: list[MetadataRelatedMetadata] = Field(
         default_factory=list,
         alias="relatedMetadata",

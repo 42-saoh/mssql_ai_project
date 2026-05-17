@@ -404,11 +404,18 @@ def test_openapi_metadata_design_chat_contract_matches_p38_surface() -> None:
         "default"
     ] is True
     assert schemas["MetadataDesignOptions"]["properties"]["maxCandidates"]["maximum"] == 10
+    assert schemas["MetadataDesignOptions"]["properties"]["conversationMode"] == {
+        "type": "string",
+        "enum": ["NEW_DESIGN", "REFINE_CURRENT"],
+        "default": "NEW_DESIGN",
+    }
 
     result_schema = schemas["MetadataDesignResult"]
     result_properties = set(result_schema["properties"])
     assert {
         "assistantMessage",
+        "interpretedIntent",
+        "appliedChanges",
         "relatedMetadata",
         "standardizationMappings",
         "tableProposal",
@@ -418,6 +425,15 @@ def test_openapi_metadata_design_chat_contract_matches_p38_surface() -> None:
         "reviewMarkers",
         "caveats",
     } <= result_properties
+    assert result_schema["properties"]["interpretedIntent"] == {
+        "$ref": "#/components/schemas/MetadataDesignInterpretedIntent"
+    }
+    assert result_schema["properties"]["appliedChanges"]["items"] == {
+        "$ref": "#/components/schemas/MetadataDesignAppliedChange"
+    }
+    assert schemas["MetadataDesignInterpretedIntent"]["properties"]["modifications"][
+        "items"
+    ] == {"$ref": "#/components/schemas/MetadataDesignIntentChange"}
     table_schema = schemas["MetadataTableProposal"]
     assert "createTableScriptPreview" in table_schema["properties"]
     assert "DDL_DRAFT" not in str(result_schema)

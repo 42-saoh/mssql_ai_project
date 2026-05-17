@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { StatusPill } from "@/components/status-pill";
 import type {
-  MetadataDesignFieldInput,
   MetadataDesignRunRequest,
   MetadataDesignRunStatus,
   MetadataProfile,
@@ -17,6 +16,8 @@ interface DesignError {
   message: string;
 }
 
+type ConversationMode = "NEW_DESIGN" | "REFINE_CURRENT";
+
 export function MetadataDesignChat({
   defaultDbProfileId,
   profiles,
@@ -26,16 +27,13 @@ export function MetadataDesignChat({
 }>) {
   const [dbProfileId, setDbProfileId] = useState(defaultDbProfileId);
   const [message, setMessage] = useState(
-    "Create an order request table with customer name, customer address, and order date.",
+    "고객명, 주소, 주문일이 있는 주문 요청 테이블을 만들어줘.",
   );
   const [tableNameHint, setTableNameHint] = useState("PPM_ORDER_REQ");
-  const [tableDescription, setTableDescription] = useState("Order request header");
-  const [fields, setFields] = useState<MetadataDesignFieldInput[]>([
-    { name: "CUSTOMER_NM", description: "Customer name" },
-    { name: "CUSTOMER_ADDR", description: "Customer address" },
-    { name: "ORDER_DT", description: "Order date" },
-  ]);
+  const [conversationMode, setConversationMode] =
+    useState<ConversationMode>("NEW_DESIGN");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [runs, setRuns] = useState<MetadataDesignRunStatus[]>([]);
   const [run, setRun] = useState<MetadataDesignRunStatus | null>(null);
   const [error, setError] = useState<DesignError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,9 +46,7 @@ export function MetadataDesignChat({
       message,
       conversationId,
       designInputs: {
-        tableNameHint,
-        tableDescription,
-        fields: fields.filter((field) => field.name || field.description || field.dbType),
+        tableNameHint: tableNameHint || undefined,
       },
       options: {
         useLlmAnalysis: true,
@@ -58,9 +54,10 @@ export function MetadataDesignChat({
         llmProfileId: "openai_sp_semantic_analysis",
         maxCandidates: 5,
         generateDtoDraft: true,
+        conversationMode,
       },
     }),
-    [conversationId, dbProfileId, fields, message, tableDescription, tableNameHint],
+    [conversationId, conversationMode, dbProfileId, message, tableNameHint],
   );
 
   useEffect(() => {
@@ -76,7 +73,6 @@ export function MetadataDesignChat({
   async function submitDesign() {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), DESIGN_TIMEOUT_MS);
-    setRun(null);
     setError(null);
     setElapsedSeconds(0);
     setStartedAt(Date.now());
@@ -106,6 +102,9 @@ export function MetadataDesignChat({
       }
       if (nextRun.status === "SUCCEEDED" && nextRun.result) {
         setRun(nextRun);
+        setRuns((current) => [...current, nextRun]);
+        setConversationMode("REFINE_CURRENT");
+        setMessage("배송메모 추가하고, 주문일은 날짜 타입으로 바꿔줘.");
       } else {
         throw {
           code: nextRun.error?.code ?? "METADATA_DESIGN_RUN_FAILED",
@@ -120,21 +119,9 @@ export function MetadataDesignChat({
     }
   }
 
-  function addField() {
-    setFields((current) => [...current, { name: "", description: "", dbType: "" }]);
-  }
-
-  function updateField(index: number, patch: MetadataDesignFieldInput) {
-    setFields((current) =>
-      current.map((field, fieldIndex) =>
-        fieldIndex === index ? { ...field, ...patch } : field,
-      ),
-    );
-  }
-
   return (
     <div className="stack">
-      <section className="panel">
+      <section className="panel metadata-chat-panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Metadata design chat</p>
@@ -142,77 +129,95 @@ export function MetadataDesignChat({
           </div>
           <span className="quiet-label">durable run</span>
         </div>
-        <div className="form-grid">
-          <label>
-            <span>Metadata profile</span>
-            <select value={dbProfileId} onChange={(event) => setDbProfileId(event.target.value)}>
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.id} - {profile.database}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Table name hint</span>
-            <input value={tableNameHint} onChange={(event) => setTableNameHint(event.target.value)} />
-          </label>
-          <label className="form-field--wide">
-            <span>Message</span>
-            <textarea value={message} onChange={(event) => setMessage(event.target.value)} />
-          </label>
-          <label className="form-field--wide">
-            <span>Table description</span>
-            <input
-              value={tableDescription}
-              onChange={(event) => setTableDescription(event.target.value)}
-            />
-          </label>
-        </div>
-        <fieldset className="metadata-design-fields">
-          <legend>Fields</legend>
-          <div className="metadata-design-field-grid">
-            {fields.map((field, index) => (
-              <div className="metadata-design-field-row" key={`field-${index}`}>
-                <input
-                  aria-label={`Field ${index + 1} name`}
-                  value={field.name ?? ""}
-                  onChange={(event) => updateField(index, { name: event.target.value })}
-                  placeholder="FIELD_NM"
-                />
-                <input
-                  aria-label={`Field ${index + 1} description`}
-                  value={field.description ?? ""}
-                  onChange={(event) => updateField(index, { description: event.target.value })}
-                  placeholder="Field description"
-                />
-                <input
-                  aria-label={`Field ${index + 1} type`}
-                  value={field.dbType ?? ""}
-                  onChange={(event) => updateField(index, { dbType: event.target.value })}
-                  placeholder="VARCHAR(100)"
-                />
+
+        <div className="metadata-chat-layout">
+          <div className="metadata-chat-transcript" aria-label="Metadata design conversation">
+            {runs.length === 0 ? (
+              <div className="chat-message chat-message--assistant">
+                <strong>Assistant</strong>
+                <p>Ready for a metadata-backed design preview.</p>
+              </div>
+            ) : null}
+            {runs.map((item) => (
+              <div className="chat-turn" key={item.runId}>
+                <div className="chat-message chat-message--user">
+                  <strong>User</strong>
+                  <p>{item.request.message}</p>
+                </div>
+                {item.result ? (
+                  <div className="chat-message chat-message--assistant">
+                    <strong>Assistant</strong>
+                    <p>{item.result.assistantMessage}</p>
+                    <small>{item.result.tableProposal.tableName}</small>
+                  </div>
+                ) : null}
               </div>
             ))}
+            {isLoading ? (
+              <div className="chat-message chat-message--assistant" aria-live="polite">
+                <strong>Assistant</strong>
+                <p>{`Designing ${elapsedSeconds}s`}</p>
+              </div>
+            ) : null}
           </div>
-          <div className="form-actions">
-            <button type="button" className="secondary-action" onClick={addField}>
-              Add field
-            </button>
-            <button type="button" onClick={submitDesign} disabled={isLoading}>
-              {isLoading ? `Designing ${elapsedSeconds}s` : "Generate preview"}
-            </button>
+
+          <div className="metadata-chat-compose">
+            <div className="form-grid">
+              <label>
+                <span>Metadata profile</span>
+                <select
+                  value={dbProfileId}
+                  onChange={(event) => setDbProfileId(event.target.value)}
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.id} - {profile.database}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Conversation mode</span>
+                <select
+                  value={conversationMode}
+                  onChange={(event) => setConversationMode(event.target.value as ConversationMode)}
+                >
+                  <option value="NEW_DESIGN">New design</option>
+                  <option value="REFINE_CURRENT">Refine current</option>
+                </select>
+              </label>
+              <label className="form-field--wide">
+                <span>Table name hint</span>
+                <input
+                  value={tableNameHint}
+                  onChange={(event) => setTableNameHint(event.target.value)}
+                />
+              </label>
+              <label className="form-field--wide">
+                <span>Message</span>
+                <textarea
+                  className="metadata-chat-input"
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="form-actions">
+              <button type="button" onClick={submitDesign} disabled={isLoading}>
+                {isLoading ? `Designing ${elapsedSeconds}s` : "Send message"}
+              </button>
+            </div>
+            {conversationId ? <p className="quiet-label">Conversation {conversationId}</p> : null}
+            {error ? (
+              <div className="blocker-list" aria-live="polite">
+                <article className="blocker-row">
+                  <strong>{error.code}</strong>
+                  <span>{error.message}</span>
+                </article>
+              </div>
+            ) : null}
           </div>
-        </fieldset>
-        {conversationId ? <p className="quiet-label">Conversation {conversationId}</p> : null}
-        {error ? (
-          <div className="blocker-list" aria-live="polite">
-            <article className="blocker-row">
-              <strong>{error.code}</strong>
-              <span>{error.message}</span>
-            </article>
-          </div>
-        ) : null}
+        </div>
       </section>
 
       {run?.result ? <MetadataDesignResultView run={run} /> : null}
@@ -246,14 +251,47 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
             <dd>{run.runId}</dd>
           </div>
           <div>
-            <dt>Metadata</dt>
-            <dd>{result.relatedMetadata.length}</dd>
+            <dt>Intent</dt>
+            <dd>{result.interpretedIntent.intent}</dd>
           </div>
           <div>
             <dt>Columns</dt>
             <dd>{result.tableProposal.columns.length}</dd>
           </div>
         </dl>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Interpreted intent</p>
+            <h2>{result.interpretedIntent.tableNameCandidate ?? result.tableProposal.tableName}</h2>
+          </div>
+          <StatusPill
+            value={String(Math.round(result.interpretedIntent.confidence * 100))}
+            label="confidence"
+          />
+        </div>
+        <div className="metadata-result-list">
+          {result.appliedChanges.map((change, index) => (
+            <article
+              className="metadata-result-row"
+              key={`${change.action}-${change.target ?? index}`}
+            >
+              <div>
+                <p className="eyebrow">{change.action}</p>
+                <h3>{change.target ?? "review target"}</h3>
+                <p>{change.summary}</p>
+              </div>
+              <div className="metadata-result-detail">
+                <StatusPill
+                  value={change.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+                  label={change.reviewRequired ? "review" : "changed"}
+                />
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="panel">

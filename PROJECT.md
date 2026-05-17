@@ -31,6 +31,20 @@ and keeps `production_ready: false`: no row-data query, procedure execution, bus
 DB DDL/DML, automatic DDL apply, source deployment, raw prompt/provider response
 storage, or secret storage is authorized.
 
+## P40 Metadata Design Natural-Language Chat Baseline
+
+P40 keeps the P38 durable run API and storage model but changes `/metadata/design`
+into a natural-language chat experience. Users can describe a new table or a
+follow-up refinement in Korean or English. The API returns sanitized
+`interpretedIntent` and `appliedChanges` alongside metadata evidence,
+`createTableScriptPreview`, and optional `DTO_DRAFT` preview.
+
+`conversationMode=NEW_DESIGN` starts a new proposal. `REFINE_CURRENT` uses the latest
+successful run in the same conversation as the baseline and applies add/remove/type
+change instructions; missing or ambiguous baselines remain `REVIEW_REQUIRED`.
+`designInputs.fields` remains API-compatible, but the Web UI no longer exposes field
+row inputs. P40 adds no new DDL and keeps `production_ready: false`.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

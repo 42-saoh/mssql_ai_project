@@ -48,6 +48,28 @@ The result contains `createTableScriptPreview` and an optional `DTO_DRAFT` previ
 manual-review preview only: it is not persisted as an artifact, does not revive a retired DDL output
 contract, and is never applied by the platform.
 
+## P40 Metadata Design Natural-Language Chat Architecture
+
+P40 keeps the P38 endpoints and v10 `METADATA_DESIGN_RUNS` JSON storage, and adds
+chat-oriented intent structure to the result. `MetadataDesignOptions.conversationMode`
+selects `NEW_DESIGN` or `REFINE_CURRENT`; `MetadataDesignResult.interpretedIntent`
+contains sanitized intent, table/field candidates, modifications, confidence, and
+`REVIEW_REQUIRED` reasons, while `appliedChanges` records deterministic add/remove/type-change
+effects.
+
+The service first extracts a bounded natural-language intent. When LLM planning is unavailable
+or disabled, deterministic Korean/English fallback supports examples such as
+`고객명, 주소, 주문일이 있는 주문 요청 테이블`, `배송메모 추가`, and
+`주문일은 날짜 타입으로 바꿔`. Extracted field candidates then flow through the same read-only
+MCP evidence path (`search_columns`, `search_tables`, `find_similar_tables`,
+`get_table_schema`) and standardization policy as P38.
+
+For `REFINE_CURRENT`, the API reads the latest `SUCCEEDED` run in the conversation and uses its
+`tableProposal` as the baseline. If no baseline exists or the natural-language instruction is
+ambiguous, the service does not silently start over; it returns caveats and review markers. The Web
+surface removes field-row input controls, leaving message, metadata profile, conversation mode, and
+optional table name hint. No apply/execute/deploy/publish control is introduced.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates

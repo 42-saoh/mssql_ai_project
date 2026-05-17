@@ -184,11 +184,20 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert "api.listMetadataProfiles()" in page
     assert 'fetch("/api/metadata/design-runs"' in component
     assert "/api/metadata/design-runs/${encodeURIComponent(nextRun.runId)}" in component
+    assert "metadata-chat-transcript" in component
+    assert "Conversation mode" in component
+    assert "conversationMode" in component
+    assert "interpretedIntent" in component
+    assert "appliedChanges" in component
     assert "createTableScriptPreview" in component
     assert "Download SQL preview" in component
     assert "Download DTO draft" in component
     assert "new Blob([content]" in component
+    assert "metadata-design-field-row" not in component
+    assert "Add field" not in component
+    assert "Field 1 name" not in component
     assert "api.submitMetadataDesignRun(payload)" in submit_route
+    assert "conversationMode: request.options?.conversationMode ?? \"NEW_DESIGN\"" in submit_route
     assert "api.getMetadataDesignRun(runId)" in poll_route
     assert "api.getMetadataDesignConversation(conversationId)" in conversation_route
     assert "submitMetadataDesignRun" in portal_api

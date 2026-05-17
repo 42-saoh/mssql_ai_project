@@ -42,6 +42,7 @@ function normalizeRequest(request: MetadataDesignRunRequest): MetadataDesignRunR
       llmProfileId: request.options?.llmProfileId ?? "openai_sp_semantic_analysis",
       maxCandidates,
       generateDtoDraft: request.options?.generateDtoDraft ?? true,
+      conversationMode: request.options?.conversationMode ?? "NEW_DESIGN",
     },
   };
 }

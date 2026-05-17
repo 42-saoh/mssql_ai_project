@@ -184,6 +184,8 @@ def test_metadata_design_builds_table_script_and_dto_from_metadata(
     assert response["dtoDraft"]["fileName"] == "PpmCustomerOrderDto.java"
     assert "public class PpmCustomerOrderDto" in response["dtoDraft"]["content"]
     assert "private String customerNm;" in response["dtoDraft"]["content"]
+    assert response["interpretedIntent"]["intent"] == "CREATE_TABLE"
+    assert response["appliedChanges"][0]["action"] == "ADD_FIELD"
     assert response["relatedMetadata"]
     assert response["standardizationMappings"][0]["source"] == "METADATA"
     assert response["reviewRequired"] is True
@@ -232,6 +234,170 @@ def test_metadata_design_no_candidates_uses_policy_with_review_required(
     assert "REVIEW_REQUIRED" in response["tableProposal"]["createTableScriptPreview"]
     assert response["dtoDraft"]["reviewRequired"] is True
     assert "METADATA_DESIGN_NO_SIMILAR_METADATA" in response["caveats"]
+
+
+def test_metadata_design_extracts_korean_natural_language_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = DesignSpyRegistry(empty=True)
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    service = MetadataDesignChatService(model_gateway=FakeModelGateway())
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "고객명, 주소, 주문일이 있는 주문 요청 테이블을 만들어줘.",
+                "options": {"useLlmAnalysis": False, "generateDtoDraft": True},
+            }
+        )
+    ).to_response()
+
+    intent = response["interpretedIntent"]
+    assert intent["intent"] == "CREATE_TABLE"
+    assert intent["tableNameCandidate"] == "PPM_ORDER_REQ"
+    assert [field["name"] for field in intent["fields"]] == [
+        "CUSTOMER_NM",
+        "ADDR",
+        "ORDER_DT",
+    ]
+    assert response["tableProposal"]["tableName"] == "PPM_ORDER_REQ"
+    assert "[CUSTOMER_NM]" in response["tableProposal"]["createTableScriptPreview"]
+    assert "[ORDER_DT]" in response["tableProposal"]["createTableScriptPreview"]
+    assert response["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+
+
+def test_metadata_design_refine_current_applies_latest_successful_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = DesignSpyRegistry(empty=True)
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    repository = MemoryWorkflowRepository()
+    repository.create_metadata_design_run(
+        run_id="metadata_design_run_baseline",
+        conversation_id="metadata_design_conv_refine",
+        request={
+            "dbProfileId": "master",
+            "message": "고객명, 주소, 주문일이 있는 주문 요청 테이블",
+            "conversationId": "metadata_design_conv_refine",
+        },
+    )
+    repository.mark_metadata_design_run_succeeded(
+        "metadata_design_run_baseline",
+        result={
+            "assistantMessage": "baseline",
+            "tableProposal": {
+                "schema": "dbo",
+                "tableName": "PPM_ORDER_REQ",
+                "tableDescription": "Order request table",
+                "columns": [
+                    {
+                        "name": "CUSTOMER_NM",
+                        "dataType": "VARCHAR(100)",
+                        "nullable": True,
+                        "description": "Customer name",
+                        "source": "STANDARD_POLICY",
+                        "evidenceRefs": ["policy:fixture"],
+                        "reviewRequired": True,
+                        "reviewReasons": ["REVIEW_REQUIRED: fixture"],
+                    },
+                    {
+                        "name": "ADDR",
+                        "dataType": "VARCHAR(500)",
+                        "nullable": True,
+                        "description": "Address",
+                        "source": "STANDARD_POLICY",
+                        "evidenceRefs": ["policy:fixture"],
+                        "reviewRequired": True,
+                        "reviewReasons": ["REVIEW_REQUIRED: fixture"],
+                    },
+                    {
+                        "name": "ORDER_DT",
+                        "dataType": "VARCHAR(500)",
+                        "nullable": True,
+                        "description": "Order date",
+                        "source": "STANDARD_POLICY",
+                        "evidenceRefs": ["policy:fixture"],
+                        "reviewRequired": True,
+                        "reviewReasons": ["REVIEW_REQUIRED: fixture"],
+                    },
+                ],
+                "createTableScriptPreview": "-- baseline",
+                "evidenceRefs": ["policy:fixture"],
+                "reviewRequired": True,
+                "reviewReasons": ["REVIEW_REQUIRED: fixture"],
+            },
+        },
+    )
+    service = MetadataDesignChatService(
+        model_gateway=FakeModelGateway(),
+        repository=repository,
+    )
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "배송메모 추가하고, 주문일은 날짜 타입으로 바꿔줘.",
+                "conversationId": "metadata_design_conv_refine",
+                "options": {
+                    "conversationMode": "REFINE_CURRENT",
+                    "useLlmAnalysis": False,
+                    "generateDtoDraft": True,
+                },
+            }
+        )
+    ).to_response()
+
+    columns = {
+        column["name"]: column["dataType"]
+        for column in response["tableProposal"]["columns"]
+    }
+    assert response["interpretedIntent"]["intent"] == "REFINE_TABLE"
+    assert {"ADD_FIELD", "CHANGE_TYPE"} <= {
+        change["action"] for change in response["appliedChanges"]
+    }
+    assert columns["DLV_MEMO"] == "VARCHAR(500)"
+    assert columns["ORDER_DT"] == "VARCHAR(8)"
+    assert "METADATA_DESIGN_REFINE_BASELINE_REQUIRED" not in response["caveats"]
+
+
+def test_metadata_design_refine_current_without_baseline_marks_review_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = DesignSpyRegistry(empty=True)
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    service = MetadataDesignChatService(
+        model_gateway=FakeModelGateway(),
+        repository=MemoryWorkflowRepository(),
+    )
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "배송메모 추가",
+                "conversationId": "metadata_design_conv_missing",
+                "options": {
+                    "conversationMode": "REFINE_CURRENT",
+                    "useLlmAnalysis": False,
+                },
+            }
+        )
+    ).to_response()
+
+    assert "METADATA_DESIGN_REFINE_BASELINE_REQUIRED" in response["caveats"]
+    assert response["appliedChanges"][0]["reviewRequired"] is True
+    assert response["reviewRequired"] is True
 
 
 def test_metadata_design_redacts_secret_like_input_from_result(

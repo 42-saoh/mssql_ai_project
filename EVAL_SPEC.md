@@ -34,6 +34,17 @@ P38 validates durable metadata design chat runs:
 - field names, descriptions, and table hints drive read-only metadata lookup and standardization.
 - `createTableScriptPreview` is present, review-required, and non-executable.
 - optional `DTO_DRAFT` preview is returned inside the design result and is not workflow artifact persistence.
+
+## P40 Metadata Design Natural-Language Chat Eval Contract
+
+P40 validates the natural-language and multi-turn layer on top of P38:
+
+- OpenAPI exposes `conversationMode`, `interpretedIntent`, and `appliedChanges`.
+- Korean and English natural-language messages produce sanitized field candidates and evidence-backed previews.
+- `REFINE_CURRENT` applies add/remove/type-change instructions to the latest successful conversation baseline.
+- Missing baseline or ambiguous refinement remains `REVIEW_REQUIRED` and does not silently start a new design.
+- Web static and smoke tests verify chat transcript/input, no field row UI, and no apply/execute/deploy/publish controls.
+- Generated table scripts remain `createTableScriptPreview`; `DDL_DRAFT` and other retired tokens remain forbidden.
 - no raw prompt/provider response, row data, full SQL/SP definition, procedure execution output,
   automatic DDL apply, publish, deploy, or retired artifact type revival is allowed.
 

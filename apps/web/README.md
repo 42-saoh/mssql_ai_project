@@ -11,7 +11,7 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `/knowledge/assets/[assetId]` and `/knowledge/assets/[assetId]/versions/[versionId]/facts` - sanitized knowledge asset version and fact graph views.
 - `/artifacts/[artifactId]` - artifact preview, copy/download controls, evidence refs, caveats, sanitized trace, and explicit validation trigger.
 - `/metadata/search` - read-only metadata identity/evidence search plus client-side async metadata analysis.
-- `/metadata/design` - chat-style metadata design run UI for durable table script previews and DTO_DRAFT previews.
+- `/metadata/design` - natural-language metadata design chat UI for durable table script previews and DTO_DRAFT previews.
 - `/metadata/dependencies` - read-only dependency closure and reference resolver diagnostics.
 
 ## SP Request Progress
@@ -60,9 +60,10 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 
 ## Metadata Design Chat
 
-- `/metadata/design` submits natural-language field, description, and table hints to the Web proxy `POST /api/metadata/design-runs`, which calls public `POST /api/v1/metadata/design-runs`.
+- `/metadata/design` submits natural-language table design and refinement messages to the Web proxy `POST /api/metadata/design-runs`, which calls public `POST /api/v1/metadata/design-runs`.
+- The visible form is chat-focused: metadata profile, `NEW_DESIGN`/`REFINE_CURRENT` mode, optional table name hint, and message. The legacy field row UI is not rendered.
 - The client polls `GET /api/metadata/design-runs/{runId}` and can reopen a durable thread with `GET /api/metadata/design-conversations/{conversationId}`.
-- Results render related metadata candidates, standardization mappings, a `createTableScriptPreview`, and a non-persisted `DTO_DRAFT` preview stored only in the design run result JSON.
+- Results render interpreted intent, applied changes, related metadata candidates, standardization mappings, a `createTableScriptPreview`, and a non-persisted `DTO_DRAFT` preview stored only in the design run result JSON.
 - SQL and Java downloads are client Blob previews. They do not use workflow artifact storage, artifact download helpers, source repository writes, deploy, publish, execute, or apply flows.
 - The page invokes no row-data tools and never renders raw prompts, raw provider responses, full SQL/SP definitions, procedure execution output, secrets, or apply controls.
 

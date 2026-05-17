@@ -335,11 +335,17 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
 
 - `POST /api/v1/metadata/design-runs` starts a durable metadata design chat run. The request
   accepts `message`, optional `conversationId`, `designInputs.tableNameHint`,
-  `designInputs.tableDescription`, and `designInputs.fields[]`.
+  `designInputs.tableDescription`, API-compatible `designInputs.fields[]`, and
+  `options.conversationMode`.
+- `conversationMode=NEW_DESIGN` extracts table and field candidates from natural-language
+  messages. `conversationMode=REFINE_CURRENT` uses the latest `SUCCEEDED` run in the
+  conversation as baseline and applies add/remove/type-change instructions. Missing baselines or
+  ambiguous instructions remain `REVIEW_REQUIRED`.
 - The service uses read-only MCP metadata lookup (`search_columns`, `search_tables`,
   `find_similar_tables`, and bounded table schema evidence) plus
   `platform_db_standardization_rules_for_ai.json` to produce `standardizationMappings`,
-  `tableProposal.createTableScriptPreview`, and optional `dtoDraft`.
+  sanitized `interpretedIntent`, `appliedChanges`, `tableProposal.createTableScriptPreview`, and
+  optional `dtoDraft`.
 - `GET /api/v1/metadata/design-runs/{runId}` polls one run. `GET
   /api/v1/metadata/design-conversations/{conversationId}` returns recent runs in that
   conversation.

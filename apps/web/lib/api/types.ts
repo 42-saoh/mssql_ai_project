@@ -587,6 +587,7 @@ export interface MetadataDesignOptions {
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   maxCandidates?: number;
   generateDtoDraft?: boolean;
+  conversationMode?: "NEW_DESIGN" | "REFINE_CURRENT";
 }
 
 export interface MetadataDesignRunRequest {
@@ -639,8 +640,46 @@ export interface MetadataTableProposal {
   reviewReasons: string[];
 }
 
+export interface MetadataDesignIntentChange {
+  action:
+    | "ADD_FIELD"
+    | "REMOVE_FIELD"
+    | "RENAME_FIELD"
+    | "CHANGE_TYPE"
+    | "CHANGE_NULLABILITY"
+    | "SET_TABLE_NAME"
+    | "SET_TABLE_DESCRIPTION"
+    | "REVIEW_REQUIRED";
+  target?: string | null;
+  value?: string | null;
+  summary: string;
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataDesignInterpretedIntent {
+  intent: "CREATE_TABLE" | "REFINE_TABLE" | "UNKNOWN";
+  tableNameCandidate?: string | null;
+  tableDescription?: string | null;
+  fields: MetadataDesignFieldInput[];
+  modifications: MetadataDesignIntentChange[];
+  confidence: number;
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataDesignAppliedChange {
+  action: string;
+  target?: string | null;
+  summary: string;
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
 export interface MetadataDesignResult {
   assistantMessage: string;
+  interpretedIntent: MetadataDesignInterpretedIntent;
+  appliedChanges: MetadataDesignAppliedChange[];
   relatedMetadata: MetadataRelatedMetadata[];
   standardizationMappings: MetadataStandardizationMapping[];
   tableProposal: MetadataTableProposal;
