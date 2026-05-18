@@ -1,0 +1,59 @@
+contract_id: p46_rollback_removal_decision@0.1.0
+phase: P46
+title: Framework Runtime Rollback Removal Decision
+supersedes_active_question_from: p44_framework_runtime_adoption@0.1.0
+decision: retain_limited_rollback_not_active_default
+decision_date: 2026-05-19
+
+runtime_default:
+  openai_remote_generation_runtime: openai_agents_sdk
+  openai_remote_orchestrator: langgraph
+  pgpt_generation_runtime: responses_httpx
+  emergency_rollback_runtime: responses_httpx
+
+rollback_status:
+  responses_httpx_active_default_for_openai: false
+  responses_httpx_retained_for_pgpt: true
+  responses_httpx_retained_for_emergency_rollback: true
+  baseline_responses_framework_adapter_active_default: false
+  baseline_responses_framework_adapter_retained_for_tests: true
+  deletion_approved: false
+
+rationale:
+  summary: >
+    P44 moved the OpenAI provider default runtime to OpenAI Agents SDK plus
+    LangGraph orchestration. The Responses/httpx gateway is no longer the active
+    OpenAI default, but it remains necessary for P-GPT compatibility and an
+    emergency rollback boundary until separate cleanup evidence approves removal.
+  p45_live_evidence_status: optional_gate_available_not_required_for_default_suite
+  generated_artifacts_production_ready: false
+
+deletion_blockers:
+  - P45 live OpenAI Agents evidence may be skipped in default environments.
+  - P-GPT structured-output compatibility through OpenAI Agents SDK is not proven.
+  - Emergency rollback has operational value while P44 is newly adopted.
+  - Removing rollback code requires a separate post-P46 cleanup contract and gate.
+
+policy:
+  no_public_api_change: true
+  no_db_schema_change: true
+  no_ui_change: true
+  no_public_mcp_route_change: true
+  no_public_artifact_type_change: true
+  no_generated_source_apply: true
+  no_deploy: true
+  no_row_data_access: true
+  no_procedure_execution: true
+  no_automatic_conversion_approval: true
+  store_raw_prompt: false
+  store_raw_provider_response: false
+  store_raw_sp_definition: false
+  store_raw_guide_body: false
+  store_row_data: false
+
+verification:
+  required_default_gate:
+    - make test PYTEST_ARGS="tests/contract/test_p45_p46_framework_runtime_gates.py tests/contract/test_p44_framework_runtime_adoption_assets.py tests/unit/agent_runtime/test_openai_agents_framework_adapter.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p44_framework_runtime_replay.py"
+    - git diff --check
+  optional_live_gate:
+    - P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=openai OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"

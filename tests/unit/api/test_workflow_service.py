@@ -9,6 +9,8 @@ from ai_agent_runtime import (
     BaselineResponsesFrameworkAdapter,
     FakeAiGenerationFrameworkAdapter,
     FakeModelGateway,
+    LangGraphAiDraftPackOrchestrator,
+    OpenAIAgentsFrameworkAdapter,
 )
 from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
@@ -101,6 +103,42 @@ def _fixture_request(outputs: list[str] | None = None) -> SPAnalysisRequest:
             "options": {"includeEvidenceRefs": True},
         }
     )
+
+
+def test_workflow_service_defaults_openai_remote_to_agents_and_langgraph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "1")
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "openai")
+    monkeypatch.delenv("AI_GENERATION_RUNTIME", raising=False)
+    monkeypatch.delenv("AI_DRAFT_PACK_ORCHESTRATOR", raising=False)
+
+    service = WorkflowService(
+        MemoryWorkflowRepository(),
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(),
+    )
+
+    assert isinstance(service.ai_generation_framework_adapter, OpenAIAgentsFrameworkAdapter)
+    assert isinstance(service.ai_draft_pack_orchestrator, LangGraphAiDraftPackOrchestrator)
+
+
+def test_workflow_service_keeps_pgpt_on_responses_httpx_rollback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "1")
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
+    monkeypatch.delenv("AI_GENERATION_RUNTIME", raising=False)
+    monkeypatch.delenv("AI_DRAFT_PACK_ORCHESTRATOR", raising=False)
+
+    service = WorkflowService(
+        MemoryWorkflowRepository(),
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(),
+    )
+
+    assert service.ai_generation_framework_adapter is None
+    assert service.ai_draft_pack_orchestrator is None
 
 
 def _passed_sp_analysis_content() -> str:

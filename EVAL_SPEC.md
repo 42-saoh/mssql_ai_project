@@ -217,6 +217,51 @@ Passing criteria:
   `make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"`.
 - `git diff --check` passes.
 
+## P44 Framework Runtime Adoption Eval Contract
+
+P44 supersedes P43 as the active framework direction. It adopts OpenAI Agents SDK
+for OpenAI remote `AiJavaMyBatisDraftPack.v0.1` generation and LangGraph for the
+AI Draft Pack stage graph while keeping generated artifacts `production_ready:
+false` / `productionReady=false`.
+
+Acceptance checks:
+- `spec/eval/p44_framework_runtime_adoption_contract.yaml` declares
+  `framework_adoption_decision: adopt`, `primary_generation_runtime:
+  openai_agents_sdk`, `orchestration_runtime: langgraph`, and
+  `generated_artifacts_production_ready: false`.
+- P43 remains historical evidence with `superseded_by:
+  p44_framework_runtime_adoption@0.1.0`; it is not rewritten as if P43 had
+  adopted a real framework.
+- Dependency/import tests prove `openai-agents==0.17.2` and `langgraph==1.2.0`
+  are available in the Python 3.14 test image.
+- OpenAI Agents SDK adapter tests prove tracing is disabled, sensitive-data
+  capture is excluded, schema failures are sanitized, and storage summaries keep
+  only hashes/counts/stage names/model ids/token counts/failure codes.
+- LangGraph tests prove stage order, repair routing, no persistent checkpointer,
+  and sanitized transient graph state.
+- Fixture replay tests run ManageBond and a synthetic complex SP through mocked
+  OpenAI Agents SDK output plus actual LangGraph orchestration. ManageBond remains
+  a benchmark only, not a production-runtime answer key.
+- Two-DTO collapse, missing operation coverage, missing `REVIEW_REQUIRED`,
+  unsafe trace, invalid schema, source apply, deploy, procedure execution, and
+  row data access remain blockers.
+
+Passing criteria:
+- `make test PYTEST_ARGS="tests/contract/test_p44_framework_runtime_adoption_assets.py tests/unit/agent_runtime/test_openai_agents_framework_adapter.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p44_framework_runtime_replay.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"` passes.
+- `git diff --check` passes.
+
+P45/P46 continuation:
+- P45 adds `tests/eval/test_p45_openai_agents_live_gate.py` as an optional
+  evidence gate. It runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`,
+  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai`, `OPENAI_API_KEY`, and
+  OpenAI Agents trace redaction env locks. The default suite skips it without
+  OpenAI, PPM, PLF, row data, or procedure execution.
+- P46 adds `spec/eval/p46_rollback_removal_decision.yaml`. The decision is
+  `retain_limited_rollback_not_active_default`: OpenAI defaults to OpenAI Agents
+  SDK plus LangGraph, while `responses_httpx` remains only for P-GPT and
+  emergency rollback. Deletion is not approved.
+- `make test PYTEST_ARGS="tests/contract/test_p45_p46_framework_runtime_gates.py tests/eval/test_p45_openai_agents_live_gate.py"` validates the disabled/default gate and contract assets without live calls.
+
 ## P35 Source Context Eval Gate
 
 Required checks for Copilot-style SP analysis:

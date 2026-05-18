@@ -33,12 +33,14 @@ from ai_agent_runtime import (
     SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
     SP_OPERATION_PLANNER_PROMPT_VERSION,
     AgentRunPayload,
+    AiDraftPackOrchestrator,
     AiGenerationFrameworkAdapter,
     ModelGateway,
     ModelGatewayError,
     ModelInvocationRecord,
     attach_planner_metrics_to_ai_tool_evidence,
     build_ai_java_mybatis_draft_pack_run,
+    build_framework_runtime_from_env,
     build_model_gateway_from_env,
     build_semantic_analysis_run,
     build_sp_operation_model_run,
@@ -163,11 +165,20 @@ class WorkflowService:
         metadata_gateway: MetadataGateway | None = None,
         model_gateway: ModelGateway | None = None,
         ai_generation_framework_adapter: AiGenerationFrameworkAdapter | None = None,
+        ai_draft_pack_orchestrator: AiDraftPackOrchestrator | None = None,
     ) -> None:
         self.repository = repository
         self.metadata_gateway = metadata_gateway or McpMetadataGateway()
         self.model_gateway = model_gateway or build_model_gateway_from_env()
+        if (
+            ai_generation_framework_adapter is None
+            and ai_draft_pack_orchestrator is None
+        ):
+            runtime = build_framework_runtime_from_env(model_gateway=self.model_gateway)
+            ai_generation_framework_adapter = runtime.framework_adapter
+            ai_draft_pack_orchestrator = runtime.ai_draft_pack_orchestrator
         self.ai_generation_framework_adapter = ai_generation_framework_adapter
+        self.ai_draft_pack_orchestrator = ai_draft_pack_orchestrator
         self.ai_tool_orchestrator = AiToolOrchestrator(model_gateway=self.model_gateway)
         self.platform_tool_orchestrator = PlatformToolOrchestrator(
             model_gateway=self.model_gateway,
@@ -1310,21 +1321,35 @@ class WorkflowService:
                 "AI Draft Pack planner has no sanitized evidence refs.",
             )
         try:
-            run_payload = build_ai_java_mybatis_draft_pack_run(
-                target_ref=target_ref,
-                sanitized_draft_context=sanitized_context,
-                expected_inventory=expected_inventory,
-                quality_gates=quality_gates,
-                model_gateway=self.model_gateway,
-                profile_id=str(request_record.options.get("llmProfileId") or ""),
-                allowed_evidence_refs=allowed_refs,
-                framework_adapter=self.ai_generation_framework_adapter,
-                run_file_inventory_stage=self.ai_generation_framework_adapter is not None,
-            )
+            if self.ai_draft_pack_orchestrator is not None:
+                run_payload = self.ai_draft_pack_orchestrator.build_run(
+                    target_ref=target_ref,
+                    sanitized_draft_context=sanitized_context,
+                    expected_inventory=expected_inventory,
+                    quality_gates=quality_gates,
+                    model_gateway=self.model_gateway,
+                    profile_id=str(request_record.options.get("llmProfileId") or ""),
+                    allowed_evidence_refs=allowed_refs,
+                )
+            else:
+                run_payload = build_ai_java_mybatis_draft_pack_run(
+                    target_ref=target_ref,
+                    sanitized_draft_context=sanitized_context,
+                    expected_inventory=expected_inventory,
+                    quality_gates=quality_gates,
+                    model_gateway=self.model_gateway,
+                    profile_id=str(request_record.options.get("llmProfileId") or ""),
+                    allowed_evidence_refs=allowed_refs,
+                    framework_adapter=self.ai_generation_framework_adapter,
+                    run_file_inventory_stage=self.ai_generation_framework_adapter is not None,
+                )
             quality_report = validate_ai_java_mybatis_draft_pack_quality(
                 run_payload.structured_output,
             )
-            if quality_report.status != ValidationStatus.PASSED:
+            if (
+                quality_report.status != ValidationStatus.PASSED
+                and self.ai_draft_pack_orchestrator is None
+            ):
                 failed_run_payload = run_payload
                 run_payload, quality_report = self._repair_ai_draft_pack_quality(
                     target_ref=target_ref,

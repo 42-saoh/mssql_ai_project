@@ -43,5 +43,17 @@ inventory contract, reconstructs persisted ManageBond draft artifacts into
 complex-SP guard so candidate success is not ManageBond-specific. P43F records the decision as
 `pilot` with `production_ready: false` and the current Responses/httpx gateway as rollback.
 
+P44 adds `test_p44_framework_runtime_replay.py` for actual framework runtime adoption. It runs
+mocked OpenAI Agents SDK output through the real `OpenAIAgentsFrameworkAdapter` and actual
+LangGraph stage graph, then reruns the same P42 static validator on ManageBond and a synthetic
+complex SP. P44 keeps generated artifacts `production_ready: false`, uses ManageBond as a
+benchmark only, and still forbids procedure execution, row data access, source apply, deploy, raw
+prompt/provider response storage, raw SP/guide storage, and LangGraph checkpoint persistence.
+
+P45 adds `test_p45_openai_agents_live_gate.py` as an optional live confidence gate. It skips by
+default and runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`, OpenAI remote env, and OpenAI Agents
+trace redaction locks. P46 records the rollback decision: OpenAI stays on OpenAI Agents SDK plus
+LangGraph, while `responses_httpx` remains only for P-GPT and emergency rollback.
+
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.

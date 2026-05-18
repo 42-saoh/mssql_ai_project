@@ -51,6 +51,17 @@ candidate framework adapters, and keeps the P42 static validator as the authorit
 artifact is persisted. P43F records a `pilot` decision only; the existing Responses/httpx path
 remains rollback and no framework dependency or runtime switch is introduced.
 
+P44 changes the internal AI Draft Pack runtime but still does not change generation artifact types
+or generated source locations. OpenAI remote generation now uses OpenAI Agents SDK behind the
+adapter contract, and LangGraph orchestrates `file_inventory`, `file_content`, `quality_gate`,
+`repair`, and `final` in process with no persistent checkpointer. Generated Java/MyBatis artifacts
+remain draft-only with `productionReady=false`; source apply, deploy, procedure execution, row data
+access, raw prompt/provider response storage, and raw SP/guide storage remain forbidden.
+
+P45/P46 do not change this package boundary. P45 live evidence is optional and sanitized, and P46
+keeps `responses_httpx` only for P-GPT compatibility plus emergency rollback while OpenAI defaults
+to OpenAI Agents SDK plus LangGraph.
+
 Retired outputs are no longer public generation targets:
 
 - `DTO_MODEL_DRAFT`

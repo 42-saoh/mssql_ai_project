@@ -230,6 +230,42 @@ does not switch the production workflow to a framework; the existing
 Responses/httpx gateway and `BaselineResponsesFrameworkAdapter` remain the
 rollback path.
 
+## P44 Real Framework Runtime Adoption Architecture
+
+P44 supersedes P43 as the active framework direction. The internal
+`FrameworkRuntimeConfig.v0.1` factory selects OpenAI Agents SDK for OpenAI remote
+AI Draft Pack generation and keeps `responses_httpx` only for P-GPT compatibility
+or emergency rollback. This is an internal dependency construction decision, not
+a public request flag.
+
+`OpenAIAgentsFrameworkAdapter` implements the existing
+`AiGenerationFrameworkAdapter.v0.1` stage methods with real OpenAI Agents SDK
+calls. It validates every output against `AiJavaMyBatisDraftPack.v0.1` and stores
+only hashes, counts, stage names, model/profile ids, token counts when available,
+and sanitized failure codes. Tracing is disabled with `set_tracing_disabled(True)`
+and run config sensitive-data capture disabled before any stage execution.
+
+`LangGraphAiDraftPackOrchestrator` owns the AI Draft Pack stage graph:
+`file_inventory -> file_content -> quality_gate -> repair -> final`. It compiles
+without a persistent checkpointer, so LangGraph state is transient in-process
+state only. The platform workflow repository remains the single persistence
+boundary for sanitized AgentRun summaries and draft artifacts.
+
+P44 does not add a public API, DB schema, UI surface, public MCP route, or public
+artifact type. Generated artifacts remain draft-only with `productionReady=false`
+and `generated_artifacts_production_ready: false`. Procedure execution, row-data
+access, business DB DDL/DML, source apply, deploy, raw prompt/provider response
+storage, raw SP definition storage, raw guide body storage, and automatic
+conversion approval remain forbidden.
+
+P45 is an explicit optional live gate around the same internal architecture. It
+runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`, OpenAI remote env, and trace
+redaction locks, and it uses sanitized fixture context rather than live PPM row
+data or procedure execution. P46 keeps the architecture default on OpenAI Agents
+SDK plus LangGraph for OpenAI while retaining `responses_httpx` solely for P-GPT
+compatibility and emergency rollback until a separate cleanup gate approves
+deletion.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates

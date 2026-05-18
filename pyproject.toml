@@ -15,7 +15,9 @@ dependencies = [
   "pyyaml>=6.0.2",
   "httpx>=0.28.1",
   "PyJWT[crypto]>=2.10.1",
-  "python-tds>=1.17.1"
+  "python-tds>=1.17.1",
+  "openai-agents==0.17.2",
+  "langgraph==1.2.0"
 ]
 
 [project.optional-dependencies]

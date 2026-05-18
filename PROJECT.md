@@ -154,6 +154,33 @@ procedure execution, automatic DDL/DML apply, generated-source apply, deploy, ra
 prompt/provider response storage, raw SP storage, raw guide body storage, or
 secret storage.
 
+## P44 Real Framework Runtime Adoption
+
+P44 supersedes the active P43 `pilot` direction with actual internal runtime
+adoption for AI Draft Pack generation. P43 remains historical readiness evidence;
+P44 is the active contract in `spec/eval/p44_framework_runtime_adoption_contract.yaml`.
+
+For OpenAI remote runs, `FrameworkRuntimeConfig.v0.1` selects OpenAI Agents SDK as
+the primary generation runtime and LangGraph as the in-process stage orchestrator
+for `AiJavaMyBatisDraftPack.v0.1`. The graph runs `file_inventory`, `file_content`,
+`quality_gate`, `repair`, and `final` with no LangGraph persistent checkpointer;
+the existing platform DB remains the only persisted workflow store. P-GPT and
+emergency rollback stay on `responses_httpx`.
+
+P44 changes the internal runtime only. It adds no public API, DB schema, UI,
+public MCP route, or public artifact type. Generated artifacts stay draft-only:
+`generated_artifacts_production_ready: false` and `productionReady=false` remain
+required. Procedure execution, row data access, source apply, deploy, automatic
+conversion approval, raw prompt storage, raw provider response storage, raw SP
+definition storage, raw guide body storage, and secret storage remain forbidden.
+
+P45 adds the optional live evidence gate `P44_OPENAI_AGENTS_LIVE_GATE=1` for the
+adopted OpenAI Agents runtime. It requires OpenAI remote env plus trace redaction
+locks and uses sanitized fixture inputs only; it does not require live PPM, row
+data, or procedure execution. P46 records that `responses_httpx` is no longer the
+active OpenAI default, but remains retained for P-GPT compatibility and emergency
+rollback; code deletion is not approved in this slice.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

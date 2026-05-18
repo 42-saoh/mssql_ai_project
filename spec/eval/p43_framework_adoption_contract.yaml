@@ -2,6 +2,11 @@ contract_id: p43_framework_adoption@0.1.0
 phase: P43
 title: Framework Adoption Readiness Contract
 production_ready: false
+superseded_by: p44_framework_runtime_adoption@0.1.0
+supersession_note: >
+  P43 remains historical pilot/readiness evidence. P44 is the active contract for
+  actual framework runtime adoption and must not be backported into P43 as if
+  P43 had adopted a real framework.
 
 purpose:
   summary: >

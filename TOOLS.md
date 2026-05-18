@@ -124,6 +124,43 @@ rollback path is the current Responses/httpx gateway plus
 `BaselineResponsesFrameworkAdapter`; it does not authorize framework dependency
 installation or a production runtime switch.
 
+## P44 Framework Runtime Adoption Verification Notes
+
+P44 is the active real framework runtime adoption track. It installs
+`openai-agents==0.17.2` and `langgraph==1.2.0`, adds
+`FrameworkRuntimeConfig.v0.1`, routes OpenAI remote AI Draft Pack generation
+through OpenAI Agents SDK, and runs the draft-pack stages through LangGraph.
+P-GPT and emergency rollback remain `responses_httpx`.
+
+The default P44 static gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p44_framework_runtime_adoption_assets.py"
+```
+
+The targeted P44 regression gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p44_framework_runtime_adoption_assets.py tests/unit/agent_runtime/test_openai_agents_framework_adapter.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p44_framework_runtime_replay.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+```
+
+P44 keeps generated artifacts draft-only with `production_ready: false` /
+`productionReady=false`. Tests must not execute stored procedures, query row
+data, apply source, deploy, store raw prompts/provider responses, store raw SP
+definitions, or store LangGraph checkpointer state.
+
+The optional P45 live evidence gate is disabled by default:
+
+```powershell
+P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=openai OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+```
+
+P45 must use sanitized fixture inputs and store sanitized invocation summaries
+only. It must not require live PPM, row data, procedure execution, source apply,
+or deploy. P46 records that the OpenAI default path has moved to OpenAI Agents
+SDK plus LangGraph; `responses_httpx` remains for P-GPT and emergency rollback
+only, not as the active OpenAI default.
+
 ## 목적
 
 이 문서는 로컬 개발에서 사용할 도구, 명령 규약, MCP 구성을 정의한다.  

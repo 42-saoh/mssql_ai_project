@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import os
 import re
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace as dataclass_replace
+import time
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 from typing import Any, Protocol
 
+from ai_agent_runtime.ai_draft_pack import (
+    AiJavaMyBatisDraftPackOutput,
+    parse_ai_java_mybatis_draft_pack_json,
+    validate_ai_java_mybatis_draft_pack_output,
+)
 from ai_agent_runtime.gateway import ModelGateway, ModelGatewayError
 from ai_agent_runtime.models import (
     AgentRunStatus,
@@ -16,8 +24,12 @@ from ai_agent_runtime.models import (
 from ai_agent_runtime.storage_safety import storage_safety_findings
 
 AI_GENERATION_FRAMEWORK_ADAPTER_VERSION = "AiGenerationFrameworkAdapter.v0.1"
+FRAMEWORK_RUNTIME_SUMMARY_VERSION = "FrameworkRuntimeSummary.v0.1"
 P43_FRAMEWORK_RAW_TRACE_BLOCKED = "P43_FRAMEWORK_RAW_TRACE_BLOCKED"
 P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED = "P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED"
+P44_OPENAI_AGENTS_ADAPTER_FAILED = "P44_OPENAI_AGENTS_ADAPTER_FAILED"
+P44_OPENAI_AGENTS_SDK_UNAVAILABLE = "P44_OPENAI_AGENTS_SDK_UNAVAILABLE"
+P44_OPENAI_AGENTS_TRACE_POLICY = "P44_OPENAI_AGENTS_TRACE_POLICY"
 
 _ADAPTER_COMPONENT = "ai_generation_framework_adapter"
 _FRAMEWORK_STAGES = frozenset({"file_inventory", "file_content", "repair"})
@@ -296,6 +308,319 @@ class FakeAiGenerationFrameworkAdapter:
             provider_request_id=None,
             component_invocations=(component,),
         )
+
+
+@dataclass(frozen=True)
+class OpenAIAgentsFrameworkAdapter:
+    adapter_id: str = "openai_agents_sdk"
+    candidate_framework: str = "openai_agents_sdk"
+    runner: Callable[[Any, str, Any], Any] | None = None
+    agent_factory: Callable[[AiGenerationFrameworkAdapterRequest], Any] | None = None
+
+    def plan_file_inventory(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        validate_framework_tool_context(request)
+        return self._run_agent_stage(request=request, stage="file_inventory")
+
+    def draft_file_content(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        validate_framework_tool_context(request)
+        return self._run_agent_stage(request=request, stage="file_content")
+
+    def repair_draft_pack(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        validate_framework_tool_context(request)
+        return self._run_agent_stage(request=request, stage="repair")
+
+    def summarize_trace(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+        stage: str,
+        status: str,
+        events: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        return summarize_framework_trace(
+            adapter_id=self.adapter_id,
+            candidate_framework=self.candidate_framework,
+            target_ref=request.target_ref,
+            stage=stage,
+            status=status,
+            events=events,
+        )
+
+    def _run_agent_stage(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+        stage: str,
+    ) -> ModelInvocationRecord:
+        _enforce_openai_agents_trace_policy()
+        started = time.monotonic()
+        try:
+            result = self._run_agents_sdk(request=request)
+            structured_output = _coerce_openai_agents_output(
+                result,
+                allowed_evidence_refs=request.allowed_evidence_refs,
+            )
+        except ModelGatewayError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - diagnostics must stay sanitized
+            raise ModelGatewayError(
+                "OpenAI Agents SDK adapter failed before producing a valid draft pack.",
+                code=P44_OPENAI_AGENTS_ADAPTER_FAILED,
+                provider_error={
+                    "type": "openai_agents_framework_adapter",
+                    "code": P44_OPENAI_AGENTS_ADAPTER_FAILED,
+                    "stage": _safe_stage(stage),
+                    "errorClass": exc.__class__.__name__,
+                },
+            ) from exc
+        latency_ms = int((time.monotonic() - started) * 1000)
+        token_usage = _openai_agents_token_usage(result)
+        component = self.summarize_trace(
+            request=request,
+            stage=stage,
+            status=AgentRunStatus.SUCCEEDED.value,
+            events=(
+                {
+                    "eventType": "openai_agents_sdk_run",
+                    "componentId": f"openai_agents_{stage}",
+                    "outputHash": stable_json_hash(structured_output),
+                    "fileCount": len(structured_output.get("files", [])),
+                    "latencyMs": latency_ms,
+                    "inputTokens": token_usage.get("inputTokens", 0),
+                    "outputTokens": token_usage.get("outputTokens", 0),
+                    "totalTokens": token_usage.get("totalTokens", 0),
+                },
+            ),
+        )
+        return ModelInvocationRecord(
+            provider="openai-agents-sdk",
+            model=request.profile.model,
+            model_profile_id=request.profile.profile_id,
+            model_registry_ref=request.profile.registry_ref,
+            reasoning_effort=request.profile.reasoning_effort,
+            prompt_version=request.prompt.prompt_version,
+            output_schema_version=request.prompt.output_schema_version,
+            input_hash=request.prompt.input_hash,
+            prompt_hash=request.prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage=token_usage,
+            latency_ms=latency_ms,
+            provider_request_id=_openai_agents_provider_request_id(result),
+            component_invocations=(component,),
+        )
+
+    def _run_agents_sdk(self, *, request: AiGenerationFrameworkAdapterRequest) -> Any:
+        if self.runner is not None:
+            return self.runner(
+                self._build_agent(request=request),
+                request.prompt.user_prompt,
+                _openai_agents_run_config(),
+            )
+        agents = _agents_sdk()
+        return agents.Runner.run_sync(
+            self._build_agent(request=request),
+            request.prompt.user_prompt,
+            run_config=_openai_agents_run_config(),
+        )
+
+    def _build_agent(self, *, request: AiGenerationFrameworkAdapterRequest) -> Any:
+        if self.agent_factory is not None:
+            return self.agent_factory(request)
+        agents = _agents_sdk()
+        return agents.Agent(
+            name=f"AI Draft Pack {request.stage}",
+            instructions=request.prompt.system_prompt,
+            model=request.profile.model,
+            output_type=AiJavaMyBatisDraftPackOutput,
+        )
+
+
+def _enforce_openai_agents_trace_policy() -> None:
+    os.environ["OPENAI_AGENTS_DISABLE_TRACING"] = "1"
+    os.environ["OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA"] = "0"
+    os.environ["OPENAI_AGENTS_DONT_LOG_MODEL_DATA"] = "1"
+    os.environ["OPENAI_AGENTS_DONT_LOG_TOOL_DATA"] = "1"
+    agents = _agents_sdk()
+    disable_tracing = getattr(agents, "set_tracing_disabled", None)
+    if not callable(disable_tracing):
+        raise ModelGatewayError(
+            "OpenAI Agents SDK tracing policy hook is unavailable.",
+            code=P44_OPENAI_AGENTS_TRACE_POLICY,
+            provider_error={
+                "type": "openai_agents_trace_policy",
+                "code": P44_OPENAI_AGENTS_TRACE_POLICY,
+                "traceDisabled": "false",
+            },
+        )
+    disable_tracing(True)
+
+
+def _openai_agents_run_config() -> Any:
+    agents = _agents_sdk()
+    run_config = getattr(agents, "RunConfig", None)
+    if run_config is None:
+        raise ModelGatewayError(
+            "OpenAI Agents SDK RunConfig is unavailable.",
+            code=P44_OPENAI_AGENTS_TRACE_POLICY,
+            provider_error={
+                "type": "openai_agents_trace_policy",
+                "code": P44_OPENAI_AGENTS_TRACE_POLICY,
+                "traceDisabled": "false",
+            },
+        )
+    try:
+        return run_config(
+            tracing_disabled=True,
+            trace_include_sensitive_data=False,
+        )
+    except TypeError:
+        return run_config(tracing_disabled=True)
+
+
+def _agents_sdk() -> Any:
+    try:
+        import agents  # type: ignore[import-not-found]
+    except Exception as exc:  # noqa: BLE001 - import diagnostics must stay sanitized
+        raise ModelGatewayError(
+            "OpenAI Agents SDK dependency is unavailable.",
+            code=P44_OPENAI_AGENTS_SDK_UNAVAILABLE,
+            provider_error={
+                "type": "openai_agents_framework_adapter",
+                "code": P44_OPENAI_AGENTS_SDK_UNAVAILABLE,
+                "dependency": "openai-agents",
+            },
+        ) from exc
+    return agents
+
+
+def _coerce_openai_agents_output(
+    result: Any,
+    *,
+    allowed_evidence_refs: Sequence[str],
+) -> dict[str, Any]:
+    output = getattr(result, "final_output", result)
+    try:
+        if isinstance(output, AiJavaMyBatisDraftPackOutput):
+            model = output
+        elif hasattr(output, "to_storage_dict") and callable(output.to_storage_dict):
+            model = validate_ai_java_mybatis_draft_pack_output(
+                output.to_storage_dict(),
+                allowed_evidence_refs=allowed_evidence_refs,
+            )
+        elif hasattr(output, "model_dump") and callable(output.model_dump):
+            model = validate_ai_java_mybatis_draft_pack_output(
+                output.model_dump(by_alias=True, mode="json"),
+                allowed_evidence_refs=allowed_evidence_refs,
+            )
+        elif isinstance(output, Mapping):
+            model = validate_ai_java_mybatis_draft_pack_output(
+                output,
+                allowed_evidence_refs=allowed_evidence_refs,
+            )
+        elif isinstance(output, str):
+            model = parse_ai_java_mybatis_draft_pack_json(
+                output,
+                allowed_evidence_refs=allowed_evidence_refs,
+            )
+        else:
+            raise TypeError(output.__class__.__name__)
+    except Exception as exc:  # noqa: BLE001 - raw adapter output must not be stored
+        raise ModelGatewayError(
+            "OpenAI Agents SDK output failed AiJavaMyBatisDraftPack validation.",
+            code="OPENAI_AI_DRAFT_PACK_INVALID",
+            provider_error={
+                "type": "openai_agents_framework_adapter",
+                "code": "OPENAI_AI_DRAFT_PACK_INVALID",
+                "outputHash": _safe_output_hash(output),
+                "errorClass": exc.__class__.__name__,
+            },
+        ) from exc
+    return model.to_storage_dict()
+
+
+def _safe_output_hash(output: Any) -> str:
+    if isinstance(output, Mapping):
+        return stable_json_hash(output)
+    if hasattr(output, "to_storage_dict") and callable(output.to_storage_dict):
+        return stable_json_hash(output.to_storage_dict())
+    if hasattr(output, "model_dump") and callable(output.model_dump):
+        return stable_json_hash(output.model_dump(by_alias=True, mode="json"))
+    if isinstance(output, str):
+        return stable_json_hash({"textLength": len(output), "textSha": stable_json_hash(output)})
+    return stable_json_hash({"outputClass": output.__class__.__name__})
+
+
+def _openai_agents_token_usage(result: Any) -> dict[str, int]:
+    usage = getattr(result, "usage", None)
+    if usage is None and isinstance(result, Mapping):
+        usage = result.get("usage")
+    mapping = _usage_mapping(usage)
+    input_tokens = _usage_int(mapping, "inputTokens", "input_tokens", "prompt_tokens")
+    output_tokens = _usage_int(mapping, "outputTokens", "output_tokens", "completion_tokens")
+    total_tokens = _usage_int(mapping, "totalTokens", "total_tokens")
+    if total_tokens == 0 and (input_tokens or output_tokens):
+        total_tokens = input_tokens + output_tokens
+    return {
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "totalTokens": total_tokens,
+    }
+
+
+def _usage_mapping(usage: Any) -> Mapping[str, Any]:
+    if isinstance(usage, Mapping):
+        return usage
+    if usage is None:
+        return {}
+    return {
+        key: getattr(usage, key)
+        for key in (
+            "inputTokens",
+            "input_tokens",
+            "prompt_tokens",
+            "outputTokens",
+            "output_tokens",
+            "completion_tokens",
+            "totalTokens",
+            "total_tokens",
+        )
+        if hasattr(usage, key)
+    }
+
+
+def _usage_int(mapping: Mapping[str, Any], *keys: str) -> int:
+    for key in keys:
+        value = mapping.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return 0
+
+
+def _openai_agents_provider_request_id(result: Any) -> str | None:
+    for key in ("response_id", "last_response_id", "run_id", "id"):
+        value = getattr(result, key, None)
+        if value:
+            return str(value)
+    if isinstance(result, Mapping):
+        for key in ("response_id", "last_response_id", "run_id", "id"):
+            value = result.get(key)
+            if value:
+                return str(value)
+    return None
 
 
 def summarize_framework_trace(

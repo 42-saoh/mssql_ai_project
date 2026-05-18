@@ -105,6 +105,33 @@
   approve automatic conversion, generated-source apply, deploy, row-data access, procedure execution,
   or a production runtime switch.
 
+## P44 Real Framework Runtime Adoption Policy
+
+- P44 supersedes P43 as the active framework direction and adopts OpenAI Agents SDK for OpenAI
+  remote AI Draft Pack generation plus LangGraph for in-process draft-pack orchestration.
+- `FrameworkRuntimeConfig.v0.1` is internal only. It adds no public request flag, public API, DB
+  schema, UI, public MCP route, or public artifact type.
+- Generated artifacts remain draft-only: `generated_artifacts_production_ready: false` and
+  `productionReady=false` are mandatory for `AiJavaMyBatisDraftPack.v0.1`.
+- OpenAI Agents SDK tracing must be disabled by default, sensitive-data capture must stay off, and
+  stored adapter summaries may contain only hashes, counts, stage names, model/profile ids, token
+  counts, component ids, blocker ids, and sanitized failure codes.
+- LangGraph must compile without a persistent checkpointer in P44. LangGraph persistence,
+  checkpointer state, tool I/O, raw prompts, raw provider responses, raw SP definitions, raw guide
+  body, row data, secrets, and failed Java/XML payloads must not be stored.
+- P45 live OpenAI Agents evidence is optional and must require `P44_OPENAI_AGENTS_LIVE_GATE=1`,
+  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai`, `OPENAI_API_KEY`, and trace redaction env
+  locks. It must use sanitized fixture inputs only and must not query row data, execute procedures,
+  apply source, deploy, or store raw prompts/provider responses.
+- P46 does not delete rollback code. It records that `responses_httpx` is not the active OpenAI
+  default and is retained only for P-GPT compatibility plus emergency rollback until a separate
+  cleanup gate approves removal.
+- P-GPT remains on `responses_httpx` until structured output through OpenAI Agents SDK is separately
+  proven. `responses_httpx` is retained for emergency rollback until P46 decides removal.
+- Procedure execution, row-data access, business DB DDL/DML apply, source apply, deploy, automatic
+  conversion approval, production readiness claims, and ManageBond-specific production hardcoding
+  remain forbidden.
+
 ## P35 Source Context Policy
 
 - Full stored procedure definitions must not be sent to the model by default. The semantic runtime
