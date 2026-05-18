@@ -1,12 +1,8 @@
 from __future__ import annotations
 
 import json
-from copy import deepcopy
-from pathlib import Path
-from typing import Any
 
 import pytest
-import yaml
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 from ai_agent_runtime import FakeModelGateway
 from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
@@ -28,64 +24,13 @@ from api_app.workflow import (
     generation_context_from_request,
 )
 
+from tests.helpers.p42_manage_bond import (
+    ManageBondMetadataGateway,
+    manage_bond_request,
+    p41_operation_model_fixture,
+    p42_ai_draft_pack_fixture,
+)
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
-
-ROOT = Path(__file__).resolve().parents[3]
-P41_FIXTURE_PATH = ROOT / "fixtures" / "eval" / "sp_operation_model_p41_manage_bond_v1.yaml"
-P42_FIXTURE_PATH = ROOT / "fixtures" / "eval" / "ai_draft_pack_p42_manage_bond_v1.yaml"
-SANITIZED_MANAGE_BOND_SQL = """
-CREATE PROCEDURE PPM.dbo.PCO_GU_ManageBond_PRC
-    @CRUDFlag varchar(20),
-    @GUBUNFlag varchar(1),
-    @ContractNum varchar(10),
-    @OrdNum smallint,
-    @BondKindCode varchar(3),
-    @Sequence smallint,
-    @ApprovalYN varchar(1),
-    @CurrencyInsureAmt decimal(18,3),
-    @UserID varchar(50),
-    @SValue varchar(max)
-AS
-BEGIN
-    IF @CRUDFlag = 'R'
-    BEGIN
-        SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD
-        FROM PPM.dbo.PCO_GUAR
-        WHERE CTRT_NO = @ContractNum AND ORDR_NO = @OrdNum;
-    END
-    IF @CRUDFlag = 'A'
-    BEGIN
-        UPDATE PPM.dbo.PCO_GUAR
-        SET GUAR_APRV_YN = @ApprovalYN
-        WHERE CTRT_NO = @ContractNum;
-        UPDATE ERP.dbo.XXEAI_TRX_HEADER_II
-        SET DUE_DATE = GETDATE()
-        WHERE INVOICE_NUM = @Sequence;
-        EXEC PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC @ContractNum, @OrdNum, @UserID;
-    END
-    IF @CRUDFlag = 'C'
-    BEGIN
-        INSERT INTO PPM.dbo.PCO_GUAR (CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_AMT)
-        SELECT @ContractNum, @OrdNum, @BondKindCode, @CurrencyInsureAmt;
-    END
-    IF @CRUDFlag = 'U'
-    BEGIN
-        UPDATE PPM.dbo.PCO_GUAR SET GUAR_AMT = @CurrencyInsureAmt WHERE GUAR_SEQ = @Sequence;
-    END
-    IF @CRUDFlag = 'D'
-    BEGIN
-        DELETE FROM PPM.dbo.PCO_GUAR WHERE CTRT_NO = @ContractNum AND GUAR_SEQ = @Sequence;
-    END
-    IF @CRUDFlag = 'VENDOR_U'
-    BEGIN
-        UPDATE PPM.dbo.PCS_ADVM_PAYRPT SET VNDR_GUAR_NO = @SValue WHERE @GUBUNFlag = 'J';
-    END
-    IF @CRUDFlag = 'ONLINE_U'
-    BEGIN
-        UPDATE PPM.dbo.PCS_PAY_CMPD_RPT SET ONLINE_GUAR_NO = @SValue WHERE @GUBUNFlag = 'G';
-    END
-END
-""".strip()
 
 
 @pytest.fixture(autouse=True)
@@ -148,245 +93,6 @@ def _fixture_request(outputs: list[str] | None = None) -> SPAnalysisRequest:
             "options": {"includeEvidenceRefs": True},
         }
     )
-
-
-def _manage_bond_request(*, use_llm_analysis: bool = True) -> SPAnalysisRequest:
-    return SPAnalysisRequest.model_validate(
-        {
-            "dbProfileId": "ppm",
-            "target": {
-                "type": "PROCEDURE",
-                "schema": "dbo",
-                "name": "PCO_GU_ManageBond_PRC",
-            },
-            "outputs": ["JAVA_MYBATIS_DRAFT"],
-            "options": {
-                "includeEvidenceRefs": True,
-                "useLlmAnalysis": use_llm_analysis,
-                "llmProfileId": "openai_fast_test",
-                "allowSpDefinitionToModel": True,
-            },
-        }
-    )
-
-
-def _p41_operation_model_fixture() -> dict:
-    return yaml.safe_load(P41_FIXTURE_PATH.read_text(encoding="utf-8"))["operation_model"]
-
-
-def _p42_ai_draft_pack_fixture() -> dict[str, Any]:
-    fixture = yaml.safe_load(P42_FIXTURE_PATH.read_text(encoding="utf-8"))
-    target = fixture["ai_draft_pack_quality_target"]
-    quality_gates = fixture["quality_gates"]
-    return {
-        "schemaVersion": target["schemaVersion"],
-        "contractTarget": target["contractTarget"],
-        "targetRef": target["targetRef"],
-        "sourcePolicy": target["sourcePolicy"],
-        "productionReady": target["productionReady"],
-        "files": [_p42_materialized_file(file) for file in target["expectedFiles"]],
-        "evidenceRefs": list(target["evidenceRefs"]),
-        "reviewMarkers": list(target["reviewMarkers"]),
-        "qualityGates": {
-            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
-            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
-            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
-            "requiredReviewMarkers": list(target["reviewMarkers"]),
-            "blockerPatterns": list(quality_gates["blocker_patterns"]),
-            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
-            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
-            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
-                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
-            ),
-        },
-        "assumptions": [
-            "P42D workflow fixture uses sanitized draft content and productionReady=false."
-        ],
-    }
-
-
-def _p42_materialized_file(file: dict[str, Any]) -> dict[str, Any]:
-    payload = {
-        "artifactType": file["artifactType"],
-        "path": file["path"],
-        "role": file["role"],
-        "className": file["className"],
-        "content": _p42_materialized_content(file),
-        "operationIds": list(file["operationIds"]),
-        "evidenceRefs": list(file["evidenceRefs"]),
-        "reviewMarkers": list(file.get("reviewMarkers") or []),
-    }
-    for optional_key in ("dtoRole", "requiredFields", "references"):
-        if optional_key in file:
-            payload[optional_key] = deepcopy(file[optional_key])
-    return payload
-
-
-def _p42_materialized_content(file: dict[str, Any]) -> str:
-    artifact_type = file["artifactType"]
-    class_name = file["className"]
-    if artifact_type == "DTO_DRAFT":
-        fields = "\n".join(f"    private String {field};" for field in file["requiredFields"])
-        markers = " ".join(file.get("reviewMarkers") or ["REVIEW_REQUIRED"])
-        return f"public class {class_name} {{\n    // {markers} draft DTO.\n{fields}\n}}"
-    if artifact_type == "SERVICE_DRAFT":
-        return _p42_service_content(file)
-    if artifact_type == "MAPPER_INTERFACE":
-        return _p42_mapper_interface_content(file)
-    if artifact_type == "MAPPER_XML":
-        return _p42_mapper_xml_content(file)
-    raise AssertionError(f"Unexpected P42 artifact type: {artifact_type}")
-
-
-def _p42_method_parameter_type(method: str) -> str:
-    return {
-        "readBond": "ManageBondSearchCriteria",
-        "approveAdvanceBond": "ApproveAdvanceBondCommand",
-        "approveDefectBond": "ApproveDefectBondCommand",
-        "sendFinanceTransfer": "FinanceTransferCommand",
-        "createBond": "CreateBondCommand",
-        "createRetentionBondBatch": "CreateRetentionBondBatchItem",
-        "updateBond": "UpdateBondCommand",
-        "deleteBond": "DeleteBondCommand",
-        "updateVendorBond": "VendorBondUpdateCommand",
-        "updateOnlineBond": "OnlineBondUpdateCommand",
-    }[method]
-
-
-def _p42_service_content(file: dict[str, Any]) -> str:
-    methods = []
-    for method in file["operationIds"]:
-        parameter_type = _p42_method_parameter_type(method)
-        if method == "readBond":
-            methods.append(
-                "    public List<ManageBondSearchRow> "
-                "readBond(ManageBondSearchCriteria criteria) { return mapper.readBond(criteria); }"
-            )
-        else:
-            methods.append(
-                f"    public int {method}({parameter_type} command) "
-                f"{{ return mapper.{method}(command); }}"
-            )
-    references = " ".join(file["references"])
-    return (
-        "import java.util.List;\n"
-        "public class ManageBondService {\n"
-        "    private final ManageBondMapper mapper;\n"
-        "    public ManageBondService(ManageBondMapper mapper) { this.mapper = mapper; }\n"
-        f"    // REVIEW_REQUIRED draft references: {references}\n"
-        f"{chr(10).join(methods)}\n"
-        "}"
-    )
-
-
-def _p42_mapper_interface_content(file: dict[str, Any]) -> str:
-    methods = []
-    for method in file["operationIds"]:
-        parameter_type = _p42_method_parameter_type(method)
-        if method == "readBond":
-            methods.append(
-                "    List<ManageBondSearchRow> readBond(ManageBondSearchCriteria criteria);"
-            )
-        else:
-            methods.append(f"    int {method}({parameter_type} command);")
-    references = " ".join(file["references"])
-    return (
-        "import java.util.List;\n"
-        "public interface ManageBondMapper {\n"
-        f"    // REVIEW_REQUIRED draft references: {references}\n"
-        f"{chr(10).join(methods)}\n"
-        "}"
-    )
-
-
-def _p42_mapper_xml_content(file: dict[str, Any]) -> str:
-    statements = []
-    for method in file["operationIds"]:
-        parameter_type = _p42_method_parameter_type(method)
-        if method == "readBond":
-            statements.append(
-                '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
-                'resultType="ManageBondSearchRow">'
-                "/* SQL_SKELETON_REVIEW_REQUIRED */</select>"
-            )
-        else:
-            statements.append(
-                f'  <update id="{method}" parameterType="{parameter_type}">'
-                "/* SQL_SKELETON_REVIEW_REQUIRED */</update>"
-            )
-    references = " ".join(file["references"])
-    return (
-        '<mapper namespace="ManageBondMapper">\n'
-        f"  <!-- REVIEW_REQUIRED DTO references: {references} -->\n"
-        f"{chr(10).join(statements)}\n"
-        "</mapper>"
-    )
-
-
-class ManageBondMetadataGateway:
-    def __init__(self, *, definition: str | None = SANITIZED_MANAGE_BOND_SQL) -> None:
-        self.definition = definition
-
-    def collect_procedure_metadata(
-        self,
-        *,
-        db_profile_id: str,
-        schema: str,
-        procedure_name: str,
-    ) -> MetadataCollectionResult:
-        definition_payload = (
-            {
-                "definition": self.definition,
-                "definitionHash": "sha256:sanitized-manage-bond",
-                "hasDefinitionAccess": True,
-            }
-            if self.definition is not None
-            else None
-        )
-        return MetadataCollectionResult(
-            db_profile_id=db_profile_id,
-            object_ref="PPM.dbo.PCO_GU_ManageBond_PRC",
-            snapshot_id="snapshot-p41-manage-bond",
-            collected_at="2026-05-18T00:00:00Z",
-            evidence_refs=(
-                {
-                    "type": "MSSQL_METADATA",
-                    "objectRef": "PPM.dbo.PCO_GU_ManageBond_PRC",
-                    "locator": "fixture#/p41/manage-bond",
-                    "snapshotId": "snapshot-p41-manage-bond",
-                },
-            ),
-            procedure_definition=definition_payload,
-            procedure_parameters={
-                "parameters": [
-                    {"name": "@CRUDFlag", "dataType": "varchar(20)", "hasDefault": False},
-                    {"name": "@GUBUNFlag", "dataType": "varchar(1)", "hasDefault": False},
-                    {"name": "@ContractNum", "dataType": "varchar(10)", "hasDefault": False},
-                    {"name": "@BondKindCode", "dataType": "varchar(3)", "hasDefault": False},
-                    {"name": "@SValue", "dataType": "varchar(max)", "hasDefault": True},
-                ]
-            },
-            table_schemas=(),
-        )
-
-    def collect_procedure_definition(
-        self,
-        *,
-        db_profile_id: str,
-        schema: str,
-        procedure_name: str,
-        referenced_database: str | None = None,
-    ) -> dict[str, object] | None:
-        if self.definition is None:
-            return None
-        return {
-            "data": {
-                "definition": self.definition,
-                "definitionHash": "sha256:sanitized-manage-bond",
-                "hasDefinitionAccess": True,
-            },
-            "evidenceRefs": [],
-        }
 
 
 def _passed_sp_analysis_content() -> str:
@@ -498,8 +204,8 @@ def test_sp_analysis_can_be_submitted_then_executed_later() -> None:
 
 
 def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts() -> None:
-    operation_model = _p41_operation_model_fixture()
-    ai_draft_pack = _p42_ai_draft_pack_fixture()
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
     repository = MemoryWorkflowRepository()
     service = WorkflowService(
         repository,
@@ -510,7 +216,7 @@ def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts()
         ),
     )
 
-    _request_record, job = service.submit_sp_analysis(_manage_bond_request())
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
 
     artifacts = repository.list_job_artifacts(job.job_id) or []
     dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
@@ -614,7 +320,7 @@ def test_p42_workflow_fails_without_java_artifacts_when_planner_is_disabled() ->
     )
 
     _request_record, job = service.submit_sp_analysis(
-        _manage_bond_request(use_llm_analysis=False)
+        manage_bond_request(use_llm_analysis=False)
     )
 
     artifacts = repository.list_job_artifacts(job.job_id) or []
@@ -646,7 +352,7 @@ def test_p42_workflow_fails_without_java_artifacts_when_definition_is_missing() 
         model_gateway=FakeModelGateway(),
     )
 
-    _request_record, job = service.submit_sp_analysis(_manage_bond_request())
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
 
     artifacts = repository.list_job_artifacts(job.job_id) or []
     dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
@@ -673,8 +379,8 @@ def test_p42_workflow_fails_without_java_artifacts_when_definition_is_missing() 
 
 
 def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() -> None:
-    operation_model = _p41_operation_model_fixture()
-    ai_draft_pack = _p42_ai_draft_pack_fixture()
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
     for file in ai_draft_pack["files"]:
         if file["artifactType"] == "SERVICE_DRAFT":
             file["content"] = "public class ManageBondService { /* REVIEW_REQUIRED */ }"
@@ -689,7 +395,7 @@ def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() 
         ),
     )
 
-    _request_record, job = service.submit_sp_analysis(_manage_bond_request())
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
 
     artifacts = repository.list_job_artifacts(job.job_id) or []
     ai_draft_run = next(

@@ -115,6 +115,12 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
   `P42_AI_DRAFT_PACK_FAILED`, while disabled or unavailable safe planning context records
   `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`. Neither case may persist Java/MyBatis fallback skeleton
   artifacts.
+- P42E adds a local API workflow replay gate for `PCO_GU_ManageBond_PRC`. The replay uses fake
+  metadata/model gateways and sanitized fixtures, treats `job_6864d2734e` as audit history only,
+  and requires a new job to persist non-empty multi-DTO AI Draft Pack artifacts.
+- P42E reconstructs the persisted Java/MyBatis artifacts into an
+  `AiJavaMyBatisDraftPack.v0.1` payload and reruns the P42C quality validator so the route-level
+  output satisfies the ManageBond fixture contract.
 - `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, missing DTO references,
   source apply/deploy claims, and raw SP/guide storage are blockers.
 - Cross-DB write, called procedure I/O, uncertain TVF/procedure kind, result-shape variants, and
@@ -129,6 +135,8 @@ Passing criteria:
 - `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"` passes.
 - P42D workflow gate includes
   `make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"`.
+- P42E replay gate includes
+  `make test PYTEST_ARGS="tests/integration/api/test_api_workflow_routes.py tests/unit/api/test_workflow_service.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py"`.
 - Later P42F gate also includes P41 and P36 regression.
 
 ## P35 Source Context Eval Gate

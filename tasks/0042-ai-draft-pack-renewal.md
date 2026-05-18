@@ -33,6 +33,21 @@ Pack failures are terminal draft failures, not successful skeleton output:
 the agent run/job, and no `OperationModelReviewRequired*` Java/MyBatis artifacts
 are persisted.
 
+## P42E Status
+
+P42E adds a local API workflow replay gate for `PCO_GU_ManageBond_PRC`. The gate
+uses sanitized ManageBond fixtures, a fake metadata gateway, and a fake model
+gateway to submit a new `JAVA_MYBATIS_DRAFT` job through `/api/v1/requests/sp-analysis`.
+The historical `job_6864d2734e` remains audit evidence only and is not an
+acceptance result.
+
+The replay must produce non-empty multi-DTO AI Draft Pack artifacts: eleven
+`DTO_DRAFT` rows and exactly one `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+`MAPPER_XML` row. Persisted artifacts are reconstructed into an
+`AiJavaMyBatisDraftPack.v0.1` payload and revalidated by the P42C static quality
+gate. Cross-database write, called procedure I/O, uncertain TVF/procedure kind,
+and transaction boundary uncertainty remain `REVIEW_REQUIRED`.
+
 ## Goal
 
 Create the P42 foundation for `PPM.dbo.PCO_GU_ManageBond_PRC` so the next slices
@@ -63,7 +78,6 @@ Mapper XML directly from sanitized analysis evidence.
 - Actual DB row data access, stored procedure execution, or business DB DDL/DML.
 - Generated source apply, deploy, publish, or production readiness.
 - OpenAI SDK dependency installation.
-- Replay/acceptance hardening beyond the P42D workflow wiring.
 
 ## Inputs
 
@@ -89,6 +103,8 @@ Mapper XML directly from sanitized analysis evidence.
 - P42C deterministic validation report for fixture-like Java/MyBatis draft packs.
 - P42D workflow wiring from `JAVA_MYBATIS_DRAFT` to validated AI Draft Pack
   artifact persistence.
+- P42E route-level ManageBond replay gate proving new jobs persist non-empty
+  multi-DTO AI Draft Pack artifacts and satisfy the fixture quality contract.
 - Minimal docs sync describing the intended P42 path.
 
 ## Recommended Skills
@@ -103,6 +119,7 @@ Mapper XML directly from sanitized analysis evidence.
 
 - `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"`
 - `make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/validation/test_ai_draft_pack_validator.py"`
+- `make test PYTEST_ARGS="tests/integration/api/test_api_workflow_routes.py tests/unit/api/test_workflow_service.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py"`
 - `git diff --check`
 
 ## Done Definition
@@ -117,7 +134,9 @@ Mapper XML directly from sanitized analysis evidence.
   `aiDraftPackTargetRef`, `aiDraftPackAgentRunId`, `aiFileRole`,
   `operationIds`, `dtoRole`, `qualityScore`, `bundleFilePath`,
   `aiEvidenceRefs`, and `reviewMarkers`.
-- P42E can continue directly into ManageBond replay acceptance gates.
+- P42E replay proves a new API workflow job produces required ManageBond DTOs,
+  single Service/Mapper/Mapper XML files, no fallback skeletons, no blank
+  content, no `ManageBondDTO` collapse, and preserved `REVIEW_REQUIRED` markers.
 
 ## Notes / Risks
 

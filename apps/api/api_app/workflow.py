@@ -2301,7 +2301,7 @@ def ai_draft_pack_file_evidence_refs(file: Any) -> list[dict[str, Any]]:
     object_ref = ai_draft_pack_visible_object_ref(file)
     return [
         {
-            "type": "GENERATION_EVIDENCE",
+            "type": "TEMPLATE",
             "objectRef": object_ref,
             "locator": f"ai-draft-pack#{file.path}",
         }

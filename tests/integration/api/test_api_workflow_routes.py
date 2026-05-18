@@ -6,7 +6,10 @@ from typing import Any
 
 import pytest
 from ai_agent_domain import ArtifactType, JobStatus, WorkflowStepType
+from ai_agent_runtime import FakeModelGateway
 from ai_agent_runtime.gateway import model_profile_from_env
+from ai_agent_runtime.models import AgentRunStatus
+from ai_agent_validation.models import ValidationStatus
 from api_app.dependencies import (
     get_metadata_analysis_service,
     get_repository,
@@ -18,9 +21,22 @@ from api_app.metadata_analysis_runs import execute_metadata_analysis_run
 from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.recovery_worker import run_recovery_once
 from api_app.repositories import KnowledgePersistenceError, ValidationReportRecord
-from api_app.workflow import SP_WORKFLOW_RECOVERY_BLOCKED, WorkflowService
+from api_app.workflow import (
+    AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
+    OPERATION_MODEL_AGENT_TYPE,
+    SP_WORKFLOW_RECOVERY_BLOCKED,
+    WorkflowService,
+)
 from fastapi.testclient import TestClient
 
+from tests.helpers.p42_manage_bond import (
+    REQUIRED_P42_REVIEW_MARKERS,
+    ManageBondMetadataGateway,
+    manage_bond_request_payload,
+    p41_operation_model_fixture,
+    p42_ai_draft_pack_fixture,
+    validate_persisted_p42_pack,
+)
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
 
@@ -313,6 +329,130 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert latest_validation.headers["X-Correlation-ID"] == "corr-route-flow"
     assert latest_validation.json()["artifactId"] == artifact_id
     assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
+
+
+def test_p42_manage_bond_route_replay_produces_valid_multi_dto_ai_draft_pack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+            ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+        ),
+    )
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        with TestClient(app) as client:
+            submit = client.post(
+                "/api/v1/requests/sp-analysis",
+                headers={"X-Correlation-ID": "corr-p42e-manage-bond"},
+                json=manage_bond_request_payload(),
+            )
+            assert submit.status_code == 202
+            submitted = submit.json()
+            job_id = submitted["jobId"]
+            assert submitted["status"] == "VALIDATION_COMPLETE"
+            assert job_id != "job_6864d2734e"
+            assert repository.get_job("job_6864d2734e") is None
+
+            job = client.get(f"/api/v1/jobs/{job_id}")
+            listed = client.get(f"/api/v1/jobs/{job_id}/artifacts")
+            agent_runs = client.get(f"/api/v1/jobs/{job_id}/agent-runs")
+
+            assert job.status_code == 200
+            assert job.json()["status"] == "VALIDATION_COMPLETE"
+            assert listed.status_code == 200
+            assert agent_runs.status_code == 200
+
+            summaries = listed.json()["artifacts"]
+            artifact_types = [item["type"] for item in summaries]
+            assert artifact_types.count(ArtifactType.DTO_DRAFT.value) == 11
+            assert artifact_types.count(ArtifactType.SERVICE_DRAFT.value) == 1
+            assert artifact_types.count(ArtifactType.MAPPER_INTERFACE.value) == 1
+            assert artifact_types.count(ArtifactType.MAPPER_XML.value) == 1
+
+            for summary in summaries:
+                detail = client.get(f"/api/v1/artifacts/{summary['artifactId']}")
+                assert detail.status_code == 200
+                content = detail.json()["content"]
+                assert content.strip()
+                assert "OperationModelReviewRequired" not in content
+                assert "ManageBondDTO" not in content
+
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    artifacts = repository.list_job_artifacts(job_id) or []
+    dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
+    service_artifact = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.SERVICE_DRAFT
+    )
+    mapper_artifact = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.MAPPER_INTERFACE
+    )
+    mapper_xml_artifact = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.MAPPER_XML
+    )
+    required_dtos = set(ai_draft_pack["qualityGates"]["requiredDtoClasses"])
+    required_methods = set(ai_draft_pack["qualityGates"]["requiredServiceMethods"])
+    persisted_dto_classes = {
+        artifact.title.rsplit("/", 1)[-1].removesuffix(".java")
+        for artifact in dto_artifacts
+    }
+
+    assert persisted_dto_classes == required_dtos
+    assert len(dto_artifacts) == len(required_dtos)
+    assert "ManageBondDTO" not in persisted_dto_classes
+    assert "OperationModelReviewRequired" not in persisted_dto_classes
+
+    for artifact in artifacts:
+        latest_validation = repository.latest_validation_for(artifact.artifact_id)
+        assert latest_validation is not None
+        assert latest_validation.status in {"PASSED", "REVIEW_REQUIRED"}
+        assert artifact.extra["aiDraftPackSchema"] == "AiJavaMyBatisDraftPack.v0.1"
+        assert artifact.extra["aiDraftPackTargetRef"] == ai_draft_pack["targetRef"]
+        assert artifact.extra["aiDraftPackAgentRunId"]
+        assert artifact.extra["bundleFilePath"] == artifact.title
+        assert artifact.extra["aiFileRole"]
+        assert artifact.extra["operationIds"]
+        assert artifact.extra["qualityScore"] >= 1.0
+        assert artifact.extra["aiEvidenceRefs"]
+        if artifact.type == ArtifactType.DTO_DRAFT:
+            assert artifact.extra["dtoRole"]
+
+    for dto_class in required_dtos:
+        assert dto_class in service_artifact.content
+        assert dto_class in mapper_artifact.content
+        assert dto_class in mapper_xml_artifact.content
+    for method in required_methods:
+        assert method in service_artifact.content
+        assert method in mapper_artifact.content
+        assert method in mapper_xml_artifact.content
+
+    replay_report = validate_persisted_p42_pack(artifacts, expected_pack=ai_draft_pack)
+    assert replay_report.status == ValidationStatus.PASSED
+    assert REQUIRED_P42_REVIEW_MARKERS <= set(replay_report.manual_review_points)
+
+    runs = repository.list_agent_runs(job_id) or []
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    ai_draft_run = next(
+        run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    assert operation_run.structured_output["targetRef"] == operation_model["targetRef"]
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert REQUIRED_P42_REVIEW_MARKERS <= set(ai_draft_run.structured_output["reviewMarkers"])
+    assert "CREATE PROCEDURE" not in str(ai_draft_run.model_invocation)
+    assert "SET GUAR_APRV_YN" not in str(ai_draft_run.model_invocation)
 
 
 def test_sp_analysis_request_can_return_before_background_workflow_completes(
@@ -789,7 +929,9 @@ def test_approval_route_records_enriched_audit_payload_for_passed_validation(
     )
 
     assert approval.status_code == 404
-    assert not any(event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events)
+    assert not any(
+        event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events
+    )
 
 
 def test_publish_and_export_routes_are_not_exposed(client: TestClient) -> None:
@@ -1438,7 +1580,9 @@ def test_recovery_worker_reuses_existing_artifact_and_generates_missing_output(
     service = WorkflowService(repository)
     metadata = service._collect_metadata(job.job_id, request)
     generated = service._generate_artifacts(job.job_id, request, metadata)
-    existing = next(artifact for artifact in generated if artifact.type == ArtifactType.SP_ANALYSIS_DOC)
+    existing = next(
+        artifact for artifact in generated if artifact.type == ArtifactType.SP_ANALYSIS_DOC
+    )
     for artifact in generated:
         if artifact.type != ArtifactType.SP_ANALYSIS_DOC:
             del repository.artifacts[artifact.artifact_id]
@@ -1487,8 +1631,12 @@ def test_recovery_worker_reuses_existing_validation_reports(
     service = WorkflowService(repository)
     metadata = service._collect_metadata(job.job_id, request)
     artifacts = service._generate_artifacts(job.job_id, request, metadata)
-    first = next(artifact for artifact in artifacts if artifact.type == ArtifactType.SP_ANALYSIS_DOC)
-    second = next(artifact for artifact in artifacts if artifact.type == ArtifactType.DEPENDENCY_REPORT)
+    first = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.SP_ANALYSIS_DOC
+    )
+    second = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.DEPENDENCY_REPORT
+    )
     existing_report = repository.save_validation_report(
         artifact_id=first.artifact_id,
         status="PASSED",
