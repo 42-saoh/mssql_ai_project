@@ -1,3 +1,17 @@
+from ai_agent_runtime.ai_draft_pack import (
+    AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION,
+    AiDraftPackArtifactType,
+    AiDraftPackFileRole,
+    AiDraftPackValidationError,
+    AiJavaMyBatisDraftPackOutput,
+    AiJavaMyBatisDraftPackPlannerOutput,
+    ai_java_mybatis_draft_pack_output_schema,
+    all_ai_java_mybatis_draft_pack_evidence_refs,
+    parse_ai_java_mybatis_draft_pack_json,
+    validate_ai_java_mybatis_draft_pack_output,
+)
 from ai_agent_runtime.gateway import (
     FakeModelGateway,
     ModelGateway,
@@ -34,6 +48,7 @@ from ai_agent_runtime.planner_effectiveness import (
     attach_planner_metrics_to_ai_tool_evidence,
     build_planner_metrics,
 )
+from ai_agent_runtime.prompts import render_ai_java_mybatis_draft_pack_prompt
 from ai_agent_runtime.quality_eval import (
     LLM_INFERENCE_EVIDENCE_TYPE,
     evaluate_p23_semantic_quality,
@@ -46,7 +61,15 @@ from ai_agent_runtime.semantic import (
 )
 
 __all__ = [
+    "AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION",
+    "AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION",
+    "AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION",
     "AgentRunPayload",
+    "AiDraftPackArtifactType",
+    "AiDraftPackFileRole",
+    "AiDraftPackValidationError",
+    "AiJavaMyBatisDraftPackOutput",
+    "AiJavaMyBatisDraftPackPlannerOutput",
     "AiToolPlanningOutput",
     "AiToolRequest",
     "FakeModelGateway",
@@ -68,6 +91,8 @@ __all__ = [
     "SpOperationModelPlannerOutput",
     "VALID_TOOL_FACT_PREFIXES",
     "all_sp_operation_model_evidence_refs",
+    "ai_java_mybatis_draft_pack_output_schema",
+    "all_ai_java_mybatis_draft_pack_evidence_refs",
     "attach_planner_metrics_to_ai_tool_evidence",
     "build_model_gateway_from_env",
     "build_metadata_analysis_run",
@@ -77,7 +102,10 @@ __all__ = [
     "build_sp_operation_model_run",
     "evaluate_p23_semantic_quality",
     "merge_llm_semantic_analysis",
+    "parse_ai_java_mybatis_draft_pack_json",
     "parse_sp_operation_model_json",
+    "render_ai_java_mybatis_draft_pack_prompt",
     "sp_operation_model_output_schema",
+    "validate_ai_java_mybatis_draft_pack_output",
     "validate_sp_operation_model_output",
 ]

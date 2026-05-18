@@ -9,6 +9,11 @@ from typing import Any, Protocol
 
 import httpx
 
+from ai_agent_runtime.ai_draft_pack import (
+    ai_java_mybatis_draft_pack_output_schema,
+    parse_ai_java_mybatis_draft_pack_json,
+    validate_ai_java_mybatis_draft_pack_output,
+)
 from ai_agent_runtime.models import (
     FAST_TEST_DEFAULT_MODEL,
     FAST_TEST_MODEL_PROFILE_ID,
@@ -94,6 +99,14 @@ class ModelGateway(Protocol):
     ) -> ModelInvocationRecord:
         ...
 
+    def draft_ai_java_mybatis_pack(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        ...
+
 
 def model_profile_from_env(profile_id: str | None) -> ModelProfile:
     normalized = (profile_id or SEMANTIC_MODEL_PROFILE_ID).strip() or SEMANTIC_MODEL_PROFILE_ID
@@ -155,6 +168,7 @@ class FakeModelGateway:
         platform_tool_plan_by_target_ref: Mapping[str, Any] | None = None,
         metadata_analysis_by_target_ref: Mapping[str, Any] | None = None,
         sp_operation_model_by_target_ref: Mapping[str, Any] | None = None,
+        ai_draft_pack_by_target_ref: Mapping[str, Any] | None = None,
     ) -> None:
         self._output_by_target_ref = {
             target_ref: LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
@@ -175,6 +189,10 @@ class FakeModelGateway:
         self._sp_operation_model_by_target_ref = {
             target_ref: validate_sp_operation_model_output(output).to_storage_dict()
             for target_ref, output in (sp_operation_model_by_target_ref or {}).items()
+        }
+        self._ai_draft_pack_by_target_ref = {
+            target_ref: validate_ai_java_mybatis_draft_pack_output(output).to_storage_dict()
+            for target_ref, output in (ai_draft_pack_by_target_ref or {}).items()
         }
 
     def invoke_semantic_analysis(
@@ -330,6 +348,39 @@ class FakeModelGateway:
             token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
             latency_ms=0,
             provider_request_id="fake-sp-operation-model",
+        )
+
+    def draft_ai_java_mybatis_pack(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        target_ref = str(prompt.metadata.get("targetRef") or "")
+        raw_output = self._ai_draft_pack_by_target_ref.get(target_ref) or (
+            _default_fake_ai_draft_pack_output(
+                allowed_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+                target_ref=target_ref,
+            )
+        )
+        output = validate_ai_java_mybatis_draft_pack_output(raw_output)
+        structured_output = output.to_storage_dict()
+        return ModelInvocationRecord(
+            provider=self.provider,
+            model=profile.model,
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort=profile.reasoning_effort,
+            prompt_version=prompt.prompt_version,
+            output_schema_version=prompt.output_schema_version,
+            input_hash=prompt.input_hash,
+            prompt_hash=prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=0,
+            provider_request_id="fake-ai-draft-pack",
         )
 
 
@@ -541,6 +592,94 @@ def _default_fake_sp_operation_model_output(
     }
 
 
+def _default_fake_ai_draft_pack_output(
+    *,
+    allowed_refs: Any,
+    target_ref: str,
+) -> dict[str, Any]:
+    refs = [str(ref) for ref in allowed_refs if str(ref).strip()]
+    evidence_refs = refs[:1] or ["metadata.ai_draft_pack.no_fact"]
+    normalized_target_ref = target_ref or "sp.ai_draft_pack.review_required"
+    review_marker = "P42_AI_DRAFT_PACK_REVIEW_REQUIRED"
+    return {
+        "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
+        "contractTarget": "AiJavaMyBatisDraftPack",
+        "targetRef": normalized_target_ref,
+        "sourcePolicy": "sanitized_facts_only",
+        "productionReady": False,
+        "files": [
+            {
+                "artifactType": "DTO_DRAFT",
+                "path": "dto/DraftSearchCriteria.java",
+                "role": "QUERY_DTO",
+                "className": "DraftSearchCriteria",
+                "content": "public class DraftSearchCriteria { /* REVIEW_REQUIRED */ }",
+                "operationIds": ["reviewDraft"],
+                "evidenceRefs": evidence_refs,
+                "reviewMarkers": [review_marker],
+            },
+            {
+                "artifactType": "DTO_DRAFT",
+                "path": "dto/DraftSearchRow.java",
+                "role": "RESULT_DTO",
+                "className": "DraftSearchRow",
+                "content": "public class DraftSearchRow { /* REVIEW_REQUIRED */ }",
+                "operationIds": ["reviewDraft"],
+                "evidenceRefs": evidence_refs,
+                "reviewMarkers": [review_marker],
+            },
+            {
+                "artifactType": "SERVICE_DRAFT",
+                "path": "service/DraftService.java",
+                "role": "SERVICE",
+                "className": "DraftService",
+                "content": "public class DraftService { void reviewDraft() {} }",
+                "operationIds": ["reviewDraft"],
+                "evidenceRefs": evidence_refs,
+                "reviewMarkers": [review_marker],
+                "references": ["DraftSearchCriteria", "DraftSearchRow"],
+            },
+            {
+                "artifactType": "MAPPER_INTERFACE",
+                "path": "mapper/DraftMapper.java",
+                "role": "MAPPER_INTERFACE",
+                "className": "DraftMapper",
+                "content": "public interface DraftMapper { void reviewDraft(); }",
+                "operationIds": ["reviewDraft"],
+                "evidenceRefs": evidence_refs,
+                "reviewMarkers": [review_marker],
+                "references": ["DraftSearchCriteria", "DraftSearchRow"],
+            },
+            {
+                "artifactType": "MAPPER_XML",
+                "path": "mapper/DraftMapperSQL.xml",
+                "role": "MAPPER_XML",
+                "className": "DraftMapperSQL",
+                "content": (
+                    '<mapper namespace="DraftMapper"><select id="reviewDraft" /></mapper>'
+                ),
+                "operationIds": ["reviewDraft"],
+                "evidenceRefs": evidence_refs,
+                "reviewMarkers": [review_marker],
+                "references": ["DraftSearchCriteria", "DraftSearchRow"],
+            },
+        ],
+        "evidenceRefs": evidence_refs,
+        "reviewMarkers": [review_marker],
+        "qualityGates": {
+            "requiredDtoClasses": ["DraftSearchCriteria", "DraftSearchRow"],
+            "requiredServiceMethods": ["reviewDraft"],
+            "requiredMapperMethods": ["reviewDraft"],
+            "requiredReviewMarkers": [review_marker],
+            "blockerPatterns": ["OperationModelReviewRequired", "ManageBondDTO"],
+            "blankContentIsBlocker": True,
+            "dtoCollapseIsBlocker": True,
+            "fallbackSkeletonPersistenceAllowedOnFailure": False,
+        },
+        "assumptions": ["Fake gateway fallback is draft-only and requires review."],
+    }
+
+
 class OpenAIModelGateway:
     provider = REMOTE_PROVIDER_OPENAI
 
@@ -640,6 +779,27 @@ class OpenAIModelGateway:
                 allowed_evidence_refs=allowed_refs,
             ),
             invalid_code="OPENAI_SP_OPERATION_MODEL_INVALID",
+        )
+
+    def draft_ai_java_mybatis_pack(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        profile: ModelProfile,
+    ) -> ModelInvocationRecord:
+        allowed_refs = prompt.metadata.get("allowedEvidenceRefs") or ()
+        return self._invoke_structured_output(
+            prompt=prompt,
+            profile=profile,
+            schema_name="ai_java_mybatis_draft_pack",
+            schema=ai_java_mybatis_draft_pack_output_schema(
+                allowed_evidence_refs=allowed_refs,
+            ),
+            parser=lambda output_text: parse_ai_java_mybatis_draft_pack_json(
+                output_text,
+                allowed_evidence_refs=allowed_refs,
+            ),
+            invalid_code="OPENAI_AI_DRAFT_PACK_INVALID",
         )
 
     def _invoke_structured_output(
@@ -960,6 +1120,19 @@ def _retry_root_keys(schema_name: str) -> tuple[str, ...]:
             "dtoBlueprints",
             "reviewMarkers",
             "evidenceRefs",
+            "assumptions",
+        )
+    if schema_name == "ai_java_mybatis_draft_pack":
+        return (
+            "schemaVersion",
+            "contractTarget",
+            "targetRef",
+            "sourcePolicy",
+            "productionReady",
+            "files",
+            "evidenceRefs",
+            "reviewMarkers",
+            "qualityGates",
             "assumptions",
         )
     return ("structuredOutput",)

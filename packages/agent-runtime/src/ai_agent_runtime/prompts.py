@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ai_agent_runtime.ai_draft_pack import (
+    AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+)
 from ai_agent_runtime.localization import KOREAN_OUTPUT_INSTRUCTION
 from ai_agent_runtime.models import (
     METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION,
@@ -81,6 +86,20 @@ collapse all procedure inputs/results into one DTO. Mark weak business naming, r
 uncertainty, cross-database writes, dynamic SQL, TVF/procedure uncertainty, and called procedure
 I/O as REVIEW_REQUIRED. Never include raw SQL snippets, row data, prompt/provider trace ids,
 procedure execution, DDL/DML apply, deployment, or secrets.
+{KOREAN_OUTPUT_INSTRUCTION}"""
+
+AI_JAVA_MYBATIS_DRAFT_PACK_SYSTEM_PROMPT = f"""You draft Java/MyBatis files for complex MSSQL
+stored procedure migration as an AiJavaMyBatisDraftPack.v0.1 JSON object. Return only schema-valid
+JSON. Use sanitized draft context, expected file inventory, quality gates, and evidence refs only.
+Keep productionReady false and sourcePolicy sanitized_facts_only. Produce multiple DTO_DRAFT files
+for query criteria, result rows, commands, batch items, and called procedure request shapes; keep
+SERVICE_DRAFT, MAPPER_INTERFACE, and MAPPER_XML as single files. Never create ManageBondDTO or
+OperationModelReviewRequired fallback skeletons. Every file must contain non-empty draft content,
+operationIds, evidenceRefs copied exactly from evidenceRefContract.allowedFactIds, and reviewMarkers
+when facts are weak. Preserve REVIEW_REQUIRED markers for weak business naming, cross-database
+writes, called procedure I/O, TVF/procedure uncertainty, result-shape variants, and transaction
+boundary uncertainty. Never include raw SP definitions, raw guide body, raw prompts, raw provider
+responses, row data, procedure execution, DDL/DML apply, source apply, deployment, or secrets.
 {KOREAN_OUTPUT_INSTRUCTION}"""
 
 
@@ -513,6 +532,123 @@ def render_sp_operation_model_prompt(
     )
 
 
+def render_ai_java_mybatis_draft_pack_prompt(
+    *,
+    target_ref: str,
+    sanitized_draft_context: Mapping[str, Any],
+    expected_inventory: Sequence[Mapping[str, Any]] | None = None,
+    quality_gates: Mapping[str, Any] | None = None,
+    allowed_evidence_refs: list[str] | tuple[str, ...] | None = None,
+    stage: str = "file_inventory",
+    repair_context: dict[str, Any] | None = None,
+) -> RenderedPrompt:
+    allowed_refs = sorted(
+        {str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()}
+    )
+    inventory = [
+        _remove_raw_metadata_fields(json.loads(json.dumps(item, ensure_ascii=False, default=str)))
+        for item in list(expected_inventory or [])
+        if isinstance(item, Mapping)
+    ]
+    gates = _remove_raw_metadata_fields(
+        json.loads(json.dumps(dict(quality_gates or {}), ensure_ascii=False, default=str))
+    )
+    context = _remove_raw_metadata_fields(
+        json.loads(json.dumps(dict(sanitized_draft_context), ensure_ascii=False, default=str))
+    )
+    input_payload = {
+        "targetRef": target_ref,
+        "stage": stage,
+        "stagedOutputFlow": [
+            "file_inventory",
+            "file_content",
+            "deterministic_validation",
+            "repair",
+        ],
+        "sanitizedDraftContext": context,
+        "expectedInventory": inventory,
+        "qualityGates": gates,
+        "outputContract": {
+            "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
+            "contractTarget": "AiJavaMyBatisDraftPack",
+            "finalStructuredOutputRequiresContent": True,
+            "productionReady": False,
+            "sourcePolicy": "sanitized_facts_only",
+        },
+        "filePolicy": {
+            "artifactTypes": [
+                "DTO_DRAFT",
+                "SERVICE_DRAFT",
+                "MAPPER_INTERFACE",
+                "MAPPER_XML",
+            ],
+            "fileRoles": [
+                "QUERY_DTO",
+                "RESULT_DTO",
+                "COMMAND_DTO",
+                "BATCH_ITEM_DTO",
+                "CALL_REQUEST_DTO",
+                "SERVICE",
+                "MAPPER_INTERFACE",
+                "MAPPER_XML",
+                "REVIEW_REQUIRED",
+            ],
+            "mustSplitDtoFiles": True,
+            "serviceMapperAndXmlSingleFile": True,
+            "blockedClassNames": ["OperationModelReviewRequired", "ManageBondDTO"],
+            "blockedMarkers": ["P41_OPERATION_MODEL_REVIEW_REQUIRED"],
+        },
+        "evidenceRefContract": {
+            "allowedFactIds": allowed_refs,
+            "factCatalog": _draft_pack_fact_catalog(inventory, context, allowed_refs),
+            "forbiddenEvidenceRefs": [
+                "prompt.inputHash",
+                "prompt.promptHash",
+                "modelInvocation.outputHash",
+                "metadata.snapshot",
+                "static.analysis",
+            ],
+            "rule": (
+                "Every root and file evidenceRefs array must contain one or more ids copied "
+                "exactly from allowedFactIds. If no allowed fact supports a file or claim, "
+                "mark the uncertainty in reviewMarkers and assumptions."
+            ),
+        },
+        "requiredReviewMarkers": _draft_pack_required_review_markers(gates, context),
+        "forbiddenStorage": [
+            "raw SP definition",
+            "raw guide body",
+            "raw prompt",
+            "raw provider response",
+            "row data",
+            "secrets",
+            "source apply",
+            "deployment",
+        ],
+    }
+    if repair_context is not None:
+        input_payload["repairContext"] = _remove_raw_metadata_fields(
+            json.loads(json.dumps(repair_context, ensure_ascii=False, default=str))
+        )
+    user_prompt = json.dumps(input_payload, ensure_ascii=False, sort_keys=True, default=str)
+    prompt_hash = text_hash(f"{AI_JAVA_MYBATIS_DRAFT_PACK_SYSTEM_PROMPT}\n{user_prompt}")
+    return RenderedPrompt(
+        prompt_version=AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+        output_schema_version=AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
+        system_prompt=AI_JAVA_MYBATIS_DRAFT_PACK_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        input_hash=stable_json_hash(input_payload),
+        prompt_hash=prompt_hash,
+        metadata={
+            "targetRef": target_ref,
+            "stage": stage,
+            "allowedEvidenceRefs": allowed_refs,
+            "expectedFileCount": len(inventory),
+            "qualityGateCount": len(gates),
+        },
+    )
+
+
 def _metadata_without_raw_definition(metadata: dict[str, Any]) -> dict[str, Any]:
     sanitized = json.loads(json.dumps(metadata, ensure_ascii=False, default=str))
     return _remove_raw_metadata_fields(sanitized)
@@ -527,6 +663,12 @@ def _remove_raw_metadata_fields(value: Any) -> Any:
                 "definition",
                 "raw_definition",
                 "raw_definition_text",
+                "raw_sp_definition",
+                "raw_prompt",
+                "raw_provider_response",
+                "raw_provider_response_text",
+                "raw_openai_response_text",
+                "raw_guide_body",
                 "rawsql",
                 "raw_sql",
                 "sqltext",
@@ -549,6 +691,85 @@ def _remove_raw_metadata_fields(value: Any) -> Any:
     if isinstance(value, list):
         return [_remove_raw_metadata_fields(item) for item in value]
     return value
+
+
+def _draft_pack_fact_catalog(
+    expected_inventory: Sequence[Mapping[str, Any]],
+    sanitized_draft_context: Mapping[str, Any],
+    allowed_refs: list[str],
+) -> list[dict[str, str]]:
+    catalog: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in expected_inventory:
+        refs = item.get("evidenceRefs")
+        if not isinstance(refs, list):
+            continue
+        summary = (
+            f"{item.get('artifactType', 'FILE')} {item.get('path', '')} "
+            f"class={item.get('className', '')} role={item.get('role', '')}"
+        )
+        for ref in refs:
+            ref_text = str(ref)
+            if ref_text not in allowed_refs or ref_text in seen:
+                continue
+            seen.add(ref_text)
+            catalog.append(
+                {
+                    "id": ref_text,
+                    "type": "AI_DRAFT_PACK_FILE_EVIDENCE",
+                    "summary": summary.strip(),
+                }
+            )
+    context_facts = sanitized_draft_context.get("deterministicFacts")
+    if isinstance(context_facts, list):
+        for fact in context_facts:
+            if not isinstance(fact, Mapping):
+                continue
+            fact_id = str(fact.get("id") or "")
+            if fact_id not in allowed_refs or fact_id in seen:
+                continue
+            seen.add(fact_id)
+            catalog.append(
+                {
+                    "id": fact_id,
+                    "type": str(fact.get("type") or "DETERMINISTIC_EVIDENCE"),
+                    "summary": str(fact.get("summary") or "Sanitized deterministic evidence."),
+                }
+            )
+    for ref in allowed_refs:
+        if ref in seen:
+            continue
+        catalog.append(
+            {
+                "id": ref,
+                "type": "DETERMINISTIC_EVIDENCE",
+                "summary": "Sanitized AI draft pack evidence.",
+            }
+        )
+    return catalog
+
+
+def _draft_pack_required_review_markers(
+    quality_gates: Mapping[str, Any],
+    sanitized_draft_context: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    raw_markers = (
+        quality_gates.get("requiredReviewMarkers")
+        or quality_gates.get("required_review_markers")
+        or sanitized_draft_context.get("reviewRequiredFacts")
+        or sanitized_draft_context.get("review_required_facts")
+        or []
+    )
+    markers: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if isinstance(raw_markers, list):
+        for marker in raw_markers:
+            code = str(marker)
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            markers.append({"code": code, "status": "REVIEW_REQUIRED"})
+    return markers
 
 
 def _operation_fact_catalog(
