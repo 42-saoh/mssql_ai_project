@@ -73,7 +73,7 @@ files. P41 remains
 change, live MCP public tool expansion, row-data access, procedure execution,
 automatic DDL/DML apply, or generated-source deployment.
 
-## P42 AI Draft Pack Renewal Groundwork
+## P42 AI Draft Pack Renewal
 
 P42 starts after the observed `job_6864d2734e` failure mode: Java/MyBatis
 artifacts were not byte-empty, but all four were `OperationModelReviewRequired*`
@@ -91,11 +91,18 @@ Public artifact types remain unchanged: DTO files are still persisted as
 `DTO_DRAFT` rows, while `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML`
 remain single files. P42B-C added the strict runtime schema and static quality
 validator, and P42D wires `JAVA_MYBATIS_DRAFT` to persist only validated AI Draft
-Pack files. If pack planning or validation fails, the workflow records
+Pack files. P42E adds a local API replay gate that submits a new ManageBond job
+through the workflow with fake metadata/model gateways and verifies eleven
+non-empty DTO artifacts plus one Service, Mapper interface, and Mapper XML.
+
+If pack planning or validation fails, the workflow records
 `P42_AI_DRAFT_PACK_FAILED` or `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and stores no
-misleading Java/MyBatis fallback skeletons. P42 remains `production_ready: false`,
-with no UI change, public API expansion, DB schema change, row-data access,
-procedure execution, automatic DDL/DML apply, or generated-source deployment.
+misleading Java/MyBatis fallback skeletons. Cross-database writes, called
+procedure I/O, TVF/procedure kind uncertainty, result-shape variants, and
+transaction boundaries remain `REVIEW_REQUIRED`. P42 remains
+`production_ready: false`, with no UI change, public API expansion, DB schema
+change, row-data access, procedure execution, automatic DDL/DML apply, or
+generated-source deployment.
 
 ## 한 줄 정의
 

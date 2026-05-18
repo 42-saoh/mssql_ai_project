@@ -43,25 +43,27 @@ operation model when planning is disabled or unavailable.
 
 ## P42 Verification Notes
 
-P42 validates the AI Draft Pack groundwork with fixture-first contract tests. The P42A
-groundwork gate is:
+P42 validates the AI Draft Pack path with fixture-first contract tests, static quality gates,
+workflow wiring tests, and a route-level ManageBond replay. The P42A groundwork gate is:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"
 ```
 
-P42B-F are planned as sequential slices for schema/gateway, deterministic code-draft
-validation, workflow artifact persistence, ManageBond replay, and docs quality gates. The
-intended final targeted gate adds P41 and P36 regression:
+P42B-E implement schema/gateway, deterministic code-draft validation, workflow artifact
+persistence, and ManageBond replay. P42F synchronizes docs and runs the final targeted gate,
+including P41 and P36 regression:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/validation/test_ai_draft_pack_validator.py tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py"
 ```
 
 The P42 fixture uses sanitized expectations from the external `MIGRATION_GUIDE.md` reference
 for `PCO_GU_ManageBond_PRC`; it does not store raw guide body, raw SP text, row data, raw
 prompts, or provider responses and does not require live DB, procedure execution, OpenAI network
-calls, public API expansion, DB schema changes, or a new public MCP invoke tool.
+calls, public API expansion, DB schema changes, or a new public MCP invoke tool. The P42E replay
+uses `FakeModelGateway` and `tests/helpers/p42_manage_bond.py`, and acceptance requires non-empty
+multi-DTO artifacts plus preserved `REVIEW_REQUIRED` uncertainty markers.
 
 ## 목적
 

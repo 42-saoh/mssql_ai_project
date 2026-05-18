@@ -48,6 +48,20 @@ The replay must produce non-empty multi-DTO AI Draft Pack artifacts: eleven
 gate. Cross-database write, called procedure I/O, uncertain TVF/procedure kind,
 and transaction boundary uncertainty remain `REVIEW_REQUIRED`.
 
+## P42F Status
+
+P42F closes the AI Draft Pack renewal slice with docs synchronization and a final
+quality gate. The synchronized docs describe the implemented P42 behavior:
+draft-only AI Draft Pack planning, deterministic Java/XML validation, workflow
+artifact persistence, explicit failure markers, local ManageBond route replay,
+and the remaining `REVIEW_REQUIRED` uncertainty items.
+
+P42F does not add UI, public API fields, DB schema, public MCP routes, public
+artifact types, source apply/deploy behavior, row-data access, procedure
+execution, live OpenAI requirements, or live PPM requirements. The final gate is
+P42 targeted tests plus P41 targeted tests, P36 generation regression, targeted
+Ruff for changed Python files when applicable, and `git diff --check`.
+
 ## Goal
 
 Create the P42 foundation for `PPM.dbo.PCO_GU_ManageBond_PRC` so the next slices
@@ -105,7 +119,8 @@ Mapper XML directly from sanitized analysis evidence.
   artifact persistence.
 - P42E route-level ManageBond replay gate proving new jobs persist non-empty
   multi-DTO AI Draft Pack artifacts and satisfy the fixture quality contract.
-- Minimal docs sync describing the intended P42 path.
+- P42F docs sync and final quality-gate report describing changed files,
+  verification, and residual risks.
 
 ## Recommended Skills
 
@@ -120,6 +135,7 @@ Mapper XML directly from sanitized analysis evidence.
 - `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"`
 - `make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/validation/test_ai_draft_pack_validator.py"`
 - `make test PYTEST_ARGS="tests/integration/api/test_api_workflow_routes.py tests/unit/api/test_workflow_service.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py"`
+- `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/validation/test_ai_draft_pack_validator.py tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py"`
 - `git diff --check`
 
 ## Done Definition
@@ -137,6 +153,8 @@ Mapper XML directly from sanitized analysis evidence.
 - P42E replay proves a new API workflow job produces required ManageBond DTOs,
   single Service/Mapper/Mapper XML files, no fallback skeletons, no blank
   content, no `ManageBondDTO` collapse, and preserved `REVIEW_REQUIRED` markers.
+- P42F docs match implemented behavior and the final gate reports no policy
+  drift, no missing regression coverage, and no whitespace issues.
 
 ## Notes / Risks
 

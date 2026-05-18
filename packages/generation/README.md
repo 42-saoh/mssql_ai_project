@@ -36,6 +36,13 @@ If the planner cannot produce a branch-level model, the workflow emits
 `OperationModelReviewRequired` with `P41_OPERATION_MODEL_REVIEW_REQUIRED` instead of treating
 the legacy single DTO as adequate.
 
+P42 adds the AI Draft Pack workflow path for complex SP Java/MyBatis drafts. For
+`JAVA_MYBATIS_DRAFT`, the API workflow can call the `AiJavaMyBatisDraftPack.v0.1` planner,
+validate the returned Java/XML content with the static P42 quality gate, and persist only
+validated files: one `DTO_DRAFT` artifact per DTO path and one artifact each for Service, Mapper
+interface, and Mapper XML. Pack artifacts remain draft-only; `OperationModelReviewRequired*`,
+single `ManageBondDTO` collapse, blank content, and source apply/deploy claims are blockers.
+
 Retired outputs are no longer public generation targets:
 
 - `DTO_MODEL_DRAFT`

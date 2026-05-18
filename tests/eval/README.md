@@ -16,9 +16,11 @@ P41 adds `test_p41_sp_operation_model.py` for the SP operation-model renewal gro
 the `PCO_GU_ManageBond_PRC` fixture, branch-level operation coverage, multi-DTO blueprint
 expectations, `REVIEW_REQUIRED` markers, storage safety, and the current single-DTO renderer gap.
 
-P42 adds `test_p42_manage_bond_ai_draft_quality.py` for AI Draft Pack groundwork. It checks the
-required ManageBond DTO inventory, single Service/Mapper/XML file expectations, fallback skeleton
-blockers, DTO-collapse blockers, `REVIEW_REQUIRED` uncertainty markers, and storage safety.
+P42 adds `test_p42_manage_bond_ai_draft_quality.py` for AI Draft Pack quality and pairs it with
+workflow/API replay tests. It checks the required ManageBond DTO inventory, single
+Service/Mapper/XML file expectations, fallback skeleton blockers, DTO-collapse blockers,
+`REVIEW_REQUIRED` uncertainty markers, storage safety, and that persisted artifacts can be
+reconstructed into a valid `AiJavaMyBatisDraftPack.v0.1` payload.
 
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.

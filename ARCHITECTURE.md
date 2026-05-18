@@ -136,17 +136,26 @@ file inventory, then file content, then deterministic validation/repair handles
 schema conformance, fallback blockers, evidence refs, and policy markers. P42B
 implements the strict `AiJavaMyBatisDraftPack.v0.1` runtime schema and prompt
 path, P42C validates Java/XML content statically, and P42D wires
-`JAVA_MYBATIS_DRAFT` to persist validated pack files instead of the P41 fallback
-Java renderer.
+`JAVA_MYBATIS_DRAFT` to prefer validated AI Draft Pack files for workflow
+persistence instead of the P41 fallback Java renderer.
 
 Workflow persistence stores each DTO pack file as its own `DTO_DRAFT` row keyed
 by `bundleFilePath`; Service, Mapper interface, and Mapper XML remain single
 rows. Artifact `extra` carries AI Draft Pack schema, target ref, agent run id,
 file role, DTO role where present, operation ids, quality score, source evidence
-refs, and review markers. Gateway/schema/quality failures record
+refs in `aiEvidenceRefs`, and review markers. Public artifact `evidenceRefs`
+stay within the existing API evidence enum, while AI draft evidence ids remain
+internal artifact metadata. Gateway/schema/quality failures record
 `P42_AI_DRAFT_PACK_FAILED`; disabled or unavailable safe context records
 `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`. Neither path persists
 `OperationModelReviewRequired*` Java/MyBatis fallback skeletons.
+
+P42E adds a route-level replay gate for `PCO_GU_ManageBond_PRC`: a fake
+metadata gateway and fake model gateway submit a new `JAVA_MYBATIS_DRAFT`
+workflow job, fetch persisted artifacts through the API, reconstruct an
+`AiJavaMyBatisDraftPack.v0.1` payload from stored artifacts, and rerun the P42C
+validator. The historical `job_6864d2734e` remains audit context only, not an
+acceptance result.
 
 P42 blocks `OperationModelReviewRequired*`, single `ManageBondDTO` collapse,
 empty content, raw SP or raw guide storage, row-data wording, and source

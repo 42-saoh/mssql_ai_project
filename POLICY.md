@@ -55,6 +55,9 @@
 - AI Draft Pack failure must be explicit with `P42_AI_DRAFT_PACK_FAILED` or
   `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`; misleading Java fallback skeleton persistence is not an
   acceptable success result.
+- P42 acceptance is based on a new sanitized workflow replay, not on historical failed jobs such as
+  `job_6864d2734e`. The replay must keep generated files draft-only and must not write them into
+  application source trees.
 - User-provided guide files may be used as quality references, but raw guide bodies, raw SP
   definitions, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets
   must not be persisted in repo fixtures or platform storage.
