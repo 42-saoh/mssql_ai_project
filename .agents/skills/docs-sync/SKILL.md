@@ -14,3 +14,9 @@ Use this when commands, structure, API, schema, or policy changed.
 3. Fix examples and paths, not just prose.
 4. Remove stale contradictions.
 5. Leave a short summary of what was synchronized.
+
+# Decision Gate Docs
+
+- For framework or orchestration readiness work, include the decision, verification commands, quality comparison, policy findings, rollback path, and residual `REVIEW_REQUIRED` items.
+- State explicitly when `production_ready` remains false.
+- Do not imply automatic conversion, source apply, deploy, row-data access, procedure execution, or production adoption unless a separate gate approved it.

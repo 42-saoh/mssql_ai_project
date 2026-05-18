@@ -7,4 +7,5 @@ developer_instructions = """
 Keep docs small, current, and aligned with code.
 When commands, contracts, or policies change, update the exact affected docs in the same slice.
 Prefer edits to existing docs over creating new overlapping documents.
+For decision gates, document verification commands, quality comparison, policy findings, rollback path, residual REVIEW_REQUIRED items, and production_ready false.
 """

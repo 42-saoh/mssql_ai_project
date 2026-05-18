@@ -18,6 +18,7 @@ Codex CLI에서 서브에이전트를 명시적으로 사용할 때 이 역할�
 | `platform_worker` | API/BFF, workflow, artifact/approval, registry 구현 | 애플리케이션 코드, 테스트, migration | 구현 중심 |
 | `mcp_engineer` | MSSQL Metadata MCP 서버, 읽기 전용 메타데이터 어댑터 | MCP tools, schemas, adapters, contract tests | 구현 중심 |
 | `template_engineer` | Canonical 모델, 프롬프트/템플릿, 생성기 | models, renderers, templates, generator tests | 설계+구현 |
+| `framework_engineer` | 내부 framework adapter pilot, trace/persistence redaction, 후보 비교 | adapter spike, trace policy evidence, baseline-vs-candidate replay | 구현 중심 |
 | `reviewer` | correctness, security, missing tests, docs drift | 리뷰 노트, 수정 요청, 품질 게이트 결과 | 읽기 전용 |
 | `docs_curator` | 설계/운영/사용자 문서 정합성 유지 | 문서 업데이트, 예시, 체크리스트 | 문서 편집 |
 
@@ -50,6 +51,15 @@ Codex CLI에서 서브에이전트를 명시적으로 사용할 때 이 역할�
 - 프롬프트보다 템플릿과 결정론적 렌더링을 우선한다.
 - 추론이 필요한 영역은 명시적으로 `REVIEW_REQUIRED` 표시를 남긴다.
 - 템플릿 버전과 출력 포맷 호환성을 관리한다.
+- P42/P43 draft pack 작업에서는 schema, inventory, repair, quality gate를 우선하고 ManageBond를 benchmark로만 취급한다.
+
+### framework_engineer
+
+- `AiGenerationFrameworkAdapter.v0.1` 기반 내부 framework pilot을 담당한다.
+- 현재 Responses/httpx gateway 또는 `BaselineResponsesFrameworkAdapter` rollback path를 보존한다.
+- fake adapter, sanitized fixture, trace/persistence redaction evidence를 실제 framework dependency보다 먼저 검증한다.
+- public switch, API/schema/UI/MCP/artifact 확장, source apply, deploy, row-data query, procedure execution은 별도 계약 없이는 만들지 않는다.
+- `production_ready: false`와 residual `REVIEW_REQUIRED`를 유지한다.
 
 ### reviewer
 
@@ -57,6 +67,7 @@ Codex CLI에서 서브에이전트를 명시적으로 사용할 때 이 역할�
 - correctness, policy compliance, security, missing tests, docs drift를 우선 본다.
 - 스타일 지적은 실제 오류 위험을 유발하는 경우만 한다.
 - 수정 제안은 재현 단계와 함께 남긴다.
+- framework adoption 리뷰에서는 trace/persistence leakage, P42 gate bypass, ManageBond overfit, rollback 누락을 blocker로 본다.
 
 ### docs_curator
 
@@ -68,7 +79,7 @@ Codex CLI에서 서브에이전트를 명시적으로 사용할 때 이 역할�
 
 ### 패턴 1. 설계 → 구현 → 리뷰
 1. `architect` 가 경계/계약을 정리한다.
-2. `platform_worker` 또는 `mcp_engineer` 가 구현한다.
+2. `platform_worker`, `mcp_engineer`, 또는 `framework_engineer` 가 구현한다.
 3. `reviewer` 가 correctness/security/docs drift를 본다.
 4. `docs_curator` 가 문서를 마감한다.
 
@@ -84,6 +95,7 @@ Codex CLI에서 서브에이전트를 명시적으로 사용할 때 이 역할�
 
 - 구조가 불명확하다 → `architect`
 - 메타데이터 서버를 건드린다 → `mcp_engineer`
+- framework adapter, trace policy, 후보 replay를 건드린다 → `framework_engineer`
 - 앱 코드/테스트를 만든다 → `platform_worker`
 - 생성기/템플릿/분석 모델을 다룬다 → `template_engineer`
 - 머지 전 검토가 필요하다 → `reviewer`

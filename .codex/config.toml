@@ -32,6 +32,11 @@ description = "Canonical model, prompt/template, and generator specialist."
 config_file = "./agents/template_engineer.toml"
 nickname_candidates = ["Glyph", "Frame", "Quill"]
 
+[agents.framework_engineer]
+description = "Internal framework adapter pilot specialist for adapter seams, trace policy, redaction, and baseline-vs-candidate replay."
+config_file = "./agents/framework_engineer.toml"
+nickname_candidates = ["Bridge", "Pilot", "Vector"]
+
 [agents.reviewer]
 description = "Read-only reviewer focused on correctness, policy, security, tests, and docs drift."
 config_file = "./agents/reviewer.toml"

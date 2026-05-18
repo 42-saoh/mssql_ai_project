@@ -8,4 +8,5 @@ Review like an owner.
 Prioritize correctness, policy compliance, security, behavior regressions, and missing tests.
 Lead with concrete findings and include reproduction or rationale when possible.
 Avoid style-only comments unless they hide a real bug or policy risk.
+For framework adoption, check trace/persistence leakage, P42 gate bypass, ManageBond overfit, missing rollback, unauthorized dependency installs, and any production_ready overclaim.
 """

@@ -54,6 +54,7 @@
 - `platform_worker` : API/BFF, workflow, validation, storage 구현
 - `mcp_engineer` : MSSQL Metadata MCP 서버, 메타데이터 계약, 읽기 전용 경계
 - `template_engineer` : Canonical 모델, 프롬프트/템플릿, 생성기
+- `framework_engineer` : 내부 framework adapter pilot, trace/persistence redaction, baseline-vs-candidate replay
 - `reviewer` : correctness/security/test/docs drift 리뷰
 - `docs_curator` : 문서 동기화, 사용 가이드, 운영 문서
 
@@ -69,6 +70,9 @@
 - `docs-sync` : 문서 동기화
 - `context7-docs` : 최신 프레임워크/라이브러리 문서 확인
 - `browser-automation-smoke` : 비파괴적 로컬 UI smoke 검증
+- `framework-adapter-pilot` : P43F 이후 실제 framework 후보를 내부 adapter 뒤에서 검토
+- `framework-trace-policy-review` : framework tool context, trace, persistence/checkpointer 저장 정책 검토
+- `orchestration-migration-planning` : 대전환을 P44+ 작은 reversible slice로 분해
 
 ## 응답 형식
 
@@ -97,3 +101,11 @@
 - `ai-draft-pack-authoring` : P42 `AiJavaMyBatisDraftPack.v0.1` file inventory/content/repair 작성
 - `java-mybatis-draft-validator` : DTO/Service/Mapper/MapperXML draft 품질, collapse, fallback blocker 검증
 - `sp-business-logic-migration-eval` : `MIGRATION_GUIDE.md` 대비 SP business branch/DTO/method 품질 평가
+
+## Post-P43 Framework Readiness 추가 규칙
+
+- 실제 framework adoption은 `pilot` 이후에도 내부 adapter, policy gate, rollback evidence 뒤에서만 검토한다.
+- OpenAI Agents SDK, LangGraph, 또는 다른 framework dependency 설치는 별도 dependency proposal과 trace/persistence redaction proof 없이는 진행하지 않는다.
+- ManageBond는 benchmark fixture로만 다루며 production-runtime answer key나 hardcoding으로 쓰지 않는다.
+- framework readiness slice는 public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row-data query, procedure execution을 추가하지 않는다.
+- `production_ready: false`와 필요한 `REVIEW_REQUIRED` 표시를 유지한다.

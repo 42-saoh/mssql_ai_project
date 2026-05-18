@@ -32,6 +32,7 @@ description: Evaluate complex stored procedure migration outputs against MIGRATI
 ## Default ManageBond Target
 
 - Default target: `PPM.dbo.PCO_GU_ManageBond_PRC`.
+- Use ManageBond as a benchmark quality target only, not as a production-runtime answer key or hardcoded generator branch.
 - Required branches: `R`, `A`, `C`, `U`, `D`, `VENDOR_U`, `ONLINE_U`.
 - Required uncertainty markers include cross-DB write, called procedure I/O, TVF/procedure kind, result-shape variants, and transaction boundaries.
 - A passing draft must show business flow in separate DTOs and branch/use-case methods, not in one merged DTO.

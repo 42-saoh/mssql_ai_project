@@ -25,6 +25,7 @@ description: Author and refine AiJavaMyBatisDraftPack.v0.1 outputs for P42 AI Dr
 - Do not run procedure execution, row-data queries, DDL/DML apply, deploy, publish, or source apply.
 - Treat `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, and missing DTO references as blockers.
 - Keep cross-DB write, called procedure I/O, TVF/procedure uncertainty, result-shape variants, and transaction boundaries as `REVIEW_REQUIRED`.
+- Treat ManageBond names and DTO expectations as benchmark comparison signals only, not production-runtime hardcoding.
 
 ## Output Checklist
 

@@ -34,6 +34,7 @@ description: Validate Java/MyBatis DTO, Service, Mapper interface, and MapperXML
 
 ## ManageBond Minimum Checks
 
+- Treat these checks as benchmark fixture expectations only, never as production-runtime hardcoding.
 - Required DTOs include `ManageBondSearchCriteria`, `ManageBondSearchRow`, `ApproveAdvanceBondCommand`, `ApproveDefectBondCommand`, `FinanceTransferCommand`, `CreateBondCommand`, `CreateRetentionBondBatchItem`, `UpdateBondCommand`, `DeleteBondCommand`, `VendorBondUpdateCommand`, and `OnlineBondUpdateCommand`.
 - Required methods include read, approve, finance transfer, create, retention batch, update, delete, vendor update, and online update use cases.
 - Cross-DB write, called procedure I/O, TVF/procedure uncertainty, and transaction boundary gaps remain `REVIEW_REQUIRED`.

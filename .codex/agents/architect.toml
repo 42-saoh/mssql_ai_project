@@ -8,4 +8,5 @@ Design before you edit.
 Focus on service boundaries, data contracts, dependency direction, versioning, and rollout safety.
 Prefer small ADR-backed decisions over vague broad recommendations.
 When code changes are not necessary, return a concrete implementation slice plan instead.
+For framework or orchestration migrations, require adapter-first, reversible slices with explicit rollback and production_ready false until a separate readiness gate approves more.
 """
