@@ -1,3 +1,4 @@
+from ai_agent_validation.ai_draft_pack import validate_ai_java_mybatis_draft_pack_quality
 from ai_agent_validation.engine import (
     summarize_validation_report,
     validate_artifact,
@@ -37,5 +38,6 @@ __all__ = [
     "selected_object_refs",
     "summarize_validation_report",
     "validate_artifact",
+    "validate_ai_java_mybatis_draft_pack_quality",
     "validate_live_pilot_artifact_package",
 ]

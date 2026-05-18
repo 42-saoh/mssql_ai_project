@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
+from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
+from ai_agent_validation.models import ValidationStatus
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "fixtures" / "eval" / "ai_draft_pack_p42_manage_bond_v1.yaml"
@@ -33,6 +36,78 @@ ALLOWED_ARTIFACT_TYPES = {
 
 def _yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _materialized_pack(fixture: dict[str, Any]) -> dict[str, Any]:
+    target = fixture["ai_draft_pack_quality_target"]
+    quality_gates = fixture["quality_gates"]
+    return {
+        "schemaVersion": target["schemaVersion"],
+        "contractTarget": target["contractTarget"],
+        "targetRef": target["targetRef"],
+        "sourcePolicy": target["sourcePolicy"],
+        "productionReady": target["productionReady"],
+        "files": [_materialized_file(file) for file in target["expectedFiles"]],
+        "evidenceRefs": list(target["evidenceRefs"]),
+        "reviewMarkers": list(target["reviewMarkers"]),
+        "qualityGates": {
+            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
+            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
+            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
+            "requiredReviewMarkers": list(target["reviewMarkers"]),
+            "blockerPatterns": list(quality_gates["blocker_patterns"]),
+            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
+            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
+            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
+                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
+            ),
+        },
+        "assumptions": ["P42C eval materialization is sanitized and productionReady=false."],
+    }
+
+
+def _materialized_file(file: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        "artifactType": file["artifactType"],
+        "path": file["path"],
+        "role": file["role"],
+        "className": file["className"],
+        "content": _materialized_content(file),
+        "operationIds": list(file["operationIds"]),
+        "evidenceRefs": list(file["evidenceRefs"]),
+        "reviewMarkers": list(file.get("reviewMarkers") or []),
+    }
+    for optional_key in ("dtoRole", "requiredFields", "references"):
+        if optional_key in file:
+            payload[optional_key] = deepcopy(file[optional_key])
+    return payload
+
+
+def _materialized_content(file: dict[str, Any]) -> str:
+    artifact_type = file["artifactType"]
+    class_name = file["className"]
+    if artifact_type == "DTO_DRAFT":
+        fields = "\n".join(f"    private String {field};" for field in file["requiredFields"])
+        return f"public class {class_name} {{\n    // REVIEW_REQUIRED draft DTO.\n{fields}\n}}"
+    if artifact_type == "MAPPER_XML":
+        references = " ".join(file["references"])
+        statements = "\n".join(
+            f'  <update id="{operation_id}">/* SQL_SKELETON_REVIEW_REQUIRED */</update>'
+            for operation_id in file["operationIds"]
+        )
+        return (
+            '<mapper namespace="ManageBondMapper">\n'
+            f"  <!-- REVIEW_REQUIRED DTO references: {references} -->\n"
+            f"{statements}\n"
+            "</mapper>"
+        )
+    references = " ".join(file.get("references") or ())
+    methods = "\n".join(
+        f"    public void {operation_id}() {{}}" for operation_id in file["operationIds"]
+    )
+    if artifact_type == "MAPPER_INTERFACE":
+        return f"public interface {class_name} {{\n    // {references}\n{methods}\n}}"
+    return f"public class {class_name} {{\n    // {references}\n{methods}\n}}"
 
 
 def _iter_mapping_keys(value: Any) -> Iterable[str]:
@@ -141,3 +216,42 @@ def test_p42_manage_bond_fixture_tracks_branch_and_dependency_coverage() -> None
         "PPM.dbo.PCS_PA_ReserveAmtSplitString_PRC"
         in facts["major_dependencies"]["called_procedures"]
     )
+
+
+def test_p42_manage_bond_materialized_pack_passes_deterministic_validator() -> None:
+    fixture = _yaml(FIXTURE)
+    expected_scores = fixture["expected_quality_report"]["scores"]
+
+    report = validate_ai_java_mybatis_draft_pack_quality(_materialized_pack(fixture))
+    scores = report.metadata["scores"]
+
+    assert report.status == ValidationStatus.PASSED
+    assert scores["requiredDtoFileCoverage"] == expected_scores["requiredDtoFileCoverage"]
+    assert scores["requiredServiceMethodCoverage"] == expected_scores[
+        "requiredServiceMethodCoverage"
+    ]
+    assert scores["expectedDtoArtifactRows"] == expected_scores["expectedDtoArtifactRows"]
+    assert scores["expectedServiceArtifactRows"] == expected_scores[
+        "expectedServiceArtifactRows"
+    ]
+    assert scores["expectedMapperInterfaceArtifactRows"] == expected_scores[
+        "expectedMapperInterfaceArtifactRows"
+    ]
+    assert scores["expectedMapperXmlArtifactRows"] == expected_scores[
+        "expectedMapperXmlArtifactRows"
+    ]
+    assert set(fixture["expected_quality_report"]["reviewRequiredFindings"]) <= set(
+        report.manual_review_points
+    )
+
+
+def test_p42_manage_bond_fallback_skeleton_pattern_is_not_acceptance_output() -> None:
+    fixture = _yaml(FIXTURE)
+    payload = _materialized_pack(fixture)
+    payload["files"][0]["path"] = "dto/OperationModelReviewRequired.java"
+    payload["files"][0]["className"] = "OperationModelReviewRequired"
+    payload["files"][0]["content"] = "public class OperationModelReviewRequired {}"
+
+    report = validate_ai_java_mybatis_draft_pack_quality(payload)
+
+    assert report.status == ValidationStatus.FAILED

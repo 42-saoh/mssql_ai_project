@@ -101,6 +101,9 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
   `VendorBondUpdateCommand`, and `OnlineBondUpdateCommand`.
 - Service, Mapper interface, and Mapper XML remain single files but must reference the required
   DTOs and expose branch/use-case methods.
+- P42C deterministic validation is static only: it checks Java/XML text, DTO/method references,
+  Mapper XML shape, forbidden payload markers, and required `REVIEW_REQUIRED` markers without
+  executing Java, SQL, Mapper XML, stored procedures, or database access.
 - `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, missing DTO references,
   source apply/deploy claims, and raw SP/guide storage are blockers.
 - Cross-DB write, called procedure I/O, uncertain TVF/procedure kind, result-shape variants, and

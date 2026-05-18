@@ -11,6 +11,15 @@ planner failed with `SP_OPERATION_MODEL_PLANNER_FAILED:ModelGatewayError`.
 P42 does not claim production readiness. It defines the contract, fixture,
 quality blockers, and sequential prompt pack needed before implementation.
 
+## P42C Status
+
+P42C adds a deterministic, static-only Java/MyBatis draft pack validator. It
+validates the `AiJavaMyBatisDraftPack.v0.1` schema first, then checks DTO class
+separation, required field tokens, Service/Mapper/Mapper XML DTO references,
+branch/use-case method tokens, Mapper XML statement ids, forbidden payload
+markers, and required `REVIEW_REQUIRED` markers. It never executes Java, SQL,
+Mapper XML, stored procedures, database access, source apply, or deploy actions.
+
 ## Goal
 
 Create the P42 foundation for `PPM.dbo.PCO_GU_ManageBond_PRC` so the next slices
@@ -64,6 +73,7 @@ Mapper XML directly from sanitized analysis evidence.
 - ManageBond AI Draft Pack quality fixture.
 - P42 prompt pack and manifest tracks.
 - Contract and eval tests for P42 groundwork.
+- P42C deterministic validation report for fixture-like Java/MyBatis draft packs.
 - Minimal docs sync describing the intended P42 path.
 
 ## Recommended Skills

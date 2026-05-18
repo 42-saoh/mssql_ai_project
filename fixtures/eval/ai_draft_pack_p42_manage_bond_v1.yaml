@@ -115,6 +115,7 @@ ai_draft_pack_quality_target:
     - CROSS_DB_WRITE_REVIEW_REQUIRED
     - CALLED_PROCEDURE_IO_REVIEW_REQUIRED
     - TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED
+    - TRANSACTION_BOUNDARY_REVIEW_REQUIRED
   expectedFiles:
     - artifactType: DTO_DRAFT
       path: dto/ManageBondSearchCriteria.java
