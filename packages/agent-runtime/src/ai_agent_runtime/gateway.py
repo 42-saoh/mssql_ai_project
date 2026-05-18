@@ -10,6 +10,7 @@ from typing import Any, Protocol
 import httpx
 
 from ai_agent_runtime.ai_draft_pack import (
+    AiDraftPackValidationError,
     ai_java_mybatis_draft_pack_output_schema,
     parse_ai_java_mybatis_draft_pack_json,
     validate_ai_java_mybatis_draft_pack_output,
@@ -360,6 +361,7 @@ class FakeModelGateway:
         raw_output = self._ai_draft_pack_by_target_ref.get(target_ref) or (
             _default_fake_ai_draft_pack_output(
                 allowed_refs=prompt.metadata.get("allowedEvidenceRefs") or (),
+                prompt_payload=_prompt_payload(prompt),
                 target_ref=target_ref,
             )
         )
@@ -390,8 +392,8 @@ def _default_fake_semantic_output() -> dict[str, Any]:
             {
                 "category": "LLM_SEMANTIC_SUMMARY",
                 "summary": (
-                    "Fake model gateway가 메타데이터와 정적 분석만 사용해 생성한 "
-                    "초안 의미 요약입니다."
+                    "Fake model gateway媛 硫뷀??곗씠?곗? ?뺤쟻 遺꾩꽍留??ъ슜???앹꽦??"
+                    "珥덉븞 ?섎? ?붿빟?낅땲??"
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": ["metadata.snapshot", "static.analysis"],
@@ -401,7 +403,7 @@ def _default_fake_semantic_output() -> dict[str, Any]:
             {
                 "code": "REVIEW_SQL_BEHAVIOR_BEFORE_CONVERSION",
                 "summary": (
-                    "Java/MyBatis 초안 코드로 전환하기 전에 procedure 동작을 검토해야 합니다."
+                    "Java/MyBatis 珥덉븞 肄붾뱶濡??꾪솚?섍린 ?꾩뿉 procedure ?숈옉??寃?좏빐???⑸땲??"
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": ["metadata.procedureDefinitionHash"],
@@ -411,7 +413,7 @@ def _default_fake_semantic_output() -> dict[str, Any]:
             {
                 "code": "LLM_OUTPUT_REQUIRES_HUMAN_REVIEW",
                 "severity": "WARNING",
-                "summary": "LLM 추론은 확인된 메타데이터 근거로 취급하지 않습니다.",
+                "summary": "LLM 異붾줎? ?뺤씤??硫뷀??곗씠??洹쇨굅濡?痍④툒?섏? ?딆뒿?덈떎.",
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": ["prompt.inputHash"],
             }
@@ -419,7 +421,7 @@ def _default_fake_semantic_output() -> dict[str, Any]:
         "reviewMarkers": [
             {
                 "code": "LLM_INFERENCE_REVIEW_REQUIRED",
-                "message": "LLM이 추론한 의미 정보는 validation caveat로 유지합니다.",
+                "message": "LLM??異붾줎???섎? ?뺣낫??validation caveat濡??좎??⑸땲??",
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": ["prompt.inputHash"],
             }
@@ -428,8 +430,8 @@ def _default_fake_semantic_output() -> dict[str, Any]:
             {
                 "code": "DRAFT_JAVA_MYBATIS_READINESS",
                 "summary": (
-                    "Java/MyBatis 초안을 적용하기 전 결정론적 메타데이터와 validation caveat를 "
-                    "반드시 확인해야 합니다."
+                    "Java/MyBatis 珥덉븞???곸슜?섍린 ??寃곗젙濡좎쟻 硫뷀??곗씠?곗? validation caveat瑜?"
+                    "諛섎뱶???뺤씤?댁빞 ?⑸땲??"
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": ["metadata.procedureDefinitionHash"],
@@ -439,16 +441,16 @@ def _default_fake_semantic_output() -> dict[str, Any]:
             {
                 "section": "migration_strategy",
                 "summary": (
-                    "가이드 claim은 evidence와 연결하고, 미지원 전환 claim은 REVIEW_REQUIRED로 "
-                    "표시합니다."
+                    "媛?대뱶 claim? evidence? ?곌껐?섍퀬, 誘몄????꾪솚 claim? REVIEW_REQUIRED濡?"
+                    "?쒖떆?⑸땲??"
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": ["metadata.procedureDefinitionHash"],
             }
         ],
         "assumptions": [
-            "Fake gateway를 사용했으며 외부 OpenAI API 요청은 보내지 않았습니다.",
-            "LLM 추론은 raw prompt나 SQL text 없이 구조화 출력으로만 저장됩니다.",
+            "Fake gateway瑜??ъ슜?덉쑝硫??몃? OpenAI API ?붿껌? 蹂대궡吏 ?딆븯?듬땲??",
+            "LLM 異붾줎? raw prompt??SQL text ?놁씠 援ъ“??異쒕젰?쇰줈留???λ맗?덈떎.",
         ],
     }
 
@@ -462,15 +464,15 @@ def _default_fake_metadata_analysis_output(
     evidence_refs = refs[:1] or ["metadata.analysis.no_fact"]
     return {
         "summary": (
-            "Fake model gateway가 sanitized 결정론적 MCP evidence로 생성한 "
-            "초안 메타데이터 분석입니다."
+            "Fake model gateway媛 sanitized 寃곗젙濡좎쟻 MCP evidence濡??앹꽦??"
+            "珥덉븞 硫뷀??곗씠??遺꾩꽍?낅땲??"
         ),
         "objectInsights": [
             {
                 "code": "METADATA_EVIDENCE_SUMMARY",
                 "objectRef": target_ref or "metadata.analysis",
                 "summary": (
-                    "추론된 구조를 사용하기 전에 읽기 전용 메타데이터 evidence를 검토해야 합니다."
+                    "異붾줎??援ъ“瑜??ъ슜?섍린 ?꾩뿉 ?쎄린 ?꾩슜 硫뷀??곗씠??evidence瑜?寃?좏빐???⑸땲??"
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": evidence_refs,
@@ -484,8 +486,8 @@ def _default_fake_metadata_analysis_output(
                         "code": "DRAFT_DTO_READINESS_REVIEW",
                         "objectRef": target_ref or "metadata.analysis",
                         "summary": (
-                            "결정론적 메타데이터 profile과 evidence caveat를 확인하기 전까지 "
-                            "DTO readiness는 draft-only로 유지합니다."
+                            "寃곗젙濡좎쟻 硫뷀??곗씠??profile怨?evidence caveat瑜??뺤씤?섍린 ?꾧퉴吏 "
+                            "DTO readiness??draft-only濡??좎??⑸땲??"
                         ),
                         "status": "REVIEW_REQUIRED",
                         "evidenceRefs": evidence_refs,
@@ -499,7 +501,7 @@ def _default_fake_metadata_analysis_output(
                 "status": "REVIEW_REQUIRED",
                 "fieldCount": 0,
                 "reviewReasons": [
-                    "Fake gateway는 evidence ref 범위를 넘어 DTO shape를 확정할 수 없습니다."
+                    "Fake gateway??evidence ref 踰붿쐞瑜??섏뼱 DTO shape瑜??뺤젙?????놁뒿?덈떎."
                 ],
                 "evidenceRefs": evidence_refs,
             }
@@ -507,14 +509,14 @@ def _default_fake_metadata_analysis_output(
         "reviewMarkers": [
             {
                 "code": "LLM_METADATA_ANALYSIS_REVIEW_REQUIRED",
-                "message": "Metadata LLM 추론은 REVIEW_REQUIRED 보조 정보로 유지합니다.",
+                "message": "Metadata LLM 異붾줎? REVIEW_REQUIRED 蹂댁“ ?뺣낫濡??좎??⑸땲??",
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": evidence_refs,
             }
         ],
         "assumptions": [
-            "Fake gateway를 사용했으며 외부 OpenAI API 요청은 보내지 않았습니다.",
-            "안전하지 않은 source text, sample record, secret-like 값은 제외했습니다.",
+            "Fake gateway瑜??ъ슜?덉쑝硫??몃? OpenAI API ?붿껌? 蹂대궡吏 ?딆븯?듬땲??",
+            "?덉쟾?섏? ?딆? source text, sample record, secret-like 媛믪? ?쒖쇅?덉뒿?덈떎.",
         ],
     }
 
@@ -595,11 +597,23 @@ def _default_fake_sp_operation_model_output(
 def _default_fake_ai_draft_pack_output(
     *,
     allowed_refs: Any,
+    prompt_payload: Mapping[str, Any] | None = None,
     target_ref: str,
 ) -> dict[str, Any]:
     refs = [str(ref) for ref in allowed_refs if str(ref).strip()]
     evidence_refs = refs[:1] or ["metadata.ai_draft_pack.no_fact"]
     normalized_target_ref = target_ref or "sp.ai_draft_pack.review_required"
+    prompt_payload = dict(prompt_payload or {})
+    expected_inventory = [
+        dict(item)
+        for item in prompt_payload.get("expectedInventory", [])
+        if isinstance(item, Mapping)
+    ]
+    quality_gates = (
+        dict(prompt_payload.get("qualityGates"))
+        if isinstance(prompt_payload.get("qualityGates"), Mapping)
+        else None
+    )
     review_markers = [
         "P42_AI_DRAFT_PACK_REVIEW_REQUIRED",
         "CROSS_DB_WRITE_REVIEW_REQUIRED",
@@ -607,6 +621,37 @@ def _default_fake_ai_draft_pack_output(
         "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
         "TRANSACTION_BOUNDARY_REVIEW_REQUIRED",
     ]
+    if expected_inventory and quality_gates:
+        return {
+            "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
+            "contractTarget": "AiJavaMyBatisDraftPack",
+            "targetRef": normalized_target_ref,
+            "sourcePolicy": "sanitized_facts_only",
+            "productionReady": False,
+            "files": [
+                _fake_ai_draft_pack_file(
+                    item,
+                    evidence_refs=evidence_refs,
+                    review_markers=review_markers,
+                )
+                for item in expected_inventory
+            ],
+            "evidenceRefs": evidence_refs,
+            "reviewMarkers": list(
+                dict.fromkeys(
+                    [
+                        *review_markers,
+                        *[
+                            str(marker)
+                            for marker in quality_gates.get("requiredReviewMarkers", [])
+                            if str(marker).strip()
+                        ],
+                    ]
+                )
+            ),
+            "qualityGates": quality_gates,
+            "assumptions": ["Fake gateway materialized the expected inventory as draft-only."],
+        }
     return {
         "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
         "contractTarget": "AiJavaMyBatisDraftPack",
@@ -692,13 +737,225 @@ def _default_fake_ai_draft_pack_output(
             "requiredServiceMethods": ["reviewDraft"],
             "requiredMapperMethods": ["reviewDraft"],
             "requiredReviewMarkers": review_markers,
-            "blockerPatterns": ["OperationModelReviewRequired", "ManageBondDTO"],
+            "blockerPatterns": ["OperationModelReviewRequired"],
             "blankContentIsBlocker": True,
             "dtoCollapseIsBlocker": True,
             "fallbackSkeletonPersistenceAllowedOnFailure": False,
         },
         "assumptions": ["Fake gateway fallback is draft-only and requires review."],
     }
+
+
+def _prompt_payload(prompt: RenderedPrompt) -> dict[str, Any]:
+    try:
+        payload = json.loads(prompt.user_prompt)
+    except (TypeError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _prompt_operation_statement_evidence(prompt: RenderedPrompt) -> list[dict[str, Any]]:
+    payload = _prompt_payload(prompt)
+    statements = payload.get("statementEvidence")
+    if not isinstance(statements, list):
+        return []
+    return [dict(item) for item in statements if isinstance(item, Mapping)]
+
+
+def _sp_operation_model_text_with_statement_evidence_defaults(
+    output_text: str,
+    *,
+    statement_defaults: Sequence[Mapping[str, Any]],
+) -> str:
+    if not statement_defaults:
+        return output_text
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return output_text
+    if not isinstance(payload, dict):
+        return output_text
+
+    operations = payload.get("operations")
+    if not isinstance(operations, list):
+        return output_text
+    default_statements = [dict(item) for item in statement_defaults if isinstance(item, Mapping)]
+    default_by_id = {
+        str(item.get("statementId") or ""): item
+        for item in default_statements
+        if str(item.get("statementId") or "")
+    }
+    default_aliases = _operation_statement_ref_aliases(default_statements)
+    existing_statements = payload.get("statementEvidence")
+    if not isinstance(existing_statements, list):
+        existing_statements = []
+    existing_statement_maps: list[dict[str, Any]] = []
+    for item in existing_statements:
+        if not isinstance(item, Mapping):
+            continue
+        statement_id = str(item.get("statementId") or "")
+        canonical_id = default_aliases.get(statement_id, statement_id)
+        if canonical_id in default_by_id:
+            existing_statement_maps.append(dict(default_by_id[canonical_id]))
+            continue
+        copied = dict(item)
+        if canonical_id != statement_id:
+            copied["statementId"] = canonical_id
+        existing_statement_maps.append(copied)
+    aliases = _operation_statement_ref_aliases(
+        [*existing_statement_maps, *default_statements]
+    )
+    existing_ids = {
+        str(item.get("statementId") or "")
+        for item in existing_statement_maps
+        if str(item.get("statementId") or "")
+    }
+    referenced_default_ids: set[str] = set()
+    for operation in operations:
+        if not isinstance(operation, dict):
+            continue
+        key = "statementRefs" if "statementRefs" in operation else "statement_refs"
+        refs = operation.get(key)
+        if not isinstance(refs, list):
+            continue
+        normalized_refs: list[str] = []
+        for ref in refs:
+            ref_text = _operation_model_string_value(
+                ref,
+                candidate_keys=("statementId", "statement_id", "id", "ref"),
+            )
+            if not ref_text:
+                continue
+            mapped_ref = aliases.get(ref_text, ref_text)
+            if mapped_ref in default_by_id:
+                referenced_default_ids.add(mapped_ref)
+            if mapped_ref not in normalized_refs:
+                normalized_refs.append(mapped_ref)
+        operation["statementRefs"] = normalized_refs
+        if key != "statementRefs":
+            operation.pop(key, None)
+
+    for statement_id in sorted(referenced_default_ids - existing_ids):
+        existing_statement_maps.append(dict(default_by_id[statement_id]))
+    payload["statementEvidence"] = existing_statement_maps
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _operation_statement_ref_aliases(
+    statements: Sequence[Mapping[str, Any]],
+) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for statement in statements:
+        statement_id = str(statement.get("statementId") or "")
+        if not statement_id:
+            continue
+        operation = str(statement.get("operation") or "").lower()
+        aliases[statement_id] = statement_id
+        suffix = statement_id.rsplit(".", 1)[-1]
+        if suffix:
+            aliases[suffix] = statement_id
+            if operation:
+                aliases[f"stmt.{operation}.{suffix}"] = statement_id
+        for ref in statement.get("evidenceRefs", []) or []:
+            ref_text = str(ref).strip()
+            if not ref_text:
+                continue
+            aliases[ref_text] = statement_id
+            ref_suffix = ref_text.rsplit(".", 1)[-1]
+            if ref_suffix:
+                aliases[ref_suffix] = statement_id
+                if operation:
+                    aliases[f"stmt.{operation}.{ref_suffix}"] = statement_id
+                    aliases[f"stmt.{operation}.{ref_text}"] = statement_id
+    return aliases
+
+
+def _fake_ai_draft_pack_file(
+    item: Mapping[str, Any],
+    *,
+    evidence_refs: Sequence[str],
+    review_markers: Sequence[str],
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "artifactType": str(item.get("artifactType") or ""),
+        "path": str(item.get("path") or ""),
+        "role": str(item.get("role") or ""),
+        "className": str(item.get("className") or "DraftFile"),
+        "operationIds": [
+            str(ref)
+            for ref in item.get("operationIds", [])
+            if str(ref).strip()
+        ]
+        or ["reviewDraft"],
+        "evidenceRefs": [
+            str(ref)
+            for ref in item.get("evidenceRefs", [])
+            if str(ref).strip()
+        ]
+        or list(evidence_refs),
+        "reviewMarkers": [
+            str(marker)
+            for marker in item.get("reviewMarkers", [])
+            if str(marker).strip()
+        ]
+        or list(review_markers),
+    }
+    for key in ("dtoRole", "requiredFields", "references"):
+        if key in item:
+            value = item[key]
+            payload[key] = (
+                list(value)
+                if isinstance(value, Sequence) and not isinstance(value, str | bytes)
+                else value
+            )
+    payload["content"] = _fake_ai_draft_pack_content(payload)
+    return payload
+
+
+def _fake_ai_draft_pack_content(file: Mapping[str, Any]) -> str:
+    artifact_type = str(file.get("artifactType") or "")
+    class_name = str(file.get("className") or "DraftFile")
+    markers = " ".join(str(marker) for marker in file.get("reviewMarkers", []) if str(marker))
+    methods = [
+        str(method)
+        for method in file.get("operationIds", [])
+        if str(method).strip()
+    ] or ["reviewDraft"]
+    references = " ".join(
+        str(reference)
+        for reference in file.get("references", [])
+        if str(reference).strip()
+    )
+    if artifact_type == "DTO_DRAFT":
+        fields = "\n".join(
+            f"    private String {field};"
+            for field in file.get("requiredFields", [])
+            if str(field).strip()
+        )
+        return f"public class {class_name} {{\n    // {markers} draft DTO.\n{fields}\n}}"
+    if artifact_type == "SERVICE_DRAFT":
+        method_text = "\n".join(
+            f"    public void {method}() {{ /* REVIEW_REQUIRED {references} */ }}"
+            for method in methods
+        )
+        return (
+            f"public class {class_name} {{\n"
+            f"    // REVIEW_REQUIRED {references}\n{method_text}\n}}"
+        )
+    if artifact_type == "MAPPER_INTERFACE":
+        method_text = "\n".join(f"    void {method}();" for method in methods)
+        return (
+            f"public interface {class_name} {{\n"
+            f"    // REVIEW_REQUIRED {references}\n{method_text}\n}}"
+        )
+    if artifact_type == "MAPPER_XML":
+        statement_text = "\n".join(
+            f'  <select id="{method}"><!-- REVIEW_REQUIRED {references} --></select>'
+            for method in methods
+        )
+        namespace = class_name[:-3] if class_name.endswith("SQL") else class_name
+        return f'<mapper namespace="{namespace}">\n{statement_text}\n</mapper>'
+    return f"// REVIEW_REQUIRED {class_name} {markers} {references}"
 
 
 class OpenAIModelGateway:
@@ -788,6 +1045,7 @@ class OpenAIModelGateway:
         profile: ModelProfile,
     ) -> ModelInvocationRecord:
         allowed_refs = prompt.metadata.get("allowedEvidenceRefs") or ()
+        statement_defaults = _prompt_operation_statement_evidence(prompt)
         return self._invoke_structured_output(
             prompt=prompt,
             profile=profile,
@@ -796,7 +1054,10 @@ class OpenAIModelGateway:
                 allowed_evidence_refs=allowed_refs,
             ),
             parser=lambda output_text: parse_sp_operation_model_json(
-                output_text,
+                _sp_operation_model_text_with_statement_evidence_defaults(
+                    output_text,
+                    statement_defaults=statement_defaults,
+                ),
                 allowed_evidence_refs=allowed_refs,
             ),
             invalid_code="OPENAI_SP_OPERATION_MODEL_INVALID",
@@ -809,6 +1070,7 @@ class OpenAIModelGateway:
         profile: ModelProfile,
     ) -> ModelInvocationRecord:
         allowed_refs = prompt.metadata.get("allowedEvidenceRefs") or ()
+        quality_gates = _prompt_ai_draft_pack_quality_gates(prompt)
         return self._invoke_structured_output(
             prompt=prompt,
             profile=profile,
@@ -817,7 +1079,10 @@ class OpenAIModelGateway:
                 allowed_evidence_refs=allowed_refs,
             ),
             parser=lambda output_text: parse_ai_java_mybatis_draft_pack_json(
-                output_text,
+                _ai_draft_pack_text_with_quality_gate_defaults(
+                    output_text,
+                    quality_gates=quality_gates,
+                ),
                 allowed_evidence_refs=allowed_refs,
             ),
             invalid_code="OPENAI_AI_DRAFT_PACK_INVALID",
@@ -883,6 +1148,7 @@ class OpenAIModelGateway:
                 raise ModelGatewayError(
                     "OpenAI response did not match the required structured output schema.",
                     code=invalid_code,
+                    provider_error=_parser_error_summary(exc, invalid_code=invalid_code),
                 ) from exc
             try:
                 retry_component = {
@@ -911,6 +1177,10 @@ class OpenAIModelGateway:
                 raise ModelGatewayError(
                     "OpenAI response did not match the required structured output schema.",
                     code=invalid_code,
+                    provider_error=_parser_error_summary(
+                        retry_exc,
+                        invalid_code=invalid_code,
+                    ),
                 ) from retry_exc
         except httpx.HTTPStatusError as exc:
             raise ModelGatewayError(
@@ -1108,6 +1378,13 @@ def _pgpt_retry_payload(
         "Use empty arrays when a section has no supported claim. Preserve machine identifiers "
         "and evidenceRefs exactly."
     )
+    if schema_name == "ai_java_mybatis_draft_pack":
+        retry_instruction = (
+            f"{retry_instruction} The files array must contain file objects with keys "
+            "artifactType, path, role, className, content, operationIds, evidenceRefs, "
+            "reviewMarkers, dtoRole, requiredFields, references, and qualityScore. "
+            "Every content value must be a non-empty Java or Mapper XML draft string."
+        )
     return {
         "model": profile.model,
         "instructions": f"{prompt.system_prompt}\n\n{retry_instruction}",
@@ -1175,6 +1452,81 @@ def _provider_error_summary(response: httpx.Response) -> dict[str, str]:
             if value:
                 summary[key] = value
     return summary
+
+
+def _parser_error_summary(exc: Exception, *, invalid_code: str) -> dict[str, str]:
+    summary = {
+        "type": exc.__class__.__name__,
+        "code": invalid_code,
+    }
+    if isinstance(exc, json.JSONDecodeError):
+        summary["message"] = str(exc)[:300]
+    elif isinstance(exc, AiDraftPackValidationError):
+        summary["message"] = "AiJavaMyBatisDraftPack validation failed."
+        summary["findingCount"] = str(len(exc.findings))
+        findings = _sanitized_parser_findings(exc.findings)
+        if findings:
+            summary["findings"] = " | ".join(findings)
+    else:
+        summary["message"] = str(exc)[:300]
+    return summary
+
+
+def _prompt_ai_draft_pack_quality_gates(prompt: RenderedPrompt) -> dict[str, Any]:
+    try:
+        payload = json.loads(prompt.user_prompt)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, Mapping):
+        return {}
+    quality_gates = payload.get("qualityGates")
+    return dict(quality_gates) if isinstance(quality_gates, Mapping) else {}
+
+
+def _ai_draft_pack_text_with_quality_gate_defaults(
+    output_text: str,
+    *,
+    quality_gates: Mapping[str, Any],
+) -> str:
+    if not quality_gates:
+        return output_text
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return output_text
+    if not isinstance(payload, dict):
+        return output_text
+    payload["qualityGates"] = dict(quality_gates)
+    required_markers = [
+        str(marker)
+        for marker in quality_gates.get("requiredReviewMarkers", [])
+        if str(marker).strip()
+    ]
+    if required_markers:
+        raw_markers = payload.get("reviewMarkers", [])
+        if not isinstance(raw_markers, list):
+            raw_markers = [raw_markers]
+        existing_markers = [
+            marker
+            for marker in (
+                _operation_model_string_value(
+                    raw_marker,
+                    candidate_keys=("code", "marker", "name", "message", "summary"),
+                )
+                for raw_marker in raw_markers
+            )
+            if marker
+        ]
+        payload["reviewMarkers"] = list(dict.fromkeys([*existing_markers, *required_markers]))
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _sanitized_parser_findings(findings: Sequence[str]) -> list[str]:
+    safe: list[str] = []
+    for finding in findings[:8]:
+        text = str(finding)
+        safe.append(text[:220])
+    return safe
 
 
 def _sanitize_provider_error_value(value: Any, *, key: str) -> str:
@@ -1297,6 +1649,16 @@ def _parse_structured_output(
     adapter_components: list[dict[str, Any]] = []
     if provider == REMOTE_PROVIDER_PGPT and schema_name == "llm_semantic_analysis":
         output_text, adapter_components = _pgpt_semantic_output_text(output_text)
+    if provider == REMOTE_PROVIDER_PGPT and schema_name == "sp_operation_model":
+        output_text, adapter_components = _pgpt_json_object_output_text(
+            output_text,
+            action="adapted_pgpt_sp_operation_model_output",
+        )
+    if provider == REMOTE_PROVIDER_PGPT and schema_name == "ai_java_mybatis_draft_pack":
+        output_text, adapter_components = _pgpt_json_object_output_text(
+            output_text,
+            action="adapted_pgpt_ai_draft_pack_output",
+        )
     try:
         return parser(output_text), adapter_components
     except (json.JSONDecodeError, ValueError) as exc:
@@ -1317,6 +1679,38 @@ def _parse_structured_output(
                         "action": f"normalized_{schema_name}",
                         "removedFieldPaths": removed_paths,
                     }
+                ],
+            )
+        if schema_name == "sp_operation_model":
+            repaired, removed_paths = _operation_model_without_schema_drift(output_text)
+            if not removed_paths:
+                raise exc
+            return (
+                parser(json.dumps(repaired, ensure_ascii=False, separators=(",", ":"))),
+                [
+                    *adapter_components,
+                    {
+                        "component": "structured_output_normalizer",
+                        "status": "SUCCEEDED",
+                        "action": "normalized_sp_operation_model",
+                        "removedFieldPaths": removed_paths,
+                    },
+                ],
+            )
+        if schema_name == "ai_java_mybatis_draft_pack":
+            repaired, removed_paths = _ai_draft_pack_without_schema_drift(output_text)
+            if not removed_paths:
+                raise exc
+            return (
+                parser(json.dumps(repaired, ensure_ascii=False, separators=(",", ":"))),
+                [
+                    *adapter_components,
+                    {
+                        "component": "structured_output_normalizer",
+                        "status": "SUCCEEDED",
+                        "action": "normalized_ai_java_mybatis_draft_pack",
+                        "removedFieldPaths": removed_paths,
+                    },
                 ],
             )
         if schema_name != "llm_semantic_analysis":
@@ -1364,6 +1758,843 @@ _SEMANTIC_WRAPPER_KEYS = (
     "analysis",
 )
 _TEXT_WRAPPER_KEYS = ("output_text", "text", "content", "message", "response")
+
+
+_OPERATION_MODEL_ROOT_KEYS = {
+    "schemaVersion",
+    "contractTarget",
+    "targetRef",
+    "sourcePolicy",
+    "productionReady",
+    "operations",
+    "statementEvidence",
+    "dtoBlueprints",
+    "reviewMarkers",
+    "evidenceRefs",
+    "assumptions",
+}
+_OPERATION_MODEL_OPERATION_KEYS = {
+    "operationId",
+    "crudFlag",
+    "title",
+    "summary",
+    "branchCondition",
+    "statementRefs",
+    "dtoBlueprintRefs",
+    "stateTransitions",
+    "riskMarkers",
+    "evidenceRefs",
+    "status",
+}
+_OPERATION_MODEL_BRANCH_KEYS = {"expression", "variables", "evidenceRefs", "status"}
+_OPERATION_MODEL_STATEMENT_KEYS = {
+    "statementId",
+    "operation",
+    "targetRef",
+    "phase",
+    "inputs",
+    "outputs",
+    "writes",
+    "crossDatabase",
+    "reviewMarkers",
+    "evidenceRefs",
+    "status",
+}
+_OPERATION_MODEL_DTO_KEYS = {
+    "name",
+    "role",
+    "operationIds",
+    "fields",
+    "evidenceRefs",
+    "reviewMarkers",
+}
+_OPERATION_MODEL_DTO_FIELD_KEYS = {"name", "dbType", "source", "required", "evidenceRefs"}
+
+_OPERATION_MODEL_ROOT_ALIASES = {
+    "schema_version": "schemaVersion",
+    "contract_target": "contractTarget",
+    "target_ref": "targetRef",
+    "source_policy": "sourcePolicy",
+    "production_ready": "productionReady",
+    "statement_evidence": "statementEvidence",
+    "dto_blueprints": "dtoBlueprints",
+    "review_markers": "reviewMarkers",
+    "evidence_refs": "evidenceRefs",
+}
+_OPERATION_MODEL_OPERATION_ALIASES = {
+    "operation_id": "operationId",
+    "crud_flag": "crudFlag",
+    "branch_condition": "branchCondition",
+    "statement_refs": "statementRefs",
+    "dto_blueprint_refs": "dtoBlueprintRefs",
+    "state_transitions": "stateTransitions",
+    "risk_markers": "riskMarkers",
+    "reviewMarkers": "riskMarkers",
+    "review_markers": "riskMarkers",
+    "evidence_refs": "evidenceRefs",
+}
+_OPERATION_MODEL_BRANCH_ALIASES = {"evidence_refs": "evidenceRefs"}
+_OPERATION_MODEL_STATEMENT_ALIASES = {
+    "statement_id": "statementId",
+    "target_ref": "targetRef",
+    "cross_database": "crossDatabase",
+    "review_markers": "reviewMarkers",
+    "evidence_refs": "evidenceRefs",
+}
+_OPERATION_MODEL_DTO_ALIASES = {
+    "className": "name",
+    "class_name": "name",
+    "dtoRole": "role",
+    "dto_role": "role",
+    "operation_ids": "operationIds",
+    "review_markers": "reviewMarkers",
+    "evidence_refs": "evidenceRefs",
+}
+_OPERATION_MODEL_DTO_FIELD_ALIASES = {
+    "db_type": "dbType",
+    "evidence_refs": "evidenceRefs",
+}
+
+_AI_DRAFT_PACK_ROOT_KEYS = {
+    "schemaVersion",
+    "contractTarget",
+    "targetRef",
+    "sourcePolicy",
+    "productionReady",
+    "files",
+    "evidenceRefs",
+    "reviewMarkers",
+    "qualityGates",
+    "assumptions",
+}
+_AI_DRAFT_PACK_FILE_KEYS = {
+    "artifactType",
+    "path",
+    "role",
+    "className",
+    "content",
+    "operationIds",
+    "evidenceRefs",
+    "reviewMarkers",
+    "dtoRole",
+    "requiredFields",
+    "references",
+    "qualityScore",
+}
+_AI_DRAFT_PACK_QUALITY_GATE_KEYS = {
+    "requiredDtoClasses",
+    "requiredServiceMethods",
+    "requiredMapperMethods",
+    "requiredReviewMarkers",
+    "blockerPatterns",
+    "blankContentIsBlocker",
+    "dtoCollapseIsBlocker",
+    "fallbackSkeletonPersistenceAllowedOnFailure",
+}
+_AI_DRAFT_PACK_ROOT_ALIASES = {
+    "schema_version": "schemaVersion",
+    "contract_target": "contractTarget",
+    "target_ref": "targetRef",
+    "source_policy": "sourcePolicy",
+    "production_ready": "productionReady",
+    "evidence_refs": "evidenceRefs",
+    "review_markers": "reviewMarkers",
+    "quality_gates": "qualityGates",
+}
+_AI_DRAFT_PACK_FILE_ALIASES = {
+    "artifact_type": "artifactType",
+    "class_name": "className",
+    "operation_ids": "operationIds",
+    "evidence_refs": "evidenceRefs",
+    "review_markers": "reviewMarkers",
+    "dto_role": "dtoRole",
+    "required_fields": "requiredFields",
+    "quality_score": "qualityScore",
+}
+_AI_DRAFT_PACK_QUALITY_GATE_ALIASES = {
+    "required_dto_classes": "requiredDtoClasses",
+    "required_service_methods": "requiredServiceMethods",
+    "required_mapper_methods": "requiredMapperMethods",
+    "required_review_markers": "requiredReviewMarkers",
+    "blocker_patterns": "blockerPatterns",
+    "blank_content_is_blocker": "blankContentIsBlocker",
+    "dto_collapse_is_blocker": "dtoCollapseIsBlocker",
+    "fallback_skeleton_persistence_allowed_on_failure": (
+        "fallbackSkeletonPersistenceAllowedOnFailure"
+    ),
+}
+
+
+def _ai_draft_pack_without_schema_drift(output_text: str) -> tuple[dict[str, Any], list[str]]:
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return {}, []
+    if not isinstance(payload, dict):
+        return {}, []
+
+    removed_paths: list[str] = []
+    payload = _ai_draft_pack_payload_from_wrapper(payload, removed_paths=removed_paths)
+    repaired = _aliased_mapping_without_extra_fields(
+        payload,
+        allowed_keys=_AI_DRAFT_PACK_ROOT_KEYS,
+        aliases=_AI_DRAFT_PACK_ROOT_ALIASES,
+        path="$",
+        removed_paths=removed_paths,
+    )
+    repaired["files"] = _ai_draft_pack_files_without_schema_drift(
+        repaired.get("files"),
+        path="$.files",
+        removed_paths=removed_paths,
+    )
+    repaired["evidenceRefs"] = _operation_model_string_list(
+        repaired.get("evidenceRefs"),
+        path="$.evidenceRefs",
+        removed_paths=removed_paths,
+        candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+    )
+    repaired["reviewMarkers"] = _operation_model_string_list(
+        repaired.get("reviewMarkers"),
+        path="$.reviewMarkers",
+        removed_paths=removed_paths,
+        candidate_keys=("code", "marker", "name", "message", "summary"),
+    )
+    repaired["assumptions"] = _operation_model_string_list(
+        repaired.get("assumptions"),
+        path="$.assumptions",
+        removed_paths=removed_paths,
+        candidate_keys=("summary", "text", "message", "description"),
+    )
+    repaired["qualityGates"] = _ai_draft_pack_quality_gates_without_schema_drift(
+        repaired.get("qualityGates"),
+        path="$.qualityGates",
+        removed_paths=removed_paths,
+    )
+    return repaired, sorted(set(removed_paths))
+
+
+def _ai_draft_pack_payload_from_wrapper(
+    payload: dict[str, Any],
+    *,
+    removed_paths: list[str],
+) -> dict[str, Any]:
+    if _looks_like_ai_draft_pack_payload(payload):
+        return payload
+    for key in ("aiDraftPack", "draftPack", "structuredOutput", "output", "data"):
+        nested = payload.get(key)
+        if isinstance(nested, dict) and _looks_like_ai_draft_pack_payload(nested):
+            removed_paths.append(f"$.{key}")
+            return nested
+    return payload
+
+
+def _looks_like_ai_draft_pack_payload(payload: Mapping[str, Any]) -> bool:
+    keys = set(payload) | {_AI_DRAFT_PACK_ROOT_ALIASES.get(key, key) for key in payload}
+    return bool(keys & {"files", "qualityGates", "targetRef"})
+
+
+def _ai_draft_pack_files_without_schema_drift(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    items = _operation_model_value_list(value, path=path, removed_paths=removed_paths)
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(items):
+        item_path = f"{path}[{index}]"
+        if not isinstance(raw_item, dict):
+            removed_paths.append(item_path)
+            continue
+        repaired = _aliased_mapping_without_extra_fields(
+            raw_item,
+            allowed_keys=_AI_DRAFT_PACK_FILE_KEYS,
+            aliases=_AI_DRAFT_PACK_FILE_ALIASES,
+            path=item_path,
+            removed_paths=removed_paths,
+        )
+        repaired["operationIds"] = _operation_model_string_list(
+            repaired.get("operationIds"),
+            path=f"{item_path}.operationIds",
+            removed_paths=removed_paths,
+            candidate_keys=("operationId", "operation_id", "id", "ref"),
+        )
+        repaired["evidenceRefs"] = _operation_model_string_list(
+            repaired.get("evidenceRefs"),
+            path=f"{item_path}.evidenceRefs",
+            removed_paths=removed_paths,
+            candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+        )
+        repaired["reviewMarkers"] = _operation_model_string_list(
+            repaired.get("reviewMarkers"),
+            path=f"{item_path}.reviewMarkers",
+            removed_paths=removed_paths,
+            candidate_keys=("code", "marker", "name", "message", "summary"),
+        )
+        repaired["requiredFields"] = _operation_model_string_list(
+            repaired.get("requiredFields"),
+            path=f"{item_path}.requiredFields",
+            removed_paths=removed_paths,
+            candidate_keys=("name", "field", "column", "param", "parameter"),
+        )
+        repaired["references"] = _operation_model_string_list(
+            repaired.get("references"),
+            path=f"{item_path}.references",
+            removed_paths=removed_paths,
+            candidate_keys=("name", "className", "class_name", "ref"),
+        )
+        repaired_items.append(repaired)
+    return repaired_items
+
+
+def _ai_draft_pack_quality_gates_without_schema_drift(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> dict[str, Any]:
+    repaired = _aliased_mapping_without_extra_fields(
+        value if isinstance(value, dict) else {},
+        allowed_keys=_AI_DRAFT_PACK_QUALITY_GATE_KEYS,
+        aliases=_AI_DRAFT_PACK_QUALITY_GATE_ALIASES,
+        path=path,
+        removed_paths=removed_paths,
+    )
+    for key in (
+        "requiredDtoClasses",
+        "requiredServiceMethods",
+        "requiredMapperMethods",
+        "blockerPatterns",
+    ):
+        repaired[key] = _operation_model_string_list(
+            repaired.get(key),
+            path=f"{path}.{key}",
+            removed_paths=removed_paths,
+            candidate_keys=("name", "className", "class_name", "method", "id", "pattern"),
+        )
+    repaired["requiredReviewMarkers"] = _operation_model_string_list(
+        repaired.get("requiredReviewMarkers"),
+        path=f"{path}.requiredReviewMarkers",
+        removed_paths=removed_paths,
+        candidate_keys=("code", "marker", "name", "message", "summary"),
+    )
+    return repaired
+
+
+def _operation_model_without_schema_drift(output_text: str) -> tuple[dict[str, Any], list[str]]:
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError:
+        return {}, []
+    if not isinstance(payload, dict):
+        return {}, []
+
+    removed_paths: list[str] = []
+    payload = _operation_model_payload_from_wrapper(payload, removed_paths=removed_paths)
+    repaired = _aliased_mapping_without_extra_fields(
+        payload,
+        allowed_keys=_OPERATION_MODEL_ROOT_KEYS,
+        aliases=_OPERATION_MODEL_ROOT_ALIASES,
+        path="$",
+        removed_paths=removed_paths,
+    )
+    repaired["operations"] = _operation_items_without_schema_drift(
+        repaired.get("operations"),
+        path="$.operations",
+        removed_paths=removed_paths,
+    )
+    repaired["statementEvidence"] = _statement_items_without_schema_drift(
+        repaired.get("statementEvidence"),
+        path="$.statementEvidence",
+        removed_paths=removed_paths,
+    )
+    repaired["dtoBlueprints"] = _dto_items_without_schema_drift(
+        repaired.get("dtoBlueprints"),
+        path="$.dtoBlueprints",
+        removed_paths=removed_paths,
+    )
+    _repair_operation_model_reference_aliases(repaired, removed_paths=removed_paths)
+    repaired["reviewMarkers"] = _operation_model_string_list(
+        repaired.get("reviewMarkers"),
+        path="$.reviewMarkers",
+        removed_paths=removed_paths,
+        candidate_keys=("code", "marker", "name", "message", "summary"),
+    )
+    repaired["evidenceRefs"] = _operation_model_string_list(
+        repaired.get("evidenceRefs"),
+        path="$.evidenceRefs",
+        removed_paths=removed_paths,
+        candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+    )
+    repaired["assumptions"] = _operation_model_string_list(
+        repaired.get("assumptions"),
+        path="$.assumptions",
+        removed_paths=removed_paths,
+        candidate_keys=("summary", "text", "message", "description"),
+    )
+    return repaired, sorted(set(removed_paths))
+
+
+def _operation_model_payload_from_wrapper(
+    payload: dict[str, Any],
+    *,
+    removed_paths: list[str],
+) -> dict[str, Any]:
+    if _looks_like_operation_model_payload(payload):
+        return payload
+    for key in ("operationModel", "spOperationModel", "structuredOutput", "output", "data"):
+        nested = payload.get(key)
+        if isinstance(nested, dict) and _looks_like_operation_model_payload(nested):
+            removed_paths.append(f"$.{key}")
+            return nested
+    return payload
+
+
+def _looks_like_operation_model_payload(payload: Mapping[str, Any]) -> bool:
+    keys = set(payload) | {_OPERATION_MODEL_ROOT_ALIASES.get(key, key) for key in payload}
+    return bool(keys & {"operations", "statementEvidence", "dtoBlueprints"})
+
+
+def _operation_items_without_schema_drift(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    items = _operation_model_value_list(value, path=path, removed_paths=removed_paths)
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(items):
+        item_path = f"{path}[{index}]"
+        if not isinstance(raw_item, dict):
+            removed_paths.append(item_path)
+            continue
+        repaired = _aliased_mapping_without_extra_fields(
+            raw_item,
+            allowed_keys=_OPERATION_MODEL_OPERATION_KEYS,
+            aliases=_OPERATION_MODEL_OPERATION_ALIASES,
+            path=item_path,
+            removed_paths=removed_paths,
+        )
+        if isinstance(raw_item.get("reviewMarkers"), list):
+            risk_markers = list(repaired.get("riskMarkers") or [])
+            for marker in raw_item["reviewMarkers"]:
+                marker_text = _operation_model_string_value(
+                    marker,
+                    candidate_keys=("code", "marker", "name", "message", "summary"),
+                )
+                if marker_text and marker_text not in risk_markers:
+                    risk_markers.append(marker_text)
+            repaired["riskMarkers"] = risk_markers
+        repaired["statementRefs"] = _operation_model_string_list(
+            repaired.get("statementRefs"),
+            path=f"{item_path}.statementRefs",
+            removed_paths=removed_paths,
+            candidate_keys=("statementId", "statement_id", "id", "ref"),
+        )
+        repaired["dtoBlueprintRefs"] = _operation_model_string_list(
+            repaired.get("dtoBlueprintRefs"),
+            path=f"{item_path}.dtoBlueprintRefs",
+            removed_paths=removed_paths,
+            candidate_keys=("name", "className", "class_name", "ref"),
+        )
+        repaired["stateTransitions"] = _operation_model_string_list(
+            repaired.get("stateTransitions"),
+            path=f"{item_path}.stateTransitions",
+            removed_paths=removed_paths,
+            candidate_keys=("code", "summary", "text", "message"),
+        )
+        repaired["riskMarkers"] = _operation_model_string_list(
+            repaired.get("riskMarkers"),
+            path=f"{item_path}.riskMarkers",
+            removed_paths=removed_paths,
+            candidate_keys=("code", "marker", "name", "message", "summary"),
+        )
+        repaired["evidenceRefs"] = _operation_model_string_list(
+            repaired.get("evidenceRefs"),
+            path=f"{item_path}.evidenceRefs",
+            removed_paths=removed_paths,
+            candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+        )
+        branch_condition = repaired.get("branchCondition")
+        repaired["branchCondition"] = _aliased_mapping_without_extra_fields(
+            branch_condition if isinstance(branch_condition, dict) else {},
+            allowed_keys=_OPERATION_MODEL_BRANCH_KEYS,
+            aliases=_OPERATION_MODEL_BRANCH_ALIASES,
+            path=f"{item_path}.branchCondition",
+            removed_paths=removed_paths,
+        )
+        repaired["branchCondition"]["variables"] = _operation_model_string_list(
+            repaired["branchCondition"].get("variables"),
+            path=f"{item_path}.branchCondition.variables",
+            removed_paths=removed_paths,
+            candidate_keys=("name", "variable", "param", "parameter"),
+        )
+        repaired["branchCondition"]["evidenceRefs"] = _operation_model_string_list(
+            repaired["branchCondition"].get("evidenceRefs"),
+            path=f"{item_path}.branchCondition.evidenceRefs",
+            removed_paths=removed_paths,
+            candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+        )
+        repaired_items.append(repaired)
+    return repaired_items
+
+
+def _statement_items_without_schema_drift(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    items = _operation_model_value_list(value, path=path, removed_paths=removed_paths)
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(items):
+        item_path = f"{path}[{index}]"
+        if not isinstance(raw_item, dict):
+            removed_paths.append(item_path)
+            continue
+        repaired_items.append(
+            _statement_item_lists_without_schema_drift(
+                _aliased_mapping_without_extra_fields(
+                    raw_item,
+                    allowed_keys=_OPERATION_MODEL_STATEMENT_KEYS,
+                    aliases=_OPERATION_MODEL_STATEMENT_ALIASES,
+                    path=item_path,
+                    removed_paths=removed_paths,
+                ),
+                path=item_path,
+                removed_paths=removed_paths,
+            )
+        )
+    return repaired_items
+
+
+def _statement_item_lists_without_schema_drift(
+    repaired: dict[str, Any],
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> dict[str, Any]:
+    for key in ("inputs", "outputs", "writes"):
+        repaired[key] = _operation_model_string_list(
+            repaired.get(key),
+            path=f"{path}.{key}",
+            removed_paths=removed_paths,
+            candidate_keys=("name", "column", "param", "parameter", "field"),
+        )
+    repaired["reviewMarkers"] = _operation_model_string_list(
+        repaired.get("reviewMarkers"),
+        path=f"{path}.reviewMarkers",
+        removed_paths=removed_paths,
+        candidate_keys=("code", "marker", "name", "message", "summary"),
+    )
+    repaired["evidenceRefs"] = _operation_model_string_list(
+        repaired.get("evidenceRefs"),
+        path=f"{path}.evidenceRefs",
+        removed_paths=removed_paths,
+        candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+    )
+    return repaired
+
+
+def _dto_items_without_schema_drift(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    items = _operation_model_value_list(value, path=path, removed_paths=removed_paths)
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(items):
+        item_path = f"{path}[{index}]"
+        if not isinstance(raw_item, dict):
+            removed_paths.append(item_path)
+            continue
+        repaired = _aliased_mapping_without_extra_fields(
+            raw_item,
+            allowed_keys=_OPERATION_MODEL_DTO_KEYS,
+            aliases=_OPERATION_MODEL_DTO_ALIASES,
+            path=item_path,
+            removed_paths=removed_paths,
+        )
+        repaired["fields"] = _dto_field_items_without_schema_drift(
+            repaired.get("fields"),
+            path=f"{item_path}.fields",
+            removed_paths=removed_paths,
+        )
+        repaired["operationIds"] = _operation_model_string_list(
+            repaired.get("operationIds"),
+            path=f"{item_path}.operationIds",
+            removed_paths=removed_paths,
+            candidate_keys=("operationId", "operation_id", "id", "ref"),
+        )
+        repaired["evidenceRefs"] = _operation_model_string_list(
+            repaired.get("evidenceRefs"),
+            path=f"{item_path}.evidenceRefs",
+            removed_paths=removed_paths,
+            candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+        )
+        repaired["reviewMarkers"] = _operation_model_string_list(
+            repaired.get("reviewMarkers"),
+            path=f"{item_path}.reviewMarkers",
+            removed_paths=removed_paths,
+            candidate_keys=("code", "marker", "name", "message", "summary"),
+        )
+        repaired_items.append(repaired)
+    return repaired_items
+
+
+def _dto_field_items_without_schema_drift(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[dict[str, Any]]:
+    items = _operation_model_value_list(value, path=path, removed_paths=removed_paths)
+    repaired_items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(items):
+        item_path = f"{path}[{index}]"
+        if not isinstance(raw_item, dict):
+            removed_paths.append(item_path)
+            continue
+        repaired = _aliased_mapping_without_extra_fields(
+            raw_item,
+            allowed_keys=_OPERATION_MODEL_DTO_FIELD_KEYS,
+            aliases=_OPERATION_MODEL_DTO_FIELD_ALIASES,
+            path=item_path,
+            removed_paths=removed_paths,
+        )
+        repaired["evidenceRefs"] = _operation_model_string_list(
+            repaired.get("evidenceRefs"),
+            path=f"{item_path}.evidenceRefs",
+            removed_paths=removed_paths,
+            candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+        )
+        repaired_items.append(repaired)
+    return repaired_items
+
+
+def _operation_model_string_list(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+    candidate_keys: Sequence[str],
+) -> list[str]:
+    if value is None:
+        return []
+    values = value if isinstance(value, list) else [value]
+    if not isinstance(value, list):
+        removed_paths.append(path)
+    repaired: list[str] = []
+    for index, item in enumerate(values):
+        text = _operation_model_string_value(item, candidate_keys=candidate_keys)
+        if text:
+            if not isinstance(item, str):
+                removed_paths.append(f"{path}[{index}]")
+            if text not in repaired:
+                repaired.append(text)
+            continue
+        removed_paths.append(f"{path}[{index}]")
+    return repaired
+
+
+def _operation_model_string_value(
+    value: Any,
+    *,
+    candidate_keys: Sequence[str],
+) -> str | None:
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, Mapping):
+        text = _first_string(value, candidate_keys)
+        if text:
+            return text
+        return _provider_optional_text(value)
+    return None
+
+
+def _repair_operation_model_reference_aliases(
+    payload: dict[str, Any],
+    *,
+    removed_paths: list[str],
+) -> None:
+    statements = [
+        item for item in payload.get("statementEvidence", []) if isinstance(item, Mapping)
+    ]
+    operations = [
+        item for item in payload.get("operations", []) if isinstance(item, Mapping)
+    ]
+    dtos = [item for item in payload.get("dtoBlueprints", []) if isinstance(item, Mapping)]
+    statement_aliases = _operation_statement_ref_aliases(statements)
+    dto_aliases = _dto_blueprint_ref_aliases(dtos)
+    operation_aliases = _operation_id_aliases(operations)
+    for index, operation in enumerate(operations):
+        operation["statementRefs"] = _mapped_operation_model_refs(
+            operation.get("statementRefs"),
+            aliases=statement_aliases,
+            path=f"$.operations[{index}].statementRefs",
+            removed_paths=removed_paths,
+        )
+        operation["dtoBlueprintRefs"] = _mapped_operation_model_refs(
+            operation.get("dtoBlueprintRefs"),
+            aliases=dto_aliases,
+            path=f"$.operations[{index}].dtoBlueprintRefs",
+            removed_paths=removed_paths,
+        )
+    for index, dto in enumerate(dtos):
+        dto["operationIds"] = _mapped_operation_model_refs(
+            dto.get("operationIds"),
+            aliases=operation_aliases,
+            path=f"$.dtoBlueprints[{index}].operationIds",
+            removed_paths=removed_paths,
+        )
+
+
+def _dto_blueprint_ref_aliases(dtos: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for dto in dtos:
+        name = str(dto.get("name") or "")
+        if not name:
+            continue
+        aliases[name] = name
+        aliases[f"dto.{name}"] = name
+        aliases[f"{name}.java"] = name
+        aliases[f"dto.{name}.java"] = name
+        aliases[name.lower()] = name
+        aliases[f"dto.{name.lower()}"] = name
+    return aliases
+
+
+def _operation_id_aliases(operations: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for operation in operations:
+        operation_id = str(operation.get("operationId") or "")
+        if not operation_id:
+            continue
+        aliases[operation_id] = operation_id
+        aliases[operation_id.lower()] = operation_id
+        crud_flag = str(operation.get("crudFlag") or "")
+        if crud_flag:
+            aliases[crud_flag] = operation_id
+            aliases[crud_flag.lower()] = operation_id
+            aliases[f"crud_{crud_flag.lower()}"] = operation_id
+            aliases[f"op.crud_{crud_flag.lower()}"] = operation_id
+    return aliases
+
+
+def _mapped_operation_model_refs(
+    refs: Any,
+    *,
+    aliases: Mapping[str, str],
+    path: str,
+    removed_paths: list[str],
+) -> list[str]:
+    values = refs if isinstance(refs, list) else []
+    repaired: list[str] = []
+    for index, ref in enumerate(values):
+        ref_text = str(ref).strip()
+        if not ref_text:
+            removed_paths.append(f"{path}[{index}]")
+            continue
+        mapped_ref = aliases.get(ref_text, aliases.get(ref_text.lower(), ref_text))
+        if mapped_ref != ref_text:
+            removed_paths.append(f"{path}[{index}]")
+        if mapped_ref not in repaired:
+            repaired.append(mapped_ref)
+    return repaired
+
+
+def _operation_model_value_list(
+    value: Any,
+    *,
+    path: str,
+    removed_paths: list[str],
+) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        removed_paths.append(path)
+        return [value]
+    if value is not None:
+        removed_paths.append(path)
+    return []
+
+
+def _aliased_mapping_without_extra_fields(
+    payload: Any,
+    *,
+    allowed_keys: set[str],
+    aliases: Mapping[str, str],
+    path: str,
+    removed_paths: list[str],
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        removed_paths.append(path)
+        return {}
+    repaired: dict[str, Any] = {}
+    for key, value in payload.items():
+        canonical_key = aliases.get(key, key)
+        if canonical_key not in allowed_keys:
+            removed_paths.append(f"{path}.{key}")
+            continue
+        if canonical_key != key:
+            removed_paths.append(f"{path}.{key}")
+        if (
+            canonical_key in repaired
+            and isinstance(repaired[canonical_key], list)
+            and isinstance(value, list)
+        ):
+            repaired[canonical_key].extend(
+                item for item in value if item not in repaired[canonical_key]
+            )
+            continue
+        repaired[canonical_key] = value
+    return repaired
+
+
+def _pgpt_json_object_output_text(
+    output_text: str,
+    *,
+    action: str,
+) -> tuple[str, list[dict[str, Any]]]:
+    payload = _json_object_from_mixed_text(output_text)
+    if payload is None:
+        raise ValueError("No P-GPT JSON object found.")
+    return (
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        [
+            {
+                "component": "pgpt_json_object_adapter",
+                "status": "SUCCEEDED",
+                "action": action,
+            }
+        ],
+    )
+
+
+def _json_object_from_mixed_text(output_text: str) -> dict[str, Any] | None:
+    candidates = [output_text.strip()]
+    candidates.extend(match.group(1).strip() for match in _JSON_FENCE_RE.finditer(output_text))
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            return payload
+        for index, char in enumerate(candidate):
+            if char != "{":
+                continue
+            try:
+                payload, _end = decoder.raw_decode(candidate[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                return payload
+    return None
 
 
 def _pgpt_semantic_output_text(output_text: str) -> tuple[str, list[dict[str, Any]]]:

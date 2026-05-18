@@ -108,7 +108,9 @@ def test_extractor_keeps_cross_db_and_called_procedure_uncertainty_review_requir
     )
 
     erp_statement = next(
-        statement for statement in result.statement_evidence if statement.target_ref.startswith("ERP.")
+        statement
+        for statement in result.statement_evidence
+        if statement.target_ref.startswith("ERP.")
     )
     call_statement = next(
         statement
@@ -138,3 +140,31 @@ def test_extractor_storage_payload_does_not_persist_raw_sql_text() -> None:
     assert "SET GUAR_APRV_YN" not in serialized
     assert "WHERE CTRT_NO" not in serialized
     assert all(statement["evidenceRefs"] for statement in payload["statementEvidence"])
+
+
+def test_extractor_does_not_emit_sql_keywords_as_write_candidates() -> None:
+    sql = """
+CREATE PROCEDURE PPM.dbo.usp_InsertFromSelect
+    @ContractNum varchar(10)
+AS
+BEGIN
+    INSERT INTO PPM.dbo.TargetBond (CTRT_NO, GUAR_SEQ)
+    SELECT CTRT_NO, GUAR_SEQ
+    FROM PPM.dbo.SourceBond
+    WHERE CTRT_NO = @ContractNum;
+END
+""".strip()
+
+    result = extract_statement_evidence(
+        sql,
+        target_ref="PPM.dbo.usp_InsertFromSelect",
+        source_name="sanitized_insert_from_select.sql",
+    )
+    insert_statement = next(
+        statement
+        for statement in result.statement_evidence
+        if statement.operation.value == "INSERT"
+    )
+
+    assert "FROM" not in insert_statement.writes
+    assert "SELECT" not in insert_statement.writes

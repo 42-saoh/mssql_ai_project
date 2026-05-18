@@ -7,7 +7,6 @@ from typing import Any
 
 import httpx
 import yaml
-
 from ai_agent_runtime import (
     FakeModelGateway,
     build_sp_operation_model_run,
@@ -49,6 +48,11 @@ def test_operation_model_prompt_uses_sanitized_statement_evidence_contract() -> 
 
     assert prompt.output_schema_version == "schema:sp_operation_model@0.1.0"
     assert prompt_payload["dtoBlueprintPolicy"]["mustNotCollapseToSingleDto"] is True
+    assert (
+        prompt_payload["operationSeparationPolicy"]["mustCoverEveryStatementEvidenceId"]
+        is True
+    )
+    assert prompt_payload["operationSeparationPolicy"]["branchCoverage"]["statementIds"]
     assert prompt_payload["evidenceRefContract"]["allowedFactIds"]
     assert "CREATE PROCEDURE" not in prompt.user_prompt
     assert "raw SQL" in prompt.system_prompt
@@ -126,6 +130,70 @@ def test_openai_gateway_uses_responses_json_schema_for_operation_model(monkeypat
         is False
     )
     assert result.structured_output["targetRef"] == payload["targetRef"]
+
+
+def test_openai_gateway_normalizes_operation_model_schema_drift(monkeypatch: Any) -> None:
+    payload = _fixture_operation_model()
+    dirty = deepcopy(payload)
+    dirty["reviewMarkers"] = [
+        {"code": "TARGET_REF_REVIEW_REQUIRED", "status": "REVIEW_REQUIRED"}
+    ]
+    removed_statement = dirty["statementEvidence"].pop(0)
+    dirty["operations"][0]["statementRefs"] = [removed_statement["statementId"]]
+    dirty["operations"][0]["dtoBlueprintRefs"] = [
+        f"dto.{dirty['operations'][0]['dtoBlueprintRefs'][0]}"
+    ]
+    dirty["operations"][0]["koreanName"] = "search"
+    dirty["operations"][0]["reviewMarkers"] = ["LLM_BUSINESS_NAMING_REVIEW_REQUIRED"]
+    dirty["operations"][0]["branchCondition"]["evidence_refs"] = dirty["operations"][0][
+        "branchCondition"
+    ].pop("evidenceRefs")
+    dirty["statementEvidence"][0]["outputs"] = ["FROM"]
+    dirty["statementEvidence"][0]["target_ref"] = dirty["statementEvidence"][0].pop(
+        "targetRef"
+    )
+    dirty["dtoBlueprints"][0]["operation_ids"] = dirty["dtoBlueprints"][0].pop(
+        "operationIds"
+    )
+    dirty["dtoBlueprints"][0]["fields"][0]["db_type"] = dirty["dtoBlueprints"][0]["fields"][
+        0
+    ].pop("dbType")
+    captured = _capture_post(monkeypatch, _json_response(dirty))
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.test/v1")
+
+    prompt = render_sp_operation_model_prompt(
+        target_ref=payload["targetRef"],
+        statement_evidence=_statement_evidence(payload),
+        allowed_evidence_refs=_allowed_refs(payload),
+    )
+    result = OpenAIModelGateway(timeout_seconds=1).plan_sp_operation_model(
+        prompt=prompt,
+        profile=model_profile_from_env("openai_fast_test"),
+    )
+
+    assert captured["json"]["text"]["format"]["name"] == "sp_operation_model"
+    assert result.structured_output["targetRef"] == payload["targetRef"]
+    assert "koreanName" not in str(result.structured_output)
+    assert "TARGET_REF_REVIEW_REQUIRED" in result.structured_output["reviewMarkers"]
+    assert "LLM_BUSINESS_NAMING_REVIEW_REQUIRED" in result.structured_output["operations"][0][
+        "riskMarkers"
+    ]
+    assert removed_statement["statementId"] in result.structured_output["operations"][0][
+        "statementRefs"
+    ]
+    assert removed_statement["statementId"] in {
+        item["statementId"] for item in result.structured_output["statementEvidence"]
+    }
+    assert not result.structured_output["operations"][0]["dtoBlueprintRefs"][0].startswith(
+        "dto."
+    )
+    assert "FROM" not in result.structured_output["statementEvidence"][0]["outputs"]
+    assert result.structured_output["statementEvidence"][0]["targetRef"]
+    assert result.structured_output["dtoBlueprints"][0]["operationIds"]
+    assert result.structured_output["dtoBlueprints"][0]["fields"][0]["dbType"]
+    assert result.component_invocations[-1]["action"] == "normalized_sp_operation_model"
 
 
 def _json_response(output: dict[str, Any]) -> httpx.Response:

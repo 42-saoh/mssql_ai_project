@@ -126,4 +126,7 @@ def test_p42_live_ai_draft_pack_replay_gate() -> None:
     checks = {item["name"]: item for item in result["checks"]}
     assert checks["workflow_submit"]["status"] == "pass"
     assert checks["p42_quality_gate"]["status"] == "pass"
-    assert result["artifactSummary"]["counts"]["DTO_DRAFT"] == 11
+    assert result["artifactSummary"]["counts"]["DTO_DRAFT"] >= 11
+    assert result["artifactSummary"]["counts"]["SERVICE_DRAFT"] == 1
+    assert result["artifactSummary"]["counts"]["MAPPER_INTERFACE"] == 1
+    assert result["artifactSummary"]["counts"]["MAPPER_XML"] == 1

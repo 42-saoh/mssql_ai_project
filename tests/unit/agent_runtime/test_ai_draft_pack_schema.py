@@ -169,17 +169,11 @@ def test_empty_evidence_refs_fail_deterministically() -> None:
         validate_ai_java_mybatis_draft_pack_output(payload)
 
 
-def test_fallback_and_single_dto_class_names_fail_deterministically() -> None:
+def test_fallback_class_names_fail_deterministically() -> None:
     payload = _valid_pack()
     payload["files"][0]["className"] = "OperationModelReviewRequired"
 
     with pytest.raises(AiDraftPackValidationError, match="OperationModelReviewRequired"):
-        validate_ai_java_mybatis_draft_pack_output(payload)
-
-    payload = _valid_pack()
-    payload["files"][0]["className"] = "ManageBondDTO"
-
-    with pytest.raises(AiDraftPackValidationError, match="ManageBondDTO"):
         validate_ai_java_mybatis_draft_pack_output(payload)
 
 

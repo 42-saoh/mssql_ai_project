@@ -127,7 +127,13 @@ def validate_ai_java_mybatis_draft_pack_output(
     try:
         model = AiJavaMyBatisDraftPackPlannerOutput.model_validate(payload)
     except ValidationError as exc:
-        findings.append(f"schema validation failed: {exc}")
+        for error in exc.errors(include_input=False):
+            loc = ".".join(str(part) for part in error.get("loc", ())) or "<root>"
+            message = str(error.get("msg") or "schema validation failed")
+            error_type = str(error.get("type") or "validation_error")
+            findings.append(f"schema validation failed at {loc}: {message} ({error_type})")
+        if not findings:
+            findings.append("schema validation failed")
         raise AiDraftPackValidationError(findings) from exc
 
     if model.schema_version != AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION:
@@ -354,7 +360,6 @@ def _blocked_identifier_findings(
     text = "\n".join([file.path, file.class_name, file.content, *file.review_markers])
     blockers = (
         "OperationModelReviewRequired",
-        "ManageBondDTO",
         "P41_OPERATION_MODEL_REVIEW_REQUIRED",
     )
     return [
@@ -368,7 +373,6 @@ def _root_blocker_findings(model: AiJavaMyBatisDraftPackOutput) -> list[str]:
     text = "\n".join([*model.review_markers, *model.assumptions])
     blockers = (
         "OperationModelReviewRequired",
-        "ManageBondDTO",
         "P41_OPERATION_MODEL_REVIEW_REQUIRED",
     )
     return [

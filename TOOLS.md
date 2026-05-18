@@ -65,6 +65,11 @@ calls, public API expansion, DB schema changes, or a new public MCP invoke tool.
 uses `FakeModelGateway` and `tests/helpers/p42_manage_bond.py`, and acceptance requires non-empty
 multi-DTO artifacts plus preserved `REVIEW_REQUIRED` uncertainty markers.
 
+P42H keeps that ManageBond fixture as a benchmark only. Runtime workflow inventory is derived
+from sanitized operation contracts and DTO blueprints. Collapsed complex-SP inventories or missing
+write/call DTO responsibilities fail as `P42_INVENTORY_CONTRACT_INCOMPLETE` before any Java/MyBatis
+draft artifacts are persisted.
+
 P42G is an optional live confidence replay for the residual P42E risk. It is not part of the
 default fixture gate and must be enabled explicitly:
 
@@ -81,6 +86,29 @@ powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTE
 The probe uses an in-memory repository, live read-only `ppm` metadata, and the existing
 OpenAI-compatible Responses/httpx gateway. It does not execute the stored procedure, query row
 data, write platform DB rows, apply generated source, or claim production readiness.
+
+## P43 Framework Adoption Verification Notes
+
+P43 evaluates whether a new agent/orchestration framework should be adopted. It
+does not install a framework in P43A and does not switch runtime behavior. The
+static groundwork gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
+```
+
+The final P43 decision gate should compare the current Responses/httpx baseline
+against candidate adapters, preserve P42/P41/P36 regressions, and keep
+`production_ready: false`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+```
+
+Candidate framework testing must use sanitized fixtures and fake adapters by
+default. Optional live replay remains a separate confidence signal and must not
+execute stored procedures, query row data, store raw prompts/provider responses,
+or apply generated source.
 
 ## 목적
 

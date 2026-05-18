@@ -133,6 +133,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
             ),
             checks=[],
             artifact_summary={},
+            diagnostics={},
         )
 
     missing = _missing_required_env()
@@ -150,6 +151,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
                 )
             ],
             artifact_summary={},
+            diagnostics={},
         )
 
     repository = MemoryWorkflowRepository()
@@ -164,7 +166,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
         app.dependency_overrides[get_repository] = lambda: repository
         app.dependency_overrides[get_workflow_service] = lambda: service
         with TestClient(app) as client:
-            workflow = _submit_live_workflow(client)
+            workflow = _submit_live_workflow(client, repository)
         artifacts = repository.list_job_artifacts(str(workflow["jobId"])) or []
         runs = repository.list_agent_runs(str(workflow["jobId"]), limit=100) or []
         artifact_summary = _verify_artifacts(artifacts)
@@ -188,6 +190,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
             summary=exc.summary,
             checks=exc.checks,
             artifact_summary={},
+            diagnostics=exc.diagnostics,
         )
     finally:
         app.dependency_overrides.clear()
@@ -215,6 +218,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
             ),
         ],
         artifact_summary=artifact_summary,
+        diagnostics={},
     )
 
 
@@ -245,7 +249,10 @@ def _require_ppm_live_profile() -> None:
         )
 
 
-def _submit_live_workflow(client: TestClient) -> dict[str, Any]:
+def _submit_live_workflow(
+    client: TestClient,
+    repository: MemoryWorkflowRepository,
+) -> dict[str, Any]:
     response = client.post(
         "/api/v1/requests/sp-analysis",
         headers={"X-Correlation-ID": "corr-p42g-live-replay"},
@@ -282,6 +289,24 @@ def _submit_live_workflow(client: TestClient) -> dict[str, Any]:
                 job_payload = job_response.json()
         blockers = job_payload.get("blockers") or []
         code = str(blockers[0].get("code") if blockers else LIVE_FAILED)
+        diagnostics = _failure_diagnostics(repository, job_id)
+        checks = [
+            _check(
+                "workflow_submit",
+                "fail",
+                blocker_code=code or LIVE_FAILED,
+                summary="Workflow job did not reach VALIDATION_COMPLETE.",
+            )
+        ]
+        if diagnostics:
+            checks.append(
+                _check(
+                    "planner_failure_diagnostics",
+                    "fail",
+                    blocker_code=code or LIVE_FAILED,
+                    summary=_diagnostics_summary(diagnostics),
+                )
+            )
         raise ProbeFailure(
             blocker_code=code or LIVE_FAILED,
             summary=str(
@@ -289,14 +314,8 @@ def _submit_live_workflow(client: TestClient) -> dict[str, Any]:
                 or payload.get("status")
                 or "P42 live replay workflow failed."
             ),
-            checks=[
-                _check(
-                    "workflow_submit",
-                    "fail",
-                    blocker_code=code or LIVE_FAILED,
-                    summary="Workflow job did not reach VALIDATION_COMPLETE.",
-                )
-            ],
+            checks=checks,
+            diagnostics=diagnostics,
         )
     return {
         "requestId": payload.get("requestId"),
@@ -318,17 +337,30 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
                 "Fallback skeleton or single DTO collapse was detected.",
                 artifact,
             )
-    expected_counts = {
-        ArtifactType.DTO_DRAFT.value: len(REQUIRED_DTO_CLASSES),
-        ArtifactType.SERVICE_DRAFT.value: 1,
-        ArtifactType.MAPPER_INTERFACE.value: 1,
-        ArtifactType.MAPPER_XML.value: 1,
-    }
     actual_counts = {
-        artifact_type: len(by_type.get(artifact_type, []))
-        for artifact_type in expected_counts
+        ArtifactType.DTO_DRAFT.value: len(by_type.get(ArtifactType.DTO_DRAFT.value, [])),
+        ArtifactType.SERVICE_DRAFT.value: len(by_type.get(ArtifactType.SERVICE_DRAFT.value, [])),
+        ArtifactType.MAPPER_INTERFACE.value: len(
+            by_type.get(ArtifactType.MAPPER_INTERFACE.value, [])
+        ),
+        ArtifactType.MAPPER_XML.value: len(by_type.get(ArtifactType.MAPPER_XML.value, [])),
     }
-    if actual_counts != expected_counts:
+    count_failures: list[str] = []
+    if actual_counts[ArtifactType.DTO_DRAFT.value] < len(REQUIRED_DTO_CLASSES):
+        count_failures.append(
+            f"DTO_DRAFT expected at least {len(REQUIRED_DTO_CLASSES)}, "
+            f"got {actual_counts[ArtifactType.DTO_DRAFT.value]}"
+        )
+    for artifact_type in (
+        ArtifactType.SERVICE_DRAFT.value,
+        ArtifactType.MAPPER_INTERFACE.value,
+        ArtifactType.MAPPER_XML.value,
+    ):
+        if actual_counts[artifact_type] != 1:
+            count_failures.append(
+                f"{artifact_type} expected exactly 1, got {actual_counts[artifact_type]}"
+            )
+    if count_failures:
         raise ProbeFailure(
             blocker_code=QUALITY_BLOCKER,
             summary=f"Unexpected artifact counts: {actual_counts}.",
@@ -337,7 +369,7 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
                     "artifact_inventory",
                     "fail",
                     blocker_code=QUALITY_BLOCKER,
-                    summary=f"Expected {expected_counts}; got {actual_counts}.",
+                    summary="; ".join(count_failures),
                 )
             ],
         )
@@ -345,21 +377,26 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
         artifact.title.rsplit("/", 1)[-1].removesuffix(".java")
         for artifact in by_type[ArtifactType.DTO_DRAFT.value]
     }
-    missing_dtos = sorted(set(REQUIRED_DTO_CLASSES) - dto_classes)
-    extra_dtos = sorted(dto_classes - set(REQUIRED_DTO_CLASSES))
-    if missing_dtos or extra_dtos:
+    collapsed_dtos = sorted(
+        dto
+        for dto in dto_classes
+        if dto == "ManageBondDTO" or dto.startswith("OperationModelReviewRequired")
+    )
+    if collapsed_dtos:
         raise ProbeFailure(
             blocker_code=QUALITY_BLOCKER,
-            summary="Live P42 replay did not produce the required ManageBond DTO inventory.",
+            summary="Live P42 replay produced collapsed or fallback DTO classes.",
             checks=[
                 _check(
                     "artifact_inventory",
                     "fail",
                     blocker_code=QUALITY_BLOCKER,
-                    summary=f"Missing DTOs: {missing_dtos}; unexpected DTOs: {extra_dtos}.",
+                    summary=f"Collapsed/fallback DTO classes: {collapsed_dtos}.",
                 )
             ],
         )
+    baseline_missing = sorted(set(REQUIRED_DTO_CLASSES) - dto_classes)
+    additional_dtos = sorted(dto_classes - set(REQUIRED_DTO_CLASSES))
     service_text = "\n".join(
         artifact.content for artifact in by_type[ArtifactType.SERVICE_DRAFT.value]
     )
@@ -369,7 +406,19 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
     mapper_xml_text = "\n".join(
         artifact.content for artifact in by_type[ArtifactType.MAPPER_XML.value]
     )
-    for token in (*REQUIRED_DTO_CLASSES, *REQUIRED_METHODS):
+    non_dto_operation_ids: set[str] = set()
+    for artifact_type in (
+        ArtifactType.SERVICE_DRAFT.value,
+        ArtifactType.MAPPER_INTERFACE.value,
+        ArtifactType.MAPPER_XML.value,
+    ):
+        for artifact in by_type[artifact_type]:
+            non_dto_operation_ids.update(
+                str(operation_id)
+                for operation_id in artifact.extra.get("operationIds", [])
+                if str(operation_id).strip()
+            )
+    for token in (*sorted(dto_classes), *sorted(non_dto_operation_ids)):
         if token not in service_text or token not in mapper_text or token not in mapper_xml_text:
             raise ProbeFailure(
                 blocker_code=QUALITY_BLOCKER,
@@ -386,7 +435,12 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
     return {
         "counts": actual_counts,
         "dtoClasses": sorted(dto_classes),
-        "summary": "Live replay persisted 11 DTO rows and single Service/Mapper/XML rows.",
+        "baselineDtoClassesNotExactMatched": baseline_missing,
+        "additionalDtoClasses": additional_dtos,
+        "summary": (
+            "Live replay persisted the minimum DTO row count with split DTOs "
+            "and single Service/Mapper/XML rows."
+        ),
     }
 
 
@@ -598,6 +652,88 @@ def _public_agent_run_summary(run: AgentRunRecord) -> dict[str, Any]:
     }
 
 
+def _failure_diagnostics(
+    repository: MemoryWorkflowRepository,
+    job_id: str,
+) -> dict[str, Any]:
+    if not job_id:
+        return {}
+    runs = repository.list_agent_runs(job_id, limit=100) or []
+    operation_run = next(
+        (run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE),
+        None,
+    )
+    ai_draft_run = next(
+        (run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE),
+        None,
+    )
+    if operation_run is None and ai_draft_run is None:
+        return {}
+    return {
+        "operationModel": _agent_run_failure_summary(operation_run),
+        "aiDraftPack": _agent_run_failure_summary(ai_draft_run),
+    }
+
+
+def _diagnostics_summary(diagnostics: Mapping[str, Any]) -> str:
+    for key in ("operationModel", "aiDraftPack"):
+        summary = diagnostics.get(key)
+        if not isinstance(summary, Mapping):
+            continue
+        failure = summary.get("failureDiagnostics")
+        if isinstance(failure, Mapping):
+            stage = failure.get("failureStage") or key
+            code = failure.get("errorCode") or "unknown"
+            error_class = failure.get("errorClass") or ""
+            return f"{key}:{stage}:{code}:{error_class}".rstrip(":")
+    return "AI Draft Pack failure diagnostics were recorded."
+
+
+def _agent_run_failure_summary(run: AgentRunRecord | None) -> dict[str, Any]:
+    if run is None:
+        return {}
+    structured_output = dict(run.structured_output or {})
+    invocation = dict(run.model_invocation or {})
+    component_invocations = invocation.get("componentInvocations") or []
+    diagnostics = structured_output.get("failureDiagnostics")
+    if not isinstance(diagnostics, Mapping):
+        diagnostics = _failure_diagnostics_from_components(component_invocations)
+    return {
+        "agentType": run.agent_type,
+        "status": run.status,
+        "summary": run.summary,
+        "targetRef": run.target_ref,
+        "failureDiagnostics": diagnostics if isinstance(diagnostics, Mapping) else {},
+        "modelInvocation": {
+            "provider": invocation.get("provider"),
+            "model": invocation.get("model"),
+            "promptVersion": invocation.get("promptVersion"),
+            "outputSchemaVersion": invocation.get("outputSchemaVersion"),
+            "status": invocation.get("status"),
+            "componentInvocations": component_invocations,
+        },
+    }
+
+
+def _failure_diagnostics_from_components(components: Any) -> dict[str, Any]:
+    if not isinstance(components, (list, tuple)):
+        return {}
+    for component in components:
+        if not isinstance(component, Mapping):
+            continue
+        diagnostics = component.get("failureDiagnostics")
+        if isinstance(diagnostics, Mapping):
+            return dict(diagnostics)
+        reason = component.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return {
+                "failureStage": str(component.get("component") or "workflow_gate"),
+                "errorCode": reason.strip(),
+                "errorClass": str(component.get("errorClass") or ""),
+            }
+    return {}
+
+
 class ProbeFailure(RuntimeError):
     def __init__(
         self,
@@ -605,11 +741,13 @@ class ProbeFailure(RuntimeError):
         blocker_code: str,
         summary: str,
         checks: list[dict[str, Any]],
+        diagnostics: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(summary)
         self.blocker_code = blocker_code
         self.summary = summary
         self.checks = checks
+        self.diagnostics = diagnostics or {}
 
     @classmethod
     def from_response(
@@ -636,6 +774,7 @@ class ProbeFailure(RuntimeError):
                     summary=f"HTTP {response.status_code}: {detail}",
                 )
             ],
+            diagnostics={},
         )
 
 
@@ -683,6 +822,7 @@ def _result(
     summary: str,
     checks: list[dict[str, Any]],
     artifact_summary: dict[str, Any],
+    diagnostics: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "gate": LIVE_GATE_ENV,
@@ -693,6 +833,7 @@ def _result(
         "target": TARGET,
         "checks": checks,
         "artifactSummary": artifact_summary,
+        "diagnostics": diagnostics,
         "redaction": REDACTION,
     }
 

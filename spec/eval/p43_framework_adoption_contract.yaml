@@ -1,0 +1,158 @@
+contract_id: p43_framework_adoption@0.1.0
+phase: P43
+title: Framework Adoption Readiness Contract
+production_ready: false
+
+purpose:
+  summary: >
+    Evaluate whether an agent/orchestration framework should be adopted to improve
+    complex stored-procedure analysis and Java/MyBatis AI Draft Pack generation
+    quality without weakening repository policy, artifact contracts, or validation
+    gates.
+  current_problem:
+    - P42 improved draft generation with AiJavaMyBatisDraftPack.v0.1, but live provider
+      drift and operation inventory quality still need stronger orchestration.
+    - ManageBond is a benchmark fixture, not a production-runtime special case.
+    - Framework adoption must improve general branch/use-case reasoning and repair,
+      not hardcode PCO_GU_ManageBond_PRC-specific inventory answers.
+
+scope:
+  mode: sequential_only
+  required_order:
+    - P43A
+    - P43B
+    - P43C
+    - P43D
+    - P43E
+    - P43F
+  implementation_posture: adapter_first_evaluation
+  dependency_installation_allowed_in_p43a: false
+  production_runtime_switch_allowed_in_p43a: false
+
+candidate_frameworks:
+  baseline_internal_responses_gateway:
+    category: baseline_control
+    current_stack: true
+    expected_use: Continue using the existing Responses/httpx gateway as the comparison baseline.
+  openai_agents_sdk:
+    category: candidate
+    expected_use: >
+      Evaluate as a lightweight agent runner for staged inventory, content, validation,
+      and repair loops when policy-safe tracing and structured output behavior can be
+      proven behind an internal adapter.
+    adoption_risks:
+      - Built-in tracing must be configured so raw prompts, raw provider responses,
+        raw SP text, row data, and secrets are not stored.
+      - SDK dependency is deferred until adapter and policy tests prove value.
+  langgraph:
+    category: candidate
+    expected_use: >
+      Evaluate for explicit graph/state orchestration if durable branch and repair
+      flows become more valuable than the current workflow service.
+    adoption_risks:
+      - Adds a separate graph-state abstraction that may duplicate existing workflow
+        persistence.
+      - Requires a strict boundary so no generated source apply or DB side effects
+        enter graph nodes.
+
+framework_adapter_contract:
+  name: AiGenerationFrameworkAdapter.v0.1
+  required_methods:
+    - plan_file_inventory
+    - draft_file_content
+    - repair_draft_pack
+    - summarize_trace
+  required_inputs:
+    - sanitized_target_ref
+    - sanitized_operation_model
+    - deterministic_inventory_contract
+    - allowed_evidence_refs
+    - quality_gates
+    - review_required_markers
+  required_outputs:
+    - structured_ai_draft_pack_candidate
+    - sanitized_trace_hashes
+    - framework_component_summary
+    - deterministic_failure_code
+  forbidden_outputs:
+    - raw_prompt
+    - raw_provider_response
+    - raw_sp_definition
+    - raw_guide_body
+    - row_data
+    - secrets
+    - generated_source_apply_claim
+
+decision_criteria:
+  quality:
+    - Complex SP DTO inventory must be derived from operations, branch conditions,
+      statement evidence, and DTO roles.
+    - A candidate must not accept two-DTO collapse for complex SPs as a valid result.
+    - Service, Mapper interface, and Mapper XML remain single files but must reference
+      branch/use-case DTOs and method responsibilities.
+    - P42 ManageBond benchmark must pass through the same generic contract used for
+      other complex SPs.
+  safety:
+    - No row-data query, stored procedure execution, DDL/DML apply, deploy, or generated
+      source write is allowed.
+    - Raw prompts, provider responses, raw SP definitions, raw guide body, row data,
+      and secrets must not be persisted in repo fixtures, platform storage, traces,
+      or docs.
+    - Weak or unsupported facts remain REVIEW_REQUIRED.
+  engineering:
+    - Framework usage must be hidden behind an adapter so the current gateway remains
+      a rollback path.
+    - No public API, DB schema, UI, public MCP route, or public artifact type change is
+      allowed during the readiness spike.
+    - Default tests must use fake gateways and sanitized fixtures.
+  operability:
+    - Failure diagnostics must be sanitized and stage-specific.
+    - Trace output must be hashes/counts/stage names only unless a future policy gate
+      explicitly approves more.
+    - Optional live replay remains confidence evidence only.
+
+acceptance:
+  p43a:
+    - Contract, fixture, task brief, prompt pack, manifest wiring, and static tests exist.
+    - production_ready remains false.
+  p43b:
+    - Adapter protocol and fake adapter tests compare baseline and candidate behavior
+      without installing a framework dependency by default.
+  p43c:
+    - P42 AI Draft Pack planner can run through the adapter in a spike path and preserve
+      deterministic validation gates.
+  p43d:
+    - Tool and trace policy gates block raw prompt/provider/SP/row-data/secret leakage.
+  p43e:
+    - ManageBond benchmark replay compares baseline vs candidate using the same generic
+      inventory contract.
+  p43f:
+    - Docs and final decision report recommend adopt, pilot, or defer with evidence.
+
+blockers:
+  - P43_FRAMEWORK_RAW_TRACE_BLOCKED
+  - P43_FRAMEWORK_ADAPTER_CONTRACT_FAILED
+  - P43_FRAMEWORK_QUALITY_REGRESSION
+  - P43_FRAMEWORK_DEPENDENCY_NOT_APPROVED
+  - P43_FRAMEWORK_LIVE_GATE_NOT_CONFIGURED
+  - P43_FRAMEWORK_OVERFITS_MANAGE_BOND
+
+forbidden_behavior:
+  store_raw_sp_definition: true
+  store_raw_guide_body: true
+  store_raw_prompt: true
+  store_raw_provider_response: true
+  query_row_data: true
+  execute_stored_procedure: true
+  apply_business_db_ddl_or_dml: true
+  write_generated_source_to_application: true
+  deploy_generated_source: true
+  change_public_artifact_types: true
+  expand_public_api_or_mcp_route: true
+
+verification:
+  p43a_static:
+    - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
+  p43_final_expected:
+    - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+    - git diff --check

@@ -12,8 +12,9 @@ from ai_agent_runtime import (
     AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
     FakeModelGateway,
     ModelProfile,
+    build_ai_java_mybatis_draft_pack_run,
 )
-from ai_agent_runtime.gateway import OpenAIModelGateway, model_profile_from_env
+from ai_agent_runtime.gateway import ModelGatewayError, OpenAIModelGateway, model_profile_from_env
 from ai_agent_runtime.prompts import render_ai_java_mybatis_draft_pack_prompt
 
 FIXTURE_PATH = Path("fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml")
@@ -124,6 +125,9 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
         "repair",
     ]
     assert prompt_payload["filePolicy"]["mustSplitDtoFiles"] is True
+    assert prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["exactFiles"]
+    assert "aggregate files" in prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["rule"]
+    assert prompt_payload["filePolicy"]["methodCoveragePolicy"]["requiredServiceMethods"]
     assert prompt_payload["evidenceRefContract"]["allowedFactIds"]
     assert "CREATE PROCEDURE" not in prompt.user_prompt
     assert "raw_guide_body" not in prompt.user_prompt
@@ -152,6 +156,69 @@ def test_fake_gateway_returns_schema_valid_ai_draft_pack() -> None:
         "ManageBondSearchRow",
         "OnlineBondUpdateCommand",
     }
+
+
+def test_ai_draft_pack_run_repairs_invalid_structured_output_once() -> None:
+    payload = _valid_pack()
+
+    class RepairingGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(ai_draft_pack_by_target_ref={payload["targetRef"]: payload})
+            self.calls = 0
+
+        def draft_ai_java_mybatis_pack(self, *, prompt, profile):
+            self.calls += 1
+            if self.calls == 1:
+                raise ModelGatewayError(
+                    "OpenAI response did not match the required structured output schema.",
+                    code="OPENAI_AI_DRAFT_PACK_INVALID",
+                )
+            assert prompt.metadata["stage"] == "repair"
+            return super().draft_ai_java_mybatis_pack(prompt=prompt, profile=profile)
+
+    gateway = RepairingGateway()
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=_allowed_refs(payload),
+    )
+
+    assert gateway.calls == 2
+    assert run.structured_output["productionReady"] is False
+    assert run.model_invocation.component_invocations[-1]["component"] == (
+        "ai_draft_pack_repair_stage"
+    )
+    assert run.model_invocation.component_invocations[-1]["failureStage"] == (
+        "model_gateway_structured_output"
+    )
+    assert "OpenAI response" not in str(run.to_storage_dict())
+
+
+def test_ai_draft_pack_run_preserves_deterministic_quality_gates() -> None:
+    payload = _valid_pack()
+    provider_payload = deepcopy(payload)
+    provider_payload["qualityGates"]["requiredDtoClasses"] = ["ManageBondSearchCriteria"]
+    gateway = FakeModelGateway(
+        ai_draft_pack_by_target_ref={payload["targetRef"]: provider_payload}
+    )
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=_allowed_refs(payload),
+    )
+
+    assert run.structured_output["qualityGates"] == payload["qualityGates"]
+    assert run.model_invocation.structured_output["qualityGates"] == payload["qualityGates"]
 
 
 def test_gateway_storage_summary_keeps_only_hashes_and_structured_output() -> None:
@@ -199,6 +266,115 @@ def test_openai_gateway_uses_responses_json_schema_for_ai_draft_pack(monkeypatch
         is False
     )
     assert result.structured_output["targetRef"] == payload["targetRef"]
+
+
+def test_pgpt_gateway_accepts_fenced_ai_draft_pack_json(monkeypatch: Any) -> None:
+    payload = _valid_pack()
+    response = httpx.Response(
+        200,
+        json={
+            "id": "resp_pgpt",
+            "output_text": "```json\n" + json.dumps(payload) + "\n```",
+            "usage": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3},
+        },
+        request=httpx.Request("POST", "https://pgpt.test/responses"),
+    )
+    captured = _capture_post(monkeypatch, response)
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_RESPONSES_URL", "https://pgpt.test/responses")
+
+    result = OpenAIModelGateway(timeout_seconds=1).draft_ai_java_mybatis_pack(
+        prompt=_prompt(payload),
+        profile=model_profile_from_env("openai_fast_test"),
+    )
+
+    assert captured["url"] == "https://pgpt.test/responses"
+    assert result.structured_output["targetRef"] == payload["targetRef"]
+    assert result.component_invocations[0]["component"] == "pgpt_json_object_adapter"
+
+
+def test_pgpt_gateway_repairs_non_object_quality_gates_from_prompt(monkeypatch: Any) -> None:
+    payload = _valid_pack()
+    provider_payload = deepcopy(payload)
+    provider_payload["qualityGates"] = []
+    provider_payload["reviewMarkers"] = []
+    response = httpx.Response(
+        200,
+        json={
+            "id": "resp_pgpt",
+            "output_text": json.dumps(provider_payload),
+            "usage": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3},
+        },
+        request=httpx.Request("POST", "https://pgpt.test/responses"),
+    )
+    _capture_post(monkeypatch, response)
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_RESPONSES_URL", "https://pgpt.test/responses")
+
+    result = OpenAIModelGateway(timeout_seconds=1).draft_ai_java_mybatis_pack(
+        prompt=_prompt(payload),
+        profile=model_profile_from_env("openai_fast_test"),
+    )
+
+    assert result.structured_output["qualityGates"] == payload["qualityGates"]
+    assert set(payload["qualityGates"]["requiredReviewMarkers"]) <= set(
+        result.structured_output["reviewMarkers"]
+    )
+
+
+def test_openai_gateway_normalizes_ai_draft_pack_schema_drift(monkeypatch: Any) -> None:
+    payload = _valid_pack()
+    provider_payload = deepcopy(payload)
+    provider_payload["reviewMarkers"] = [
+        {"code": marker, "status": "REVIEW_REQUIRED"}
+        for marker in payload["reviewMarkers"]
+    ]
+    provider_payload["assumptions"] = [
+        {"summary": "Provider returned a structured assumption object."}
+    ]
+    first_file = provider_payload["files"][0]
+    first_file["class_name"] = first_file.pop("className")
+    first_file["operation_ids"] = [
+        {"operationId": operation_id} for operation_id in first_file.pop("operationIds")
+    ]
+    first_file["evidence_refs"] = [
+        {"ref": evidence_ref} for evidence_ref in first_file.pop("evidenceRefs")
+    ]
+    first_file["review_markers"] = [{"code": "FILE_REVIEW_REQUIRED"}]
+    first_file.pop("reviewMarkers", None)
+    first_file["required_fields"] = [
+        {"name": field} for field in first_file.pop("requiredFields", [])
+    ]
+    first_file["references"] = [
+        {"className": reference} for reference in first_file.get("references", [])
+    ]
+    first_file["providerOnly"] = "remove me"
+    _capture_post(monkeypatch, _json_response(provider_payload))
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.test/v1")
+
+    result = OpenAIModelGateway(timeout_seconds=1).draft_ai_java_mybatis_pack(
+        prompt=_prompt(payload),
+        profile=model_profile_from_env("openai_fast_test"),
+    )
+
+    normalized_file = result.structured_output["files"][0]
+    assert result.structured_output["reviewMarkers"] == payload["reviewMarkers"]
+    assert result.structured_output["assumptions"] == [
+        "Provider returned a structured assumption object."
+    ]
+    assert normalized_file["className"] == payload["files"][0]["className"]
+    assert normalized_file["operationIds"] == payload["files"][0]["operationIds"]
+    assert normalized_file["evidenceRefs"] == payload["files"][0]["evidenceRefs"]
+    assert normalized_file["reviewMarkers"] == ["FILE_REVIEW_REQUIRED"]
+    assert result.component_invocations[-1]["action"] == (
+        "normalized_ai_java_mybatis_draft_pack"
+    )
+    removed_paths = result.component_invocations[-1]["removedFieldPaths"]
+    assert "$.files[0].providerOnly" in removed_paths
 
 
 def _json_response(output: dict[str, Any]) -> httpx.Response:

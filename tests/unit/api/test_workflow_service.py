@@ -4,6 +4,7 @@ import json
 
 import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
+from ai_agent_generation import GenerationContext
 from ai_agent_runtime import FakeModelGateway
 from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
@@ -18,8 +19,11 @@ from api_app.workflow import (
     P41_OPERATION_MODEL_REVIEW_REQUIRED,
     P42_AI_DRAFT_PACK_FAILED,
     P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+    P42_INVENTORY_CONTRACT_INCOMPLETE,
     WORKFLOW_METADATA_NOTE,
     WorkflowService,
+    ai_draft_pack_expected_inventory,
+    ai_draft_pack_quality_gates,
     dependency_procedure_candidates,
     generation_context_from_request,
 )
@@ -156,6 +160,82 @@ def _model_invocation(
         structured_output=structured_output,
         token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
         latency_ms=0,
+    )
+
+
+def test_p42_inventory_derives_java_method_ids_from_operation_refs() -> None:
+    operation_model = {
+        "targetRef": "dbo.usp_ComplexProc",
+        "operations": [
+            {
+                "operationId": "op.complexCrudRQuery",
+                "statementRefs": ["stmt.select.s001"],
+                "dtoBlueprintRefs": ["ComplexSearchCriteria", "ComplexSearchRow"],
+            },
+            {
+                "operationId": "op.complexCrudUUpdate",
+                "statementRefs": ["stmt.update.s002"],
+                "dtoBlueprintRefs": ["ComplexUpdateCommand"],
+            },
+        ],
+        "statementEvidence": [
+            {"statementId": "stmt.select.s001", "operation": "SELECT"},
+            {"statementId": "stmt.update.s002", "operation": "UPDATE"},
+        ],
+        "dtoBlueprints": [
+            {
+                "name": "ComplexSearchCriteria",
+                "role": "QUERY",
+                "operationIds": ["op.complexCrudRQuery"],
+                "fields": [{"name": "SearchType"}],
+                "evidenceRefs": ["source.span.s001"],
+                "reviewMarkers": [],
+            },
+            {
+                "name": "ComplexSearchRow",
+                "role": "RESULT",
+                "operationIds": ["op.complexCrudRQuery"],
+                "fields": [{"name": "ResultId"}],
+                "evidenceRefs": ["source.span.s001"],
+                "reviewMarkers": [],
+            },
+            {
+                "name": "ComplexUpdateCommand",
+                "role": "COMMAND",
+                "operationIds": ["op.complexCrudUUpdate"],
+                "fields": [{"name": "UpdateValue"}],
+                "evidenceRefs": ["source.span.s002"],
+                "reviewMarkers": [],
+            },
+        ],
+        "reviewMarkers": ["TRANSACTION_BOUNDARY_REVIEW_REQUIRED"],
+    }
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "sample",
+            "request": {
+                "entityName": "ComplexProc",
+                "spName": "dbo.usp_ComplexProc",
+                "operationModel": operation_model,
+            },
+        }
+    )
+
+    inventory = ai_draft_pack_expected_inventory(context)
+    service_item = next(item for item in inventory if item["artifactType"] == "SERVICE_DRAFT")
+    mapper_item = next(item for item in inventory if item["artifactType"] == "MAPPER_INTERFACE")
+    mapper_xml_item = next(item for item in inventory if item["artifactType"] == "MAPPER_XML")
+    quality_gates = ai_draft_pack_quality_gates(context, inventory)
+
+    assert service_item["operationIds"] == ["complexCrudRQuery", "complexCrudUUpdate"]
+    assert mapper_item["operationIds"] == service_item["operationIds"]
+    assert mapper_xml_item["operationIds"] == service_item["operationIds"]
+    assert "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED" in quality_gates["requiredReviewMarkers"]
+    assert "TRANSACTION_BOUNDARY_REVIEW_REQUIRED" in quality_gates["requiredReviewMarkers"]
+    assert not any(
+        str(operation_id).startswith("op.")
+        for item in inventory
+        for operation_id in item.get("operationIds", [])
     )
 
 
@@ -311,6 +391,63 @@ def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts()
     assert context.request["aiDraftPackTrace"]["agentRunId"] == ai_draft_runs[0].agent_run_id
 
 
+def test_p42_complex_sp_inventory_contract_rejects_collapsed_operation_model() -> None:
+    operation_model = p41_operation_model_fixture()
+    operation_model["operations"] = operation_model["operations"][:1]
+    operation_model["dtoBlueprints"] = operation_model["dtoBlueprints"][:2]
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+
+    class InventorySpyGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+                ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+            )
+            self.draft_calls = 0
+
+        def draft_ai_java_mybatis_pack(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.draft_calls += 1
+            return super().draft_ai_java_mybatis_pack(prompt=prompt, profile=profile)
+
+    gateway = InventorySpyGateway()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_INVENTORY_CONTRACT_INCOMPLETE
+    assert gateway.draft_calls == 0
+    assert ai_draft_run.status == AgentRunStatus.FAILED.value
+    assert ai_draft_run.structured_output["reviewMarkers"][0]["code"] == (
+        P42_INVENTORY_CONTRACT_INCOMPLETE
+    )
+    assert ai_draft_run.structured_output["failureDiagnostics"]["failureStage"] == (
+        "inventory_contract"
+    )
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
+
+
 def test_p42_workflow_fails_without_java_artifacts_when_planner_is_disabled() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(
@@ -420,11 +557,217 @@ def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() 
     assert ai_draft_run.structured_output["reviewMarkers"][0]["code"] == (
         P42_AI_DRAFT_PACK_FAILED
     )
-    assert any(
-        finding["ruleId"] == "p42.ai_draft_pack.non_dto.dto_reference"
+    failed_rule_ids = {
+        finding["ruleId"]
         for finding in ai_draft_run.structured_output["qualityGateFindings"]
-    )
+    }
+    assert failed_rule_ids & {
+        "p42.ai_draft_pack.non_dto.dto_reference",
+        "p42.ai_draft_pack.service.method",
+    }
     assert "OperationModelReviewRequired" not in str(artifacts)
+
+
+def test_p42_workflow_repairs_invalid_quality_once_and_persists_artifacts() -> None:
+    operation_model = p41_operation_model_fixture()
+    repaired_pack = p42_ai_draft_pack_fixture()
+    invalid_pack = p42_ai_draft_pack_fixture()
+    for file in invalid_pack["files"]:
+        if file["artifactType"] == "SERVICE_DRAFT":
+            file["content"] = "public class ManageBondService { /* REVIEW_REQUIRED */ }"
+            break
+
+    class QualityRepairGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+            )
+            self.draft_calls = 0
+            self.stages: list[str] = []
+
+        def draft_ai_java_mybatis_pack(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.draft_calls += 1
+            self.stages.append(str(prompt.metadata["stage"]))
+            payload = invalid_pack if self.draft_calls == 1 else repaired_pack
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="quality-repair-gateway",
+                structured_output=payload,
+            )
+
+    gateway = QualityRepairGateway()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert gateway.draft_calls == 2
+    assert gateway.stages == ["file_content", "repair"]
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert any(
+        component["component"] == "ai_draft_pack_repair_stage"
+        and component["failureStage"] == "deterministic_quality_validation"
+        for component in ai_draft_run.model_invocation["componentInvocations"]
+    )
+    assert len([artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]) == (
+        len(repaired_pack["qualityGates"]["requiredDtoClasses"])
+    )
+
+
+def test_p42_workflow_reference_guard_preserves_missing_mapper_xml_dto_token() -> None:
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+    for file in ai_draft_pack["files"]:
+        if file["artifactType"] == "MAPPER_XML":
+            file["content"] = file["content"].replace(
+                "CreateRetentionBondBatchItem",
+                "RetentionBatchItem",
+            )
+            break
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+            ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+        ),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    mapper_xml = next(
+        artifact
+        for artifact in repository.list_job_artifacts(job.job_id) or []
+        if artifact.type == ArtifactType.MAPPER_XML
+    )
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert "CreateRetentionBondBatchItem" in mapper_xml.content
+    assert any(
+        component["component"] == "ai_draft_pack_reference_guard"
+        for component in ai_draft_run.model_invocation["componentInvocations"]
+    )
+
+
+def test_p42_workflow_records_sanitized_gateway_failure_without_repairing_timeout() -> None:
+    operation_model = p41_operation_model_fixture()
+
+    class TimeoutDraftGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+            )
+            self.draft_calls = 0
+
+        def draft_ai_java_mybatis_pack(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.draft_calls += 1
+            raise ModelGatewayError(
+                "OpenAI Responses API request timed out.",
+                code="OPENAI_TIMEOUT",
+            )
+
+    gateway = TimeoutDraftGateway()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert gateway.draft_calls == 1
+    assert diagnostics["failureStage"] == "model_gateway"
+    assert diagnostics["errorCode"] == "OPENAI_TIMEOUT"
+    assert diagnostics["errorClass"] == "ModelGatewayError"
+    assert ai_draft_run.model_invocation["componentInvocations"][0]["failureStage"] == (
+        "model_gateway"
+    )
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
+    assert "CREATE PROCEDURE" not in str(ai_draft_run.structured_output)
+    assert "rawProviderResponse" not in str(ai_draft_run.structured_output)
+
+
+def test_p42_workflow_records_sanitized_invalid_output_failure_after_repair_fails() -> None:
+    operation_model = p41_operation_model_fixture()
+
+    class InvalidOutputGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+            )
+            self.draft_calls = 0
+
+        def draft_ai_java_mybatis_pack(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.draft_calls += 1
+            raise ModelGatewayError(
+                "OpenAI response did not match the required structured output schema.",
+                code="OPENAI_AI_DRAFT_PACK_INVALID",
+            )
+
+    gateway = InvalidOutputGateway()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert gateway.draft_calls == 2
+    assert diagnostics["failureStage"] == "model_gateway"
+    assert diagnostics["errorCode"] == "OPENAI_AI_DRAFT_PACK_INVALID"
+    assert diagnostics["errorClass"] == "ModelGatewayError"
+    assert "rawProviderResponse" not in str(ai_draft_run.model_invocation)
+    assert "CREATE PROCEDURE" not in str(ai_draft_run.model_invocation)
 
 
 def test_llm_prompt_uses_retrieved_source_context_without_full_definition() -> None:

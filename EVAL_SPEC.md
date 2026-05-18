@@ -94,11 +94,14 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
   raw provider responses, row data, or secrets.
 - Public artifact types remain unchanged: `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
   `MAPPER_XML`.
-- The ManageBond quality target requires separate DTO files:
+- The ManageBond benchmark fixture requires separate DTO files:
   `ManageBondSearchCriteria`, `ManageBondSearchRow`, `ApproveAdvanceBondCommand`,
   `ApproveDefectBondCommand`, `FinanceTransferCommand`, `CreateBondCommand`,
   `CreateRetentionBondBatchItem`, `UpdateBondCommand`, `DeleteBondCommand`,
   `VendorBondUpdateCommand`, and `OnlineBondUpdateCommand`.
+- Production workflow must not use ManageBond-specific runtime constants. It must derive
+  `expectedInventory` and quality gates from sanitized operation contracts, DTO blueprints,
+  statement evidence, branch responsibilities, and review markers.
 - Service, Mapper interface, and Mapper XML remain single files but must reference the required
   DTOs and expose branch/use-case methods.
 - P42C deterministic validation is static only: it checks Java/XML text, DTO/method references,
@@ -131,10 +134,19 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
   or query row data, must not write generated source or platform DB rows, and must scan persisted
   in-memory artifacts/agent traces for raw SP, raw prompt, raw provider response, row-data, and
   secret leakage.
+- After P42H, P42G must not use ManageBond fixture inventory as a runtime fallback. If live
+  metadata cannot produce branch-level operation evidence and the operation model remains
+  `P41_OPERATION_MODEL_REVIEW_REQUIRED`, the live gate should fail with sanitized review-required
+  diagnostics instead of passing through hardcoded DTO inventory.
 - P42G passing means confidence evidence only. It does not make P42 production-ready and does not
   approve automatic conversion, publish, deploy, DDL/DML apply, or generated-source apply.
-- `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, missing DTO references,
-  source apply/deploy claims, and raw SP/guide storage are blockers.
+- P42H adds a generic inventory-contract gate: collapsed complex-SP inventories, uncovered
+  statement evidence, missing DTO blueprint coverage, and write/call operations without command,
+  batch item, or call request DTOs must fail as `P42_INVENTORY_CONTRACT_INCOMPLETE` before
+  Java/MyBatis artifacts are persisted.
+- `OperationModelReviewRequired*`, generic single-DTO collapse, fixture-specific
+  `ManageBondDTO`, blank content, missing DTO references, source apply/deploy claims, and raw
+  SP/guide storage are blockers.
 - Cross-DB write, called procedure I/O, uncertain TVF/procedure kind, result-shape variants, and
   transaction boundary gaps remain `REVIEW_REQUIRED`.
 - P42A is groundwork only. P42B-F implement schema/gateway, deterministic validator, workflow
@@ -155,6 +167,36 @@ Passing criteria:
   `make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
 - Optional live P42G gate includes
   `P42_LIVE_REPLAY_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
+
+## P43 Framework Adoption Readiness Eval Contract
+
+P43 evaluates whether introducing a framework improves complex SP analysis and
+AI Draft Pack generation quality. P43A is groundwork only:
+
+- `spec/eval/p43_framework_adoption_contract.yaml` exists and keeps
+  `production_ready: false`.
+- `fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml` treats
+  `PCO_GU_ManageBond_PRC` as a complex-SP benchmark, not a production-runtime
+  special case.
+- Candidate comparison keeps the current Responses/httpx gateway as baseline and
+  evaluates OpenAI Agents SDK and LangGraph only behind an internal adapter.
+- P43 must not install a new framework dependency in P43A.
+- P43 must not change UI, public API, DB schema, public MCP routes, or public
+  artifact types.
+- Framework traces and tool calls must not store raw prompts, raw provider
+  responses, raw SP definitions, raw guide body, row data, secrets, or failed
+  generated Java/XML content.
+- The final decision must be `adopt`, `pilot`, or `defer`, and each outcome keeps
+  `production_ready: false` until a separate production readiness gate exists.
+- ManageBond is a benchmark fixture for detecting generic failures such as
+  complex-SP two-DTO collapse, missing branch/use-case coverage, raw trace
+  leakage, and fallback skeleton persistence. It is not a hardcoded answer key.
+
+Passing criteria:
+- `make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"` passes.
+- P43F final gate includes
+  `make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"`.
+- `git diff --check` passes.
 
 ## P35 Source Context Eval Gate
 

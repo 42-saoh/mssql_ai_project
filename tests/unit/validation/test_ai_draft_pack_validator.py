@@ -152,9 +152,26 @@ def test_fallback_skeleton_and_single_dto_collapse_are_blockers() -> None:
     assert RULE_SCHEMA in _failed_rule_ids(payload)
 
     payload = _valid_pack()
+    original = payload["files"][0]["className"]
     payload["files"][0]["className"] = "ManageBondDTO"
+    payload["files"][0]["path"] = "dto/ManageBondDTO.java"
+    payload["files"][0]["content"] = payload["files"][0]["content"].replace(
+        original,
+        "ManageBondDTO",
+    )
+    payload["qualityGates"]["requiredDtoClasses"] = [
+        "ManageBondDTO" if item == original else item
+        for item in payload["qualityGates"]["requiredDtoClasses"]
+    ]
+    for file in payload["files"]:
+        if "references" in file:
+            file["references"] = [
+                "ManageBondDTO" if item == original else item
+                for item in file["references"]
+            ]
+            file["content"] = file["content"].replace(original, "ManageBondDTO")
 
-    assert RULE_SCHEMA in _failed_rule_ids(payload)
+    assert RULE_FORBIDDEN_PAYLOAD in _failed_rule_ids(payload)
 
 
 def test_missing_required_dto_is_a_blocker() -> None:

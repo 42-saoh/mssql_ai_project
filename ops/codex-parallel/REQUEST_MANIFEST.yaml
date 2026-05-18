@@ -18,6 +18,7 @@ basis:
   - spec/eval/p40_metadata_design_natural_language_chat_contract.yaml
   - spec/eval/p41_sp_operation_model_contract.yaml
   - spec/eval/p42_ai_draft_pack_contract.yaml
+  - spec/eval/p43_framework_adoption_contract.yaml
   - spec/validation/validation_rules.yaml
   - spec/policy/project_ai_java_mybatis_generation_policy.yaml
   - spec/policy/platform_db_standardization_rules_for_ai.json
@@ -28,6 +29,7 @@ basis:
   - fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml
   - fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml
   - fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml
+  - fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml
 profiles:
   coordinator: safe-explore
   worker: dev-edit
@@ -1579,4 +1581,107 @@ waves:
         verify:
           - make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
           - git diff --check
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E, P38A, P38B, P38C, P38D, P38E, P40A, P40B, P40C, P40D, P40E, P41A, P41B, P41C, P41D, P41E, P41F, P42A, P42B, P42C, P42D, P42E, P42F]
+  - wave: W20_P43_framework_adoption_readiness
+    description: P43 framework adoption readiness, adapter-first and sequential only
+    tracks:
+      - id: P43A
+        branch: feat/p43a-framework-adoption-contract-assets
+        worktree: ../wt/p43a-framework-adoption-contract-assets
+        prompt: prompts/43a_framework_adoption_contract_assets.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring, docs-sync]
+        depends_on: [P42F]
+        target_paths:
+          - spec/eval/p43_framework_adoption_contract.yaml
+          - fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml
+          - tasks/0043-framework-adoption-readiness.md
+          - ops/codex-parallel/
+          - tests/contract/test_p43_framework_adoption_prompt_assets.py
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
+          - git diff --check
+      - id: P43B
+        branch: feat/p43b-framework-adapter-contract
+        worktree: ../wt/p43b-framework-adapter-contract
+        prompt: prompts/43b_framework_adapter_contract.md
+        role: architect
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P43A]
+        target_paths:
+          - packages/agent-runtime/
+          - tests/unit/agent_runtime/
+          - spec/eval/p43_framework_adoption_contract.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/contract/test_p43_framework_adoption_prompt_assets.py"
+          - git diff --check
+      - id: P43C
+        branch: feat/p43c-ai-draft-pack-framework-spike
+        worktree: ../wt/p43c-ai-draft-pack-framework-spike
+        prompt: prompts/43c_ai_draft_pack_framework_spike.md
+        role: template_engineer
+        skills: [contract-to-code, ai-draft-pack-authoring, java-mybatis-draft-validator]
+        depends_on: [P43B]
+        target_paths:
+          - packages/agent-runtime/
+          - packages/validation/
+          - tests/unit/agent_runtime/
+          - tests/unit/validation/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/validation/test_ai_draft_pack_validator.py"
+          - git diff --check
+      - id: P43D
+        branch: feat/p43d-tool-trace-policy-gate
+        worktree: ../wt/p43d-tool-trace-policy-gate
+        prompt: prompts/43d_tool_trace_policy_gate.md
+        role: reviewer
+        skills: [quality-gate-review, mcp-tooling-design, docs-sync]
+        depends_on: [P43C]
+        target_paths:
+          - packages/agent-runtime/
+          - packages/validation/
+          - POLICY.md
+          - ARCHITECTURE.md
+          - tests/unit/agent_runtime/
+          - tests/unit/validation/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/validation/test_ai_draft_pack_validator.py"
+          - git diff --check
+      - id: P43E
+        branch: feat/p43e-framework-replay-comparison
+        worktree: ../wt/p43e-framework-replay-comparison
+        prompt: prompts/43e_manage_bond_framework_replay_gate.md
+        role: platform_worker
+        skills: [eval-fixture-authoring, sp-business-logic-migration-eval, quality-gate-review]
+        depends_on: [P43D]
+        target_paths:
+          - tests/eval/
+          - tests/integration/api/
+          - fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml
+          - fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/integration/api/test_api_workflow_routes.py"
+          - git diff --check
+      - id: P43F
+        branch: feat/p43f-docs-decision-gate
+        worktree: ../wt/p43f-docs-decision-gate
+        prompt: prompts/43f_docs_decision_gate.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P43E]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+          - docs/
+          - tasks/0043-framework-adoption-readiness.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+          - git diff --check
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E, P38A, P38B, P38C, P38D, P38E, P40A, P40B, P40C, P40D, P40E, P41A, P41B, P41C, P41D, P41E, P41F, P42A, P42B, P42C, P42D, P42E, P42F, P43A, P43B, P43C, P43D, P43E, P43F]

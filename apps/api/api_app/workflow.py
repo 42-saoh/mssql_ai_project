@@ -44,6 +44,7 @@ from ai_agent_runtime import (
     validate_ai_java_mybatis_draft_pack_output,
     validate_sp_operation_model_output,
 )
+from ai_agent_runtime.ai_draft_pack import AiDraftPackValidationError
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import (
     OUTPUT_SCHEMA_VERSION,
@@ -61,6 +62,7 @@ from ai_agent_validation import (
     validate_ai_java_mybatis_draft_pack_quality,
     validate_artifact,
 )
+from ai_agent_validation.ai_draft_pack import DEFAULT_REQUIRED_REVIEW_MARKERS
 
 from api_app.ai_tool_orchestrator import AiToolOrchestrator
 from api_app.backpressure import workflow_admission
@@ -94,6 +96,7 @@ SP_WORKFLOW_RECOVERY_BLOCKED = "SP_WORKFLOW_RECOVERY_BLOCKED"
 P41_OPERATION_MODEL_REVIEW_REQUIRED = "P41_OPERATION_MODEL_REVIEW_REQUIRED"
 P42_AI_DRAFT_PACK_FAILED = "P42_AI_DRAFT_PACK_FAILED"
 P42_AI_DRAFT_PACK_REVIEW_REQUIRED = "P42_AI_DRAFT_PACK_REVIEW_REQUIRED"
+P42_INVENTORY_CONTRACT_INCOMPLETE = "P42_INVENTORY_CONTRACT_INCOMPLETE"
 RECOVERABLE_SP_JOB_STATUSES = frozenset(
     {
         JobStatus.SUBMITTED,
@@ -775,6 +778,26 @@ class WorkflowService:
                 model_invocation=run_payload.model_invocation.to_storage_dict(),
                 target_key=request_record.target_key,
             )
+        except ModelGatewayError as exc:
+            payload = operation_model_review_required_payload(
+                target_ref=target_ref,
+                reason="SP_OPERATION_MODEL_PLANNER_FAILED",
+                evidence_refs=extraction.evidence_refs,
+            )
+            return self._save_operation_model_run(
+                job_id=job_id,
+                request_record=request_record,
+                payload=payload,
+                target_ref=target_ref,
+                reason=f"SP_OPERATION_MODEL_PLANNER_FAILED:{exc.code}",
+                evidence_payload=evidence_payload,
+                failure_diagnostics={
+                    "failureStage": "sp_operation_model_planner",
+                    "errorCode": exc.code,
+                    "errorClass": exc.__class__.__name__,
+                    "providerError": dict(exc.provider_error),
+                },
+            )
         except Exception as exc:  # noqa: BLE001 - operation planning must not fail the job
             payload = operation_model_review_required_payload(
                 target_ref=target_ref,
@@ -788,6 +811,11 @@ class WorkflowService:
                 target_ref=target_ref,
                 reason=f"SP_OPERATION_MODEL_PLANNER_FAILED:{exc.__class__.__name__}",
                 evidence_payload=evidence_payload,
+                failure_diagnostics={
+                    "failureStage": "sp_operation_model_planner",
+                    "errorCode": "SP_OPERATION_MODEL_PLANNER_FAILED",
+                    "errorClass": exc.__class__.__name__,
+                },
             )
 
     def _save_operation_model_run(
@@ -799,6 +827,7 @@ class WorkflowService:
         target_ref: str,
         reason: str,
         evidence_payload: dict[str, Any] | None,
+        failure_diagnostics: Mapping[str, Any] | None = None,
     ) -> AgentRunRecord:
         validated = validate_sp_operation_model_output(payload).to_storage_dict()
         model_invocation = operation_model_fallback_invocation(
@@ -806,6 +835,7 @@ class WorkflowService:
             profile_id=str(request_record.options.get("llmProfileId") or ""),
             reason=reason,
             evidence_payload=evidence_payload,
+            failure_diagnostics=failure_diagnostics,
         )
         return self.repository.save_agent_run(
             job_id=job_id,
@@ -1213,20 +1243,19 @@ class WorkflowService:
         operation_model_markers = {
             str(marker) for marker in context.operation_model.get("reviewMarkers", [])
         }
-        if (
-            "PROCEDURE_DEFINITION_UNAVAILABLE" in operation_model_markers
-            and "PCO_GU_MANAGEBOND_PRC" in target_ref.upper()
-        ):
+        if P41_OPERATION_MODEL_REVIEW_REQUIRED in operation_model_markers and bool(
+            request_record.options.get("allowSpDefinitionToModel", False)
+        ) and ai_draft_pack_requires_branch_evidence(context):
             self._save_ai_draft_pack_failure_run(
                 job_id=job_id,
                 request_record=request_record,
                 target_ref=target_ref,
                 code=P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
-                reason="AI_DRAFT_PACK_SAFE_CONTEXT_UNAVAILABLE:PROCEDURE_DEFINITION_UNAVAILABLE",
+                reason="AI_DRAFT_PACK_SAFE_CONTEXT_UNAVAILABLE:P41_OPERATION_MODEL_REVIEW_REQUIRED",
             )
             raise AiDraftPackWorkflowError(
                 P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
-                "AI Draft Pack planner needs sanitized procedure evidence before drafting.",
+                "AI Draft Pack planner needs branch-level operation evidence before drafting.",
             )
         if not bool(request_record.options.get("useLlmAnalysis", False)):
             self._save_ai_draft_pack_failure_run(
@@ -1242,6 +1271,24 @@ class WorkflowService:
             )
         sanitized_context = ai_draft_pack_context(context)
         expected_inventory = ai_draft_pack_expected_inventory(context)
+        inventory_findings = ai_draft_pack_inventory_findings(
+            context,
+            expected_inventory,
+        )
+        if inventory_findings:
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_INVENTORY_CONTRACT_INCOMPLETE,
+                reason="AI_DRAFT_PACK_INVENTORY_CONTRACT_INCOMPLETE",
+                failure_stage="inventory_contract",
+                validation_findings=inventory_findings,
+            )
+            raise AiDraftPackWorkflowError(
+                P42_INVENTORY_CONTRACT_INCOMPLETE,
+                "AI Draft Pack inventory contract is incomplete for the operation model.",
+            )
         quality_gates = ai_draft_pack_quality_gates(context, expected_inventory)
         allowed_refs = ai_draft_pack_allowed_evidence_refs(
             context=sanitized_context,
@@ -1272,6 +1319,16 @@ class WorkflowService:
             quality_report = validate_ai_java_mybatis_draft_pack_quality(
                 run_payload.structured_output,
             )
+            if quality_report.status != ValidationStatus.PASSED:
+                run_payload, quality_report = self._repair_ai_draft_pack_quality(
+                    target_ref=target_ref,
+                    request_record=request_record,
+                    sanitized_context=sanitized_context,
+                    expected_inventory=expected_inventory,
+                    quality_gates=quality_gates,
+                    allowed_refs=allowed_refs,
+                    failed_report=quality_report,
+                )
         except AttributeError as exc:
             self._save_ai_draft_pack_failure_run(
                 job_id=job_id,
@@ -1279,10 +1336,43 @@ class WorkflowService:
                 target_ref=target_ref,
                 code=P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
                 reason="AI_DRAFT_PACK_PLANNER_UNAVAILABLE",
+                failure_stage="planner_unavailable",
+                error_class=exc.__class__.__name__,
             )
             raise AiDraftPackWorkflowError(
                 P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
                 "AI Draft Pack planner is unavailable.",
+            ) from exc
+        except ModelGatewayError as exc:
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_FAILED,
+                reason=f"AI_DRAFT_PACK_PLANNER_FAILED:{exc.code}",
+                failure_stage="model_gateway",
+                error_code=exc.code,
+                error_class=exc.__class__.__name__,
+                provider_error=exc.provider_error,
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_FAILED,
+                "AI Draft Pack planner failed before producing valid artifacts.",
+            ) from exc
+        except AiDraftPackValidationError as exc:
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_FAILED,
+                reason="AI_DRAFT_PACK_PLANNER_FAILED:AiDraftPackValidationError",
+                failure_stage="schema_validation",
+                error_class=exc.__class__.__name__,
+                validation_findings=exc.findings,
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_FAILED,
+                "AI Draft Pack planner failed before producing valid artifacts.",
             ) from exc
         except Exception as exc:  # noqa: BLE001 - failure run must stay sanitized
             self._save_ai_draft_pack_failure_run(
@@ -1291,6 +1381,8 @@ class WorkflowService:
                 target_ref=target_ref,
                 code=P42_AI_DRAFT_PACK_FAILED,
                 reason=f"AI_DRAFT_PACK_PLANNER_FAILED:{exc.__class__.__name__}",
+                failure_stage="planner_exception",
+                error_class=exc.__class__.__name__,
             )
             raise AiDraftPackWorkflowError(
                 P42_AI_DRAFT_PACK_FAILED,
@@ -1304,6 +1396,8 @@ class WorkflowService:
                 code=P42_AI_DRAFT_PACK_FAILED,
                 reason="AI_DRAFT_PACK_QUALITY_GATE_FAILED",
                 quality_report=quality_report,
+                failure_stage="quality_validation",
+                validation_findings=ai_draft_pack_quality_findings(quality_report),
             )
             raise AiDraftPackWorkflowError(
                 P42_AI_DRAFT_PACK_FAILED,
@@ -1321,6 +1415,33 @@ class WorkflowService:
         )
         return record, quality_report
 
+    def _repair_ai_draft_pack_quality(
+        self,
+        *,
+        target_ref: str,
+        request_record: WorkRequestRecord,
+        sanitized_context: Mapping[str, Any],
+        expected_inventory: Sequence[Mapping[str, Any]],
+        quality_gates: Mapping[str, Any],
+        allowed_refs: Sequence[str],
+        failed_report: ValidationReport,
+    ) -> tuple[AgentRunPayload, ValidationReport]:
+        repair_context = ai_draft_pack_quality_repair_context(failed_report)
+        run_payload = build_ai_java_mybatis_draft_pack_run(
+            target_ref=target_ref,
+            sanitized_draft_context=sanitized_context,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            model_gateway=self.model_gateway,
+            profile_id=str(request_record.options.get("llmProfileId") or ""),
+            allowed_evidence_refs=allowed_refs,
+            repair_context=repair_context,
+        )
+        return (
+            run_payload,
+            validate_ai_java_mybatis_draft_pack_quality(run_payload.structured_output),
+        )
+
     def _save_ai_draft_pack_failure_run(
         self,
         *,
@@ -1330,6 +1451,11 @@ class WorkflowService:
         code: str,
         reason: str,
         quality_report: ValidationReport | None = None,
+        failure_stage: str = "ai_draft_pack_workflow_gate",
+        error_code: str | None = None,
+        error_class: str | None = None,
+        provider_error: Mapping[str, Any] | None = None,
+        validation_findings: Sequence[str] | None = None,
     ) -> AgentRunRecord:
         profile = model_profile_from_env(str(request_record.options.get("llmProfileId") or ""))
         checks = [
@@ -1341,6 +1467,14 @@ class WorkflowService:
             }
             for check in (quality_report.failed_checks if quality_report else ())
         ]
+        diagnostics = ai_draft_pack_failure_diagnostics(
+            failure_stage=failure_stage,
+            error_code=error_code or code,
+            error_class=error_class,
+            provider_error=provider_error,
+            validation_findings=validation_findings,
+            quality_report=quality_report,
+        )
         structured_output = {
             "schemaVersion": AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION,
             "contractTarget": "AiJavaMyBatisDraftPack",
@@ -1357,6 +1491,7 @@ class WorkflowService:
                 }
             ],
             "qualityGateFindings": checks,
+            "failureDiagnostics": diagnostics,
             "assumptions": [
                 "AI Draft Pack failure records do not store generated Java/XML content.",
             ],
@@ -1388,6 +1523,9 @@ class WorkflowService:
                     "status": "FAILED",
                     "errorCode": code,
                     "reason": reason,
+                    "failureStage": failure_stage,
+                    "errorClass": error_class or "",
+                    "failureDiagnostics": diagnostics,
                 },
             ),
         )
@@ -1775,7 +1913,7 @@ def ai_draft_pack_expected_inventory(context: GenerationContext) -> list[dict[st
     dto_blueprints = operation_model.get("dtoBlueprints")
     if isinstance(dto_blueprints, list):
         inventory = [
-            _inventory_item_from_dto_blueprint(item)
+            _inventory_item_from_dto_blueprint(item, operation_model)
             for item in dto_blueprints
             if isinstance(item, Mapping)
             and str(item.get("name") or "") != "OperationModelReviewRequired"
@@ -1882,6 +2020,168 @@ def ai_draft_pack_expected_inventory(context: GenerationContext) -> list[dict[st
     ]
 
 
+def ai_draft_pack_inventory_findings(
+    context: GenerationContext,
+    expected_inventory: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    operation_model = context.operation_model
+    if not isinstance(operation_model, Mapping):
+        return []
+    markers = {str(marker) for marker in operation_model.get("reviewMarkers", [])}
+    if P41_OPERATION_MODEL_REVIEW_REQUIRED in markers:
+        return []
+    operations = [
+        item
+        for item in operation_model.get("operations", [])
+        if isinstance(item, Mapping)
+    ]
+    statements = [
+        item
+        for item in operation_model.get("statementEvidence", [])
+        if isinstance(item, Mapping)
+    ]
+    dto_blueprints = [
+        item
+        for item in operation_model.get("dtoBlueprints", [])
+        if isinstance(item, Mapping)
+        and str(item.get("name") or "") != "OperationModelReviewRequired"
+    ]
+    if not operations and not dto_blueprints:
+        return []
+
+    findings: list[str] = []
+    inventory_dtos = {
+        str(item.get("className") or "")
+        for item in expected_inventory
+        if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
+    }
+    missing_dtos = sorted(
+        str(item.get("name") or "")
+        for item in dto_blueprints
+        if str(item.get("name") or "") and str(item.get("name") or "") not in inventory_dtos
+    )
+    if missing_dtos:
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: dtoBlueprints missing from inventory: "
+            f"{', '.join(missing_dtos[:12])}."
+        )
+
+    statement_ids = {
+        str(item.get("statementId") or "")
+        for item in statements
+        if str(item.get("statementId") or "")
+    }
+    covered_statement_ids: set[str] = set()
+    for operation in operations:
+        covered_statement_ids.update(
+            str(ref)
+            for ref in operation.get("statementRefs", [])
+            if str(ref).strip()
+        )
+    uncovered = sorted(statement_ids - covered_statement_ids)
+    if uncovered:
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: statement evidence not covered by "
+            f"operation contracts: {', '.join(uncovered[:12])}."
+        )
+
+    dto_count = len(inventory_dtos)
+    write_or_call_count = sum(
+        1
+        for item in statements
+        if str(item.get("operation") or "").upper()
+        in {"INSERT", "UPDATE", "DELETE", "MERGE", "EXECUTE", "CALL"}
+    )
+    complex_model = len(operations) > 1 or write_or_call_count > 1 or len(statement_ids) > 3
+    if complex_model and dto_count <= 2:
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: complex SP inventory collapsed to "
+            f"{dto_count} DTO files."
+        )
+
+    inventory_roles = {
+        str(item.get("dtoRole") or "").upper()
+        for item in expected_inventory
+        if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
+    }
+    needs_command_like_dto = any(
+        str(item.get("operation") or "").upper()
+        in {"INSERT", "UPDATE", "DELETE", "MERGE", "EXECUTE", "CALL"}
+        for item in statements
+    )
+    if needs_command_like_dto and not (
+        inventory_roles & {"COMMAND", "BATCH_ITEM", "CALL_REQUEST"}
+    ):
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: write/call responsibilities need "
+            "COMMAND, BATCH_ITEM, or CALL_REQUEST DTO roles."
+        )
+
+    operation_ids = _operation_ids_for_inventory(expected_inventory)
+    non_dto_items = [
+        item
+        for item in expected_inventory
+        if item.get("artifactType")
+        in {
+            ArtifactType.SERVICE_DRAFT.value,
+            ArtifactType.MAPPER_INTERFACE.value,
+            ArtifactType.MAPPER_XML.value,
+        }
+    ]
+    for artifact_type in (
+        ArtifactType.SERVICE_DRAFT.value,
+        ArtifactType.MAPPER_INTERFACE.value,
+        ArtifactType.MAPPER_XML.value,
+    ):
+        matches = [
+            item
+            for item in non_dto_items
+            if item.get("artifactType") == artifact_type
+        ]
+        if len(matches) != 1:
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: expected exactly one "
+                f"{artifact_type} inventory item."
+            )
+            continue
+        missing_methods = [
+            method
+            for method in operation_ids
+            if method not in {str(ref) for ref in matches[0].get("operationIds", [])}
+        ]
+        if missing_methods:
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: {artifact_type} missing "
+                f"operation ids: {', '.join(missing_methods[:12])}."
+            )
+    return findings
+
+
+def ai_draft_pack_requires_branch_evidence(context: GenerationContext) -> bool:
+    parameter_names = [
+        str(param.name or "").lstrip("@").lower()
+        for param in context.input_params
+        if str(param.name or "").strip()
+    ]
+    if len(parameter_names) < 4:
+        return False
+    branch_tokens = (
+        "crud",
+        "flag",
+        "gubun",
+        "mode",
+        "action",
+        "kind",
+        "type",
+        "status",
+        "svalue",
+    )
+    return any(
+        any(token in parameter for token in branch_tokens)
+        for parameter in parameter_names
+    )
+
+
 def ai_draft_pack_quality_gates(
     context: GenerationContext,
     expected_inventory: Sequence[Mapping[str, Any]],
@@ -1892,19 +2192,13 @@ def ai_draft_pack_quality_gates(
         if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
     ]
     operation_ids = _operation_ids_for_inventory(expected_inventory)
-    review_markers = sorted(
-        {
-            "CROSS_DB_WRITE_REVIEW_REQUIRED",
-            "CALLED_PROCEDURE_IO_REVIEW_REQUIRED",
-            "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
-            "TRANSACTION_BOUNDARY_REVIEW_REQUIRED",
-            *(
-                str(item)
-                for item in context.operation_model.get("reviewMarkers", [])
-                if "REVIEW_REQUIRED" in str(item)
-                and "P41_OPERATION_MODEL_REVIEW_REQUIRED" not in str(item)
-            ),
-        }
+    review_markers = list(
+        dict.fromkeys(
+            [
+                *DEFAULT_REQUIRED_REVIEW_MARKERS,
+                *operation_model_review_markers_for_draft(context.operation_model),
+            ]
+        )
     )
     return {
         "requiredDtoClasses": dto_classes,
@@ -1913,13 +2207,89 @@ def ai_draft_pack_quality_gates(
         "requiredReviewMarkers": review_markers,
         "blockerPatterns": [
             "OperationModelReviewRequired",
-            "ManageBondDTO",
             "P41_OPERATION_MODEL_REVIEW_REQUIRED",
         ],
         "blankContentIsBlocker": True,
         "dtoCollapseIsBlocker": True,
         "fallbackSkeletonPersistenceAllowedOnFailure": False,
     }
+
+
+def ai_draft_pack_quality_repair_context(report: ValidationReport) -> dict[str, Any]:
+    failed = [
+        {
+            "ruleId": check.rule_id,
+            "severity": check.severity.value,
+            "message": check.message[:300],
+        }
+        for check in report.failed_checks[:20]
+    ]
+    return {
+        "failureStage": "deterministic_quality_validation",
+        "errorCode": "AI_DRAFT_PACK_QUALITY_GATE_FAILED",
+        "errorClass": "ValidationReport",
+        "reason": "Deterministic P42 quality gate failed.",
+        "failedCheckCount": len(report.failed_checks),
+        "failedChecks": failed,
+        "instruction": (
+            "Repair the draft pack so all expected files, DTO references, mapper methods, "
+            "and required REVIEW_REQUIRED markers pass deterministic validation."
+        ),
+    }
+
+
+def ai_draft_pack_quality_findings(report: ValidationReport) -> list[str]:
+    return [
+        f"{check.rule_id}:{check.message[:300]}"
+        for check in report.failed_checks[:20]
+    ]
+
+
+def ai_draft_pack_failure_diagnostics(
+    *,
+    failure_stage: str,
+    error_code: str,
+    error_class: str | None,
+    provider_error: Mapping[str, Any] | None,
+    validation_findings: Sequence[str] | None,
+    quality_report: ValidationReport | None,
+) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {
+        "failureStage": str(failure_stage),
+        "errorCode": str(error_code),
+    }
+    if error_class:
+        diagnostics["errorClass"] = str(error_class)
+    safe_provider_error = _safe_provider_error(provider_error or {})
+    if safe_provider_error:
+        diagnostics["providerError"] = safe_provider_error
+    safe_findings = _safe_ai_draft_validation_findings(validation_findings or ())
+    if safe_findings:
+        diagnostics["validationFindingCount"] = len(validation_findings or ())
+        diagnostics["validationFindings"] = safe_findings
+    if quality_report is not None:
+        diagnostics["qualityFailedCheckCount"] = len(quality_report.failed_checks)
+        diagnostics["qualityFailedRuleIds"] = list(
+            dict.fromkeys(check.rule_id for check in quality_report.failed_checks)
+        )[:20]
+    return diagnostics
+
+
+def _safe_provider_error(provider_error: Mapping[str, Any]) -> dict[str, str]:
+    safe: dict[str, str] = {}
+    for key in ("type", "code", "param", "message", "findingCount", "findings"):
+        value = provider_error.get(key)
+        if value is not None:
+            safe[key] = str(value)[:300]
+    return safe
+
+
+def _safe_ai_draft_validation_findings(findings: Sequence[str]) -> list[str]:
+    safe: list[str] = []
+    for finding in findings[:20]:
+        text = str(finding)
+        safe.append(text[:300])
+    return safe
 
 
 def ai_draft_pack_allowed_evidence_refs(
@@ -1952,7 +2322,10 @@ def _evidence_summary(value: Any) -> dict[str, Any]:
     }
 
 
-def _inventory_item_from_dto_blueprint(item: Mapping[str, Any]) -> dict[str, Any]:
+def _inventory_item_from_dto_blueprint(
+    item: Mapping[str, Any],
+    operation_model: Mapping[str, Any],
+) -> dict[str, Any]:
     dto_name = str(item.get("name") or "ReviewRequiredDto")
     role = str(item.get("role") or "REVIEW_REQUIRED").upper()
     role_map = {
@@ -1972,13 +2345,20 @@ def _inventory_item_from_dto_blueprint(item: Mapping[str, Any]) -> dict[str, Any
     evidence_refs = [
         str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip()
     ] or ["metadata.ai_draft_pack.review_required"]
+    raw_operation_ids = [
+        str(ref) for ref in item.get("operationIds", []) if str(ref).strip()
+    ]
     return {
         "artifactType": ArtifactType.DTO_DRAFT.value,
         "path": f"dto/{dto_name}.java",
         "role": role_map.get(role, "COMMAND_DTO"),
         "className": dto_name,
-        "operationIds": [str(ref) for ref in item.get("operationIds", []) if str(ref).strip()]
-        or ["reviewDraft"],
+        "operationIds": _draft_operation_ids_for_dto(
+            dto_name=dto_name,
+            role=role,
+            raw_operation_ids=raw_operation_ids,
+            operation_model=operation_model,
+        ),
         "dtoRole": role,
         "requiredFields": required_fields,
         "evidenceRefs": evidence_refs,
@@ -1986,6 +2366,178 @@ def _inventory_item_from_dto_blueprint(item: Mapping[str, Any]) -> dict[str, Any
             str(marker) for marker in item.get("reviewMarkers", []) if str(marker).strip()
         ],
     }
+
+
+def _draft_operation_ids_for_dto(
+    *,
+    dto_name: str,
+    role: str,
+    raw_operation_ids: Sequence[str],
+    operation_model: Mapping[str, Any],
+) -> list[str]:
+    raw_refs = list(dict.fromkeys(str(item) for item in raw_operation_ids if str(item).strip()))
+    method_ids = [
+        method_id
+        for method_id in (
+            _draft_method_id_from_operation_ref(operation_id) for operation_id in raw_refs
+        )
+        if method_id
+    ]
+    if role in {"QUERY", "RESULT"}:
+        return method_ids or ["reviewDraft"]
+    if role == "CALL_REQUEST":
+        statement_methods = _statement_phase_method_ids(
+            operation_model=operation_model,
+            operation_ids=raw_refs,
+            statement_operations={"EXECUTE", "CALL"},
+        )
+        return (
+            statement_methods
+            or [_lower_camel_class_stem(dto_name)]
+            or method_ids
+            or ["reviewDraft"]
+        )
+    if role == "BATCH_ITEM":
+        stem = _class_stem(dto_name)
+        method = stem if stem.lower().endswith("batch") else f"{stem}Batch"
+        return [_lower_camel_from_words(method)] if method else method_ids or ["reviewDraft"]
+    if role == "COMMAND":
+        if len(raw_refs) == 1 and _operation_has_single_dto_blueprint(
+            operation_id=raw_refs[0],
+            operation_model=operation_model,
+        ):
+            return method_ids or ["reviewDraft"]
+        return [_lower_camel_class_stem(dto_name)] or method_ids or ["reviewDraft"]
+    return method_ids or [_lower_camel_class_stem(dto_name)] or ["reviewDraft"]
+
+
+def _draft_method_id_from_operation_ref(operation_id: str) -> str:
+    text = str(operation_id or "").strip()
+    if not text:
+        return ""
+    parts = [part for part in re.split(r"[^0-9A-Za-z]+", text) if part]
+    if len(parts) > 1 and parts[0].lower() in {"op", "operation", "operations"}:
+        parts = parts[1:]
+    candidate = _lower_camel_from_words(" ".join(parts) if parts else text)
+    if candidate and not re.match(r"[A-Za-z_]", candidate[0]):
+        candidate = f"draft{candidate[:1].upper()}{candidate[1:]}"
+    return candidate
+
+
+def _operation_has_single_dto_blueprint(
+    *,
+    operation_id: str,
+    operation_model: Mapping[str, Any],
+) -> bool:
+    for operation in operation_model.get("operations", []):
+        if not isinstance(operation, Mapping):
+            continue
+        if str(operation.get("operationId") or "") != operation_id:
+            continue
+        refs = [
+            str(ref)
+            for ref in operation.get("dtoBlueprintRefs", [])
+            if str(ref).strip()
+        ]
+        return len(refs) == 1
+    return False
+
+
+def _statement_phase_method_ids(
+    *,
+    operation_model: Mapping[str, Any],
+    operation_ids: Sequence[str],
+    statement_operations: set[str],
+) -> list[str]:
+    operations = [
+        item
+        for item in operation_model.get("operations", [])
+        if isinstance(item, Mapping)
+        and (not operation_ids or str(item.get("operationId") or "") in operation_ids)
+    ]
+    statement_refs: set[str] = set()
+    for operation in operations:
+        statement_refs.update(
+            str(ref)
+            for ref in operation.get("statementRefs", [])
+            if str(ref).strip()
+        )
+    methods: list[str] = []
+    for statement in operation_model.get("statementEvidence", []):
+        if not isinstance(statement, Mapping):
+            continue
+        statement_id = str(statement.get("statementId") or "")
+        if statement_refs and statement_id not in statement_refs:
+            continue
+        operation = str(statement.get("operation") or "").upper()
+        if operation not in statement_operations:
+            continue
+        phase = str(statement.get("phase") or statement_id or "")
+        method = _lower_camel_from_words(phase)
+        if method:
+            methods.append(method)
+    return list(dict.fromkeys(methods))
+
+
+def _lower_camel_class_stem(class_name: str) -> str:
+    return _lower_camel_from_words(_class_stem(class_name))
+
+
+def _class_stem(class_name: str) -> str:
+    return operation_model_entity_stem(class_name) or class_name
+
+
+def _lower_camel_from_words(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parts = [
+        part
+        for part in re.split(r"[^0-9A-Za-z]+", re.sub(r"(?<!^)(?=[A-Z])", "_", text))
+        if part
+    ]
+    if not parts:
+        return text[:1].lower() + text[1:]
+    first, *rest = parts
+    return first[:1].lower() + first[1:] + "".join(
+        part[:1].upper() + part[1:] for part in rest
+    )
+
+
+def operation_model_review_markers_for_draft(
+    operation_model: Mapping[str, Any] | None,
+) -> list[str]:
+    if not isinstance(operation_model, Mapping):
+        return []
+    markers: list[str] = []
+    markers.extend(_review_markers_from_value(operation_model.get("reviewMarkers")))
+    for operation in operation_model.get("operations", []):
+        if not isinstance(operation, Mapping):
+            continue
+        markers.extend(_review_markers_from_value(operation.get("riskMarkers")))
+        branch = operation.get("branchCondition")
+        if isinstance(branch, Mapping):
+            markers.extend(_review_markers_from_value(branch.get("reviewMarkers")))
+    for dto in operation_model.get("dtoBlueprints", []):
+        if isinstance(dto, Mapping):
+            markers.extend(_review_markers_from_value(dto.get("reviewMarkers")))
+    excluded = {
+        P41_OPERATION_MODEL_REVIEW_REQUIRED,
+        "SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED",
+    }
+    return sorted(
+        {
+            marker
+            for marker in markers
+            if "REVIEW_REQUIRED" in marker and marker not in excluded
+        }
+    )
+
+
+def _review_markers_from_value(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [str(item) for item in value if str(item).strip()]
 
 
 def _operation_ids_for_inventory(inventory: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -2210,13 +2762,24 @@ def operation_model_fallback_invocation(
     profile_id: str,
     reason: str,
     evidence_payload: Mapping[str, Any] | None,
+    failure_diagnostics: Mapping[str, Any] | None = None,
 ) -> ModelInvocationRecord:
     profile = model_profile_from_env(profile_id)
     invocation_input = {
         "reason": reason,
         "targetRef": payload.get("targetRef"),
         "evidenceSummary": dict(evidence_payload or {}),
+        "failureDiagnostics": dict(failure_diagnostics or {}),
     }
+    component = {
+        "component": "sp_operation_model_workflow_gate",
+        "status": "REVIEW_REQUIRED",
+        "reviewMarker": P41_OPERATION_MODEL_REVIEW_REQUIRED,
+        "reason": reason,
+        "evidenceSummary": dict(evidence_payload or {}),
+    }
+    if failure_diagnostics:
+        component["failureDiagnostics"] = dict(failure_diagnostics)
     return ModelInvocationRecord(
         provider="workflow",
         model="deterministic-operation-model-fallback",
@@ -2233,15 +2796,7 @@ def operation_model_fallback_invocation(
         token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
         latency_ms=0,
         provider_request_id=None,
-        component_invocations=(
-            {
-                "component": "sp_operation_model_workflow_gate",
-                "status": "REVIEW_REQUIRED",
-                "reviewMarker": P41_OPERATION_MODEL_REVIEW_REQUIRED,
-                "reason": reason,
-                "evidenceSummary": dict(evidence_payload or {}),
-            },
-        ),
+        component_invocations=(component,),
     )
 
 

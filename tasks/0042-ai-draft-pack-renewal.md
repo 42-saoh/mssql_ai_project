@@ -77,6 +77,21 @@ persistence, execute stored procedures, query row data, apply generated source,
 or claim production readiness. Missing live prerequisites are blocker failures
 when the gate is enabled and skipped/default when it is disabled.
 
+## P42H Status
+
+P42H corrects the P42G live-repair direction by removing ManageBond-specific
+runtime inventory overrides. The workflow now builds `expectedInventory` from
+sanitized operation model facts: `operations`, `dtoBlueprints`,
+`statementEvidence`, branch responsibilities, DTO roles, evidence refs, and
+`REVIEW_REQUIRED` markers. ManageBond remains a benchmark fixture and live
+confidence target, not a production-runtime special case.
+
+Complex SPs that collapse to two DTOs, leave statement evidence uncovered, omit
+DTO blueprint coverage, or have write/call responsibilities without command,
+batch item, or call request DTOs now fail before model drafting with
+`P42_INVENTORY_CONTRACT_INCOMPLETE`. That failure stores sanitized diagnostics
+only and persists no Java/MyBatis draft artifacts.
+
 ## Goal
 
 Create the P42 foundation for `PPM.dbo.PCO_GU_ManageBond_PRC` so the next slices
@@ -96,7 +111,8 @@ Mapper XML directly from sanitized analysis evidence.
 - Define `AiJavaMyBatisDraftPack.v0.1` as an internal draft-pack contract.
 - Keep public artifact types unchanged: `DTO_DRAFT`, `SERVICE_DRAFT`,
   `MAPPER_INTERFACE`, and `MAPPER_XML`.
-- Record the required ManageBond DTO inventory and branch/use-case method wiring.
+- Record the ManageBond benchmark DTO inventory and branch/use-case method wiring as a fixture
+  quality target, while keeping production workflow inventory derivation generic.
 - Add P42A-F prompt pack and manifest wiring for sequential execution only.
 - Add fixture-first tests that reject fallback skeletons, blank files, and single
   `ManageBondDTO` collapse.
@@ -138,6 +154,8 @@ Mapper XML directly from sanitized analysis evidence.
   verification, and residual risks.
 - P42G opt-in live confidence probe and eval test for live OpenAI + live PPM
   replay without platform DB persistence or source apply.
+- P42H generic draft inventory contract that removes ManageBond runtime
+  hardcoding and fails incomplete complex-SP inventories explicitly.
 
 ## Recommended Skills
 
@@ -159,19 +177,23 @@ Mapper XML directly from sanitized analysis evidence.
 
 ## Done Definition
 
-- The required ManageBond DTO file inventory is explicit and cannot collapse into
-  one DTO.
+- Complex SP DTO inventory is derived from operation contracts and cannot
+  collapse into one procedure-wide DTO.
 - Service, Mapper interface, and Mapper XML remain single files but must reference
   branch/use-case DTOs.
-- `OperationModelReviewRequired*`, `ManageBondDTO`, blank content, and fallback
-  skeleton persistence are quality blockers.
+- `OperationModelReviewRequired*`, fixture-specific `ManageBondDTO`, blank
+  content, generic DTO collapse, and fallback skeleton persistence are quality
+  blockers.
 - P42D stores AI Draft Pack metadata in artifact `extra`: `aiDraftPackSchema`,
   `aiDraftPackTargetRef`, `aiDraftPackAgentRunId`, `aiFileRole`,
   `operationIds`, `dtoRole`, `qualityScore`, `bundleFilePath`,
   `aiEvidenceRefs`, and `reviewMarkers`.
-- P42E replay proves a new API workflow job produces required ManageBond DTOs,
-  single Service/Mapper/Mapper XML files, no fallback skeletons, no blank
-  content, no `ManageBondDTO` collapse, and preserved `REVIEW_REQUIRED` markers.
+- P42E/P42G replay proves a new API workflow job produces a multi-DTO draft
+  meeting or exceeding the ManageBond benchmark count, single
+  Service/Mapper/Mapper XML files, no fallback skeletons, no blank content, no
+  `ManageBondDTO` collapse, and preserved `REVIEW_REQUIRED` markers. Exact
+  ManageBond class names remain a fixture comparison signal, not a production
+  runtime answer key.
 - P42F docs match implemented behavior and the final gate reports no policy
   drift, no missing regression coverage, and no whitespace issues.
 
@@ -181,5 +203,14 @@ Mapper XML directly from sanitized analysis evidence.
   therefore recommends inventory, file content, validation, and repair stages.
 - Live OpenAI/live PPM confidence is opt-in only. A P42G pass is confidence
   evidence, not production readiness or automatic conversion approval.
+- After P42H, a live P42G run with the gate enabled must produce branch-level
+  operation evidence. If live metadata falls back to
+  `P41_OPERATION_MODEL_REVIEW_REQUIRED`, the workflow fails with
+  `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` rather than using the ManageBond fixture as
+  a runtime answer key.
+- P42G live confidence now allows additional split DTOs beyond the benchmark
+  minimum when the dynamic inventory contract, wiring checks, and P42 validator
+  pass. This prevents the gate from rewarding exact ManageBond-specific
+  hardcoding over generally better branch/use-case separation.
 - Cross-database writes, uncertain TVF/procedure kind, called procedure I/O, and
   transaction boundary uncertainty remain `REVIEW_REQUIRED`.

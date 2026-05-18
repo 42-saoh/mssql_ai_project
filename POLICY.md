@@ -48,13 +48,17 @@
   evidence refs, quality gates, and `REVIEW_REQUIRED` markers only.
 - Public artifact types remain unchanged: `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
   `MAPPER_XML`.
-- `DTO_DRAFT` must not collapse a complex SP into a single `ManageBondDTO`; branch/use-case DTO
-  files are required for the ManageBond quality target.
+- `DTO_DRAFT` must not collapse a complex SP into a single procedure-wide DTO. Branch/use-case
+  DTO files must be derived from sanitized operation contracts, DTO blueprints, statement
+  evidence, and review markers. `ManageBondDTO` is blocked only by the ManageBond benchmark
+  fixture policy, not by production-runtime target-specific branching.
 - `OperationModelReviewRequired*` fallback skeletons, blank content, missing DTO references, raw SP
   dumps, row-data wording, and source apply/deploy claims are blockers for P42 Java/MyBatis drafts.
 - AI Draft Pack failure must be explicit with `P42_AI_DRAFT_PACK_FAILED` or
   `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`; misleading Java fallback skeleton persistence is not an
   acceptable success result.
+- If the deterministic draft inventory contract is incomplete for a complex SP, the workflow must
+  fail with `P42_INVENTORY_CONTRACT_INCOMPLETE` and persist no Java/MyBatis draft files.
 - P42 acceptance is based on a new sanitized workflow replay, not on historical failed jobs such as
   `job_6864d2734e`. The replay must keep generated files draft-only and must not write them into
   application source trees.
@@ -70,6 +74,25 @@
 - P42 does not authorize UI changes, public artifact type expansion, public API expansion, DB schema
   changes, live MCP public tool expansion, procedure execution, row-data access, automatic DDL/DML
   apply, or generated-source deployment.
+
+## P43 Framework Adoption Policy
+
+- P43 is an adoption-readiness track, not a runtime migration or production-readiness claim.
+- Framework candidates must be evaluated behind `AiGenerationFrameworkAdapter.v0.1`; the current
+  Responses/httpx gateway remains the rollback baseline.
+- P43A must not install OpenAI Agents SDK, LangGraph, or another framework dependency. Later slices
+  may propose a dependency only with adapter tests, trace policy gates, and rollback evidence.
+- Framework adoption must improve general complex-SP branch/use-case DTO inventory quality. It must
+  not hardcode `PCO_GU_ManageBond_PRC` or any target-specific DTO answer key into production
+  workflow logic.
+- Framework traces and tool calls may store only sanitized stage names, counts, hashes, failure
+  codes, and policy-safe metrics. Raw prompts, raw provider responses, raw SP definitions, raw guide
+  body, row data, secrets, and failed generated Java/XML content remain forbidden.
+- Stored procedure execution, row-data access, business DB DDL/DML apply, generated-source apply,
+  deploy, UI changes, public API expansion, public MCP route expansion, DB schema changes, and public
+  artifact type changes remain out of scope.
+- A P43 decision may be `adopt`, `pilot`, or `defer`; all three must keep `production_ready: false`
+  until a separate production readiness gate exists.
 
 ## P35 Source Context Policy
 

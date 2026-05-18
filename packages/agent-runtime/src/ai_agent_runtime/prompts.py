@@ -86,6 +86,15 @@ collapse all procedure inputs/results into one DTO. Mark weak business naming, r
 uncertainty, cross-database writes, dynamic SQL, TVF/procedure uncertainty, and called procedure
 I/O as REVIEW_REQUIRED. Never include raw SQL snippets, row data, prompt/provider trace ids,
 procedure execution, DDL/DML apply, deployment, or secrets.
+Use exact JSON keys from the output contract only. Operation objects use riskMarkers, not
+reviewMarkers. Branch conditions use evidenceRefs, not evidence_refs. DTO fields use dbType, not
+db_type. Do not add koreanName, localizedName, explanation, notes, confidence, or other helper
+fields; put uncertain text into summary, assumptions, or REVIEW_REQUIRED markers.
+Every statementEvidence item must be referenced by at least one operation.statementRefs entry.
+Split operations by distinct branch predicates and business use-cases. Do not merge unrelated
+CRUD, approval, create, update, delete, vendor, online, batch, or called-procedure responsibilities
+into a single operation. DTO blueprint names should use the target-derived business stem and
+use-case role, not only generic CrudR/CrudC/CrudU names when better branch evidence exists.
 {KOREAN_OUTPUT_INSTRUCTION}"""
 
 AI_JAVA_MYBATIS_DRAFT_PACK_SYSTEM_PROMPT = f"""You draft Java/MyBatis files for complex MSSQL
@@ -93,12 +102,16 @@ stored procedure migration as an AiJavaMyBatisDraftPack.v0.1 JSON object. Return
 JSON. Use sanitized draft context, expected file inventory, quality gates, and evidence refs only.
 Keep productionReady false and sourcePolicy sanitized_facts_only. Produce multiple DTO_DRAFT files
 for query criteria, result rows, commands, batch items, and called procedure request shapes; keep
-SERVICE_DRAFT, MAPPER_INTERFACE, and MAPPER_XML as single files. Never create ManageBondDTO or
-OperationModelReviewRequired fallback skeletons. Every file must contain non-empty draft content,
+SERVICE_DRAFT, MAPPER_INTERFACE, and MAPPER_XML as single files. Never create procedure-wide
+single DTO collapse or OperationModelReviewRequired fallback skeletons. Every file must contain
+non-empty draft content,
 operationIds, evidenceRefs copied exactly from evidenceRefContract.allowedFactIds, and reviewMarkers
 when facts are weak. Preserve REVIEW_REQUIRED markers for weak business naming, cross-database
 writes, called procedure I/O, TVF/procedure uncertainty, result-shape variants, and transaction
-boundary uncertainty. Never include raw SP definitions, raw guide body, raw prompts, raw provider
+boundary uncertainty. The non-DTO files are aggregate files: use the expectedInventory path and
+className exactly for the single Service, Mapper interface, and Mapper XML, and put every required
+method from qualityGates into those aggregate files. Never create use-case-specific Service or
+Mapper files. Never include raw SP definitions, raw guide body, raw prompts, raw provider
 responses, row data, procedure execution, DDL/DML apply, source apply, deployment, or secrets.
 {KOREAN_OUTPUT_INSTRUCTION}"""
 
@@ -475,6 +488,86 @@ def render_sp_operation_model_prompt(
             "statementRefs, dtoBlueprintRefs, and multi-DTO blueprints. Keep QUERY and "
             "RESULT DTOs separate from COMMAND, BATCH_ITEM, and CALL_REQUEST DTOs."
         ),
+        "operationSeparationPolicy": {
+            "mustCoverEveryStatementEvidenceId": True,
+            "statementCoverageRule": (
+                "Every statementEvidence[].statementId must appear in at least one "
+                "operations[].statementRefs array. If a statement is initialization, "
+                "cleanup, dynamic SQL, or a called-procedure bridge, create a distinct "
+                "REVIEW_REQUIRED operation instead of omitting it."
+            ),
+            "splitByDistinctBranchCondition": True,
+            "splitByDistinctCrudOrUseCase": True,
+            "branchCoverage": _operation_branch_contract(statement_evidence),
+            "namingRule": (
+                "Derive a stable Java business stem from the procedure name by removing "
+                "schema/company prefixes and procedure suffixes, then append use-case "
+                "and DTO role words. Avoid DTO names that are only CrudR, CrudC, CrudU, "
+                "CrudD, or similar generic flags when branch/use-case evidence exists."
+            ),
+        },
+        "outputContract": {
+            "schemaVersion": "SpOperationModel.v0.1",
+            "contractTarget": "SpOperationModel",
+            "productionReady": False,
+            "sourcePolicy": "sanitized_facts_only",
+            "rootKeys": [
+                "schemaVersion",
+                "contractTarget",
+                "targetRef",
+                "sourcePolicy",
+                "productionReady",
+                "operations",
+                "statementEvidence",
+                "dtoBlueprints",
+                "reviewMarkers",
+                "evidenceRefs",
+                "assumptions",
+            ],
+            "operationKeys": [
+                "operationId",
+                "crudFlag",
+                "title",
+                "summary",
+                "branchCondition",
+                "statementRefs",
+                "dtoBlueprintRefs",
+                "stateTransitions",
+                "riskMarkers",
+                "evidenceRefs",
+                "status",
+            ],
+            "branchConditionKeys": ["expression", "variables", "evidenceRefs", "status"],
+            "statementKeys": [
+                "statementId",
+                "operation",
+                "targetRef",
+                "phase",
+                "inputs",
+                "outputs",
+                "writes",
+                "crossDatabase",
+                "reviewMarkers",
+                "evidenceRefs",
+                "status",
+            ],
+            "dtoBlueprintKeys": [
+                "name",
+                "role",
+                "operationIds",
+                "fields",
+                "evidenceRefs",
+                "reviewMarkers",
+            ],
+            "dtoFieldKeys": ["name", "dbType", "source", "required", "evidenceRefs"],
+            "forbiddenHelperKeys": [
+                "koreanName",
+                "localizedName",
+                "explanation",
+                "notes",
+                "confidence",
+            ],
+        },
         "dtoBlueprintPolicy": {
             "mustNotCollapseToSingleDto": True,
             "expectedRoles": [
@@ -556,6 +649,11 @@ def render_ai_java_mybatis_draft_pack_prompt(
     context = _remove_raw_metadata_fields(
         json.loads(json.dumps(dict(sanitized_draft_context), ensure_ascii=False, default=str))
     )
+    non_dto_inventory = [
+        item
+        for item in inventory
+        if item.get("artifactType") in {"SERVICE_DRAFT", "MAPPER_INTERFACE", "MAPPER_XML"}
+    ]
     input_payload = {
         "targetRef": target_ref,
         "stage": stage,
@@ -574,6 +672,31 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "finalStructuredOutputRequiresContent": True,
             "productionReady": False,
             "sourcePolicy": "sanitized_facts_only",
+            "rootKeys": [
+                "schemaVersion",
+                "contractTarget",
+                "targetRef",
+                "sourcePolicy",
+                "productionReady",
+                "files",
+                "evidenceRefs",
+                "reviewMarkers",
+                "qualityGates",
+                "assumptions",
+            ],
+            "fileKeys": [
+                "artifactType",
+                "path",
+                "role",
+                "className",
+                "content",
+                "operationIds",
+                "evidenceRefs",
+                "reviewMarkers",
+                "dtoRole",
+                "requiredFields",
+                "references",
+            ],
         },
         "filePolicy": {
             "artifactTypes": [
@@ -595,8 +718,31 @@ def render_ai_java_mybatis_draft_pack_prompt(
             ],
             "mustSplitDtoFiles": True,
             "serviceMapperAndXmlSingleFile": True,
-            "blockedClassNames": ["OperationModelReviewRequired", "ManageBondDTO"],
+            "blockedClassNames": ["OperationModelReviewRequired"],
             "blockedMarkers": ["P41_OPERATION_MODEL_REVIEW_REQUIRED"],
+            "exactExpectedFileCount": len(inventory),
+            "exactExpectedInventoryRequired": True,
+            "nonDtoAggregatePolicy": {
+                "exactFiles": non_dto_inventory,
+                "rule": (
+                    "Return exactly these Service/Mapper/MapperXML path and className values. "
+                    "They are aggregate files and must include every method listed in "
+                    "qualityGates.requiredServiceMethods and qualityGates.requiredMapperMethods."
+                ),
+                "blocked": (
+                    "Do not create use-case-specific Service, Mapper interface, or Mapper XML "
+                    "files such as ReadService, CreateMapper, or per-branch XML files."
+                ),
+            },
+            "methodCoveragePolicy": {
+                "requiredServiceMethods": gates.get("requiredServiceMethods", []),
+                "requiredMapperMethods": gates.get("requiredMapperMethods", []),
+                "rule": (
+                    "Each required service method token must appear in the SERVICE_DRAFT "
+                    "content. Each required mapper method token must appear in both the "
+                    "MAPPER_INTERFACE content and the MAPPER_XML statement ids."
+                ),
+            },
         },
         "evidenceRefContract": {
             "allowedFactIds": allowed_refs,
@@ -846,6 +992,53 @@ def _operation_required_review_markers(
             }
         )
     return markers
+
+
+def _operation_branch_contract(statement_evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    statement_ids: list[str] = []
+    phases: list[str] = []
+    operation_types: list[str] = []
+    branch_like_phases: list[str] = []
+    branch_keywords = (
+        "crud",
+        "flag",
+        "kind",
+        "type",
+        "status",
+        "gubun",
+        "mode",
+        "value",
+        "approval",
+        "vendor",
+        "online",
+        "batch",
+    )
+    for statement in statement_evidence:
+        if not isinstance(statement, dict):
+            continue
+        statement_id = str(statement.get("statementId") or "")
+        phase = str(statement.get("phase") or "")
+        operation = str(statement.get("operation") or "")
+        if statement_id:
+            statement_ids.append(statement_id)
+        if phase and phase not in phases:
+            phases.append(phase)
+        if operation and operation not in operation_types:
+            operation_types.append(operation)
+        if phase and any(keyword in phase.lower() for keyword in branch_keywords):
+            if phase not in branch_like_phases:
+                branch_like_phases.append(phase)
+    return {
+        "statementIds": statement_ids,
+        "distinctPhaseCount": len(phases),
+        "operationTypes": operation_types,
+        "branchLikePhases": branch_like_phases,
+        "coverageRule": (
+            "Use these ids as the complete deterministic statement coverage set. "
+            "Operation grouping may be higher-level, but coverage must be total and "
+            "branch-like phases should not be collapsed into one method/DTO responsibility."
+        ),
+    }
 
 
 def _stage_task(stage: str) -> str:

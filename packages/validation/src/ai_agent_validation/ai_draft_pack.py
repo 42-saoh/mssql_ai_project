@@ -42,7 +42,6 @@ DEFAULT_REQUIRED_REVIEW_MARKERS = (
 
 DEFAULT_FORBIDDEN_PATTERNS = (
     "OperationModelReviewRequired",
-    "ManageBondDTO",
     "P41_OPERATION_MODEL_REVIEW_REQUIRED",
     r"\bCREATE\s+(?:OR\s+ALTER\s+)?PROC(?:EDURE)?\b",
     r"\bALTER\s+PROC(?:EDURE)?\b",

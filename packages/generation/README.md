@@ -41,7 +41,9 @@ P42 adds the AI Draft Pack workflow path for complex SP Java/MyBatis drafts. For
 validate the returned Java/XML content with the static P42 quality gate, and persist only
 validated files: one `DTO_DRAFT` artifact per DTO path and one artifact each for Service, Mapper
 interface, and Mapper XML. Pack artifacts remain draft-only; `OperationModelReviewRequired*`,
-single `ManageBondDTO` collapse, blank content, and source apply/deploy claims are blockers.
+single-DTO collapse for complex SPs, blank content, and source apply/deploy claims are blockers.
+Target-specific names such as `ManageBondDTO` are enforced by eval fixtures, while workflow
+inventory is derived from sanitized operation contracts and DTO blueprints.
 
 Retired outputs are no longer public generation targets:
 

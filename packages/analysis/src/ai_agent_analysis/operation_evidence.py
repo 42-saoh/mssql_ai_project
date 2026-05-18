@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
-from pydantic import BaseModel, Field
-
-from ai_agent_analysis.source_map import ProcedureSourceMap, build_procedure_source_map
 from ai_agent_domain import (
     CanonicalEvidenceStatus,
     SpStatementContract,
     SpStatementOperation,
 )
+from pydantic import BaseModel, Field
+
+from ai_agent_analysis.source_map import ProcedureSourceMap, build_procedure_source_map
 
 STATEMENT_EVIDENCE_EXTRACTOR_VERSION = "sp_statement_evidence_extractor@0.1.0"
 
@@ -25,6 +25,37 @@ _INSERT_COLUMNS_RE = re.compile(
     r"\((?P<body>.*?)\)"
 )
 _SELECT_COLUMNS_RE = re.compile(r"(?is)\bSELECT\b(?P<body>.*?)(?:\bFROM\b|$)")
+_SQL_KEYWORD_CANDIDATES = {
+    "NULL",
+    "CASE",
+    "WHEN",
+    "THEN",
+    "ELSE",
+    "END",
+    "SELECT",
+    "FROM",
+    "WHERE",
+    "JOIN",
+    "INNER",
+    "LEFT",
+    "RIGHT",
+    "FULL",
+    "OUTER",
+    "INSERT",
+    "INTO",
+    "VALUES",
+    "UPDATE",
+    "DELETE",
+    "SET",
+    "ON",
+    "GROUP",
+    "ORDER",
+    "BY",
+    "HAVING",
+    "UNION",
+    "EXEC",
+    "EXECUTE",
+}
 
 
 class StatementEvidenceExtraction(BaseModel):
@@ -103,7 +134,10 @@ def extract_statement_evidence(
                 branch_hints,
             )
             for statement in statements
-            if _nearest_branch_hint(_span_start_line(statement.statement_id, source_map), branch_hints)
+            if _nearest_branch_hint(
+                _span_start_line(statement.statement_id, source_map),
+                branch_hints,
+            )
         },
         reviewMarkers=sorted(set(review_markers)),
         evidenceRefs=sorted({ref for statement in statements for ref in statement.evidence_refs}),
@@ -209,7 +243,9 @@ def _write_candidates(operation: SpStatementOperation, text: str, target: str) -
         return list(
             dict.fromkeys(
                 candidate
-                for candidate in (_column_candidate(part) for part in _split_csv(match.group("body")))
+                for candidate in (
+                    _column_candidate(part) for part in _split_csv(match.group("body"))
+                )
                 if candidate
             )
         ) or ["REVIEW_REQUIRED_INSERT_COLUMNS"]
@@ -268,7 +304,7 @@ def _column_candidate(value: str) -> str:
     if not identifiers:
         return ""
     candidate = identifiers[-1].split(".")[-1].strip().strip("[]")
-    if candidate.upper() in {"NULL", "CASE", "WHEN", "THEN", "ELSE", "END"}:
+    if candidate.upper() in _SQL_KEYWORD_CANDIDATES:
         return ""
     return candidate
 

@@ -123,13 +123,17 @@ contract is `AiJavaMyBatisDraftPack.v0.1`: a sanitized file bundle containing
 evidence refs, and review markers. It is a draft-generation contract only and
 does not replace `CanonicalAnalysisModel.v2` or public artifact types.
 
-For `PCO_GU_ManageBond_PRC`, the P42 quality target requires separate DTO files
-such as `ManageBondSearchCriteria`, `ManageBondSearchRow`,
+P42 derives the draft file inventory from sanitized `SpOperationModel.v0.1`
+contracts rather than target-specific runtime constants. DTO blueprints,
+statement evidence, branch conditions, and operation responsibilities define the
+expected DTO files and method ids. `PCO_GU_ManageBond_PRC` remains the benchmark
+fixture: its operation model should naturally produce separate DTO files such as
+`ManageBondSearchCriteria`, `ManageBondSearchRow`,
 `ApproveAdvanceBondCommand`, `ApproveDefectBondCommand`, `FinanceTransferCommand`,
 `CreateBondCommand`, `CreateRetentionBondBatchItem`, `UpdateBondCommand`,
 `DeleteBondCommand`, `VendorBondUpdateCommand`, and `OnlineBondUpdateCommand`.
 Service, Mapper interface, and Mapper XML remain single draft files but must
-expose branch/use-case methods and reference the branch-specific DTOs.
+expose the derived branch/use-case methods and reference the branch-specific DTOs.
 
 The implementation path is AI-heavy but validation-gated: the model produces
 file inventory, then file content, then deterministic validation/repair handles
@@ -138,6 +142,12 @@ implements the strict `AiJavaMyBatisDraftPack.v0.1` runtime schema and prompt
 path, P42C validates Java/XML content statically, and P42D wires
 `JAVA_MYBATIS_DRAFT` to prefer validated AI Draft Pack files for workflow
 persistence instead of the P41 fallback Java renderer.
+
+If the deterministic inventory contract is incomplete for a complex SP, the
+workflow records `P42_INVENTORY_CONTRACT_INCOMPLETE` and persists no Java/MyBatis
+draft artifacts. This covers collapsed two-DTO outputs, uncovered statement
+evidence, missing DTO blueprint coverage, and write/call responsibilities without
+command, batch item, or call request DTOs.
 
 Workflow persistence stores each DTO pack file as its own `DTO_DRAFT` row keyed
 by `bundleFilePath`; Service, Mapper interface, and Mapper XML remain single
@@ -167,11 +177,37 @@ returns only counts, DTO class names, sanitized agent-run summaries, and redacti
 status. Persisted in-memory artifacts are reconstructed into
 `AiJavaMyBatisDraftPack.v0.1` and checked with the same P42C validator.
 
-P42 blocks `OperationModelReviewRequired*`, single `ManageBondDTO` collapse,
+P42 blocks `OperationModelReviewRequired*`, single-DTO collapse for complex SPs,
 empty content, raw SP or raw guide storage, row-data wording, and source
-apply/deploy claims. P42 adds no UI, OpenAPI, DB schema, public MCP route,
-procedure execution, row-data query, automatic DDL/DML apply, or generated-source
-deployment.
+apply/deploy claims. `ManageBondDTO` remains a fixture-specific blocker for the
+ManageBond benchmark, not a production-runtime special case. P42 adds no UI,
+OpenAPI, DB schema, public MCP route, procedure execution, row-data query,
+automatic DDL/DML apply, or generated-source deployment.
+
+## P43 Framework Adoption Readiness Architecture
+
+P43 introduces no runtime framework switch. It defines an adapter-first
+evaluation track for deciding whether a framework should replace or augment the
+current Responses/httpx model gateway for complex SP analysis and AI Draft Pack
+generation. The internal adapter contract is
+`AiGenerationFrameworkAdapter.v0.1`, with stages for inventory planning, file
+content drafting, repair, and sanitized trace summaries.
+
+The current gateway remains the baseline adapter. OpenAI Agents SDK is the first
+candidate because it is close to the existing Responses-oriented model path and
+can express agent loops, tool use, handoff-like composition, and traces. LangGraph
+is the second candidate when explicit graph state and durable orchestration have
+measurable value. Both candidates must run behind the same P42 deterministic
+inventory, schema, validation, repair, and no-fallback gates.
+
+Framework traces are treated as high-risk evidence surfaces. Storage-ready
+summaries may include stage names, component ids, counts, content hashes, failure
+codes, and policy-safe metrics only. Raw prompts, raw provider responses, raw SP
+definitions, raw guide body, row data, secrets, and failed generated Java/XML
+payloads remain forbidden in repo assets, platform storage, trace payloads, and
+docs. P43 adds no public API, DB schema, UI, public MCP route, public artifact
+type, procedure execution, row-data query, business DB DDL/DML apply, generated
+source apply, or deploy behavior.
 
 ## P35 Source Context Architecture
 
