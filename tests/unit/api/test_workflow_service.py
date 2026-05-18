@@ -5,7 +5,11 @@ import json
 import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 from ai_agent_generation import GenerationContext
-from ai_agent_runtime import FakeModelGateway
+from ai_agent_runtime import (
+    BaselineResponsesFrameworkAdapter,
+    FakeAiGenerationFrameworkAdapter,
+    FakeModelGateway,
+)
 from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from api_app.lifecycle import WorkflowStateError
@@ -391,6 +395,68 @@ def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts()
     assert context.request["aiDraftPackTrace"]["agentRunId"] == ai_draft_runs[0].agent_run_id
 
 
+@pytest.mark.parametrize(
+    ("adapter_kind", "candidate_framework"),
+    [
+        ("baseline", "baseline_internal_responses_gateway"),
+        ("candidate", "openai_agents_sdk_fake"),
+    ],
+)
+def test_p43c_workflow_ab_routes_ai_draft_pack_through_framework_adapter(
+    adapter_kind: str,
+    candidate_framework: str,
+) -> None:
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+    gateway = FakeModelGateway(
+        sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+        ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+    )
+    adapter = (
+        BaselineResponsesFrameworkAdapter(model_gateway=gateway)
+        if adapter_kind == "baseline"
+        else FakeAiGenerationFrameworkAdapter(
+            output=ai_draft_pack,
+            candidate_framework=candidate_framework,
+        )
+    )
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+        ai_generation_framework_adapter=adapter,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    adapter_components = [
+        component
+        for component in ai_draft_run.model_invocation["componentInvocations"]
+        if component.get("component") == "ai_generation_framework_adapter"
+    ]
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert [component["stage"] for component in adapter_components] == [
+        "file_inventory",
+        "file_content",
+    ]
+    assert {component["candidateFramework"] for component in adapter_components} == {
+        candidate_framework
+    }
+    assert len([artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]) == (
+        len(ai_draft_pack["qualityGates"]["requiredDtoClasses"])
+    )
+    assert "OperationModelReviewRequired" not in str(artifacts)
+    assert "ManageBondDTO" not in str(artifacts)
+
+
 def test_p42_complex_sp_inventory_contract_rejects_collapsed_operation_model() -> None:
     operation_model = p41_operation_model_fixture()
     operation_model["operations"] = operation_model["operations"][:1]
@@ -409,12 +475,36 @@ def test_p42_complex_sp_inventory_contract_rejects_collapsed_operation_model() -
             self.draft_calls += 1
             return super().draft_ai_java_mybatis_pack(prompt=prompt, profile=profile)
 
+    class ShouldNotCallFrameworkAdapter:
+        adapter_id = "should_not_call"
+        candidate_framework = "should_not_call"
+
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def plan_file_inventory(self, *, request) -> ModelInvocationRecord:
+            self.calls.append("file_inventory")
+            raise AssertionError("adapter should not run before inventory contract passes")
+
+        def draft_file_content(self, *, request) -> ModelInvocationRecord:
+            self.calls.append("file_content")
+            raise AssertionError("adapter should not run before inventory contract passes")
+
+        def repair_draft_pack(self, *, request) -> ModelInvocationRecord:
+            self.calls.append("repair")
+            raise AssertionError("adapter should not run before inventory contract passes")
+
+        def summarize_trace(self, **_kwargs) -> dict:
+            return {}
+
     gateway = InventorySpyGateway()
+    adapter = ShouldNotCallFrameworkAdapter()
     repository = MemoryWorkflowRepository()
     service = WorkflowService(
         repository,
         metadata_gateway=ManageBondMetadataGateway(),
         model_gateway=gateway,
+        ai_generation_framework_adapter=adapter,
     )
 
     _request_record, job = service.submit_sp_analysis(manage_bond_request())
@@ -429,6 +519,7 @@ def test_p42_complex_sp_inventory_contract_rejects_collapsed_operation_model() -
     assert job.status == JobStatus.FAILED
     assert job.error_code == P42_INVENTORY_CONTRACT_INCOMPLETE
     assert gateway.draft_calls == 0
+    assert adapter.calls == []
     assert ai_draft_run.status == AgentRunStatus.FAILED.value
     assert ai_draft_run.structured_output["reviewMarkers"][0]["code"] == (
         P42_INVENTORY_CONTRACT_INCOMPLETE
@@ -566,6 +657,170 @@ def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() 
         "p42.ai_draft_pack.service.method",
     }
     assert "OperationModelReviewRequired" not in str(artifacts)
+
+
+def test_p43c_candidate_two_dto_collapse_fails_without_java_artifacts() -> None:
+    operation_model = p41_operation_model_fixture()
+    collapsed_pack = p42_ai_draft_pack_fixture()
+    dto_files = [
+        file for file in collapsed_pack["files"] if file["artifactType"] == "DTO_DRAFT"
+    ][:2]
+    non_dto_files = [
+        file for file in collapsed_pack["files"] if file["artifactType"] != "DTO_DRAFT"
+    ]
+    kept_dtos = [file["className"] for file in dto_files]
+    for file in non_dto_files:
+        file["references"] = list(kept_dtos)
+    collapsed_pack["files"] = [*dto_files, *non_dto_files]
+    collapsed_pack["qualityGates"]["requiredDtoClasses"] = list(kept_dtos)
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+        ),
+        ai_generation_framework_adapter=FakeAiGenerationFrameworkAdapter(
+            output=collapsed_pack,
+            candidate_framework="langgraph_fake",
+        ),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    stored_text = str(ai_draft_run.structured_output) + str(ai_draft_run.model_invocation)
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert ai_draft_run.structured_output["failureDiagnostics"]["failureStage"] == (
+        "quality_validation"
+    )
+    assert "p42.ai_draft_pack.schema" in str(
+        ai_draft_run.structured_output["failureDiagnostics"]
+    )
+    assert "qualityGates.requiredDtoClasses missing DTO files" in str(
+        ai_draft_run.structured_output["failureDiagnostics"]
+    )
+    assert "public class" not in stored_text
+    assert "ManageBondDTO" not in stored_text
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
+
+
+def test_p43c_candidate_missing_review_markers_fails_quality_gate() -> None:
+    operation_model = p41_operation_model_fixture()
+    missing_markers_pack = p42_ai_draft_pack_fixture()
+    missing_markers_pack["reviewMarkers"] = []
+    missing_markers_pack["qualityGates"]["requiredReviewMarkers"] = []
+    for file in missing_markers_pack["files"]:
+        file["reviewMarkers"] = []
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+        ),
+        ai_generation_framework_adapter=FakeAiGenerationFrameworkAdapter(
+            output=missing_markers_pack,
+            candidate_framework="openai_agents_sdk_fake",
+        ),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert diagnostics["failureStage"] == "quality_validation"
+    assert "p42.ai_draft_pack.schema" in str(diagnostics)
+    assert "required REVIEW_REQUIRED markers missing" in str(diagnostics)
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
+
+
+def test_p43c_raw_adapter_trace_failure_is_sanitized_and_stage_specific() -> None:
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+        ),
+        ai_generation_framework_adapter=FakeAiGenerationFrameworkAdapter(
+            output=ai_draft_pack,
+            candidate_framework="openai_agents_sdk_fake",
+            trace_events=(
+                {
+                    "eventType": "unsafe_trace",
+                    "raw_provider_response": (
+                        "CREATE PROCEDURE dbo.Leak AS SELECT password FROM row data"
+                    ),
+                },
+            ),
+        ),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
+    stored_text = str(ai_draft_run.structured_output) + str(ai_draft_run.model_invocation)
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert diagnostics["failureStage"] == "file_inventory_framework_trace"
+    assert diagnostics["providerError"]["stage"] == "file_inventory"
+    assert "CREATE PROCEDURE" not in stored_text
+    assert "password" not in stored_text
+    assert "raw_provider_response" not in stored_text
+    assert "row data" not in stored_text
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
 
 
 def test_p42_workflow_repairs_invalid_quality_once_and_persists_artifacts() -> None:

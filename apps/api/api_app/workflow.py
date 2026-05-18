@@ -33,6 +33,7 @@ from ai_agent_runtime import (
     SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
     SP_OPERATION_PLANNER_PROMPT_VERSION,
     AgentRunPayload,
+    AiGenerationFrameworkAdapter,
     ModelGateway,
     ModelGatewayError,
     ModelInvocationRecord,
@@ -161,10 +162,12 @@ class WorkflowService:
         repository: WorkflowRepository,
         metadata_gateway: MetadataGateway | None = None,
         model_gateway: ModelGateway | None = None,
+        ai_generation_framework_adapter: AiGenerationFrameworkAdapter | None = None,
     ) -> None:
         self.repository = repository
         self.metadata_gateway = metadata_gateway or McpMetadataGateway()
         self.model_gateway = model_gateway or build_model_gateway_from_env()
+        self.ai_generation_framework_adapter = ai_generation_framework_adapter
         self.ai_tool_orchestrator = AiToolOrchestrator(model_gateway=self.model_gateway)
         self.platform_tool_orchestrator = PlatformToolOrchestrator(
             model_gateway=self.model_gateway,
@@ -1315,11 +1318,14 @@ class WorkflowService:
                 model_gateway=self.model_gateway,
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
                 allowed_evidence_refs=allowed_refs,
+                framework_adapter=self.ai_generation_framework_adapter,
+                run_file_inventory_stage=self.ai_generation_framework_adapter is not None,
             )
             quality_report = validate_ai_java_mybatis_draft_pack_quality(
                 run_payload.structured_output,
             )
             if quality_report.status != ValidationStatus.PASSED:
+                failed_run_payload = run_payload
                 run_payload, quality_report = self._repair_ai_draft_pack_quality(
                     target_ref=target_ref,
                     request_record=request_record,
@@ -1328,6 +1334,10 @@ class WorkflowService:
                     quality_gates=quality_gates,
                     allowed_refs=allowed_refs,
                     failed_report=quality_report,
+                )
+                run_payload = merge_ai_draft_pack_repair_components(
+                    failed_run_payload=failed_run_payload,
+                    repaired_run_payload=run_payload,
                 )
         except AttributeError as exc:
             self._save_ai_draft_pack_failure_run(
@@ -1350,7 +1360,10 @@ class WorkflowService:
                 target_ref=target_ref,
                 code=P42_AI_DRAFT_PACK_FAILED,
                 reason=f"AI_DRAFT_PACK_PLANNER_FAILED:{exc.code}",
-                failure_stage="model_gateway",
+                failure_stage=ai_draft_pack_gateway_failure_stage(
+                    exc,
+                    framework_adapter=self.ai_generation_framework_adapter,
+                ),
                 error_code=exc.code,
                 error_class=exc.__class__.__name__,
                 provider_error=exc.provider_error,
@@ -1366,7 +1379,10 @@ class WorkflowService:
                 target_ref=target_ref,
                 code=P42_AI_DRAFT_PACK_FAILED,
                 reason="AI_DRAFT_PACK_PLANNER_FAILED:AiDraftPackValidationError",
-                failure_stage="schema_validation",
+                failure_stage=ai_draft_pack_validation_failure_stage(
+                    exc.findings,
+                    framework_adapter=self.ai_generation_framework_adapter,
+                ),
                 error_class=exc.__class__.__name__,
                 validation_findings=exc.findings,
             )
@@ -1436,6 +1452,7 @@ class WorkflowService:
             profile_id=str(request_record.options.get("llmProfileId") or ""),
             allowed_evidence_refs=allowed_refs,
             repair_context=repair_context,
+            framework_adapter=self.ai_generation_framework_adapter,
         )
         return (
             run_payload,
@@ -2238,6 +2255,24 @@ def ai_draft_pack_quality_repair_context(report: ValidationReport) -> dict[str, 
     }
 
 
+def merge_ai_draft_pack_repair_components(
+    *,
+    failed_run_payload: AgentRunPayload,
+    repaired_run_payload: AgentRunPayload,
+) -> AgentRunPayload:
+    failed_components = tuple(failed_run_payload.model_invocation.component_invocations)
+    if not failed_components:
+        return repaired_run_payload
+    merged_invocation = dataclass_replace(
+        repaired_run_payload.model_invocation,
+        component_invocations=(
+            *failed_components,
+            *repaired_run_payload.model_invocation.component_invocations,
+        ),
+    )
+    return dataclass_replace(repaired_run_payload, model_invocation=merged_invocation)
+
+
 def ai_draft_pack_quality_findings(report: ValidationReport) -> list[str]:
     return [
         f"{check.rule_id}:{check.message[:300]}"
@@ -2277,11 +2312,37 @@ def ai_draft_pack_failure_diagnostics(
 
 def _safe_provider_error(provider_error: Mapping[str, Any]) -> dict[str, str]:
     safe: dict[str, str] = {}
-    for key in ("type", "code", "param", "message", "findingCount", "findings"):
+    for key in ("type", "code", "param", "message", "stage", "findingCount", "findings"):
         value = provider_error.get(key)
         if value is not None:
             safe[key] = str(value)[:300]
     return safe
+
+
+def ai_draft_pack_gateway_failure_stage(
+    exc: ModelGatewayError,
+    *,
+    framework_adapter: AiGenerationFrameworkAdapter | None,
+) -> str:
+    if framework_adapter is None or not str(exc.code).startswith("P43_FRAMEWORK"):
+        return "model_gateway"
+    stage = str(exc.provider_error.get("stage") or "").strip()
+    if stage in {"file_inventory", "file_content", "repair"}:
+        return f"{stage}_framework_trace"
+    return "framework_adapter_trace"
+
+
+def ai_draft_pack_validation_failure_stage(
+    findings: Sequence[str],
+    *,
+    framework_adapter: AiGenerationFrameworkAdapter | None,
+) -> str:
+    if framework_adapter is None:
+        return "schema_validation"
+    for stage in ("file_inventory", "file_content", "repair"):
+        if any(str(finding).startswith(f"{stage}:") for finding in findings):
+            return f"{stage}_schema_validation"
+    return "framework_adapter_schema_validation"
 
 
 def _safe_ai_draft_validation_findings(findings: Sequence[str]) -> list[str]:

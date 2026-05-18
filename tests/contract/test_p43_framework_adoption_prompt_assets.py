@@ -6,11 +6,17 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+PROJECT = ROOT / "PROJECT.md"
 CONTRACT = ROOT / "spec" / "eval" / "p43_framework_adoption_contract.yaml"
 FIXTURE = ROOT / "fixtures" / "eval" / "framework_adoption_p43_manage_bond_v1.yaml"
 TASK = ROOT / "tasks" / "0043-framework-adoption-readiness.md"
 MANIFEST = ROOT / "ops" / "codex-parallel" / "REQUEST_MANIFEST.yaml"
 PROMPT_DIR = ROOT / "ops" / "codex-parallel" / "prompts"
+POLICY = ROOT / "POLICY.md"
+ARCHITECTURE = ROOT / "ARCHITECTURE.md"
+TOOLS = ROOT / "TOOLS.md"
+EVAL_SPEC = ROOT / "EVAL_SPEC.md"
+DECISION_REPORT = ROOT / "docs" / "framework-adoption-decision-p43.md"
 
 P43_PROMPTS = {
     "P43A": "43a_framework_adoption_contract_assets.md",
@@ -90,8 +96,76 @@ def test_p43_contract_defines_framework_adapter_contract() -> None:
     assert "raw_provider_response" in adapter["forbidden_outputs"]
 
 
+def test_p43f_contract_records_pilot_decision_gate() -> None:
+    contract = _yaml(CONTRACT)
+    decision = contract["decision_gate"]
+
+    assert decision["phase"] == "P43F"
+    assert decision["decision"] == "pilot"
+    assert decision["production_ready"] is False
+    assert decision["decision_report"] == "docs/framework-adoption-decision-p43.md"
+    assert "BaselineResponsesFrameworkAdapter" in decision["rollback_path"]
+    assert decision["quality_comparison"]["outcome"] == "preserve_baseline_quality"
+    assert decision["quality_comparison"]["manage_bond_expected_dto_artifact_rows"] == 11
+    assert decision["quality_comparison"]["synthetic_complex_sp_hardcoding_guard"] == "passed"
+    assert (
+        decision["quality_comparison"]["synthetic_two_dto_collapse_guard"]
+        == "failed_as_expected"
+    )
+    assert decision["policy_findings"]["new_framework_dependencies"] == 0
+    assert decision["policy_findings"]["row_data_or_procedure_execution"] == 0
+    assert "P43_FRAMEWORK_DEPENDENCY_NOT_APPROVED" in decision["residual_review_required"]
+    assert "WEAK_OR_UNSUPPORTED_FRAMEWORK_FACTS_REVIEW_REQUIRED" in (
+        decision["residual_review_required"]
+    )
+
+
+def test_p43d_contract_defines_tool_and_trace_policy_gates() -> None:
+    contract = _yaml(CONTRACT)
+    tool_policy = contract["framework_tool_policy"]
+    trace_policy = contract["framework_trace_policy"]
+
+    assert tool_policy["blocker"] == "P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED"
+    assert "target_ref_hash" in tool_policy["allowed_context"]
+    assert "deterministic_inventory_contract" in tool_policy["allowed_context"]
+    assert "failed_java_or_xml_payload" in tool_policy["forbidden_context"]
+    assert trace_policy["blocker"] == "P43_FRAMEWORK_RAW_TRACE_BLOCKED"
+    assert "raw_framework_events" in trace_policy["transient_only"]
+    assert "numeric_policy_safe_metrics" in trace_policy["stored_summary_allowed_fields"]
+    assert "tool_io" in trace_policy["stored_summary_forbidden_fields"]
+    assert "P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED" in contract["blockers"]
+
+
+def test_p43d_docs_record_framework_tracing_and_persistence_blockers() -> None:
+    docs = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (POLICY, ARCHITECTURE, TOOLS, EVAL_SPEC)
+    )
+    contract = _yaml(CONTRACT)
+
+    assert "P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED" in docs
+    assert "P43_FRAMEWORK_RAW_TRACE_BLOCKED" in docs
+    assert "hash/count/code" in docs or "hash/count/code" in str(contract)
+    assert "OpenAI Agents SDK tracing" in docs
+    assert "LangGraph persistence" in docs
+    assert (
+        contract["candidate_frameworks"]["openai_agents_sdk"]["policy_docs"]["tracing"]
+        == "https://openai.github.io/openai-agents-python/tracing/"
+    )
+    assert (
+        contract["candidate_frameworks"]["openai_agents_sdk"]["policy_docs"]["configuration"]
+        == "https://openai.github.io/openai-agents-python/config/"
+    )
+    assert (
+        contract["candidate_frameworks"]["langgraph"]["policy_docs"]["persistence"]
+        == "https://docs.langchain.com/oss/python/langgraph/persistence"
+    )
+
+
 def test_p43_fixture_keeps_manage_bond_as_benchmark_only() -> None:
     fixture = _yaml(FIXTURE)
+    replay = fixture["benchmark_replay"]
+    decision = fixture["expected_decision_report"]
 
     assert fixture["fixture_suite_id"] == "framework_adoption_p43_manage_bond_v1"
     assert fixture["contract_ref"] == "p43_framework_adoption@0.1.0"
@@ -102,6 +176,64 @@ def test_p43_fixture_keeps_manage_bond_as_benchmark_only() -> None:
     assert fixture["source_reference"]["copy_raw_sp_text_to_repo"] is False
     assert fixture["expected_general_contract"]["reject_two_dto_collapse_for_complex_sp"] is True
     assert fixture["expected_general_contract"]["reject_raw_trace_or_prompt_storage"] is True
+    assert replay["phase"] == "P43E"
+    assert replay["default_mode"] == "fake_adapters_and_sanitized_fixtures_only"
+    assert replay["reconstruct_artifacts_as"] == "AiJavaMyBatisDraftPack.v0.1"
+    assert replay["comparison_contract"]["same_generic_inventory_contract_required"] is True
+    assert replay["comparison_contract"]["candidate_quality_must_preserve_or_improve_baseline"]
+    assert {
+        case["id"] for case in replay["replay_cases"]
+    } == {
+        "manage_bond_baseline_vs_candidate",
+        "synthetic_complex_sp_collapse_guard",
+    }
+    synthetic = next(
+        case
+        for case in replay["replay_cases"]
+        if case["id"] == "synthetic_complex_sp_collapse_guard"
+    )
+    assert synthetic["role"] == "generic_hardcoding_guard"
+    assert any("ManageBond DTO names" in signal for signal in synthetic["expected_signals"])
+    assert decision["p43f_decision"] == "pilot"
+    assert decision["decision_report_path"] == "docs/framework-adoption-decision-p43.md"
+    assert decision["quality_comparison"]["baseline_vs_candidate_result"] == (
+        "preserve_baseline_quality"
+    )
+    assert decision["quality_comparison"]["manage_bond_expected_dto_artifact_rows"] == 11
+    assert "BaselineResponsesFrameworkAdapter" in decision["rollback_path"]
+    assert "P43_FRAMEWORK_LIVE_GATE_NOT_CONFIGURED" in decision["residual_review_required"]
+
+
+def test_p43f_decision_report_documents_evidence_and_boundaries() -> None:
+    report = DECISION_REPORT.read_text(encoding="utf-8")
+    docs = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            PROJECT,
+            ARCHITECTURE,
+            POLICY,
+            TOOLS,
+            EVAL_SPEC,
+            ROOT / "packages" / "agent-runtime" / "README.md",
+            ROOT / "packages" / "generation" / "README.md",
+            ROOT / "fixtures" / "eval" / "README.md",
+            ROOT / "tests" / "eval" / "README.md",
+            ROOT / "docs" / "integration-eval-status.md",
+            ROOT / "docs" / "test-gate-history.md",
+        )
+    )
+
+    assert "P43 decision: `pilot`" in report
+    assert "`production_ready` remains false" in report
+    assert "BaselineResponsesFrameworkAdapter" in report
+    assert "Quality comparison result" in report
+    assert "Policy findings" in report
+    assert "Residual `REVIEW_REQUIRED` items" in report
+    assert "tests/eval/test_p43_framework_adapter_replay.py" in report
+    assert "git -c safe.directory=D:/wt/p35 diff --check" in report
+    assert "P43F records the framework adoption decision as `pilot`" in docs
+    assert "P43F records the decision as `pilot`" in docs or "P43F records a `pilot`" in docs
+    assert PROJECT.exists()
 
 
 def test_p43_prompt_pack_exists_and_preserves_policy() -> None:
@@ -155,6 +287,7 @@ def test_p43_assets_do_not_copy_raw_stored_procedure_or_prompt_text() -> None:
     asset_paths = [
         CONTRACT,
         FIXTURE,
+        DECISION_REPORT,
         TASK,
         *(PROMPT_DIR / prompt for prompt in P43_PROMPTS.values()),
     ]
@@ -166,6 +299,7 @@ def test_p43_assets_do_not_copy_raw_stored_procedure_or_prompt_text() -> None:
         "BEGIN TRANSACTION raw",
         "provider_response_raw",
         "raw_provider_payload",
+        "production_ready: true",
     ]
 
     for path in asset_paths:

@@ -88,11 +88,22 @@
 - Framework traces and tool calls may store only sanitized stage names, counts, hashes, failure
   codes, and policy-safe metrics. Raw prompts, raw provider responses, raw SP definitions, raw guide
   body, row data, secrets, and failed generated Java/XML content remain forbidden.
+- P43D makes framework adoption a blocker until `P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED` and
+  `P43_FRAMEWORK_RAW_TRACE_BLOCKED` gates prove candidates receive only sanitized tool context and
+  store only hash/count/code trace summaries.
+- OpenAI Agents SDK tracing must be disabled or configured to exclude sensitive data before any
+  adoption because its tracing is enabled by default and spans can include LLM/tool inputs and
+  outputs. LangGraph persistence/checkpointers must use a proven redacted state boundary before any
+  adoption because graph state can be persisted.
 - Stored procedure execution, row-data access, business DB DDL/DML apply, generated-source apply,
   deploy, UI changes, public API expansion, public MCP route expansion, DB schema changes, and public
   artifact type changes remain out of scope.
 - A P43 decision may be `adopt`, `pilot`, or `defer`; all three must keep `production_ready: false`
   until a separate production readiness gate exists.
+- P43F records the current decision as `pilot`. This allows only future internal, policy-gated
+  framework adapter evidence gathering after dependency approval and redaction proof. It does not
+  approve automatic conversion, generated-source apply, deploy, row-data access, procedure execution,
+  or a production runtime switch.
 
 ## P35 Source Context Policy
 

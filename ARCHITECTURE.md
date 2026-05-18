@@ -209,6 +209,27 @@ docs. P43 adds no public API, DB schema, UI, public MCP route, public artifact
 type, procedure execution, row-data query, business DB DDL/DML apply, generated
 source apply, or deploy behavior.
 
+P43D adds internal policy gates before candidate framework execution. The
+adapter builds a sanitized tool context with target hashes, operation and
+inventory ids/counts, allowed evidence refs, quality gates, and
+`REVIEW_REQUIRED` markers only. `P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED` stops any
+raw prompt/provider/SP/guide/row-data/secret material or source-apply/deploy
+claim before a framework stage runs. `P43_FRAMEWORK_RAW_TRACE_BLOCKED` stops
+unsafe framework events or storage summaries unless the stored component matches
+the hash/count/code allowlist. OpenAI Agents SDK adoption is blocked until
+default tracing is disabled or sensitive data capture is excluded; LangGraph
+adoption is blocked until graph persistence/checkpointers use a proven redacted
+state boundary.
+
+P43E-F close the readiness track with a replay comparison and a reversible
+decision gate. The final decision is `pilot`, based on fake-adapter evidence that
+candidate output preserves the baseline P42 quality gate, reconstructs persisted
+draft artifacts into `AiJavaMyBatisDraftPack.v0.1`, rejects synthetic two-DTO
+collapse, and does not depend on ManageBond-specific runtime hardcoding. This
+does not switch the production workflow to a framework; the existing
+Responses/httpx gateway and `BaselineResponsesFrameworkAdapter` remain the
+rollback path.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates

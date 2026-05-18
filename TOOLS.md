@@ -97,18 +97,32 @@ static groundwork gate is:
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
 ```
 
-The final P43 decision gate should compare the current Responses/httpx baseline
-against candidate adapters, preserve P42/P41/P36 regressions, and keep
-`production_ready: false`:
+The final P43 decision gate records a `pilot` recommendation. It compares the
+current Responses/httpx baseline against fake candidate adapters, preserves
+P42/P41/P36 regressions, and keeps `production_ready: false`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
 ```
 
 Candidate framework testing must use sanitized fixtures and fake adapters by
 default. Optional live replay remains a separate confidence signal and must not
 execute stored procedures, query row data, store raw prompts/provider responses,
 or apply generated source.
+
+P43D framework policy checks are part of the static gate. Candidate adapters must
+pass `P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED` checks before stage execution and
+`P43_FRAMEWORK_RAW_TRACE_BLOCKED` checks before storing trace summaries. Stored
+framework trace components are limited to adapter ids, candidate framework,
+stage/status, component ids, counts, hashes, blocker/failure codes, and numeric
+policy-safe metrics. OpenAI Agents SDK tracing must be disabled or configured to
+exclude sensitive inputs/outputs before adoption; LangGraph persistence must use
+a redacted serializer/checkpointer boundary before adoption.
+
+The P43F decision report is `docs/framework-adoption-decision-p43.md`. Its
+rollback path is the current Responses/httpx gateway plus
+`BaselineResponsesFrameworkAdapter`; it does not authorize framework dependency
+installation or a production runtime switch.
 
 ## 목적
 

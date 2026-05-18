@@ -186,6 +186,25 @@ AI Draft Pack generation quality. P43A is groundwork only:
 - Framework traces and tool calls must not store raw prompts, raw provider
   responses, raw SP definitions, raw guide body, row data, secrets, or failed
   generated Java/XML content.
+- P43D adds explicit framework tool-context and trace-summary gates:
+  `P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED` blocks unsafe candidate context before a
+  stage runs, and `P43_FRAMEWORK_RAW_TRACE_BLOCKED` blocks unsafe framework
+  events or summaries before storage.
+- Stored framework trace summaries are limited to adapter ids, candidate
+  framework, stage/status, component ids, counts, hashes, blocker/failure codes,
+  and numeric policy-safe metrics.
+- OpenAI Agents SDK tracing and LangGraph persistence/checkpointers remain
+  adoption blockers until sensitive input/output capture and graph-state
+  persistence are proven redacted.
+- P43E replay compares the baseline internal gateway adapter and fake candidate
+  adapters with the same generic inventory contract, reconstructs persisted draft
+  artifacts as `AiJavaMyBatisDraftPack.v0.1`, and reruns the P42 static
+  Java/MyBatis validator.
+- P43E includes a synthetic complex-SP collapse guard so candidate success cannot
+  depend on ManageBond-specific DTO names or a production-runtime answer key.
+- P43F records the decision as `pilot`, with `docs/framework-adoption-decision-p43.md`
+  as the evidence-backed decision report and the current Responses/httpx gateway
+  plus `BaselineResponsesFrameworkAdapter` as rollback.
 - The final decision must be `adopt`, `pilot`, or `defer`, and each outcome keeps
   `production_ready: false` until a separate production readiness gate exists.
 - ManageBond is a benchmark fixture for detecting generic failures such as
@@ -195,7 +214,7 @@ AI Draft Pack generation quality. P43A is groundwork only:
 Passing criteria:
 - `make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"` passes.
 - P43F final gate includes
-  `make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"`.
+  `make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"`.
 - `git diff --check` passes.
 
 ## P35 Source Context Eval Gate

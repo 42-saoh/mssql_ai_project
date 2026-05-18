@@ -45,6 +45,12 @@ single-DTO collapse for complex SPs, blank content, and source apply/deploy clai
 Target-specific names such as `ManageBondDTO` are enforced by eval fixtures, while workflow
 inventory is derived from sanitized operation contracts and DTO blueprints.
 
+P43 does not change generation artifact types or generated source locations. It routes the AI
+Draft Pack planner through an optional internal adapter spike in tests, compares baseline and fake
+candidate framework adapters, and keeps the P42 static validator as the authority before any draft
+artifact is persisted. P43F records a `pilot` decision only; the existing Responses/httpx path
+remains rollback and no framework dependency or runtime switch is introduced.
+
 Retired outputs are no longer public generation targets:
 
 - `DTO_MODEL_DRAFT`

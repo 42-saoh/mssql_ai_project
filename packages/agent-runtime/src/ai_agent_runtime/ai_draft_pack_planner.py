@@ -8,6 +8,10 @@ from ai_agent_runtime.ai_draft_pack import (
     AiDraftPackValidationError,
     validate_ai_java_mybatis_draft_pack_output,
 )
+from ai_agent_runtime.framework_adapter import (
+    AiGenerationFrameworkAdapter,
+    AiGenerationFrameworkAdapterRequest,
+)
 from ai_agent_runtime.gateway import ModelGateway, ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunPayload, AgentRunStatus, stable_json_hash
 from ai_agent_runtime.prompts import render_ai_java_mybatis_draft_pack_prompt
@@ -16,6 +20,7 @@ AGENT_TYPE = "LLM_AI_DRAFT_PACK_PLANNER"
 REPAIRABLE_AI_DRAFT_PACK_GATEWAY_CODES = frozenset({"OPENAI_AI_DRAFT_PACK_INVALID"})
 REPAIR_COMPONENT = "ai_draft_pack_repair_stage"
 REFERENCE_GUARD_COMPONENT = "ai_draft_pack_reference_guard"
+FRAMEWORK_ADAPTER_STAGES = frozenset({"file_inventory", "file_content", "repair"})
 
 
 def build_ai_java_mybatis_draft_pack_run(
@@ -28,6 +33,8 @@ def build_ai_java_mybatis_draft_pack_run(
     profile_id: str | None,
     allowed_evidence_refs: Sequence[str] | None = None,
     repair_context: Mapping[str, Any] | None = None,
+    framework_adapter: AiGenerationFrameworkAdapter | None = None,
+    run_file_inventory_stage: bool = False,
 ) -> AgentRunPayload:
     allowed_refs = _allowed_evidence_refs(
         context=sanitized_draft_context,
@@ -35,6 +42,25 @@ def build_ai_java_mybatis_draft_pack_run(
         additional_refs=allowed_evidence_refs,
     )
     profile = model_profile_from_env(profile_id)
+    prior_component_invocations: tuple[dict[str, Any], ...] = ()
+    if framework_adapter is not None and run_file_inventory_stage and repair_context is None:
+        inventory_invocation = _invoke_ai_java_mybatis_draft_pack_stage(
+            target_ref=target_ref,
+            sanitized_draft_context=sanitized_draft_context,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            model_gateway=model_gateway,
+            profile=profile,
+            allowed_refs=allowed_refs,
+            stage="file_inventory",
+            repair_context=None,
+            framework_adapter=framework_adapter,
+        )
+        _validate_ai_draft_pack_invocation(
+            inventory_invocation,
+            stage="file_inventory",
+        )
+        prior_component_invocations = tuple(inventory_invocation.component_invocations)
     stage = "repair" if repair_context else "file_content"
     try:
         return _build_ai_java_mybatis_draft_pack_run_stage(
@@ -47,6 +73,8 @@ def build_ai_java_mybatis_draft_pack_run(
             allowed_refs=allowed_refs,
             stage=stage,
             repair_context=repair_context,
+            framework_adapter=framework_adapter,
+            prior_component_invocations=prior_component_invocations,
         )
     except (ModelGatewayError, AiDraftPackValidationError) as exc:
         if repair_context is not None or not _is_repairable_planner_exception(exc):
@@ -62,6 +90,8 @@ def build_ai_java_mybatis_draft_pack_run(
             allowed_refs=allowed_refs,
             stage="repair",
             repair_context=retry_context,
+            framework_adapter=framework_adapter,
+            prior_component_invocations=prior_component_invocations,
         )
 
 
@@ -76,18 +106,25 @@ def _build_ai_java_mybatis_draft_pack_run_stage(
     allowed_refs: Sequence[str],
     stage: str,
     repair_context: Mapping[str, Any] | None,
+    framework_adapter: AiGenerationFrameworkAdapter | None,
+    prior_component_invocations: Sequence[Mapping[str, Any]] = (),
 ) -> AgentRunPayload:
-    prompt = render_ai_java_mybatis_draft_pack_prompt(
+    invocation = _invoke_ai_java_mybatis_draft_pack_stage(
         target_ref=target_ref,
         sanitized_draft_context=sanitized_draft_context,
         expected_inventory=expected_inventory,
         quality_gates=quality_gates,
-        allowed_evidence_refs=allowed_refs,
+        model_gateway=model_gateway,
+        profile=profile,
+        allowed_refs=allowed_refs,
         stage=stage,
-        repair_context=dict(repair_context or {}) if repair_context else None,
+        repair_context=repair_context,
+        framework_adapter=framework_adapter,
     )
-    invocation = model_gateway.draft_ai_java_mybatis_pack(prompt=prompt, profile=profile)
-    model = validate_ai_java_mybatis_draft_pack_output(invocation.structured_output)
+    model = _validate_ai_draft_pack_invocation(
+        invocation,
+        stage=stage if framework_adapter is not None else None,
+    )
     structured_output = model.to_storage_dict()
     guard_component = None
     if repair_context is not None:
@@ -96,10 +133,19 @@ def _build_ai_java_mybatis_draft_pack_run_stage(
             expected_inventory=expected_inventory,
         )
     structured_output["qualityGates"] = dict(quality_gates)
-    if invocation.structured_output != structured_output or guard_component is not None:
-        component_invocations = invocation.component_invocations
-        if guard_component is not None:
-            component_invocations = (*component_invocations, guard_component)
+    component_invocations = invocation.component_invocations
+    if guard_component is not None:
+        component_invocations = (*component_invocations, guard_component)
+    if prior_component_invocations:
+        component_invocations = (
+            *(dict(item) for item in prior_component_invocations),
+            *component_invocations,
+        )
+    if (
+        invocation.structured_output != structured_output
+        or guard_component is not None
+        or prior_component_invocations
+    ):
         invocation = dataclass_replace(
             invocation,
             structured_output=structured_output,
@@ -125,6 +171,65 @@ def _build_ai_java_mybatis_draft_pack_run_stage(
             f"for {model.target_ref}."
         ),
     )
+
+
+def _invoke_ai_java_mybatis_draft_pack_stage(
+    *,
+    target_ref: str,
+    sanitized_draft_context: Mapping[str, Any],
+    expected_inventory: Sequence[Mapping[str, Any]],
+    quality_gates: Mapping[str, Any],
+    model_gateway: ModelGateway,
+    profile: Any,
+    allowed_refs: Sequence[str],
+    stage: str,
+    repair_context: Mapping[str, Any] | None,
+    framework_adapter: AiGenerationFrameworkAdapter | None,
+):
+    prompt = render_ai_java_mybatis_draft_pack_prompt(
+        target_ref=target_ref,
+        sanitized_draft_context=sanitized_draft_context,
+        expected_inventory=expected_inventory,
+        quality_gates=quality_gates,
+        allowed_evidence_refs=allowed_refs,
+        stage=stage,
+        repair_context=dict(repair_context or {}) if repair_context else None,
+    )
+    if framework_adapter is None:
+        invocation = model_gateway.draft_ai_java_mybatis_pack(prompt=prompt, profile=profile)
+    else:
+        adapter_request = AiGenerationFrameworkAdapterRequest(
+            target_ref=target_ref,
+            sanitized_draft_context=sanitized_draft_context,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            allowed_evidence_refs=allowed_refs,
+            prompt=prompt,
+            profile=profile,
+            stage=stage,
+            repair_context=repair_context,
+        )
+        invocation = (
+            framework_adapter.repair_draft_pack(request=adapter_request)
+            if stage == "repair"
+            else (
+                framework_adapter.plan_file_inventory(request=adapter_request)
+                if stage == "file_inventory"
+                else framework_adapter.draft_file_content(request=adapter_request)
+            )
+        )
+    return invocation
+
+
+def _validate_ai_draft_pack_invocation(invocation: Any, *, stage: str | None):
+    try:
+        return validate_ai_java_mybatis_draft_pack_output(invocation.structured_output)
+    except AiDraftPackValidationError as exc:
+        if stage is None:
+            raise
+        raise AiDraftPackValidationError(
+            _stage_validation_findings(stage=stage, findings=exc.findings)
+        ) from exc
 
 
 def _is_repairable_planner_exception(exc: Exception) -> bool:
@@ -213,7 +318,7 @@ def _append_reference_comment(
 def _repair_context_from_exception(exc: Exception) -> dict[str, Any]:
     if isinstance(exc, AiDraftPackValidationError):
         return {
-            "failureStage": "schema_validation",
+            "failureStage": _schema_failure_stage_from_findings(exc.findings),
             "errorClass": exc.__class__.__name__,
             "reason": "AiJavaMyBatisDraftPack schema validation failed.",
             "validationFindings": _safe_validation_findings(exc.findings),
@@ -254,11 +359,32 @@ def _safe_validation_findings(findings: Sequence[str]) -> list[str]:
 
 def _safe_provider_error(provider_error: Mapping[str, Any]) -> dict[str, str]:
     safe: dict[str, str] = {}
-    for key in ("type", "code", "param", "message", "findingCount", "findings"):
+    for key in ("type", "code", "param", "message", "stage", "findingCount", "findings"):
         value = provider_error.get(key)
         if value is not None:
             safe[key] = str(value)[:300]
     return safe
+
+
+def _stage_validation_findings(
+    *,
+    stage: str,
+    findings: Sequence[str],
+) -> list[str]:
+    prefix = stage if stage in FRAMEWORK_ADAPTER_STAGES else "ai_draft_pack"
+    return [
+        finding
+        if str(finding).startswith(f"{prefix}:")
+        else f"{prefix}: {finding}"
+        for finding in findings
+    ]
+
+
+def _schema_failure_stage_from_findings(findings: Sequence[str]) -> str:
+    for stage in FRAMEWORK_ADAPTER_STAGES:
+        if any(str(finding).startswith(f"{stage}:") for finding in findings):
+            return f"{stage}_schema_validation"
+    return "schema_validation"
 
 
 def _allowed_evidence_refs(

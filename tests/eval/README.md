@@ -36,5 +36,12 @@ OpenAI-compatible gateway when `P42_LIVE_REPLAY_GATE=1`. The live gate treats th
 ManageBond DTO list as a minimum benchmark count, not an exact runtime answer key: additional
 split DTOs are allowed when the generated Service/Mapper/XML wiring and P42 validator pass.
 
+P43 adds `test_p43_framework_adapter_replay.py` for framework-adoption readiness. It compares
+the baseline internal gateway adapter and fake candidate adapters with the same generic
+inventory contract, reconstructs persisted ManageBond draft artifacts into
+`AiJavaMyBatisDraftPack.v0.1`, reruns the P42 static validator, and verifies a synthetic
+complex-SP guard so candidate success is not ManageBond-specific. P43F records the decision as
+`pilot` with `production_ready: false` and the current Responses/httpx gateway as rollback.
+
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.

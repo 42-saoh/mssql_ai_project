@@ -135,7 +135,19 @@ task brief, sequential prompt pack, and static contract tests. P43 must not use
 quality benchmark for detecting DTO collapse, weak branch/use-case coverage, raw
 trace leakage, and fallback skeleton behavior.
 
-No framework dependency is installed in P43A. P43 keeps `production_ready: false`
+P43B-E add the internal `AiGenerationFrameworkAdapter.v0.1` spike, fake baseline
+and candidate adapters, sanitized tool/trace policy gates, and a replay gate that
+compares the current Responses/httpx baseline with fake OpenAI Agents SDK and
+LangGraph candidates. The replay preserves P42 quality on ManageBond and proves a
+synthetic complex-SP collapse guard without ManageBond-specific runtime
+hardcoding.
+
+P43F records the framework adoption decision as `pilot`: a future real-framework
+adapter may be explored only behind the internal adapter and policy gates. The
+current Responses/httpx gateway and `BaselineResponsesFrameworkAdapter` remain the
+rollback path.
+
+No framework dependency is installed in P43. P43 keeps `production_ready: false`
 and does not authorize UI changes, public API expansion, DB schema changes,
 public MCP route expansion, public artifact type changes, row-data access,
 procedure execution, automatic DDL/DML apply, generated-source apply, deploy, raw

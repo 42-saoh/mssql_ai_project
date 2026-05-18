@@ -13,6 +13,7 @@ make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/ev
 make test PYTEST_ARGS="tests/unit/api/test_metadata_analysis_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/eval/test_p32_live_confidence_planner_effectiveness.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"
 make test PYTEST_ARGS="tests/unit/api/test_metadata_tool_cache.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_batch_sp_analysis.py tests/integration/api/test_api_workflow_routes.py tests/eval/test_p33_performance_scale.py tests/contract/test_openapi_and_env_sample_assets.py tests/unit/web/test_p14_product_ui_static.py"
 make test PYTEST_ARGS="tests/unit/api/test_knowledge_asset_service.py tests/unit/api/test_workflow_service.py tests/unit/api/test_metadata_analysis_service.py tests/integration/api/test_api_workflow_routes.py tests/integration/api/test_api_auth_rbac.py tests/contract/test_openapi_and_env_sample_assets.py tests/eval/test_p34_knowledge_assetization.py tests/unit/web/test_p14_product_ui_static.py"
+make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
 ```
 
 ## Optional Live History
@@ -33,3 +34,4 @@ P21_LIVE_PORTAL_GATE=1 P27_HARD_LIVE_GATE=1 P32_LIVE_CONFIDENCE_GATE=1 P35_KNOWL
 - Fixture-first gates never require live PLF, live PPM, OpenAI, P-GPT, or IdP/JWKS.
 - Optional live gates are confidence evidence only and must not be used as production readiness, publish/deploy approval, DDL apply approval, or automatic conversion approval.
 - PPM metadata failure must remain a blocker or skip according to the explicit gate mode; it must never fall back to PLF.
+- P43F records a `pilot` framework decision from fixture-first replay only. Real framework dependency approval, OpenAI Agents SDK trace redaction, LangGraph persistence redaction, and optional live evidence remain future `REVIEW_REQUIRED` items.

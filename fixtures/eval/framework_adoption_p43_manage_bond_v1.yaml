@@ -49,16 +49,66 @@ expected_general_contract:
   require_review_required_markers: true
   require_dto_method_reference_wiring: true
 
+benchmark_replay:
+  phase: P43E
+  default_mode: fake_adapters_and_sanitized_fixtures_only
+  reconstruct_artifacts_as: AiJavaMyBatisDraftPack.v0.1
+  validator: P42_static_java_mybatis_draft_pack_validator
+  comparison_contract:
+    baseline_adapter: baseline_internal_responses_gateway
+    candidate_adapters:
+      - openai_agents_sdk_fake
+      - langgraph_fake
+    same_generic_inventory_contract_required: true
+    candidate_quality_must_preserve_or_improve_baseline: true
+    p36_p41_p42_regression_gate_required: true
+  replay_cases:
+    - id: manage_bond_baseline_vs_candidate
+      target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+      role: benchmark_quality_target_only
+      expected_signals:
+        - no OperationModelReviewRequired fallback files
+        - no blank Java or Mapper XML files
+        - no generic DTO collapse
+        - no raw trace leakage
+    - id: synthetic_complex_sp_collapse_guard
+      target_ref: dbo.usp_SyntheticComplexOrder_PRC
+      role: generic_hardcoding_guard
+      expected_signals:
+        - candidate passes without ManageBond DTO names
+        - two DTO collapse fails the same P42 validator
+        - required REVIEW_REQUIRED markers are preserved
+        - no procedure execution or row data access is required
+
 expected_decision_report:
   allowed_decisions:
     - adopt
     - pilot
     - defer
+  p43f_decision: pilot
+  decision_report_path: docs/framework-adoption-decision-p43.md
   minimum_evidence:
     - fake_gateway_replay_result
     - static_policy_trace_scan
     - ManageBond benchmark comparison
     - regression impact summary
+  quality_comparison:
+    baseline_vs_candidate_result: preserve_baseline_quality
+    manage_bond_expected_dto_artifact_rows: 11
+    manage_bond_required_dto_coverage: 1.0
+    manage_bond_required_service_method_coverage: 1.0
+    manage_bond_required_mapper_method_coverage: 1.0
+    synthetic_complex_sp_hardcoding_guard: passed
+    synthetic_two_dto_collapse_guard: failed_as_expected
+  rollback_path:
+    - baseline_internal_responses_gateway
+    - BaselineResponsesFrameworkAdapter
+  residual_review_required:
+    - P43_FRAMEWORK_DEPENDENCY_NOT_APPROVED
+    - P43_FRAMEWORK_LIVE_GATE_NOT_CONFIGURED
+    - OPENAI_AGENTS_SDK_TRACING_REDACTION_REVIEW_REQUIRED
+    - LANGGRAPH_PERSISTENCE_REDACTION_REVIEW_REQUIRED
+    - WEAK_OR_UNSUPPORTED_FRAMEWORK_FACTS_REVIEW_REQUIRED
   must_state:
     - production_ready remains false
     - live replay is optional confidence evidence
@@ -70,4 +120,4 @@ forbidden_markers:
   - row data
   - procedure execution
   - generated source apply
-  - production_ready: true
+  - production readiness true claim

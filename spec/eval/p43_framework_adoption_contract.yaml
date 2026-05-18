@@ -43,7 +43,14 @@ candidate_frameworks:
     adoption_risks:
       - Built-in tracing must be configured so raw prompts, raw provider responses,
         raw SP text, row data, and secrets are not stored.
+      - >
+        Official tracing docs state tracing is enabled by default and records agent,
+        generation, function, handoff, and guardrail spans; adoption is blocked until
+        sensitive data capture is disabled or excluded.
       - SDK dependency is deferred until adapter and policy tests prove value.
+    policy_docs:
+      tracing: https://openai.github.io/openai-agents-python/tracing/
+      configuration: https://openai.github.io/openai-agents-python/config/
   langgraph:
     category: candidate
     expected_use: >
@@ -54,6 +61,12 @@ candidate_frameworks:
         persistence.
       - Requires a strict boundary so no generated source apply or DB side effects
         enter graph nodes.
+      - >
+        Persistence/checkpointer behavior stores graph state; adoption is blocked until
+        a redacted serializer/checkpointer boundary proves raw prompts, messages, and
+        tool I/O cannot be persisted.
+    policy_docs:
+      persistence: https://docs.langchain.com/oss/python/langgraph/persistence
 
 framework_adapter_contract:
   name: AiGenerationFrameworkAdapter.v0.1
@@ -82,6 +95,101 @@ framework_adapter_contract:
     - row_data
     - secrets
     - generated_source_apply_claim
+
+framework_tool_policy:
+  blocker: P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED
+  allowed_context:
+    - stage
+    - adapter_contract_version
+    - target_ref_hash
+    - sanitized_metadata_counts
+    - sanitized_operation_ids
+    - sanitized_statement_ids
+    - sanitized_dto_blueprint_names
+    - deterministic_inventory_contract
+    - allowed_evidence_refs
+    - quality_gates
+    - review_required_markers
+  forbidden_context:
+    - raw_prompt
+    - raw_provider_response
+    - raw_sp_definition
+    - raw_guide_body
+    - row_data
+    - secrets
+    - procedure_execution_claim
+    - business_db_ddl_or_dml_apply_claim
+    - generated_source_apply_claim
+    - deploy_claim
+    - failed_java_or_xml_payload
+
+framework_trace_policy:
+  blocker: P43_FRAMEWORK_RAW_TRACE_BLOCKED
+  transient_only:
+    - raw_framework_events
+    - framework_messages
+    - tool_inputs_or_outputs
+  stored_summary_allowed_fields:
+    - adapter_id
+    - candidate_framework
+    - stage
+    - status
+    - component_ids
+    - counts
+    - hashes
+    - blocker_ids
+    - failure_codes
+    - numeric_policy_safe_metrics
+  stored_summary_forbidden_fields:
+    - raw_prompt
+    - raw_provider_response
+    - raw_sp_definition
+    - raw_guide_body
+    - row_data
+    - secrets
+    - framework_messages
+    - tool_io
+    - generated_java_or_xml_payload
+
+decision_gate:
+  phase: P43F
+  decision: pilot
+  production_ready: false
+  decision_report: docs/framework-adoption-decision-p43.md
+  rationale: >
+    P43B-E proved the internal adapter seam, sanitized tool/trace policy gates,
+    baseline rollback path, and fake candidate replay quality preservation, but
+    no real OpenAI Agents SDK or LangGraph adapter dependency has been installed
+    or proven with live evidence.
+  rollback_path:
+    - current Responses/httpx ModelGateway.draft_ai_java_mybatis_pack path
+    - BaselineResponsesFrameworkAdapter
+  evidence:
+    - P43E baseline-vs-candidate fake adapter replay passed.
+    - ManageBond benchmark artifacts reconstruct into AiJavaMyBatisDraftPack.v0.1.
+    - Synthetic complex-SP replay passes without ManageBond-specific DTO names.
+    - Synthetic two-DTO collapse fails the same P42 static validator.
+    - P36, P41, and P42 regression evals remain in the final gate.
+  quality_comparison:
+    outcome: preserve_baseline_quality
+    manage_bond_required_dto_coverage: 1.0
+    manage_bond_required_service_method_coverage: 1.0
+    manage_bond_required_mapper_method_coverage: 1.0
+    manage_bond_expected_dto_artifact_rows: 11
+    synthetic_complex_sp_hardcoding_guard: passed
+    synthetic_two_dto_collapse_guard: failed_as_expected
+  policy_findings:
+    raw_trace_storage_findings: 0
+    public_interface_changes: 0
+    new_framework_dependencies: 0
+    row_data_or_procedure_execution: 0
+    generated_source_apply_or_deploy: 0
+  residual_review_required:
+    - P43_FRAMEWORK_DEPENDENCY_NOT_APPROVED
+    - P43_FRAMEWORK_LIVE_GATE_NOT_CONFIGURED
+    - OPENAI_AGENTS_SDK_TRACING_REDACTION_REVIEW_REQUIRED
+    - LANGGRAPH_PERSISTENCE_REDACTION_REVIEW_REQUIRED
+    - WEAK_OR_UNSUPPORTED_FRAMEWORK_FACTS_REVIEW_REQUIRED
 
 decision_criteria:
   quality:
@@ -126,11 +234,16 @@ acceptance:
   p43e:
     - ManageBond benchmark replay compares baseline vs candidate using the same generic
       inventory contract.
+    - Synthetic complex-SP replay proves candidate adapters do not depend on
+      ManageBond-specific DTO names or runtime answer keys.
+    - Reconstructed AiJavaMyBatisDraftPack.v0.1 artifacts rerun the P42 static
+      Java/MyBatis validator and reject two-DTO collapse generically.
   p43f:
-    - Docs and final decision report recommend adopt, pilot, or defer with evidence.
+    - Docs and final decision report recommend pilot with evidence and rollback path.
 
 blockers:
   - P43_FRAMEWORK_RAW_TRACE_BLOCKED
+  - P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED
   - P43_FRAMEWORK_ADAPTER_CONTRACT_FAILED
   - P43_FRAMEWORK_QUALITY_REGRESSION
   - P43_FRAMEWORK_DEPENDENCY_NOT_APPROVED
@@ -154,5 +267,5 @@ verification:
   p43a_static:
     - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
   p43_final_expected:
-    - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+    - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p43_framework_adapter_replay.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
     - git diff --check
