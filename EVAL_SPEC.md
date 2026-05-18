@@ -83,6 +83,38 @@ P41 validates the operation-model renewal path for complex SP code generation:
 - `production_ready: false` 유지
 - 후속 P41B~P41F 순차 작업이 manifest 와 prompt pack 에 연결됨
 
+## P42 AI Draft Pack Renewal Eval Contract
+
+P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
+
+- `AiJavaMyBatisDraftPack.v0.1` exists as an internal draft-pack contract for file inventory,
+  file content, evidence refs, review markers, and quality gates.
+- `fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml` models the expected
+  `PCO_GU_ManageBond_PRC` draft pack without storing raw SP text, raw guide body, raw prompts,
+  raw provider responses, row data, or secrets.
+- Public artifact types remain unchanged: `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+  `MAPPER_XML`.
+- The ManageBond quality target requires separate DTO files:
+  `ManageBondSearchCriteria`, `ManageBondSearchRow`, `ApproveAdvanceBondCommand`,
+  `ApproveDefectBondCommand`, `FinanceTransferCommand`, `CreateBondCommand`,
+  `CreateRetentionBondBatchItem`, `UpdateBondCommand`, `DeleteBondCommand`,
+  `VendorBondUpdateCommand`, and `OnlineBondUpdateCommand`.
+- Service, Mapper interface, and Mapper XML remain single files but must reference the required
+  DTOs and expose branch/use-case methods.
+- `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, missing DTO references,
+  source apply/deploy claims, and raw SP/guide storage are blockers.
+- Cross-DB write, called procedure I/O, uncertain TVF/procedure kind, result-shape variants, and
+  transaction boundary gaps remain `REVIEW_REQUIRED`.
+- P42A is groundwork only. P42B-F implement schema/gateway, deterministic validator, workflow
+  wiring, replay gate, and docs quality gate.
+- P42 does not authorize UI changes, public API expansion, DB schema changes, public MCP route
+  expansion, row-data access, procedure execution, business DB DDL/DML, automatic DDL apply,
+  generated-source deployment, or production readiness.
+
+Passing criteria:
+- `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"` passes.
+- Later P42F gate also includes P41 and P36 regression.
+
 ## P35 Source Context Eval Gate
 
 Required checks for Copilot-style SP analysis:

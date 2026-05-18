@@ -40,6 +40,30 @@
   changes, live MCP public tool expansion,
   procedure execution, row-data access, automatic DDL/DML apply, or generated-source deployment.
 
+## P42 AI Draft Pack Renewal Policy
+
+- `AiJavaMyBatisDraftPack.v0.1` is an internal draft contract for Java/MyBatis file bundles, not
+  production-ready conversion evidence.
+- P42 fixtures may store sanitized target refs, branch names, DTO file names, method names,
+  evidence refs, quality gates, and `REVIEW_REQUIRED` markers only.
+- Public artifact types remain unchanged: `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+  `MAPPER_XML`.
+- `DTO_DRAFT` must not collapse a complex SP into a single `ManageBondDTO`; branch/use-case DTO
+  files are required for the ManageBond quality target.
+- `OperationModelReviewRequired*` fallback skeletons, blank content, missing DTO references, raw SP
+  dumps, row-data wording, and source apply/deploy claims are blockers for P42 Java/MyBatis drafts.
+- AI Draft Pack failure must be explicit with `P42_AI_DRAFT_PACK_FAILED` or
+  `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`; misleading Java fallback skeleton persistence is not an
+  acceptable success result.
+- User-provided guide files may be used as quality references, but raw guide bodies, raw SP
+  definitions, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets
+  must not be persisted in repo fixtures or platform storage.
+- Cross-database writes, uncertain TVF/procedure kind, called procedure I/O, result-shape variants,
+  and transaction boundary uncertainty must remain `REVIEW_REQUIRED`.
+- P42 does not authorize UI changes, public artifact type expansion, public API expansion, DB schema
+  changes, live MCP public tool expansion, procedure execution, row-data access, automatic DDL/DML
+  apply, or generated-source deployment.
+
 ## P35 Source Context Policy
 
 - Full stored procedure definitions must not be sent to the model by default. The semantic runtime

@@ -1,0 +1,233 @@
+contract_id: p42_ai_draft_pack@0.1.0
+phase: P42
+title: AI Draft Pack renewal groundwork for Java/MyBatis SP conversion
+status: p42a_groundwork_ready
+production_ready: false
+
+depends_on:
+  - p36_output_renewal@0.1.0
+  - p41_sp_operation_model@0.1.0
+  - template:java_mybatis_sp_wrapper@0.3.0
+
+objective: >
+  Define the P42 groundwork contract for an AI Draft Pack path that directly
+  drafts DTO, Service, Mapper interface, and Mapper XML files from sanitized SP
+  analysis evidence. P42 exists because the P41 operation-model planner can fail
+  before useful Java/MyBatis drafts are produced, as observed for
+  job_6864d2734e.
+
+execution_shape:
+  mode: sequential_only
+  parallel_execution_allowed: false
+  required_order:
+    - P42A
+    - P42B
+    - P42C
+    - P42D
+    - P42E
+    - P42F
+
+artifact_policy:
+  requested_output_groups_unchanged:
+    - JAVA_MYBATIS_DRAFT
+  persisted_artifact_types_unchanged:
+    - DTO_DRAFT
+    - SERVICE_DRAFT
+    - MAPPER_INTERFACE
+    - MAPPER_XML
+  dto_draft_internal_shape: multi_file_rows_required
+  service_draft_shape: single_file
+  mapper_interface_shape: single_file
+  mapper_xml_shape: single_file
+  new_public_artifact_type_allowed: false
+  ui_change_allowed: false
+  db_schema_change_allowed: false
+  public_api_change_allowed: false
+  production_ready: false
+
+job_6864d2734e_audit:
+  target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+  observed_status: VALIDATION_COMPLETE
+  observed_java_mybatis_titles:
+    - OperationModelReviewRequired.java
+    - OperationModelReviewRequiredService.java
+    - OperationModelReviewRequiredMapper.java
+    - OperationModelReviewRequiredMapperSQL.xml
+  observed_planner_marker: SP_OPERATION_MODEL_PLANNER_FAILED:ModelGatewayError
+  conclusion: >
+    Artifacts were not byte-empty, but they were fallback review skeletons and
+    therefore functionally failed the requested ManageBond multi-DTO business
+    draft quality target.
+
+ai_draft_pack_contract:
+  schema_ref: AiJavaMyBatisDraftPack.v0.1
+  contract_target: AiJavaMyBatisDraftPack
+  source_policy: sanitized_facts_only
+  production_ready_required: false
+  required_top_level_fields:
+    - schemaVersion
+    - targetRef
+    - sourcePolicy
+    - productionReady
+    - files
+    - evidenceRefs
+    - reviewMarkers
+    - qualityGates
+  required_file_fields:
+    - artifactType
+    - path
+    - role
+    - className
+    - content
+    - operationIds
+    - evidenceRefs
+    - reviewMarkers
+  accepted_artifact_types:
+    - DTO_DRAFT
+    - SERVICE_DRAFT
+    - MAPPER_INTERFACE
+    - MAPPER_XML
+  accepted_file_roles:
+    - QUERY_DTO
+    - RESULT_DTO
+    - COMMAND_DTO
+    - BATCH_ITEM_DTO
+    - CALL_REQUEST_DTO
+    - SERVICE
+    - MAPPER_INTERFACE
+    - MAPPER_XML
+    - REVIEW_REQUIRED
+  recommended_llm_output_flow:
+    - file_inventory
+    - file_content
+    - deterministic_validation
+    - repair
+  model_gateway_default: existing_responses_httpx_gateway
+  openai_sdk_allowed_only_after_p42b_decision: true
+
+manage_bond_quality_target:
+  source_reference_name: MIGRATION_GUIDE.md
+  source_reference_path_outside_repo: D:/migration/test_mcp_server_with_codex/MIGRATION_GUIDE.md
+  target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+  copy_user_reference_content_to_repo: false
+  copy_raw_sp_text_to_repo: false
+  required_crud_flags:
+    - R
+    - A
+    - C
+    - U
+    - D
+    - VENDOR_U
+    - ONLINE_U
+  required_branch_variables:
+    - "@CRUDFlag"
+    - "@BondKindCode"
+    - "@GUBUNFlag"
+    - "@SValue"
+  required_dto_files:
+    - ManageBondSearchCriteria
+    - ManageBondSearchRow
+    - ApproveAdvanceBondCommand
+    - ApproveDefectBondCommand
+    - FinanceTransferCommand
+    - CreateBondCommand
+    - CreateRetentionBondBatchItem
+    - UpdateBondCommand
+    - DeleteBondCommand
+    - VendorBondUpdateCommand
+    - OnlineBondUpdateCommand
+  required_single_files:
+    service: ManageBondService
+    mapper_interface: ManageBondMapper
+    mapper_xml: ManageBondMapperSQL
+  required_service_methods:
+    - readBond
+    - approveAdvanceBond
+    - approveDefectBond
+    - sendFinanceTransfer
+    - createBond
+    - createRetentionBondBatch
+    - updateBond
+    - deleteBond
+    - updateVendorBond
+    - updateOnlineBond
+
+failure_policy:
+  blocked_artifact_titles:
+    - OperationModelReviewRequired.java
+    - OperationModelReviewRequiredService.java
+    - OperationModelReviewRequiredMapper.java
+    - OperationModelReviewRequiredMapperSQL.xml
+  blocked_class_names:
+    - OperationModelReviewRequired
+    - ManageBondDTO
+  blocked_markers:
+    - P41_OPERATION_MODEL_REVIEW_REQUIRED
+  failure_markers:
+    - P42_AI_DRAFT_PACK_FAILED
+    - P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+  empty_content_is_blocker: true
+  dto_collapse_is_blocker: true
+  fallback_java_skeleton_persistence_allowed_on_failure: false
+
+future_workflow_expectation:
+  default_for_java_mybatis_draft: ai_draft_pack
+  p41_renderer_status: regression_and_backward_compatibility_path
+  artifact_storage:
+    dto_draft: one_artifact_row_per_dto_file
+    service_draft: one_artifact_row
+    mapper_interface: one_artifact_row
+    mapper_xml: one_artifact_row
+  artifact_extra_fields:
+    - aiDraftPackSchema
+    - aiFileRole
+    - operationIds
+    - dtoRole
+    - qualityScore
+
+quality_thresholds:
+  required_dto_file_coverage_min: 1.0
+  required_service_method_coverage_min: 1.0
+  single_dto_collapse_allowed: false
+  operation_model_fallback_allowed: false
+  blank_file_allowed: false
+  review_required_uncertain_items_min: 3
+  forbidden_storage_findings_max: 0
+
+forbidden_behavior:
+  row_data_query: true
+  procedure_execution: true
+  business_db_ddl_or_dml: true
+  automatic_ddl_apply: true
+  automatic_generated_source_apply: true
+  raw_prompt_storage: true
+  raw_sp_definition_storage: true
+  raw_openai_response_text_storage: true
+  raw_guide_body_storage: true
+  secret_storage: true
+  ppm_to_plf_fallback: true
+
+storage_policy:
+  forbidden_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - raw_guide_body
+    - row_data
+    - secrets
+  allowed_reference_derivations:
+    - sanitized operation ids
+    - sanitized statement evidence ids
+    - branch condition summaries
+    - table/procedure/function target refs
+    - DTO file names and field candidates
+    - Service/Mapper method names
+    - REVIEW_REQUIRED markers
+
+verification:
+  contract_assets:
+    - tests/contract/test_p42_ai_draft_pack_prompt_assets.py
+  fixture_eval:
+    - tests/eval/test_p42_manage_bond_ai_draft_quality.py
+  targeted_command:
+    - make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"

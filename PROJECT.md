@@ -73,6 +73,28 @@ files. P41 remains
 change, live MCP public tool expansion, row-data access, procedure execution,
 automatic DDL/DML apply, or generated-source deployment.
 
+## P42 AI Draft Pack Renewal Groundwork
+
+P42 starts after the observed `job_6864d2734e` failure mode: Java/MyBatis
+artifacts were not byte-empty, but all four were `OperationModelReviewRequired*`
+fallback skeletons because operation-model planning failed before useful
+ManageBond draft files were created.
+
+P42A defines an internal `AiJavaMyBatisDraftPack.v0.1` contract and
+fixture-first quality target for `PPM.dbo.PCO_GU_ManageBond_PRC`. The intended
+P42 path lets the LLM draft the Java/MyBatis file bundle directly from
+sanitized evidence, then uses deterministic validators and eval gates to block
+blank files, single `ManageBondDTO` collapse, `OperationModelReviewRequired*`
+fallback artifacts, raw SP/guide storage, and source apply/deploy claims.
+
+Public artifact types remain unchanged: DTO files are still persisted as
+`DTO_DRAFT` rows, while `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML`
+remain single files. P42A is groundwork only; workflow wiring, schema
+implementation, validation, and replay gates are split into P42B-F. P42 remains
+`production_ready: false`, with no UI change, public API expansion, DB schema
+change, row-data access, procedure execution, automatic DDL/DML apply, or
+generated-source deployment.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

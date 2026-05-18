@@ -114,6 +114,33 @@ backward compatibility and is still considered insufficient for complex SPs. P41
 no UI, OpenAPI, DB schema, live MCP public tool, procedure execution, row-data query,
 automatic DDL/DML apply, or generated-source deployment.
 
+## P42 AI Draft Pack Architecture Groundwork
+
+P42 defines a second Java/MyBatis draft-generation path for complex SPs when the
+operation-model-first path fails before useful code is produced. The internal
+contract is `AiJavaMyBatisDraftPack.v0.1`: a sanitized file bundle containing
+`files[]` with artifact type, path, role, class name, content, operation ids,
+evidence refs, and review markers. It is a draft-generation contract only and
+does not replace `CanonicalAnalysisModel.v2` or public artifact types.
+
+For `PCO_GU_ManageBond_PRC`, the P42 quality target requires separate DTO files
+such as `ManageBondSearchCriteria`, `ManageBondSearchRow`,
+`ApproveAdvanceBondCommand`, `ApproveDefectBondCommand`, `FinanceTransferCommand`,
+`CreateBondCommand`, `CreateRetentionBondBatchItem`, `UpdateBondCommand`,
+`DeleteBondCommand`, `VendorBondUpdateCommand`, and `OnlineBondUpdateCommand`.
+Service, Mapper interface, and Mapper XML remain single draft files but must
+expose branch/use-case methods and reference the branch-specific DTOs.
+
+The planned implementation path is AI-heavy but validation-gated: the model
+produces file inventory, then file content, then deterministic validation/repair
+handles schema conformance, fallback blockers, evidence refs, and policy markers.
+P42 blocks `OperationModelReviewRequired*`, single `ManageBondDTO` collapse,
+empty content, raw SP or raw guide storage, row-data wording, and source
+apply/deploy claims. P42A only adds contract assets and tests; P42B-F implement
+schema, validator, workflow wiring, replay, and docs gates. P42 adds no UI,
+OpenAPI, DB schema, public MCP route, procedure execution, row-data query,
+automatic DDL/DML apply, or generated-source deployment.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates

@@ -1,0 +1,373 @@
+fixture_suite_id: ai_draft_pack_p42_manage_bond_v1
+contract_ref: p42_ai_draft_pack@0.1.0
+phase: P42A
+status: p42a_groundwork_ready
+production_ready: false
+purpose: >
+  P42A fixture for the AI Draft Pack path for PPM.dbo.PCO_GU_ManageBond_PRC.
+  It captures the file inventory, branch coverage, and quality blockers that
+  a generated Java/MyBatis draft pack must satisfy without storing raw SP text,
+  raw guide body, row data, or provider output.
+
+source_reference:
+  name: MIGRATION_GUIDE.md
+  path_outside_repo: D:/migration/test_mcp_server_with_codex/MIGRATION_GUIDE.md
+  target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+  usage: sanitized_quality_reference_only
+  copy_reference_content_to_repo: false
+  copy_raw_sp_text_to_repo: false
+
+job_audit:
+  job_id: job_6864d2734e
+  observed_java_mybatis_titles:
+    - OperationModelReviewRequired.java
+    - OperationModelReviewRequiredService.java
+    - OperationModelReviewRequiredMapper.java
+    - OperationModelReviewRequiredMapperSQL.xml
+  observed_marker: SP_OPERATION_MODEL_PLANNER_FAILED:ModelGatewayError
+  acceptance_status: rejected_for_p42_target
+  rejection_reason: >
+    Fallback skeletons are review markers, not ManageBond business draft files.
+
+artifact_scope:
+  requested_output_groups_unchanged:
+    - JAVA_MYBATIS_DRAFT
+  persisted_artifact_types_unchanged:
+    - DTO_DRAFT
+    - SERVICE_DRAFT
+    - MAPPER_INTERFACE
+    - MAPPER_XML
+  dto_draft_internal_shape: multiple_dto_artifact_rows_required
+  service_draft_shape: single_file
+  mapper_interface_shape: single_file
+  mapper_xml_shape: single_file
+  new_public_artifact_type_allowed: false
+  ui_change_allowed: false
+  db_schema_change_allowed: false
+
+storage_policy:
+  forbidden_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - raw_guide_body
+    - row_data
+    - secrets
+  forbidden_runtime_actions:
+    - row_data_query
+    - procedure_execution
+    - business_db_ddl_or_dml
+    - automatic_ddl_apply
+    - automatic_generated_source_apply
+    - ppm_to_plf_fallback
+
+guide_quality_facts:
+  target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+  input_parameter_count: 42
+  crud_flags:
+    - R
+    - A
+    - C
+    - U
+    - D
+    - VENDOR_U
+    - ONLINE_U
+  branch_variables:
+    - "@CRUDFlag"
+    - "@BondKindCode"
+    - "@GUBUNFlag"
+    - "@SValue"
+  major_dependencies:
+    same_database:
+      - PPM.dbo.PCO_GUAR
+      - PPM.dbo.PCO_ATTC_FIL
+      - PPM.dbo.PCO_ATTC_FIL_DTL
+      - PPM.dbo.PCS_ADVM_PAYRPT
+      - PPM.dbo.PCS_PAY_CMPD_RPT
+      - PPM.dbo.PCS_RTNM_PAYRPT
+      - PPM.dbo.PPN_VNDR
+    cross_database:
+      - ERP.dbo.XXEAI_TRX_HEADER_II
+      - HRM.dbo.EHRTB_IFEmployee
+      - TCM.dbo.TCM_COM_CD_DTL
+    called_procedures:
+      - PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC
+      - PPM.dbo.PCO_PA_SendMsgErpTransFailRsn_PRC
+      - PPM.dbo.PCS_PA_ReserveAmtSplitString_PRC
+  review_required_facts:
+    - CROSS_DB_WRITE_REVIEW_REQUIRED
+    - CALLED_PROCEDURE_IO_REVIEW_REQUIRED
+    - TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED
+    - TRANSACTION_BOUNDARY_REVIEW_REQUIRED
+    - RESULT_SHAPE_BRANCH_VARIANT_REVIEW_REQUIRED
+
+ai_draft_pack_quality_target:
+  schemaVersion: AiJavaMyBatisDraftPack.v0.1
+  contractTarget: AiJavaMyBatisDraftPack
+  targetRef: PPM.dbo.PCO_GU_ManageBond_PRC
+  sourcePolicy: sanitized_facts_only
+  productionReady: false
+  evidenceRefs:
+    - ev_p42_manage_bond_guide_summary
+    - ev_p42_manage_bond_p41_gap_audit
+    - ev_p42_manage_bond_static_branch_summary
+  reviewMarkers:
+    - CROSS_DB_WRITE_REVIEW_REQUIRED
+    - CALLED_PROCEDURE_IO_REVIEW_REQUIRED
+    - TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED
+  expectedFiles:
+    - artifactType: DTO_DRAFT
+      path: dto/ManageBondSearchCriteria.java
+      role: QUERY_DTO
+      className: ManageBondSearchCriteria
+      operationIds: [readBond]
+      dtoRole: QUERY
+      requiredFields: [crudFlag, flag, contractNum, ordNum, bondKindCode]
+      evidenceRefs: [ev_p42_manage_bond_guide_summary]
+      reviewMarkers: [RESULT_SHAPE_BRANCH_VARIANT_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/ManageBondSearchRow.java
+      role: RESULT_DTO
+      className: ManageBondSearchRow
+      operationIds: [readBond]
+      dtoRole: RESULT
+      requiredFields: [contractNum, ordNum, bondKindCode, bondStatusCode, approvalYn]
+      evidenceRefs: [ev_p42_manage_bond_guide_summary]
+      reviewMarkers: [RESULT_SHAPE_BRANCH_VARIANT_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/ApproveAdvanceBondCommand.java
+      role: COMMAND_DTO
+      className: ApproveAdvanceBondCommand
+      operationIds: [approveAdvanceBond]
+      dtoRole: COMMAND
+      requiredFields: [contractNum, ordNum, sequence, approvalYn, userId]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [CROSS_DB_WRITE_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/ApproveDefectBondCommand.java
+      role: COMMAND_DTO
+      className: ApproveDefectBondCommand
+      operationIds: [approveDefectBond]
+      dtoRole: COMMAND
+      requiredFields: [contractNum, ordNum, sequence, userId]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [STATE_TRANSITION_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/FinanceTransferCommand.java
+      role: CALL_REQUEST_DTO
+      className: FinanceTransferCommand
+      operationIds: [sendFinanceTransfer]
+      dtoRole: CALL_REQUEST
+      requiredFields: [invoiceNum, contractNum, ordNum, userId]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [CALLED_PROCEDURE_IO_REVIEW_REQUIRED, CROSS_DB_WRITE_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/CreateBondCommand.java
+      role: COMMAND_DTO
+      className: CreateBondCommand
+      operationIds: [createBond]
+      dtoRole: COMMAND
+      requiredFields: [contractNum, ordNum, bondKindCode, currencyInsureAmt, appendixNum, userId]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [CONCURRENCY_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/CreateRetentionBondBatchItem.java
+      role: BATCH_ITEM_DTO
+      className: CreateRetentionBondBatchItem
+      operationIds: [createRetentionBondBatch]
+      dtoRole: BATCH_ITEM
+      requiredFields: [sValue, retentionSeq, retentionAmount]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/UpdateBondCommand.java
+      role: COMMAND_DTO
+      className: UpdateBondCommand
+      operationIds: [updateBond]
+      dtoRole: COMMAND
+      requiredFields: [contractNum, ordNum, sequence, currencyInsureAmt, note]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: []
+    - artifactType: DTO_DRAFT
+      path: dto/DeleteBondCommand.java
+      role: COMMAND_DTO
+      className: DeleteBondCommand
+      operationIds: [deleteBond]
+      dtoRole: COMMAND
+      requiredFields: [contractNum, ordNum, bondKindCode, sequence]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [CASCADE_DELETE_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/VendorBondUpdateCommand.java
+      role: COMMAND_DTO
+      className: VendorBondUpdateCommand
+      operationIds: [updateVendorBond]
+      dtoRole: COMMAND
+      requiredFields: [gubunFlag, contractNum, ordNum, sequence]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [GUBUN_BRANCH_CONTRACT_REVIEW_REQUIRED, COLUMN_DETAIL_REVIEW_REQUIRED]
+    - artifactType: DTO_DRAFT
+      path: dto/OnlineBondUpdateCommand.java
+      role: COMMAND_DTO
+      className: OnlineBondUpdateCommand
+      operationIds: [updateOnlineBond]
+      dtoRole: COMMAND
+      requiredFields: [gubunFlag, contractNum, ordNum, sequence]
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [GUBUN_BRANCH_CONTRACT_REVIEW_REQUIRED, COLUMN_DETAIL_REVIEW_REQUIRED]
+    - artifactType: SERVICE_DRAFT
+      path: service/ManageBondService.java
+      role: SERVICE
+      className: ManageBondService
+      operationIds:
+        - readBond
+        - approveAdvanceBond
+        - approveDefectBond
+        - sendFinanceTransfer
+        - createBond
+        - createRetentionBondBatch
+        - updateBond
+        - deleteBond
+        - updateVendorBond
+        - updateOnlineBond
+      references:
+        - ManageBondSearchCriteria
+        - ManageBondSearchRow
+        - ApproveAdvanceBondCommand
+        - ApproveDefectBondCommand
+        - FinanceTransferCommand
+        - CreateBondCommand
+        - CreateRetentionBondBatchItem
+        - UpdateBondCommand
+        - DeleteBondCommand
+        - VendorBondUpdateCommand
+        - OnlineBondUpdateCommand
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [REVIEW_REQUIRED_DRAFT_ONLY]
+    - artifactType: MAPPER_INTERFACE
+      path: mapper/ManageBondMapper.java
+      role: MAPPER_INTERFACE
+      className: ManageBondMapper
+      operationIds:
+        - readBond
+        - approveAdvanceBond
+        - approveDefectBond
+        - sendFinanceTransfer
+        - createBond
+        - createRetentionBondBatch
+        - updateBond
+        - deleteBond
+        - updateVendorBond
+        - updateOnlineBond
+      references:
+        - ManageBondSearchCriteria
+        - ManageBondSearchRow
+        - ApproveAdvanceBondCommand
+        - ApproveDefectBondCommand
+        - FinanceTransferCommand
+        - CreateBondCommand
+        - CreateRetentionBondBatchItem
+        - UpdateBondCommand
+        - DeleteBondCommand
+        - VendorBondUpdateCommand
+        - OnlineBondUpdateCommand
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [REVIEW_REQUIRED_DRAFT_ONLY]
+    - artifactType: MAPPER_XML
+      path: mapper/ManageBondMapperSQL.xml
+      role: MAPPER_XML
+      className: ManageBondMapperSQL
+      operationIds:
+        - readBond
+        - approveAdvanceBond
+        - approveDefectBond
+        - sendFinanceTransfer
+        - createBond
+        - createRetentionBondBatch
+        - updateBond
+        - deleteBond
+        - updateVendorBond
+        - updateOnlineBond
+      references:
+        - ManageBondSearchCriteria
+        - ManageBondSearchRow
+        - ApproveAdvanceBondCommand
+        - ApproveDefectBondCommand
+        - FinanceTransferCommand
+        - CreateBondCommand
+        - CreateRetentionBondBatchItem
+        - UpdateBondCommand
+        - DeleteBondCommand
+        - VendorBondUpdateCommand
+        - OnlineBondUpdateCommand
+      evidenceRefs: [ev_p42_manage_bond_static_branch_summary]
+      reviewMarkers: [SQL_SKELETON_REVIEW_REQUIRED]
+
+quality_gates:
+  required_dto_classes:
+    - ManageBondSearchCriteria
+    - ManageBondSearchRow
+    - ApproveAdvanceBondCommand
+    - ApproveDefectBondCommand
+    - FinanceTransferCommand
+    - CreateBondCommand
+    - CreateRetentionBondBatchItem
+    - UpdateBondCommand
+    - DeleteBondCommand
+    - VendorBondUpdateCommand
+    - OnlineBondUpdateCommand
+  required_service_methods:
+    - readBond
+    - approveAdvanceBond
+    - approveDefectBond
+    - sendFinanceTransfer
+    - createBond
+    - createRetentionBondBatch
+    - updateBond
+    - deleteBond
+    - updateVendorBond
+    - updateOnlineBond
+  required_mapper_methods:
+    - readBond
+    - approveAdvanceBond
+    - approveDefectBond
+    - sendFinanceTransfer
+    - createBond
+    - createRetentionBondBatch
+    - updateBond
+    - deleteBond
+    - updateVendorBond
+    - updateOnlineBond
+  blocker_patterns:
+    - OperationModelReviewRequired
+    - ManageBondDTO
+    - P41_OPERATION_MODEL_REVIEW_REQUIRED
+  blank_content_is_blocker: true
+  dto_collapse_is_blocker: true
+  fallback_skeleton_persistence_allowed_on_failure: false
+
+expected_quality_report:
+  status: PASSED
+  productionReady: false
+  scores:
+    requiredDtoFileCoverage: 1.0
+    requiredServiceMethodCoverage: 1.0
+    expectedDtoArtifactRows: 11
+    expectedServiceArtifactRows: 1
+    expectedMapperInterfaceArtifactRows: 1
+    expectedMapperXmlArtifactRows: 1
+    operationModelFallbackAllowed: false
+    singleDtoCollapseAllowed: false
+    blankFileAllowed: false
+    forbiddenStorageFindings: 0
+  reviewRequiredFindings:
+    - CROSS_DB_WRITE_REVIEW_REQUIRED
+    - CALLED_PROCEDURE_IO_REVIEW_REQUIRED
+    - TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED
+    - TRANSACTION_BOUNDARY_REVIEW_REQUIRED
+
+verification_commands:
+  default_fixture_gate:
+    - make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"
+  diff_check:
+    - git diff --check
