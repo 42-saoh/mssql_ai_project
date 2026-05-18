@@ -131,15 +131,28 @@ such as `ManageBondSearchCriteria`, `ManageBondSearchRow`,
 Service, Mapper interface, and Mapper XML remain single draft files but must
 expose branch/use-case methods and reference the branch-specific DTOs.
 
-The planned implementation path is AI-heavy but validation-gated: the model
-produces file inventory, then file content, then deterministic validation/repair
-handles schema conformance, fallback blockers, evidence refs, and policy markers.
+The implementation path is AI-heavy but validation-gated: the model produces
+file inventory, then file content, then deterministic validation/repair handles
+schema conformance, fallback blockers, evidence refs, and policy markers. P42B
+implements the strict `AiJavaMyBatisDraftPack.v0.1` runtime schema and prompt
+path, P42C validates Java/XML content statically, and P42D wires
+`JAVA_MYBATIS_DRAFT` to persist validated pack files instead of the P41 fallback
+Java renderer.
+
+Workflow persistence stores each DTO pack file as its own `DTO_DRAFT` row keyed
+by `bundleFilePath`; Service, Mapper interface, and Mapper XML remain single
+rows. Artifact `extra` carries AI Draft Pack schema, target ref, agent run id,
+file role, DTO role where present, operation ids, quality score, source evidence
+refs, and review markers. Gateway/schema/quality failures record
+`P42_AI_DRAFT_PACK_FAILED`; disabled or unavailable safe context records
+`P42_AI_DRAFT_PACK_REVIEW_REQUIRED`. Neither path persists
+`OperationModelReviewRequired*` Java/MyBatis fallback skeletons.
+
 P42 blocks `OperationModelReviewRequired*`, single `ManageBondDTO` collapse,
 empty content, raw SP or raw guide storage, row-data wording, and source
-apply/deploy claims. P42A only adds contract assets and tests; P42B-F implement
-schema, validator, workflow wiring, replay, and docs gates. P42 adds no UI,
-OpenAPI, DB schema, public MCP route, procedure execution, row-data query,
-automatic DDL/DML apply, or generated-source deployment.
+apply/deploy claims. P42 adds no UI, OpenAPI, DB schema, public MCP route,
+procedure execution, row-data query, automatic DDL/DML apply, or generated-source
+deployment.
 
 ## P35 Source Context Architecture
 

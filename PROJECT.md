@@ -89,11 +89,13 @@ fallback artifacts, raw SP/guide storage, and source apply/deploy claims.
 
 Public artifact types remain unchanged: DTO files are still persisted as
 `DTO_DRAFT` rows, while `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML`
-remain single files. P42A is groundwork only; workflow wiring, schema
-implementation, validation, and replay gates are split into P42B-F. P42 remains
-`production_ready: false`, with no UI change, public API expansion, DB schema
-change, row-data access, procedure execution, automatic DDL/DML apply, or
-generated-source deployment.
+remain single files. P42B-C added the strict runtime schema and static quality
+validator, and P42D wires `JAVA_MYBATIS_DRAFT` to persist only validated AI Draft
+Pack files. If pack planning or validation fails, the workflow records
+`P42_AI_DRAFT_PACK_FAILED` or `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and stores no
+misleading Java/MyBatis fallback skeletons. P42 remains `production_ready: false`,
+with no UI change, public API expansion, DB schema change, row-data access,
+procedure execution, automatic DDL/DML apply, or generated-source deployment.
 
 ## 한 줄 정의
 

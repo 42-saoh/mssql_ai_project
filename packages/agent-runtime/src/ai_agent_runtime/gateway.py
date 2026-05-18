@@ -600,7 +600,13 @@ def _default_fake_ai_draft_pack_output(
     refs = [str(ref) for ref in allowed_refs if str(ref).strip()]
     evidence_refs = refs[:1] or ["metadata.ai_draft_pack.no_fact"]
     normalized_target_ref = target_ref or "sp.ai_draft_pack.review_required"
-    review_marker = "P42_AI_DRAFT_PACK_REVIEW_REQUIRED"
+    review_markers = [
+        "P42_AI_DRAFT_PACK_REVIEW_REQUIRED",
+        "CROSS_DB_WRITE_REVIEW_REQUIRED",
+        "CALLED_PROCEDURE_IO_REVIEW_REQUIRED",
+        "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
+        "TRANSACTION_BOUNDARY_REVIEW_REQUIRED",
+    ]
     return {
         "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
         "contractTarget": "AiJavaMyBatisDraftPack",
@@ -613,30 +619,39 @@ def _default_fake_ai_draft_pack_output(
                 "path": "dto/DraftSearchCriteria.java",
                 "role": "QUERY_DTO",
                 "className": "DraftSearchCriteria",
-                "content": "public class DraftSearchCriteria { /* REVIEW_REQUIRED */ }",
+                "content": (
+                    "public class DraftSearchCriteria { "
+                    "/* REVIEW_REQUIRED DraftSearchCriteria */ }"
+                ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
-                "reviewMarkers": [review_marker],
+                "reviewMarkers": review_markers,
             },
             {
                 "artifactType": "DTO_DRAFT",
                 "path": "dto/DraftSearchRow.java",
                 "role": "RESULT_DTO",
                 "className": "DraftSearchRow",
-                "content": "public class DraftSearchRow { /* REVIEW_REQUIRED */ }",
+                "content": (
+                    "public class DraftSearchRow { /* REVIEW_REQUIRED DraftSearchRow */ }"
+                ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
-                "reviewMarkers": [review_marker],
+                "reviewMarkers": review_markers,
             },
             {
                 "artifactType": "SERVICE_DRAFT",
                 "path": "service/DraftService.java",
                 "role": "SERVICE",
                 "className": "DraftService",
-                "content": "public class DraftService { void reviewDraft() {} }",
+                "content": (
+                    "public class DraftService { "
+                    "/* REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow */ "
+                    "void reviewDraft() {} }"
+                ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
-                "reviewMarkers": [review_marker],
+                "reviewMarkers": review_markers,
                 "references": ["DraftSearchCriteria", "DraftSearchRow"],
             },
             {
@@ -644,10 +659,14 @@ def _default_fake_ai_draft_pack_output(
                 "path": "mapper/DraftMapper.java",
                 "role": "MAPPER_INTERFACE",
                 "className": "DraftMapper",
-                "content": "public interface DraftMapper { void reviewDraft(); }",
+                "content": (
+                    "public interface DraftMapper { "
+                    "/* REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow */ "
+                    "void reviewDraft(); }"
+                ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
-                "reviewMarkers": [review_marker],
+                "reviewMarkers": review_markers,
                 "references": ["DraftSearchCriteria", "DraftSearchRow"],
             },
             {
@@ -656,21 +675,23 @@ def _default_fake_ai_draft_pack_output(
                 "role": "MAPPER_XML",
                 "className": "DraftMapperSQL",
                 "content": (
-                    '<mapper namespace="DraftMapper"><select id="reviewDraft" /></mapper>'
+                    '<mapper namespace="DraftMapper">'
+                    "<!-- REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow -->"
+                    '<select id="reviewDraft" /></mapper>'
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
-                "reviewMarkers": [review_marker],
+                "reviewMarkers": review_markers,
                 "references": ["DraftSearchCriteria", "DraftSearchRow"],
             },
         ],
         "evidenceRefs": evidence_refs,
-        "reviewMarkers": [review_marker],
+        "reviewMarkers": review_markers,
         "qualityGates": {
             "requiredDtoClasses": ["DraftSearchCriteria", "DraftSearchRow"],
             "requiredServiceMethods": ["reviewDraft"],
             "requiredMapperMethods": ["reviewDraft"],
-            "requiredReviewMarkers": [review_marker],
+            "requiredReviewMarkers": review_markers,
             "blockerPatterns": ["OperationModelReviewRequired", "ManageBondDTO"],
             "blankContentIsBlocker": True,
             "dtoCollapseIsBlocker": True,

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -14,19 +16,23 @@ from api_app.metadata_gateway import MetadataCollectionResult
 from api_app.schemas import SPAnalysisRequest
 from api_app.tracking import IdempotencyConflictError, RequestTrackingContext
 from api_app.workflow import (
+    AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
     DEPENDENCY_AGENT_TYPE,
     OPERATION_MODEL_AGENT_TYPE,
     P41_OPERATION_MODEL_REVIEW_REQUIRED,
+    P42_AI_DRAFT_PACK_FAILED,
+    P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
     WORKFLOW_METADATA_NOTE,
     WorkflowService,
     dependency_procedure_candidates,
+    generation_context_from_request,
 )
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
-
 ROOT = Path(__file__).resolve().parents[3]
 P41_FIXTURE_PATH = ROOT / "fixtures" / "eval" / "sp_operation_model_p41_manage_bond_v1.yaml"
+P42_FIXTURE_PATH = ROOT / "fixtures" / "eval" / "ai_draft_pack_p42_manage_bond_v1.yaml"
 SANITIZED_MANAGE_BOND_SQL = """
 CREATE PROCEDURE PPM.dbo.PCO_GU_ManageBond_PRC
     @CRUDFlag varchar(20),
@@ -166,6 +172,155 @@ def _manage_bond_request(*, use_llm_analysis: bool = True) -> SPAnalysisRequest:
 
 def _p41_operation_model_fixture() -> dict:
     return yaml.safe_load(P41_FIXTURE_PATH.read_text(encoding="utf-8"))["operation_model"]
+
+
+def _p42_ai_draft_pack_fixture() -> dict[str, Any]:
+    fixture = yaml.safe_load(P42_FIXTURE_PATH.read_text(encoding="utf-8"))
+    target = fixture["ai_draft_pack_quality_target"]
+    quality_gates = fixture["quality_gates"]
+    return {
+        "schemaVersion": target["schemaVersion"],
+        "contractTarget": target["contractTarget"],
+        "targetRef": target["targetRef"],
+        "sourcePolicy": target["sourcePolicy"],
+        "productionReady": target["productionReady"],
+        "files": [_p42_materialized_file(file) for file in target["expectedFiles"]],
+        "evidenceRefs": list(target["evidenceRefs"]),
+        "reviewMarkers": list(target["reviewMarkers"]),
+        "qualityGates": {
+            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
+            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
+            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
+            "requiredReviewMarkers": list(target["reviewMarkers"]),
+            "blockerPatterns": list(quality_gates["blocker_patterns"]),
+            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
+            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
+            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
+                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
+            ),
+        },
+        "assumptions": [
+            "P42D workflow fixture uses sanitized draft content and productionReady=false."
+        ],
+    }
+
+
+def _p42_materialized_file(file: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        "artifactType": file["artifactType"],
+        "path": file["path"],
+        "role": file["role"],
+        "className": file["className"],
+        "content": _p42_materialized_content(file),
+        "operationIds": list(file["operationIds"]),
+        "evidenceRefs": list(file["evidenceRefs"]),
+        "reviewMarkers": list(file.get("reviewMarkers") or []),
+    }
+    for optional_key in ("dtoRole", "requiredFields", "references"):
+        if optional_key in file:
+            payload[optional_key] = deepcopy(file[optional_key])
+    return payload
+
+
+def _p42_materialized_content(file: dict[str, Any]) -> str:
+    artifact_type = file["artifactType"]
+    class_name = file["className"]
+    if artifact_type == "DTO_DRAFT":
+        fields = "\n".join(f"    private String {field};" for field in file["requiredFields"])
+        markers = " ".join(file.get("reviewMarkers") or ["REVIEW_REQUIRED"])
+        return f"public class {class_name} {{\n    // {markers} draft DTO.\n{fields}\n}}"
+    if artifact_type == "SERVICE_DRAFT":
+        return _p42_service_content(file)
+    if artifact_type == "MAPPER_INTERFACE":
+        return _p42_mapper_interface_content(file)
+    if artifact_type == "MAPPER_XML":
+        return _p42_mapper_xml_content(file)
+    raise AssertionError(f"Unexpected P42 artifact type: {artifact_type}")
+
+
+def _p42_method_parameter_type(method: str) -> str:
+    return {
+        "readBond": "ManageBondSearchCriteria",
+        "approveAdvanceBond": "ApproveAdvanceBondCommand",
+        "approveDefectBond": "ApproveDefectBondCommand",
+        "sendFinanceTransfer": "FinanceTransferCommand",
+        "createBond": "CreateBondCommand",
+        "createRetentionBondBatch": "CreateRetentionBondBatchItem",
+        "updateBond": "UpdateBondCommand",
+        "deleteBond": "DeleteBondCommand",
+        "updateVendorBond": "VendorBondUpdateCommand",
+        "updateOnlineBond": "OnlineBondUpdateCommand",
+    }[method]
+
+
+def _p42_service_content(file: dict[str, Any]) -> str:
+    methods = []
+    for method in file["operationIds"]:
+        parameter_type = _p42_method_parameter_type(method)
+        if method == "readBond":
+            methods.append(
+                "    public List<ManageBondSearchRow> "
+                "readBond(ManageBondSearchCriteria criteria) { return mapper.readBond(criteria); }"
+            )
+        else:
+            methods.append(
+                f"    public int {method}({parameter_type} command) "
+                f"{{ return mapper.{method}(command); }}"
+            )
+    references = " ".join(file["references"])
+    return (
+        "import java.util.List;\n"
+        "public class ManageBondService {\n"
+        "    private final ManageBondMapper mapper;\n"
+        "    public ManageBondService(ManageBondMapper mapper) { this.mapper = mapper; }\n"
+        f"    // REVIEW_REQUIRED draft references: {references}\n"
+        f"{chr(10).join(methods)}\n"
+        "}"
+    )
+
+
+def _p42_mapper_interface_content(file: dict[str, Any]) -> str:
+    methods = []
+    for method in file["operationIds"]:
+        parameter_type = _p42_method_parameter_type(method)
+        if method == "readBond":
+            methods.append(
+                "    List<ManageBondSearchRow> readBond(ManageBondSearchCriteria criteria);"
+            )
+        else:
+            methods.append(f"    int {method}({parameter_type} command);")
+    references = " ".join(file["references"])
+    return (
+        "import java.util.List;\n"
+        "public interface ManageBondMapper {\n"
+        f"    // REVIEW_REQUIRED draft references: {references}\n"
+        f"{chr(10).join(methods)}\n"
+        "}"
+    )
+
+
+def _p42_mapper_xml_content(file: dict[str, Any]) -> str:
+    statements = []
+    for method in file["operationIds"]:
+        parameter_type = _p42_method_parameter_type(method)
+        if method == "readBond":
+            statements.append(
+                '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
+                'resultType="ManageBondSearchRow">'
+                "/* SQL_SKELETON_REVIEW_REQUIRED */</select>"
+            )
+        else:
+            statements.append(
+                f'  <update id="{method}" parameterType="{parameter_type}">'
+                "/* SQL_SKELETON_REVIEW_REQUIRED */</update>"
+            )
+    references = " ".join(file["references"])
+    return (
+        '<mapper namespace="ManageBondMapper">\n'
+        f"  <!-- REVIEW_REQUIRED DTO references: {references} -->\n"
+        f"{chr(10).join(statements)}\n"
+        "</mapper>"
+    )
 
 
 class ManageBondMetadataGateway:
@@ -342,14 +497,16 @@ def test_sp_analysis_can_be_submitted_then_executed_later() -> None:
     assert repository.list_job_artifacts(submitted.job_id)
 
 
-def test_p41_manage_bond_workflow_wires_operation_model_into_multi_dto_artifacts() -> None:
+def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts() -> None:
     operation_model = _p41_operation_model_fixture()
+    ai_draft_pack = _p42_ai_draft_pack_fixture()
     repository = MemoryWorkflowRepository()
     service = WorkflowService(
         repository,
         metadata_gateway=ManageBondMetadataGateway(),
         model_gateway=FakeModelGateway(
-            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model}
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+            ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
         ),
     )
 
@@ -367,6 +524,7 @@ def test_p41_manage_bond_workflow_wires_operation_model_into_multi_dto_artifacts
         artifact for artifact in artifacts if artifact.type == ArtifactType.MAPPER_XML
     ]
     dto_titles = {artifact.title for artifact in dto_artifacts}
+    required_dtos = set(ai_draft_pack["qualityGates"]["requiredDtoClasses"])
 
     validation_debug = [
         (
@@ -377,50 +535,51 @@ def test_p41_manage_bond_workflow_wires_operation_model_into_multi_dto_artifacts
         for artifact in artifacts
     ]
     assert job.status == JobStatus.VALIDATION_COMPLETE, validation_debug
-    assert len(dto_artifacts) == len(operation_model["dtoBlueprints"])
+    assert len(dto_artifacts) == len(required_dtos)
     assert len(service_artifacts) == 1
     assert len(mapper_artifacts) == 1
     assert len(mapper_xml_artifacts) == 1
     assert not any(title.endswith("/ManageBondDTO.java") for title in dto_titles)
-    assert {
-        "ManageBondSearchCriteria.java",
-        "ManageBondSearchRow.java",
-        "ApproveAdvanceBondCommand.java",
-        "CreateBondCommand.java",
-        "CreateRetentionBondBatchItem.java",
-        "VendorBondUpdateCommand.java",
-        "OnlineBondUpdateCommand.java",
-    } <= {title.rsplit("/", 1)[-1] for title in dto_titles}
+    assert not any(title.endswith("/OperationModelReviewRequired.java") for title in dto_titles)
+    assert {f"{dto}.java" for dto in required_dtos} == {
+        title.rsplit("/", 1)[-1] for title in dto_titles
+    }
     for artifact in dto_artifacts:
         assert artifact.extra["bundleFilePath"] == artifact.title
         assert artifact.extra["bundleRole"] == ArtifactType.DTO_DRAFT.value
-        assert artifact.extra["operationModelSchema"] == "SpOperationModel.v0.1"
+        assert artifact.extra["aiDraftPackSchema"] == "AiJavaMyBatisDraftPack.v0.1"
+        assert artifact.extra["aiDraftPackTargetRef"] == ai_draft_pack["targetRef"]
+        assert artifact.extra["aiDraftPackAgentRunId"]
+        assert artifact.extra["aiFileRole"]
         assert artifact.extra["operationIds"]
         assert artifact.extra["dtoRole"]
+        assert artifact.extra["qualityScore"] >= 1.0
+        assert artifact.extra["aiEvidenceRefs"]
+        assert isinstance(artifact.extra["reviewMarkers"], list)
+        assert "OperationModelReviewRequired" not in artifact.content
+        assert "ManageBondDTO" not in artifact.content
+    for artifact in [*service_artifacts, *mapper_artifacts, *mapper_xml_artifacts]:
+        assert artifact.extra["aiDraftPackSchema"] == "AiJavaMyBatisDraftPack.v0.1"
+        assert artifact.extra["bundleFilePath"] == artifact.title
+        assert artifact.extra["aiFileRole"]
+        assert artifact.extra["operationIds"]
+        assert "OperationModelReviewRequired" not in artifact.content
+        assert "ManageBondDTO" not in artifact.content
 
-    service = service_artifacts[0].content
-    mapper = mapper_artifacts[0].content
-    mapper_xml = mapper_xml_artifacts[0].content
-    assert "public class ManageBondService" in service
-    assert "List<ManageBondSearchRow> readBond(ManageBondSearchCriteria condition)" in service
-    assert "int vendorBondUpdate(VendorBondUpdateCommand command)" in mapper
-    assert "int onlineBondUpdate(OnlineBondUpdateCommand command)" in mapper
+    service_content = service_artifacts[0].content
+    mapper_content = mapper_artifacts[0].content
+    mapper_xml_content = mapper_xml_artifacts[0].content
+    assert "public class ManageBondService" in service_content
     assert (
-        'parameterType="com.pec.ppm.workflow.draft.model.ManageBondSearchCriteria"'
-        in mapper_xml
+        "List<ManageBondSearchRow> readBond(ManageBondSearchCriteria criteria)"
+        in service_content
     )
-    assert (
-        'resultType="com.pec.ppm.workflow.draft.model.ManageBondSearchRow"'
-        in mapper_xml
-    )
-    assert (
-        'parameterType="com.pec.ppm.workflow.draft.model.VendorBondUpdateCommand"'
-        in mapper_xml
-    )
-    assert (
-        'parameterType="com.pec.ppm.workflow.draft.model.OnlineBondUpdateCommand"'
-        in mapper_xml
-    )
+    assert "int updateVendorBond(VendorBondUpdateCommand command)" in mapper_content
+    assert "int updateOnlineBond(OnlineBondUpdateCommand command)" in mapper_content
+    assert 'parameterType="ManageBondSearchCriteria"' in mapper_xml_content
+    assert 'resultType="ManageBondSearchRow"' in mapper_xml_content
+    assert 'parameterType="VendorBondUpdateCommand"' in mapper_xml_content
+    assert 'parameterType="OnlineBondUpdateCommand"' in mapper_xml_content
     operation_runs = [
         run
         for run in repository.list_agent_runs(job.job_id) or []
@@ -430,9 +589,23 @@ def test_p41_manage_bond_workflow_wires_operation_model_into_multi_dto_artifacts
     assert operation_runs[0].structured_output["targetRef"] == operation_model["targetRef"]
     assert "CREATE PROCEDURE" not in str(operation_runs[0].structured_output)
     assert "SET GUAR_APRV_YN" not in str(operation_runs[0].model_invocation)
+    ai_draft_runs = [
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    ]
+    assert len(ai_draft_runs) == 1
+    assert ai_draft_runs[0].status == AgentRunStatus.SUCCEEDED.value
+    context = generation_context_from_request(
+        repository.requests[job.request_id],
+        operation_model_run=operation_runs[0],
+        ai_draft_pack_run=ai_draft_runs[0],
+    )
+    assert context.request["aiDraftPack"]["schemaVersion"] == "AiJavaMyBatisDraftPack.v0.1"
+    assert context.request["aiDraftPackTrace"]["agentRunId"] == ai_draft_runs[0].agent_run_id
 
 
-def test_p41_workflow_uses_review_required_operation_model_when_planner_is_disabled() -> None:
+def test_p42_workflow_fails_without_java_artifacts_when_planner_is_disabled() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(
         repository,
@@ -448,16 +621,24 @@ def test_p41_workflow_uses_review_required_operation_model_when_planner_is_disab
     dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
     runs = repository.list_agent_runs(job.job_id) or []
     operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    ai_draft_run = next(run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE)
 
-    assert job.status == JobStatus.VALIDATION_COMPLETE, (job.error_code, job.error_message)
-    assert len(dto_artifacts) == 1
-    assert dto_artifacts[0].title.endswith("/OperationModelReviewRequired.java")
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    assert not dto_artifacts
+    assert not any(artifact.type == ArtifactType.SERVICE_DRAFT for artifact in artifacts)
+    assert not any(artifact.type == ArtifactType.MAPPER_INTERFACE for artifact in artifacts)
+    assert not any(artifact.type == ArtifactType.MAPPER_XML for artifact in artifacts)
     assert P41_OPERATION_MODEL_REVIEW_REQUIRED in operation_run.structured_output["reviewMarkers"]
     assert "LLM_OPERATION_MODEL_DISABLED" in operation_run.structured_output["reviewMarkers"]
+    assert ai_draft_run.status == AgentRunStatus.FAILED.value
+    assert ai_draft_run.structured_output["reviewMarkers"][0]["code"] == (
+        P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    )
     assert not any(artifact.title.endswith("/PcoGuManagebondPrcDTO.java") for artifact in artifacts)
 
 
-def test_p41_workflow_uses_review_required_operation_model_without_definition() -> None:
+def test_p42_workflow_fails_without_java_artifacts_when_definition_is_missing() -> None:
     repository = MemoryWorkflowRepository()
     service = WorkflowService(
         repository,
@@ -469,17 +650,75 @@ def test_p41_workflow_uses_review_required_operation_model_without_definition() 
 
     artifacts = repository.list_job_artifacts(job.job_id) or []
     dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
+    runs = repository.list_agent_runs(job.job_id) or []
     operation_run = next(
         run
-        for run in repository.list_agent_runs(job.job_id) or []
+        for run in runs
         if run.agent_type == OPERATION_MODEL_AGENT_TYPE
     )
+    ai_draft_run = next(run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE)
 
-    assert job.status == JobStatus.VALIDATION_COMPLETE, (job.error_code, job.error_message)
-    assert len(dto_artifacts) == 1
-    assert dto_artifacts[0].title.endswith("/OperationModelReviewRequired.java")
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    assert not dto_artifacts
+    assert not any(artifact.type == ArtifactType.SERVICE_DRAFT for artifact in artifacts)
+    assert not any(artifact.type == ArtifactType.MAPPER_INTERFACE for artifact in artifacts)
+    assert not any(artifact.type == ArtifactType.MAPPER_XML for artifact in artifacts)
     assert P41_OPERATION_MODEL_REVIEW_REQUIRED in operation_run.structured_output["reviewMarkers"]
     assert "PROCEDURE_DEFINITION_UNAVAILABLE" in operation_run.structured_output["reviewMarkers"]
+    assert ai_draft_run.status == AgentRunStatus.FAILED.value
+    assert ai_draft_run.structured_output["reviewMarkers"][0]["code"] == (
+        P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    )
+
+
+def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() -> None:
+    operation_model = _p41_operation_model_fixture()
+    ai_draft_pack = _p42_ai_draft_pack_fixture()
+    for file in ai_draft_pack["files"]:
+        if file["artifactType"] == "SERVICE_DRAFT":
+            file["content"] = "public class ManageBondService { /* REVIEW_REQUIRED */ }"
+            break
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+            ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+        ),
+    )
+
+    _request_record, job = service.submit_sp_analysis(_manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+        and run.status == AgentRunStatus.FAILED.value
+    )
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
+    assert ai_draft_run.structured_output["reviewMarkers"][0]["code"] == (
+        P42_AI_DRAFT_PACK_FAILED
+    )
+    assert any(
+        finding["ruleId"] == "p42.ai_draft_pack.non_dto.dto_reference"
+        for finding in ai_draft_run.structured_output["qualityGateFindings"]
+    )
+    assert "OperationModelReviewRequired" not in str(artifacts)
 
 
 def test_llm_prompt_uses_retrieved_source_context_without_full_definition() -> None:
@@ -536,8 +775,9 @@ def test_llm_prompt_uses_retrieved_source_context_without_full_definition() -> N
 
 
 def test_confirmed_dependency_procedure_creates_child_agent_run_and_reduces_root() -> None:
-    class MultiSpSpyGateway:
+    class MultiSpSpyGateway(FakeModelGateway):
         def __init__(self) -> None:
+            super().__init__()
             self.prompt_payloads: list[dict] = []
 
         def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:

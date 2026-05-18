@@ -12,6 +12,10 @@ from ai_agent_runtime.ai_draft_pack import (
     parse_ai_java_mybatis_draft_pack_json,
     validate_ai_java_mybatis_draft_pack_output,
 )
+from ai_agent_runtime.ai_draft_pack_planner import (
+    AGENT_TYPE as AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
+)
+from ai_agent_runtime.ai_draft_pack_planner import build_ai_java_mybatis_draft_pack_run
 from ai_agent_runtime.gateway import (
     FakeModelGateway,
     ModelGateway,
@@ -72,6 +76,7 @@ __all__ = [
     "AiJavaMyBatisDraftPackPlannerOutput",
     "AiToolPlanningOutput",
     "AiToolRequest",
+    "AI_DRAFT_PACK_PLANNER_AGENT_TYPE",
     "FakeModelGateway",
     "LLM_INFERENCE_EVIDENCE_TYPE",
     "LlmSemanticAnalysisOutput",
@@ -96,6 +101,7 @@ __all__ = [
     "attach_planner_metrics_to_ai_tool_evidence",
     "build_model_gateway_from_env",
     "build_metadata_analysis_run",
+    "build_ai_java_mybatis_draft_pack_run",
     "build_planner_metrics",
     "build_semantic_analysis_run",
     "build_semantic_analysis_runs",

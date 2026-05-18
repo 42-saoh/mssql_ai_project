@@ -22,21 +22,26 @@ from ai_agent_generation import (
     RenderedBundle,
     build_migration_guide_payload,
     render_artifact,
-    render_java_mybatis_sp_wrapper,
 )
 from ai_agent_generation.models import GENERATOR_VERSION
 from ai_agent_generation.utils import draft_quality_text
 from ai_agent_runtime import (
+    AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
+    AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION,
+    SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
+    SP_OPERATION_PLANNER_PROMPT_VERSION,
     AgentRunPayload,
     ModelGateway,
     ModelGatewayError,
     ModelInvocationRecord,
-    SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
-    SP_OPERATION_PLANNER_PROMPT_VERSION,
     attach_planner_metrics_to_ai_tool_evidence,
+    build_ai_java_mybatis_draft_pack_run,
     build_model_gateway_from_env,
     build_semantic_analysis_run,
     build_sp_operation_model_run,
+    validate_ai_java_mybatis_draft_pack_output,
     validate_sp_operation_model_output,
 )
 from ai_agent_runtime.gateway import model_profile_from_env
@@ -53,6 +58,7 @@ from ai_agent_validation import (
     ValidationReport,
     ValidationSeverity,
     ValidationStatus,
+    validate_ai_java_mybatis_draft_pack_quality,
     validate_artifact,
 )
 
@@ -86,6 +92,8 @@ OPERATION_MODEL_AGENT_TYPE = "LLM_SP_OPERATION_PLANNER"
 SOURCE_DEPENDENCY_MODE_CONFIRMED = "CONFIRMED_PROCEDURES"
 SP_WORKFLOW_RECOVERY_BLOCKED = "SP_WORKFLOW_RECOVERY_BLOCKED"
 P41_OPERATION_MODEL_REVIEW_REQUIRED = "P41_OPERATION_MODEL_REVIEW_REQUIRED"
+P42_AI_DRAFT_PACK_FAILED = "P42_AI_DRAFT_PACK_FAILED"
+P42_AI_DRAFT_PACK_REVIEW_REQUIRED = "P42_AI_DRAFT_PACK_REVIEW_REQUIRED"
 RECOVERABLE_SP_JOB_STATUSES = frozenset(
     {
         JobStatus.SUBMITTED,
@@ -112,6 +120,12 @@ class WorkflowRecoveryBlocked(RuntimeError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+class AiDraftPackWorkflowError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -631,10 +645,24 @@ class WorkflowService:
                     )
                 )
             elif output == RequestedOutputType.JAVA_MYBATIS_DRAFT.value:
+                ai_draft_run, ai_draft_quality = self._run_ai_draft_pack_planning(
+                    job_id,
+                    request_record=request,
+                    context=context,
+                )
+                context = generation_context_from_request(
+                    request,
+                    metadata,
+                    agent_run,
+                    static_analysis=static_analysis,
+                    operation_model_run=operation_model_run,
+                    ai_draft_pack_run=ai_draft_run,
+                )
                 artifacts.extend(
-                    self._store_java_mybatis_bundle(
+                    self._store_ai_draft_pack_artifacts(
                         job_id,
-                        render_java_mybatis_sp_wrapper(context),
+                        ai_draft_run,
+                        quality_report=ai_draft_quality,
                     )
                 )
             else:
@@ -1174,6 +1202,206 @@ class WorkflowService:
                 return run
         return None
 
+    def _run_ai_draft_pack_planning(
+        self,
+        job_id: str,
+        *,
+        request_record: WorkRequestRecord,
+        context: GenerationContext,
+    ) -> tuple[AgentRunRecord, ValidationReport]:
+        target_ref = ai_draft_pack_target_ref(context, request_record)
+        operation_model_markers = {
+            str(marker) for marker in context.operation_model.get("reviewMarkers", [])
+        }
+        if (
+            "PROCEDURE_DEFINITION_UNAVAILABLE" in operation_model_markers
+            and "PCO_GU_MANAGEBOND_PRC" in target_ref.upper()
+        ):
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                reason="AI_DRAFT_PACK_SAFE_CONTEXT_UNAVAILABLE:PROCEDURE_DEFINITION_UNAVAILABLE",
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                "AI Draft Pack planner needs sanitized procedure evidence before drafting.",
+            )
+        if not bool(request_record.options.get("useLlmAnalysis", False)):
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                reason="LLM_AI_DRAFT_PACK_DISABLED",
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                "AI Draft Pack planner is disabled for JAVA_MYBATIS_DRAFT.",
+            )
+        sanitized_context = ai_draft_pack_context(context)
+        expected_inventory = ai_draft_pack_expected_inventory(context)
+        quality_gates = ai_draft_pack_quality_gates(context, expected_inventory)
+        allowed_refs = ai_draft_pack_allowed_evidence_refs(
+            context=sanitized_context,
+            expected_inventory=expected_inventory,
+        )
+        if not allowed_refs:
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                reason="AI_DRAFT_PACK_SAFE_EVIDENCE_UNAVAILABLE",
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                "AI Draft Pack planner has no sanitized evidence refs.",
+            )
+        try:
+            run_payload = build_ai_java_mybatis_draft_pack_run(
+                target_ref=target_ref,
+                sanitized_draft_context=sanitized_context,
+                expected_inventory=expected_inventory,
+                quality_gates=quality_gates,
+                model_gateway=self.model_gateway,
+                profile_id=str(request_record.options.get("llmProfileId") or ""),
+                allowed_evidence_refs=allowed_refs,
+            )
+            quality_report = validate_ai_java_mybatis_draft_pack_quality(
+                run_payload.structured_output,
+            )
+        except AttributeError as exc:
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                reason="AI_DRAFT_PACK_PLANNER_UNAVAILABLE",
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                "AI Draft Pack planner is unavailable.",
+            ) from exc
+        except Exception as exc:  # noqa: BLE001 - failure run must stay sanitized
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_FAILED,
+                reason=f"AI_DRAFT_PACK_PLANNER_FAILED:{exc.__class__.__name__}",
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_FAILED,
+                "AI Draft Pack planner failed before producing valid artifacts.",
+            ) from exc
+        if quality_report.status != ValidationStatus.PASSED:
+            self._save_ai_draft_pack_failure_run(
+                job_id=job_id,
+                request_record=request_record,
+                target_ref=target_ref,
+                code=P42_AI_DRAFT_PACK_FAILED,
+                reason="AI_DRAFT_PACK_QUALITY_GATE_FAILED",
+                quality_report=quality_report,
+            )
+            raise AiDraftPackWorkflowError(
+                P42_AI_DRAFT_PACK_FAILED,
+                "AI Draft Pack quality gate failed.",
+            )
+        record = self.repository.save_agent_run(
+            job_id=job_id,
+            agent_type=run_payload.agent_type,
+            status=run_payload.status.value,
+            target_ref=run_payload.target_ref,
+            summary=run_payload.summary,
+            structured_output=run_payload.structured_output,
+            model_invocation=run_payload.model_invocation.to_storage_dict(),
+            target_key=request_record.target_key,
+        )
+        return record, quality_report
+
+    def _save_ai_draft_pack_failure_run(
+        self,
+        *,
+        job_id: str,
+        request_record: WorkRequestRecord,
+        target_ref: str,
+        code: str,
+        reason: str,
+        quality_report: ValidationReport | None = None,
+    ) -> AgentRunRecord:
+        profile = model_profile_from_env(str(request_record.options.get("llmProfileId") or ""))
+        checks = [
+            {
+                "ruleId": check.rule_id,
+                "severity": check.severity.value,
+                "result": check.result.value,
+                "message": check.message[:500],
+            }
+            for check in (quality_report.failed_checks if quality_report else ())
+        ]
+        structured_output = {
+            "schemaVersion": AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION,
+            "contractTarget": "AiJavaMyBatisDraftPack",
+            "targetRef": target_ref,
+            "sourcePolicy": "sanitized_facts_only",
+            "productionReady": False,
+            "status": "FAILED",
+            "reviewMarkers": [
+                {
+                    "code": code,
+                    "message": reason,
+                    "status": "REVIEW_REQUIRED",
+                    "evidenceRefs": [],
+                }
+            ],
+            "qualityGateFindings": checks,
+            "assumptions": [
+                "AI Draft Pack failure records do not store generated Java/XML content.",
+            ],
+        }
+        failure_input = {
+            "targetRef": target_ref,
+            "reason": reason,
+            "code": code,
+        }
+        invocation = ModelInvocationRecord(
+            provider="workflow",
+            model="deterministic-ai-draft-pack-gate",
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort="none",
+            prompt_version=AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+            output_schema_version=AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
+            input_hash=stable_json_hash(failure_input),
+            prompt_hash=text_hash(f"{AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION}:{reason}"),
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.FAILED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=0,
+            provider_request_id=None,
+            component_invocations=(
+                {
+                    "component": "ai_draft_pack_workflow_gate",
+                    "status": "FAILED",
+                    "errorCode": code,
+                    "reason": reason,
+                },
+            ),
+        )
+        return self.repository.save_agent_run(
+            job_id=job_id,
+            agent_type=AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
+            status=AgentRunStatus.FAILED.value,
+            target_ref=target_ref,
+            summary=f"AI Draft Pack generation stopped: {reason}.",
+            structured_output=structured_output,
+            model_invocation=invocation.to_storage_dict(),
+            target_key=request_record.target_key,
+        )
+
     def _store_rendered_artifact(
         self,
         job_id: str,
@@ -1241,6 +1469,74 @@ class WorkflowService:
             if artifact.type != ArtifactType.DTO_DRAFT:
                 continue
             if artifact.extra.get("bundleFilePath") == file.path:
+                return artifact
+        return None
+
+    def _store_ai_draft_pack_artifacts(
+        self,
+        job_id: str,
+        ai_draft_pack_run: AgentRunRecord,
+        *,
+        quality_report: ValidationReport,
+    ) -> list[ArtifactRecord]:
+        pack = validate_ai_java_mybatis_draft_pack_output(
+            ai_draft_pack_run.structured_output,
+        )
+        artifacts: list[ArtifactRecord] = []
+        for file in pack.files:
+            artifact_type = ArtifactType(file.artifact_type.value)
+            existing = self._find_existing_ai_draft_pack_artifact(
+                job_id,
+                artifact_type=artifact_type,
+                file_path=file.path,
+            )
+            if existing is not None:
+                artifacts.append(existing)
+                continue
+            assumptions = dedupe_strings(
+                (
+                    *pack.assumptions,
+                    *file.review_markers,
+                    WORKFLOW_METADATA_NOTE,
+                )
+            )
+            artifacts.append(
+                self.repository.add_artifact(
+                    job_id=job_id,
+                    artifact_type=artifact_type,
+                    title=file.path,
+                    content=file.content,
+                    evidence_refs=ai_draft_pack_file_evidence_refs(file),
+                    generator_version=GENERATOR_VERSION,
+                    registry_refs=(
+                        AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+                        AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
+                    ),
+                    assumptions=assumptions,
+                    review_required=True,
+                    extra=ai_draft_pack_file_extra(
+                        ai_draft_pack_run,
+                        pack,
+                        file,
+                        quality_report=quality_report,
+                    ),
+                )
+            )
+        return artifacts
+
+    def _find_existing_ai_draft_pack_artifact(
+        self,
+        job_id: str,
+        *,
+        artifact_type: ArtifactType,
+        file_path: str,
+    ) -> ArtifactRecord | None:
+        if artifact_type != ArtifactType.DTO_DRAFT:
+            return self.repository.find_job_artifact_by_type(job_id, artifact_type)
+        for artifact in self.repository.list_job_artifacts(job_id) or []:
+            if artifact.type != ArtifactType.DTO_DRAFT:
+                continue
+            if artifact.extra.get("bundleFilePath") == file_path:
                 return artifact
         return None
 
@@ -1336,6 +1632,7 @@ def generation_context_from_request(
     agent_run: AgentRunRecord | None = None,
     static_analysis: dict[str, object] | None = None,
     operation_model_run: AgentRunRecord | None = None,
+    ai_draft_pack_run: AgentRunRecord | None = None,
 ) -> GenerationContext:
     target = request.target
     schema = str(target["schema"])
@@ -1400,6 +1697,10 @@ def generation_context_from_request(
     if operation_model:
         request_payload["operationModel"] = operation_model
         request_payload["operationModelTrace"] = llm_trace_summary(operation_model_run)
+    ai_draft_pack = ai_draft_pack_for_generation(ai_draft_pack_run)
+    if ai_draft_pack:
+        request_payload["aiDraftPack"] = ai_draft_pack
+        request_payload["aiDraftPackTrace"] = llm_trace_summary(ai_draft_pack_run)
     return GenerationContext.from_mapping(
         {
             "sampleId": request.request_id,
@@ -1424,6 +1725,305 @@ def java_mybatis_output_requested(request: WorkRequestRecord) -> bool:
     return RequestedOutputType.JAVA_MYBATIS_DRAFT.value in set(request.outputs)
 
 
+def ai_draft_pack_target_ref(context: GenerationContext, request: WorkRequestRecord) -> str:
+    operation_model = context.operation_model
+    if operation_model.get("targetRef"):
+        return str(operation_model["targetRef"])
+    target = request.target
+    return f"{target['schema']}.{target['name']}"
+
+
+def ai_draft_pack_context(context: GenerationContext) -> dict[str, Any]:
+    operation_model = context.operation_model
+    statement_evidence = operation_model.get("statementEvidence")
+    dto_blueprints = operation_model.get("dtoBlueprints")
+    operations = operation_model.get("operations")
+    return {
+        "targetRef": operation_model.get("targetRef") or context.sp_name,
+        "entityName": context.entity_name,
+        "spName": context.sp_name,
+        "inputParams": [item.__dict__ for item in context.input_params],
+        "resultShape": list(context.result_shape),
+        "evidenceRefs": [ref.object_ref for ref in context.evidence_refs if ref.object_ref],
+        "allowedEvidenceRefs": [
+            ref.object_ref for ref in context.evidence_refs if ref.object_ref
+        ],
+        "operationModelSummary": {
+            "schemaVersion": operation_model.get("schemaVersion"),
+            "operationCount": len(operations) if isinstance(operations, list) else 0,
+            "statementEvidenceCount": (
+                len(statement_evidence) if isinstance(statement_evidence, list) else 0
+            ),
+            "dtoBlueprintCount": len(dto_blueprints) if isinstance(dto_blueprints, list) else 0,
+            "reviewMarkers": list(operation_model.get("reviewMarkers") or []),
+        },
+        "operations": _safe_prompt_items(operations),
+        "dtoBlueprints": _safe_prompt_items(dto_blueprints),
+        "statementEvidence": _safe_prompt_items(statement_evidence),
+        "llmTrace": context.value("llmTrace", {}),
+        "operationModelTrace": context.value("operationModelTrace", {}),
+        "dependencyEvidenceSummary": _evidence_summary(context.value("dependencyEvidence", {})),
+        "aiToolEvidenceSummary": _evidence_summary(context.value("aiToolEvidence", {})),
+        "platformToolEvidenceSummary": _evidence_summary(
+            context.value("platformToolEvidence", {})
+        ),
+    }
+
+
+def ai_draft_pack_expected_inventory(context: GenerationContext) -> list[dict[str, Any]]:
+    operation_model = context.operation_model
+    dto_blueprints = operation_model.get("dtoBlueprints")
+    if isinstance(dto_blueprints, list):
+        inventory = [
+            _inventory_item_from_dto_blueprint(item)
+            for item in dto_blueprints
+            if isinstance(item, Mapping)
+            and str(item.get("name") or "") != "OperationModelReviewRequired"
+        ]
+        if inventory:
+            entity_name = operation_model_entity_name(operation_model) or context.entity_name
+            operation_ids = _operation_ids_for_inventory(inventory)
+            refs = _evidence_refs_for_inventory(inventory)
+            dto_names = [item["className"] for item in inventory]
+            inventory.extend(
+                [
+                    _non_dto_inventory_item(
+                        artifact_type=ArtifactType.SERVICE_DRAFT.value,
+                        path=f"service/{entity_name}Service.java",
+                        role="SERVICE",
+                        class_name=f"{entity_name}Service",
+                        operation_ids=operation_ids,
+                        references=dto_names,
+                        evidence_refs=refs,
+                    ),
+                    _non_dto_inventory_item(
+                        artifact_type=ArtifactType.MAPPER_INTERFACE.value,
+                        path=f"mapper/{entity_name}Mapper.java",
+                        role="MAPPER_INTERFACE",
+                        class_name=f"{entity_name}Mapper",
+                        operation_ids=operation_ids,
+                        references=dto_names,
+                        evidence_refs=refs,
+                    ),
+                    _non_dto_inventory_item(
+                        artifact_type=ArtifactType.MAPPER_XML.value,
+                        path=f"mapper/{entity_name}MapperSQL.xml",
+                        role="MAPPER_XML",
+                        class_name=f"{entity_name}MapperSQL",
+                        operation_ids=operation_ids,
+                        references=dto_names,
+                        evidence_refs=refs,
+                    ),
+                ]
+            )
+            return inventory
+    refs = [ref.object_ref for ref in context.evidence_refs if ref.object_ref] or [
+        "metadata.ai_draft_pack.review_required"
+    ]
+    return [
+        {
+            "artifactType": "DTO_DRAFT",
+            "path": f"dto/{context.entity_name}SearchCriteria.java",
+            "role": "QUERY_DTO",
+            "className": f"{context.entity_name}SearchCriteria",
+            "operationIds": ["reviewDraft"],
+            "dtoRole": "QUERY",
+            "requiredFields": [param.name for param in context.input_params],
+            "evidenceRefs": refs,
+            "reviewMarkers": ["P42_AI_DRAFT_PACK_REVIEW_REQUIRED"],
+        },
+        {
+            "artifactType": "DTO_DRAFT",
+            "path": f"dto/{context.entity_name}SearchRow.java",
+            "role": "RESULT_DTO",
+            "className": f"{context.entity_name}SearchRow",
+            "operationIds": ["reviewDraft"],
+            "dtoRole": "RESULT",
+            "requiredFields": list(context.result_shape),
+            "evidenceRefs": refs,
+            "reviewMarkers": ["P42_AI_DRAFT_PACK_REVIEW_REQUIRED"],
+        },
+        _non_dto_inventory_item(
+            artifact_type="SERVICE_DRAFT",
+            path=f"service/{context.entity_name}Service.java",
+            role="SERVICE",
+            class_name=f"{context.entity_name}Service",
+            operation_ids=["reviewDraft"],
+            references=[
+                f"{context.entity_name}SearchCriteria",
+                f"{context.entity_name}SearchRow",
+            ],
+            evidence_refs=refs,
+        ),
+        _non_dto_inventory_item(
+            artifact_type="MAPPER_INTERFACE",
+            path=f"mapper/{context.entity_name}Mapper.java",
+            role="MAPPER_INTERFACE",
+            class_name=f"{context.entity_name}Mapper",
+            operation_ids=["reviewDraft"],
+            references=[
+                f"{context.entity_name}SearchCriteria",
+                f"{context.entity_name}SearchRow",
+            ],
+            evidence_refs=refs,
+        ),
+        _non_dto_inventory_item(
+            artifact_type="MAPPER_XML",
+            path=f"mapper/{context.entity_name}MapperSQL.xml",
+            role="MAPPER_XML",
+            class_name=f"{context.entity_name}MapperSQL",
+            operation_ids=["reviewDraft"],
+            references=[
+                f"{context.entity_name}SearchCriteria",
+                f"{context.entity_name}SearchRow",
+            ],
+            evidence_refs=refs,
+        ),
+    ]
+
+
+def ai_draft_pack_quality_gates(
+    context: GenerationContext,
+    expected_inventory: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    dto_classes = [
+        str(item.get("className"))
+        for item in expected_inventory
+        if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
+    ]
+    operation_ids = _operation_ids_for_inventory(expected_inventory)
+    review_markers = sorted(
+        {
+            "CROSS_DB_WRITE_REVIEW_REQUIRED",
+            "CALLED_PROCEDURE_IO_REVIEW_REQUIRED",
+            "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
+            "TRANSACTION_BOUNDARY_REVIEW_REQUIRED",
+            *(
+                str(item)
+                for item in context.operation_model.get("reviewMarkers", [])
+                if "REVIEW_REQUIRED" in str(item)
+                and "P41_OPERATION_MODEL_REVIEW_REQUIRED" not in str(item)
+            ),
+        }
+    )
+    return {
+        "requiredDtoClasses": dto_classes,
+        "requiredServiceMethods": operation_ids,
+        "requiredMapperMethods": operation_ids,
+        "requiredReviewMarkers": review_markers,
+        "blockerPatterns": [
+            "OperationModelReviewRequired",
+            "ManageBondDTO",
+            "P41_OPERATION_MODEL_REVIEW_REQUIRED",
+        ],
+        "blankContentIsBlocker": True,
+        "dtoCollapseIsBlocker": True,
+        "fallbackSkeletonPersistenceAllowedOnFailure": False,
+    }
+
+
+def ai_draft_pack_allowed_evidence_refs(
+    *,
+    context: Mapping[str, Any],
+    expected_inventory: Sequence[Mapping[str, Any]],
+) -> tuple[str, ...]:
+    refs: list[str] = []
+    refs.extend(str(ref) for ref in context.get("allowedEvidenceRefs", []) if str(ref).strip())
+    refs.extend(str(ref) for ref in context.get("evidenceRefs", []) if str(ref).strip())
+    for item in expected_inventory:
+        refs.extend(str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip())
+    return tuple(dict.fromkeys(refs))
+
+
+def _safe_prompt_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _evidence_summary(value: Any) -> dict[str, Any]:
+    payload = dict(value) if isinstance(value, Mapping) else {}
+    refs = payload.get("evidenceRefs")
+    markers = payload.get("reviewMarkers")
+    return {
+        "evidenceRefs": list(refs) if isinstance(refs, list) else [],
+        "reviewMarkers": list(markers) if isinstance(markers, list) else [],
+        "summary": payload.get("summary") if isinstance(payload.get("summary"), Mapping) else {},
+    }
+
+
+def _inventory_item_from_dto_blueprint(item: Mapping[str, Any]) -> dict[str, Any]:
+    dto_name = str(item.get("name") or "ReviewRequiredDto")
+    role = str(item.get("role") or "REVIEW_REQUIRED").upper()
+    role_map = {
+        "QUERY": "QUERY_DTO",
+        "RESULT": "RESULT_DTO",
+        "COMMAND": "COMMAND_DTO",
+        "BATCH_ITEM": "BATCH_ITEM_DTO",
+        "CALL_REQUEST": "CALL_REQUEST_DTO",
+        "REVIEW_REQUIRED": "REVIEW_REQUIRED",
+    }
+    fields = item.get("fields") if isinstance(item.get("fields"), list) else []
+    required_fields = [
+        str(field.get("name"))
+        for field in fields
+        if isinstance(field, Mapping) and str(field.get("name") or "")
+    ]
+    evidence_refs = [
+        str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip()
+    ] or ["metadata.ai_draft_pack.review_required"]
+    return {
+        "artifactType": ArtifactType.DTO_DRAFT.value,
+        "path": f"dto/{dto_name}.java",
+        "role": role_map.get(role, "COMMAND_DTO"),
+        "className": dto_name,
+        "operationIds": [str(ref) for ref in item.get("operationIds", []) if str(ref).strip()]
+        or ["reviewDraft"],
+        "dtoRole": role,
+        "requiredFields": required_fields,
+        "evidenceRefs": evidence_refs,
+        "reviewMarkers": [
+            str(marker) for marker in item.get("reviewMarkers", []) if str(marker).strip()
+        ],
+    }
+
+
+def _operation_ids_for_inventory(inventory: Sequence[Mapping[str, Any]]) -> list[str]:
+    ids: list[str] = []
+    for item in inventory:
+        ids.extend(str(ref) for ref in item.get("operationIds", []) if str(ref).strip())
+    return list(dict.fromkeys(ids)) or ["reviewDraft"]
+
+
+def _evidence_refs_for_inventory(inventory: Sequence[Mapping[str, Any]]) -> list[str]:
+    refs: list[str] = []
+    for item in inventory:
+        refs.extend(str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip())
+    return list(dict.fromkeys(refs)) or ["metadata.ai_draft_pack.review_required"]
+
+
+def _non_dto_inventory_item(
+    *,
+    artifact_type: str,
+    path: str,
+    role: str,
+    class_name: str,
+    operation_ids: Sequence[str],
+    references: Sequence[str],
+    evidence_refs: Sequence[str],
+) -> dict[str, Any]:
+    return {
+        "artifactType": artifact_type,
+        "path": path,
+        "role": role,
+        "className": class_name,
+        "operationIds": list(operation_ids),
+        "references": list(references),
+        "evidenceRefs": list(evidence_refs),
+        "reviewMarkers": ["REVIEW_REQUIRED_DRAFT_ONLY"],
+    }
+
+
 def operation_model_for_generation(
     operation_model_run: AgentRunRecord | None,
 ) -> dict[str, Any] | None:
@@ -1435,8 +2035,22 @@ def operation_model_for_generation(
     return validate_sp_operation_model_output(payload).to_storage_dict()
 
 
+def ai_draft_pack_for_generation(
+    ai_draft_pack_run: AgentRunRecord | None,
+) -> dict[str, Any] | None:
+    if ai_draft_pack_run is None:
+        return None
+    payload = ai_draft_pack_run.structured_output
+    if not isinstance(payload, Mapping):
+        return None
+    return validate_ai_java_mybatis_draft_pack_output(payload).to_storage_dict()
+
+
 def operation_model_entity_name(operation_model: Mapping[str, Any] | None) -> str | None:
     if not operation_model:
+        return None
+    markers = {str(marker) for marker in operation_model.get("reviewMarkers", [])}
+    if P41_OPERATION_MODEL_REVIEW_REQUIRED in markers:
         return None
     dto_blueprints = operation_model.get("dtoBlueprints")
     if not isinstance(dto_blueprints, list):
@@ -1449,6 +2063,8 @@ def operation_model_entity_name(operation_model: Mapping[str, Any] | None) -> st
     ] or [item for item in dto_blueprints if isinstance(item, Mapping)]
     for dto in candidates:
         dto_name = str(dto.get("name") or "")
+        if dto_name == "OperationModelReviewRequired":
+            continue
         stem = operation_model_entity_stem(dto_name)
         if stem:
             return stem
@@ -1646,6 +2262,68 @@ def _append_operation_model_evidence_component(
         ),
     )
     return dataclass_replace(run_payload, model_invocation=invocation)
+
+
+def ai_draft_pack_file_extra(
+    ai_draft_pack_run: AgentRunRecord,
+    pack: Any,
+    file: Any,
+    *,
+    quality_report: ValidationReport,
+) -> dict[str, Any]:
+    scores = dict(quality_report.metadata.get("scores") or {})
+    quality_score = file.quality_score
+    if quality_score is None:
+        quality_score = min(
+            float(scores.get("requiredDtoFileCoverage", 1.0)),
+            float(scores.get("requiredServiceMethodCoverage", 1.0)),
+            float(scores.get("requiredMapperMethodCoverage", 1.0)),
+            float(scores.get("requiredReviewMarkerCoverage", 1.0)),
+        )
+    return {
+        "requestedOutputType": RequestedOutputType.JAVA_MYBATIS_DRAFT.value,
+        "source": "ai_java_mybatis_draft_pack",
+        "bundleFilePath": file.path,
+        "bundleRole": file.artifact_type.value,
+        "aiDraftPackSchema": pack.schema_version,
+        "aiDraftPackTargetRef": pack.target_ref,
+        "aiDraftPackAgentRunId": ai_draft_pack_run.agent_run_id,
+        "aiFileRole": file.role.value,
+        "operationIds": list(file.operation_ids),
+        "dtoRole": file.dto_role,
+        "qualityScore": quality_score,
+        "aiEvidenceRefs": list(file.evidence_refs),
+        "reviewMarkers": list(file.review_markers),
+    }
+
+
+def ai_draft_pack_file_evidence_refs(file: Any) -> list[dict[str, Any]]:
+    object_ref = ai_draft_pack_visible_object_ref(file)
+    return [
+        {
+            "type": "GENERATION_EVIDENCE",
+            "objectRef": object_ref,
+            "locator": f"ai-draft-pack#{file.path}",
+        }
+    ]
+
+
+def ai_draft_pack_visible_object_ref(file: Any) -> str:
+    content = str(file.content)
+    class_name = str(file.class_name)
+    if class_name and class_name in content:
+        return class_name
+    for reference in file.references:
+        ref = str(reference)
+        if ref and ref in content:
+            return ref
+    for operation_id in file.operation_ids:
+        operation = str(operation_id)
+        if operation and operation in content:
+            return operation
+    if "REVIEW_REQUIRED" in content:
+        return "REVIEW_REQUIRED"
+    return java_bundle_file_evidence_object_ref(file)
 
 
 def java_bundle_file_extra(bundle: RenderedBundle, file: Any) -> dict[str, Any]:

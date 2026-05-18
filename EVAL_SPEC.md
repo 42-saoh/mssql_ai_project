@@ -104,6 +104,17 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
 - P42C deterministic validation is static only: it checks Java/XML text, DTO/method references,
   Mapper XML shape, forbidden payload markers, and required `REVIEW_REQUIRED` markers without
   executing Java, SQL, Mapper XML, stored procedures, or database access.
+- P42D wires `JAVA_MYBATIS_DRAFT` to the AI Draft Pack path before Java/MyBatis artifact
+  persistence. A successful pack must pass the P42B schema and P42C quality gate, then persist one
+  `DTO_DRAFT` row per DTO file path and exactly one `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+  `MAPPER_XML` row.
+- P42D artifact `extra` metadata must include `aiDraftPackSchema`, `aiDraftPackTargetRef`,
+  `aiDraftPackAgentRunId`, `aiFileRole`, `operationIds`, `dtoRole` for DTOs, `qualityScore`,
+  `bundleFilePath`, `aiEvidenceRefs`, and `reviewMarkers`.
+- P42D failure behavior is explicit: gateway/schema/quality failures record
+  `P42_AI_DRAFT_PACK_FAILED`, while disabled or unavailable safe planning context records
+  `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`. Neither case may persist Java/MyBatis fallback skeleton
+  artifacts.
 - `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, missing DTO references,
   source apply/deploy claims, and raw SP/guide storage are blockers.
 - Cross-DB write, called procedure I/O, uncertain TVF/procedure kind, result-shape variants, and
@@ -116,6 +127,8 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
 
 Passing criteria:
 - `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"` passes.
+- P42D workflow gate includes
+  `make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"`.
 - Later P42F gate also includes P41 and P36 regression.
 
 ## P35 Source Context Eval Gate
