@@ -62,6 +62,21 @@ execution, live OpenAI requirements, or live PPM requirements. The final gate is
 P42 targeted tests plus P41 targeted tests, P36 generation regression, targeted
 Ruff for changed Python files when applicable, and `git diff --check`.
 
+## P42G Status
+
+P42G addresses the remaining P42E risk with an optional live confidence replay.
+The new gate is disabled by default through `P42_LIVE_REPLAY_GATE=0`. When
+operators explicitly provide live read-only `ppm` metadata settings and remote
+OpenAI-compatible LLM settings, it submits `PCO_GU_ManageBond_PRC` through an
+in-memory workflow replay, verifies the required multi-DTO artifact inventory,
+reconstructs persisted artifacts into `AiJavaMyBatisDraftPack.v0.1`, and reruns
+the P42C static quality validator.
+
+P42G does not change P42A-F fixture-first acceptance. It does not use platform DB
+persistence, execute stored procedures, query row data, apply generated source,
+or claim production readiness. Missing live prerequisites are blocker failures
+when the gate is enabled and skipped/default when it is disabled.
+
 ## Goal
 
 Create the P42 foundation for `PPM.dbo.PCO_GU_ManageBond_PRC` so the next slices
@@ -121,6 +136,8 @@ Mapper XML directly from sanitized analysis evidence.
   multi-DTO AI Draft Pack artifacts and satisfy the fixture quality contract.
 - P42F docs sync and final quality-gate report describing changed files,
   verification, and residual risks.
+- P42G opt-in live confidence probe and eval test for live OpenAI + live PPM
+  replay without platform DB persistence or source apply.
 
 ## Recommended Skills
 
@@ -136,6 +153,8 @@ Mapper XML directly from sanitized analysis evidence.
 - `make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/validation/test_ai_draft_pack_validator.py"`
 - `make test PYTEST_ARGS="tests/integration/api/test_api_workflow_routes.py tests/unit/api/test_workflow_service.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py"`
 - `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/validation/test_ai_draft_pack_validator.py tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py"`
+- `make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`
+- Optional live confidence: `P42_LIVE_REPLAY_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`
 - `git diff --check`
 
 ## Done Definition
@@ -160,5 +179,7 @@ Mapper XML directly from sanitized analysis evidence.
 
 - P-GPT/Responses structured output drift remains a P42B risk; the contract
   therefore recommends inventory, file content, validation, and repair stages.
+- Live OpenAI/live PPM confidence is opt-in only. A P42G pass is confidence
+  evidence, not production readiness or automatic conversion approval.
 - Cross-database writes, uncertain TVF/procedure kind, called procedure I/O, and
   transaction boundary uncertainty remain `REVIEW_REQUIRED`.

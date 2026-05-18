@@ -889,6 +889,7 @@ def test_env_sample_contains_worktree_port_defaults_without_secrets() -> None:
     assert "MSSQL_METADATA_TDS_VERSION=7.4" in text
     assert "P21_LIVE_PORTAL_GATE=0" in text
     assert "P27_HARD_LIVE_GATE=0" in text
+    assert "P42_LIVE_REPLAY_GATE=0" in text
     assert "MCP_TOOL_RESULT_CACHE_ENABLED=1" in text
     assert "MCP_TOOL_RESULT_CACHE_TTL_SECONDS=300" in text
     assert "MCP_TOOL_RESULT_CACHE_MAX_ENTRIES=1024" in text

@@ -35,6 +35,9 @@ def test_pytest_suite_aliases_expand_to_existing_test_files() -> None:
     assert "tests/eval/test_p35_knowledge_live_confidence_gate.py" in suites[
         "live-confidence"
     ]
+    assert "tests/eval/test_p42_live_ai_draft_pack_replay_gate.py" in suites[
+        "live-confidence"
+    ]
 
     web_targets = runner.expand_targets(["@web"])
     core_targets = runner.expand_targets(["@core"])
@@ -65,6 +68,7 @@ def test_makefile_exposes_safe_consolidated_test_gates() -> None:
         "P21_LIVE_PORTAL_GATE=0",
         "P27_HARD_LIVE_GATE=0",
         "P35_KNOWLEDGE_LIVE_GATE=0",
+        "P42_LIVE_REPLAY_GATE=0",
         "AUTH_RBAC_LIVE_GATE=0",
         "LLM_ENABLE_REMOTE=0",
         "MSSQL_ENABLE_LIVE_METADATA=0",

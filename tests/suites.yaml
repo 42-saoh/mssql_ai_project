@@ -18,3 +18,4 @@ suites:
     - tests/eval/test_p27_dependency_evidence_hard_live_gate.py
     - tests/eval/test_p32_live_confidence_planner_effectiveness.py
     - tests/eval/test_p35_knowledge_live_confidence_gate.py
+    - tests/eval/test_p42_live_ai_draft_pack_replay_gate.py

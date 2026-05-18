@@ -124,6 +124,15 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
 - P42F is the docs and quality-gate closure: docs must describe the implemented P42 path without
   claiming production readiness, and the final gate must run P42 targeted tests, P41 targeted
   tests, P36 generation regression, and `git diff --check`.
+- P42G is an optional live confidence replay for the residual P42E risk. It is disabled by default
+  with `P42_LIVE_REPLAY_GATE=0`; when enabled it uses live read-only `ppm` metadata and the
+  existing OpenAI-compatible Responses/httpx gateway with an in-memory workflow repository.
+- P42G must fail before live access when required env is missing, must not run the stored procedure
+  or query row data, must not write generated source or platform DB rows, and must scan persisted
+  in-memory artifacts/agent traces for raw SP, raw prompt, raw provider response, row-data, and
+  secret leakage.
+- P42G passing means confidence evidence only. It does not make P42 production-ready and does not
+  approve automatic conversion, publish, deploy, DDL/DML apply, or generated-source apply.
 - `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, missing DTO references,
   source apply/deploy claims, and raw SP/guide storage are blockers.
 - Cross-DB write, called procedure I/O, uncertain TVF/procedure kind, result-shape variants, and
@@ -142,6 +151,10 @@ Passing criteria:
   `make test PYTEST_ARGS="tests/integration/api/test_api_workflow_routes.py tests/unit/api/test_workflow_service.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py"`.
 - P42F final gate includes
   `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/validation/test_ai_draft_pack_validator.py tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py"`.
+- P42G disabled/default gate includes
+  `make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
+- Optional live P42G gate includes
+  `P42_LIVE_REPLAY_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
 
 ## P35 Source Context Eval Gate
 

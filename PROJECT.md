@@ -104,6 +104,14 @@ transaction boundaries remain `REVIEW_REQUIRED`. P42 remains
 change, row-data access, procedure execution, automatic DDL/DML apply, or
 generated-source deployment.
 
+P42G adds an optional live confidence replay for the remaining P42E risk. It is
+disabled by default with `P42_LIVE_REPLAY_GATE=0`; when explicitly enabled with
+live PPM read-only metadata and the remote OpenAI-compatible gateway, it replays
+`PCO_GU_ManageBond_PRC` through an in-memory workflow repository and reruns the
+same P42 static AI Draft Pack quality gate. Passing P42G is confidence evidence
+only, not production readiness or automatic conversion approval, and the default
+fixture-first P42 acceptance remains unchanged.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

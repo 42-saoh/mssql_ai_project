@@ -58,6 +58,10 @@
 - P42 acceptance is based on a new sanitized workflow replay, not on historical failed jobs such as
   `job_6864d2734e`. The replay must keep generated files draft-only and must not write them into
   application source trees.
+- P42G live replay is opt-in confidence evidence only. It may use transient SP definition/source
+  context through the existing read-only metadata and LLM gates, but persisted probe output must
+  stay sanitized and must not store raw SP definitions, raw prompts, raw provider responses, row
+  data, secrets, or generated-source writes.
 - User-provided guide files may be used as quality references, but raw guide bodies, raw SP
   definitions, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets
   must not be persisted in repo fixtures or platform storage.

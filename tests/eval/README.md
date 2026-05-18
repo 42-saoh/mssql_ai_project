@@ -22,5 +22,10 @@ Service/Mapper/XML file expectations, fallback skeleton blockers, DTO-collapse b
 `REVIEW_REQUIRED` uncertainty markers, storage safety, and that persisted artifacts can be
 reconstructed into a valid `AiJavaMyBatisDraftPack.v0.1` payload.
 
+P42G adds `test_p42_live_ai_draft_pack_replay_gate.py` as an optional live confidence gate.
+It is disabled by default, fails before live access when required env is missing, and only
+replays `PCO_GU_ManageBond_PRC` with live read-only PPM metadata and the remote
+OpenAI-compatible gateway when `P42_LIVE_REPLAY_GATE=1`.
+
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.

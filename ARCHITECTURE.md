@@ -157,6 +157,16 @@ workflow job, fetch persisted artifacts through the API, reconstruct an
 validator. The historical `job_6864d2734e` remains audit context only, not an
 acceptance result.
 
+P42G adds an opt-in live confidence gate on the same architecture without
+changing public APIs or persistence contracts. `apps/api/scripts/p42_live_ai_draft_pack_probe.py`
+uses an in-memory workflow repository, the existing `McpMetadataGateway`, and
+the existing Responses/httpx model gateway to replay `PCO_GU_ManageBond_PRC`
+only when `P42_LIVE_REPLAY_GATE=1` and the live OpenAI/PPM metadata gates are
+explicitly enabled. It stores no platform DB rows, writes no source files, and
+returns only counts, DTO class names, sanitized agent-run summaries, and redaction
+status. Persisted in-memory artifacts are reconstructed into
+`AiJavaMyBatisDraftPack.v0.1` and checked with the same P42C validator.
+
 P42 blocks `OperationModelReviewRequired*`, single `ManageBondDTO` collapse,
 empty content, raw SP or raw guide storage, row-data wording, and source
 apply/deploy claims. P42 adds no UI, OpenAPI, DB schema, public MCP route,

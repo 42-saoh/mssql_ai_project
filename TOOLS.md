@@ -65,6 +65,23 @@ calls, public API expansion, DB schema changes, or a new public MCP invoke tool.
 uses `FakeModelGateway` and `tests/helpers/p42_manage_bond.py`, and acceptance requires non-empty
 multi-DTO artifacts plus preserved `REVIEW_REQUIRED` uncertainty markers.
 
+P42G is an optional live confidence replay for the residual P42E risk. It is not part of the
+default fixture gate and must be enabled explicitly:
+
+```powershell
+$env:P42_LIVE_REPLAY_GATE="1"
+$env:LLM_LIVE_GATE="1"
+$env:LLM_ENABLE_REMOTE="1"
+$env:LLM_ALLOW_SP_TEXT="1"
+$env:MSSQL_ENABLE_LIVE_METADATA="1"
+$env:MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS="20"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
+```
+
+The probe uses an in-memory repository, live read-only `ppm` metadata, and the existing
+OpenAI-compatible Responses/httpx gateway. It does not execute the stored procedure, query row
+data, write platform DB rows, apply generated source, or claim production readiness.
+
 ## 목적
 
 이 문서는 로컬 개발에서 사용할 도구, 명령 규약, MCP 구성을 정의한다.  
