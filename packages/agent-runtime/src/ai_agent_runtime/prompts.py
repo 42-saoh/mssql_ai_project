@@ -106,7 +106,12 @@ SERVICE_DRAFT, MAPPER_INTERFACE, and MAPPER_XML as single files. Never create pr
 single DTO collapse or OperationModelReviewRequired fallback skeletons. Every file must contain
 non-empty draft content,
 operationIds, evidenceRefs copied exactly from evidenceRefContract.allowedFactIds, and reviewMarkers
-when facts are weak. Preserve REVIEW_REQUIRED markers for weak business naming, cross-database
+when facts are weak. Use draftPackEvidenceBundle as the authoritative generic coverage plan:
+operationCoverageMatrix drives method coverage, dtoResponsibilityMatrix drives DTO separation,
+reviewMarkerContract drives required caveats, and mapperCoverageContract drives Service/Mapper/XML
+wiring. Do not satisfy quality by copying benchmark-specific class names; use roles, operation ids,
+statement refs, and deterministic responsibilities. Preserve REVIEW_REQUIRED markers for weak
+business naming, cross-database
 writes, called procedure I/O, TVF/procedure uncertainty, result-shape variants, and transaction
 boundary uncertainty. The non-DTO files are aggregate files: use the expectedInventory path and
 className exactly for the single Service, Mapper interface, and Mapper XML, and put every required
@@ -114,6 +119,8 @@ method from qualityGates into those aggregate files. Never create use-case-speci
 Mapper files. Never include raw SP definitions, raw guide body, raw prompts, raw provider
 responses, row data, procedure execution, DDL/DML apply, source apply, deployment, or secrets.
 {KOREAN_OUTPUT_INSTRUCTION}"""
+
+DRAFT_PACK_EVIDENCE_BUNDLE_VERSION = "DraftPackEvidenceBundle.v0.1"
 
 
 def render_semantic_analysis_prompt(
@@ -654,9 +661,16 @@ def render_ai_java_mybatis_draft_pack_prompt(
         for item in inventory
         if item.get("artifactType") in {"SERVICE_DRAFT", "MAPPER_INTERFACE", "MAPPER_XML"}
     ]
+    evidence_bundle = build_draft_pack_evidence_bundle(
+        sanitized_draft_context=context,
+        expected_inventory=inventory,
+        quality_gates=gates,
+        allowed_evidence_refs=allowed_refs,
+    )
     input_payload = {
         "targetRef": target_ref,
         "stage": stage,
+        "stageTask": _ai_draft_pack_stage_task(stage),
         "stagedOutputFlow": [
             "file_inventory",
             "file_content",
@@ -664,6 +678,11 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "repair",
         ],
         "sanitizedDraftContext": context,
+        "draftPackEvidenceBundle": evidence_bundle,
+        "operationCoverageMatrix": evidence_bundle["operationCoverageMatrix"],
+        "dtoResponsibilityMatrix": evidence_bundle["dtoResponsibilityMatrix"],
+        "reviewMarkerContract": evidence_bundle["reviewMarkerContract"],
+        "mapperCoverageContract": evidence_bundle["mapperCoverageContract"],
         "expectedInventory": inventory,
         "qualityGates": gates,
         "outputContract": {
@@ -722,6 +741,8 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "blockedMarkers": ["P41_OPERATION_MODEL_REVIEW_REQUIRED"],
             "exactExpectedFileCount": len(inventory),
             "exactExpectedInventoryRequired": True,
+            "genericCoverageFirst": True,
+            "benchmarkNamesAreNotAnswerKeys": True,
             "nonDtoAggregatePolicy": {
                 "exactFiles": non_dto_inventory,
                 "rule": (
@@ -791,8 +812,265 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "allowedEvidenceRefs": allowed_refs,
             "expectedFileCount": len(inventory),
             "qualityGateCount": len(gates),
+            "evidenceBundleVersion": DRAFT_PACK_EVIDENCE_BUNDLE_VERSION,
         },
     )
+
+
+def build_draft_pack_evidence_bundle(
+    *,
+    sanitized_draft_context: Mapping[str, Any],
+    expected_inventory: Sequence[Mapping[str, Any]],
+    quality_gates: Mapping[str, Any],
+    allowed_evidence_refs: Sequence[str],
+) -> dict[str, Any]:
+    operations = _sequence_of_mappings(sanitized_draft_context.get("operations"))
+    statement_evidence = _sequence_of_mappings(sanitized_draft_context.get("statementEvidence"))
+    dependency_summary = _safe_summary_mapping(
+        sanitized_draft_context.get("dependencyEvidenceSummary")
+    )
+    platform_summary = _safe_summary_mapping(
+        sanitized_draft_context.get("platformToolEvidenceSummary")
+    )
+    ai_tool_summary = _safe_summary_mapping(
+        sanitized_draft_context.get("aiToolEvidenceSummary")
+    )
+    return {
+        "version": DRAFT_PACK_EVIDENCE_BUNDLE_VERSION,
+        "evidenceRefCount": len(tuple(dict.fromkeys(map(str, allowed_evidence_refs)))),
+        "operationCoverageMatrix": _operation_coverage_matrix(
+            operations=operations,
+            statement_evidence=statement_evidence,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+        ),
+        "dtoResponsibilityMatrix": _dto_responsibility_matrix(expected_inventory),
+        "reviewMarkerContract": _review_marker_contract(
+            quality_gates=quality_gates,
+            sanitized_draft_context=sanitized_draft_context,
+            statement_evidence=statement_evidence,
+        ),
+        "mapperCoverageContract": _mapper_coverage_contract(
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+        ),
+        "supportingEvidenceSummaries": {
+            "dependencyEvidenceSummary": dependency_summary,
+            "platformToolEvidenceSummary": platform_summary,
+            "aiToolEvidenceSummary": ai_tool_summary,
+        },
+        "qualityPrinciple": (
+            "Improve generic operation, DTO, mapper, and REVIEW_REQUIRED coverage. "
+            "Named benchmark procedures may appear in evidence, but their DTO names are "
+            "comparison signals only and must not be treated as runtime answer keys."
+        ),
+    }
+
+
+def _ai_draft_pack_stage_task(stage: str) -> str:
+    if stage == "file_inventory":
+        return (
+            "Verify the expected inventory against generic operation, DTO responsibility, "
+            "review marker, and mapper coverage contracts before drafting content."
+        )
+    if stage == "file_content":
+        return (
+            "Draft every expected file using the bundle matrices. Preserve exact paths, "
+            "class names, operation ids, evidence refs, and required REVIEW_REQUIRED markers."
+        )
+    if stage == "repair":
+        return (
+            "Repair only schema, inventory, DTO separation, method wiring, evidence ref, "
+            "and REVIEW_REQUIRED coverage failures described by sanitized diagnostics."
+        )
+    return (
+        "Produce draft-only Java/MyBatis structured output from sanitized deterministic "
+        "evidence."
+    )
+
+
+def _operation_coverage_matrix(
+    *,
+    operations: Sequence[Mapping[str, Any]],
+    statement_evidence: Sequence[Mapping[str, Any]],
+    expected_inventory: Sequence[Mapping[str, Any]],
+    quality_gates: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    statements_by_operation = _statements_by_operation(statement_evidence)
+    inventory_by_operation = _inventory_by_operation(expected_inventory)
+    required_service = set(_strings(quality_gates.get("requiredServiceMethods")))
+    required_mapper = set(_strings(quality_gates.get("requiredMapperMethods")))
+    operation_ids = _deduped(
+        [
+            *_ids_from_mapping_items(operations, "operationId"),
+            *inventory_by_operation.keys(),
+            *required_service,
+            *required_mapper,
+        ]
+    )
+    return [
+        {
+            "operationId": operation_id,
+            "statementRefs": statements_by_operation.get(operation_id, []),
+            "expectedFilePaths": inventory_by_operation.get(operation_id, []),
+            "requiresServiceMethod": operation_id in required_service,
+            "requiresMapperMethod": operation_id in required_mapper,
+            "coverageRule": (
+                "This operation id must be represented in relevant DTO files and in the "
+                "aggregate Service, Mapper interface, and Mapper XML when method flags are true."
+            ),
+        }
+        for operation_id in operation_ids
+        if operation_id
+    ]
+
+
+def _dto_responsibility_matrix(
+    expected_inventory: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    result = []
+    for item in expected_inventory:
+        if str(item.get("artifactType") or "") != "DTO_DRAFT":
+            continue
+        result.append(
+            {
+                "path": str(item.get("path") or ""),
+                "className": str(item.get("className") or ""),
+                "role": str(item.get("role") or ""),
+                "dtoRole": str(item.get("dtoRole") or item.get("role") or ""),
+                "operationIds": _strings(item.get("operationIds")),
+                "requiredFields": _strings(item.get("requiredFields")),
+                "reviewMarkers": _strings(item.get("reviewMarkers")),
+                "separationRule": (
+                    "Keep this DTO responsibility separate unless another expected inventory "
+                    "item explicitly shares the same path and className."
+                ),
+            }
+        )
+    return result
+
+
+def _review_marker_contract(
+    *,
+    quality_gates: Mapping[str, Any],
+    sanitized_draft_context: Mapping[str, Any],
+    statement_evidence: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    statement_markers: list[str] = []
+    for statement in statement_evidence:
+        statement_markers.extend(_strings(statement.get("reviewMarkers")))
+    markers = _deduped(
+        [
+            *_strings(quality_gates.get("requiredReviewMarkers")),
+            *_strings(sanitized_draft_context.get("reviewRequiredFacts")),
+            *_strings(
+                _mapping(sanitized_draft_context.get("operationModelSummary")).get(
+                    "reviewMarkers"
+                )
+            ),
+            *statement_markers,
+        ]
+    )
+    return {
+        "requiredMarkers": markers,
+        "rule": (
+            "Every marker must appear at the root or relevant file reviewMarkers and weak facts "
+            "must remain REVIEW_REQUIRED instead of being converted to confident implementation "
+            "claims."
+        ),
+    }
+
+
+def _mapper_coverage_contract(
+    *,
+    expected_inventory: Sequence[Mapping[str, Any]],
+    quality_gates: Mapping[str, Any],
+) -> dict[str, Any]:
+    non_dto = [
+        {
+            "artifactType": str(item.get("artifactType") or ""),
+            "path": str(item.get("path") or ""),
+            "className": str(item.get("className") or ""),
+            "references": _strings(item.get("references")),
+            "operationIds": _strings(item.get("operationIds")),
+        }
+        for item in expected_inventory
+        if str(item.get("artifactType") or "")
+        in {"SERVICE_DRAFT", "MAPPER_INTERFACE", "MAPPER_XML"}
+    ]
+    return {
+        "aggregateFiles": non_dto,
+        "requiredServiceMethods": _strings(quality_gates.get("requiredServiceMethods")),
+        "requiredMapperMethods": _strings(quality_gates.get("requiredMapperMethods")),
+        "rule": (
+            "Use one aggregate Service, one aggregate Mapper interface, and one aggregate "
+            "Mapper XML. Each required mapper method must appear as a Java mapper method "
+            "and XML statement id."
+        ),
+    }
+
+
+def _statements_by_operation(
+    statement_evidence: Sequence[Mapping[str, Any]],
+) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for statement in statement_evidence:
+        operation = str(statement.get("operation") or statement.get("operationId") or "")
+        statement_id = str(statement.get("statementId") or "")
+        if operation and statement_id:
+            result.setdefault(operation, []).append(statement_id)
+    return {key: _deduped(value) for key, value in result.items()}
+
+
+def _inventory_by_operation(
+    expected_inventory: Sequence[Mapping[str, Any]],
+) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for item in expected_inventory:
+        path = str(item.get("path") or "")
+        for operation_id in _strings(item.get("operationIds")):
+            if path:
+                result.setdefault(operation_id, []).append(path)
+    return {key: _deduped(value) for key, value in result.items()}
+
+
+def _safe_summary_mapping(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        str(key): item
+        for key, item in value.items()
+        if isinstance(item, str | int | float | bool)
+        or (
+            isinstance(item, Sequence)
+            and not isinstance(item, str | bytes)
+            and all(isinstance(seq_item, str | int | float | bool) for seq_item in item)
+        )
+    }
+
+
+def _sequence_of_mappings(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
+
+def _ids_from_mapping_items(items: Sequence[Mapping[str, Any]], key: str) -> list[str]:
+    return _deduped(str(item.get(key) or "") for item in items)
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _strings(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return _deduped(str(item) for item in value if item is not None and str(item).strip())
+
+
+def _deduped(values: Sequence[str] | Any) -> list[str]:
+    return list(dict.fromkeys(str(value) for value in values if str(value).strip()))
 
 
 def _metadata_without_raw_definition(metadata: dict[str, Any]) -> dict[str, Any]:

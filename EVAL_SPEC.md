@@ -128,8 +128,10 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
   claiming production readiness, and the final gate must run P42 targeted tests, P41 targeted
   tests, P36 generation regression, and `git diff --check`.
 - P42G is an optional live confidence replay for the residual P42E risk. It is disabled by default
-  with `P42_LIVE_REPLAY_GATE=0`; when enabled it uses live read-only `ppm` metadata and the
-  existing OpenAI-compatible Responses/httpx gateway with an in-memory workflow repository.
+  with `P42_LIVE_REPLAY_GATE=0`. `P42_LIVE_REPLAY_MODE=sanitized_fixture` uses sanitized fixture
+  facts and the existing OpenAI-compatible gateway without live PPM metadata or raw SP external
+  export; `P42_LIVE_REPLAY_MODE=live_ppm` uses live read-only `ppm` metadata and remains gated by
+  raw-SP-to-remote-model approval.
 - P42G must fail before live access when required env is missing, must not run the stored procedure
   or query row data, must not write generated source or platform DB rows, and must scan persisted
   in-memory artifacts/agent traces for raw SP, raw prompt, raw provider response, row-data, and
@@ -166,7 +168,9 @@ Passing criteria:
 - P42G disabled/default gate includes
   `make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
 - Optional live P42G gate includes
-  `P42_LIVE_REPLAY_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
+  `P42_LIVE_REPLAY_GATE=1 P42_LIVE_REPLAY_MODE=sanitized_fixture LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
+- Optional live P42G `live_ppm` confidence evidence includes
+  `P42_LIVE_REPLAY_GATE=1 P42_LIVE_REPLAY_MODE=live_ppm LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=1 MSSQL_ENABLE_LIVE_METADATA=1 MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"`.
 
 ## P43 Framework Adoption Readiness Eval Contract
 
@@ -254,13 +258,48 @@ P45/P46 continuation:
 - P45 adds `tests/eval/test_p45_openai_agents_live_gate.py` as an optional
   evidence gate. It runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`,
   `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai`, `OPENAI_API_KEY`, and
-  OpenAI Agents trace redaction env locks. The default suite skips it without
-  OpenAI, PPM, PLF, row data, or procedure execution.
+  OpenAI Agents trace redaction env locks. `OPENAI_BASE_URL` must be empty or
+  `https://api.openai.com/v1`; custom/P-GPT-compatible endpoints are blocked as
+  unverified Agents SDK live evidence and remain on `responses_httpx`. The
+  default suite skips it without OpenAI, PPM, PLF, row data, or procedure
+  execution.
 - P46 adds `spec/eval/p46_rollback_removal_decision.yaml`. The decision is
   `retain_limited_rollback_not_active_default`: OpenAI defaults to OpenAI Agents
   SDK plus LangGraph, while `responses_httpx` remains only for P-GPT and
   emergency rollback. Deletion is not approved.
 - `make test PYTEST_ARGS="tests/contract/test_p45_p46_framework_runtime_gates.py tests/eval/test_p45_openai_agents_live_gate.py"` validates the disabled/default gate and contract assets without live calls.
+
+## P47 Generic AI Draft Quality Uplift Eval Contract
+
+P47 keeps P44-P46 real framework adoption active and improves complex-SP draft
+quality without ManageBond-specific hardcoding.
+
+Acceptance checks:
+- `spec/eval/p47_generic_ai_draft_quality_uplift_contract.yaml` exists and keeps
+  generated artifacts `production_ready: false`.
+- `prompt:ai_java_mybatis_draft_pack@0.2.0` renders
+  `DraftPackEvidenceBundle.v0.1` plus operation coverage, DTO responsibility,
+  review marker, and mapper coverage matrices.
+- The OpenAI live profile for AI Draft Pack generation is `openai_ai_draft_pack`.
+  `OPENAI_MODEL_AI_DRAFT_PACK` falls back to `OPENAI_MODEL_ANALYSIS`, and the
+  default live quality path must not use `openai_fast_test`.
+- ManageBond DTO/method names are benchmark comparison metrics only. Generic
+  pass/fail gates are based on discovered operation coverage, DTO separation,
+  mapper wiring, schema validation, and required `REVIEW_REQUIRED` markers.
+- The P42 live probe reports ManageBond benchmark metrics separately from generic
+  validator pass/fail and stores no raw SP, prompt, provider response, row data,
+  secrets, failed Java/XML payloads, source apply, or deploy claims.
+- P42 sanitized fixture live replay and live_ppm replay both route through the
+  same schema and P42C deterministic validator. The planner's DTO reference guard
+  applies generically to all successful draft-pack outputs, not only repair
+  retries, so non-DTO Service/Mapper/XML files preserve deterministic DTO
+  responsibility references without ManageBond-specific hardcoding.
+
+Passing criteria:
+- `make test PYTEST_ARGS="tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"` passes.
+- P36/P41/P42/P44/P45/P46 regression gates continue to pass.
+- Optional live failures are reported with sanitized stage/blocker diagnostics
+  only and do not imply production readiness.
 
 ## P35 Source Context Eval Gate
 

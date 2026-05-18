@@ -37,11 +37,11 @@
 
 | Skill | Location | When to use | Output |
 |---|---|---|---|
-| `framework-adapter-pilot` | `.agents/skills/framework-adapter-pilot` | OpenAI Agents SDK, LangGraph, or another candidate must be evaluated behind `AiGenerationFrameworkAdapter.v0.1` | adapter pilot plan, fake-first replay evidence, rollback notes |
+| `framework-adapter-pilot` | `.agents/skills/framework-adapter-pilot` | OpenAI Agents SDK/LangGraph runtime quality, trace policy, rollback, or generic AI Draft Pack uplift changes are touched | runtime quality plan, replay evidence, rollback notes |
 | `framework-trace-policy-review` | `.agents/skills/framework-trace-policy-review` | Candidate traces, tool context, persistence, or checkpointers could store sensitive payloads | sanitized trace review, blocker ids, residual `REVIEW_REQUIRED` |
 | `orchestration-migration-planning` | `.agents/skills/orchestration-migration-planning` | A large workflow/runtime migration needs to be split into reversible P44+ slices | migration slice order, tests, docs decision gate |
 
-Post-P43 framework work keeps `production_ready: false`, uses `.agents/skills` rather than a new `.agent` directory, and preserves the current Responses/httpx gateway or baseline adapter as rollback until a separate decision gate approves more.
+Post-P43/P44 framework work keeps generated artifacts `production_ready: false`, uses `.agents/skills` rather than a new `.agent` directory, treats P44 as actual internal OpenAI Agents SDK plus LangGraph adoption, and keeps Responses/httpx for P-GPT compatibility and emergency rollback. P47 quality work must use generic coverage evidence and benchmark-only ManageBond metrics rather than runtime answer keys.
 ## P42 Additional Skills
 
 | Skill | Location | When to use | Output |
@@ -50,4 +50,4 @@ Post-P43 framework work keeps `production_ready: false`, uses `.agents/skills` r
 | `java-mybatis-draft-validator` | `.agents/skills/java-mybatis-draft-validator` | DTO/Service/Mapper/MapperXML 초안의 blank, fallback, single DTO collapse, forbidden marker 를 검증할 때 | blocker report, review marker report, validation checklist |
 | `sp-business-logic-migration-eval` | `.agents/skills/sp-business-logic-migration-eval` | `MIGRATION_GUIDE.md`와 생성 산출물을 비교해 SP business branch 품질을 평가할 때 | branch coverage report, DTO/method responsibility map, missing `REVIEW_REQUIRED` findings |
 
-P42/P43 domain skills treat ManageBond as benchmark evidence only, not as production-runtime hardcoding.
+P42/P43/P47 domain skills treat ManageBond as benchmark evidence only, not as production-runtime hardcoding.

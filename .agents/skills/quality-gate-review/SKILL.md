@@ -22,6 +22,8 @@ Use this before merge or before handing work back to a reviewer.
 - framework persistence or checkpointer state without proven redaction
 - candidate adapter bypassing P42 schema, deterministic inventory, repair, Java/MyBatis quality, or no-fallback gates
 - ManageBond-specific runtime hardcoding or benchmark overfit
+- exact benchmark DTO/method lists used as generic pass/fail gates instead of benchmark metrics
+- missing generic coverage evidence for operation ids, DTO responsibilities, mapper statements, and required `REVIEW_REQUIRED` markers
 - missing rollback path to the current Responses/httpx gateway or baseline adapter
 - dependency install, public switch, API/schema/UI/MCP/artifact expansion, source apply, deploy, row-data query, or procedure execution without an explicit policy gate
 

@@ -109,3 +109,19 @@
 - ManageBond는 benchmark fixture로만 다루며 production-runtime answer key나 hardcoding으로 쓰지 않는다.
 - framework readiness slice는 public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row-data query, procedure execution을 추가하지 않는다.
 - `production_ready: false`와 필요한 `REVIEW_REQUIRED` 표시를 유지한다.
+
+## P44/P47 Framework Runtime 추가 규칙
+
+- P44 이후 framework work는 OpenAI Agents SDK + LangGraph actual internal runtime adoption으로 다룬다.
+- `framework-adapter-pilot`은 이름을 유지하지만, P44+ 런타임 품질, rollback, live evidence, generic AI Draft Pack uplift 검토에 사용한다.
+- Responses/httpx는 P-GPT compatibility와 emergency rollback 경로로만 유지한다.
+- P47 quality uplift는 prompt, tool evidence, model profile, validation logic을 일반화하고 ManageBond DTO/method 목록을 generic pass/fail answer key로 쓰지 않는다.
+- Public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row-data query, procedure execution은 별도 계약 없이 추가하지 않는다.
+
+## P44/P47 Framework Runtime Rules
+
+- P44+ framework work treats OpenAI Agents SDK + LangGraph as the adopted internal runtime.
+- `framework-adapter-pilot` keeps its name but covers P44+ runtime quality, rollback, live evidence, and generic AI Draft Pack uplift review.
+- Responses/httpx stays only for P-GPT compatibility and emergency rollback.
+- P47 quality uplift generalizes prompt, tool evidence, model profile, and validation logic; ManageBond DTO/method lists must not become generic pass/fail answer keys.
+- Do not add public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row-data query, or procedure execution without a separate contract.

@@ -169,12 +169,13 @@ acceptance result.
 
 P42G adds an opt-in live confidence gate on the same architecture without
 changing public APIs or persistence contracts. `apps/api/scripts/p42_live_ai_draft_pack_probe.py`
-uses an in-memory workflow repository, the existing `McpMetadataGateway`, and
-the existing Responses/httpx model gateway to replay `PCO_GU_ManageBond_PRC`
-only when `P42_LIVE_REPLAY_GATE=1` and the live OpenAI/PPM metadata gates are
-explicitly enabled. It stores no platform DB rows, writes no source files, and
-returns only counts, DTO class names, sanitized agent-run summaries, and redaction
-status. Persisted in-memory artifacts are reconstructed into
+uses an in-memory workflow repository. In `P42_LIVE_REPLAY_MODE=sanitized_fixture`
+it uses sanitized fixture facts and the existing Responses/httpx model gateway
+without live PPM metadata or raw SP external export. In `live_ppm` mode it uses
+the existing `McpMetadataGateway` and requires explicit live OpenAI/PPM metadata
+gates. It stores no platform DB rows, writes no source files, and returns only
+counts, DTO class names, sanitized agent-run summaries, and redaction status.
+Persisted in-memory artifacts are reconstructed into
 `AiJavaMyBatisDraftPack.v0.1` and checked with the same P42C validator.
 
 P42 blocks `OperationModelReviewRequired*`, single-DTO collapse for complex SPs,
@@ -261,10 +262,41 @@ conversion approval remain forbidden.
 P45 is an explicit optional live gate around the same internal architecture. It
 runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`, OpenAI remote env, and trace
 redaction locks, and it uses sanitized fixture context rather than live PPM row
-data or procedure execution. P46 keeps the architecture default on OpenAI Agents
-SDK plus LangGraph for OpenAI while retaining `responses_httpx` solely for P-GPT
-compatibility and emergency rollback until a separate cleanup gate approves
-deletion.
+data or procedure execution. It accepts only an official OpenAI Agents endpoint
+as live evidence; custom/P-GPT-compatible endpoints remain on `responses_httpx`.
+P46 keeps the architecture default on OpenAI Agents SDK plus LangGraph for
+OpenAI while retaining `responses_httpx` solely for P-GPT compatibility and
+emergency rollback until a separate cleanup gate approves deletion.
+
+## P47 Generic AI Draft Quality Uplift Architecture
+
+P47 improves AI Draft Pack quality through a generic evidence bundle before the
+OpenAI Agents/LangGraph runtime stages. The prompt renderer builds
+`DraftPackEvidenceBundle.v0.1` from sanitized operation summaries, statement
+evidence, expected inventory, platform knowledge summaries, and review markers.
+It exposes operation coverage, DTO responsibility, review marker, and mapper
+coverage matrices to the model without storing raw prompts, raw provider
+responses, raw SP definitions, raw guide bodies, row data, secrets, or failed
+Java/XML payloads.
+
+The bundle is internal-only and transient. It does not create a new public API,
+artifact type, DB table, UI surface, MCP route, or source-apply path. The same
+P42 schema, inventory contract, static Java/MyBatis validator, P44 adapter
+policy, and LangGraph quality/repair stages remain authoritative. ManageBond
+DTO and method names are benchmark comparison metrics only; generic pass/fail is
+based on discovered operation ids, DTO responsibilities, mapper statement wiring,
+and required `REVIEW_REQUIRED` markers.
+
+P47 also applies a generic reference guard after successful structured draft
+generation. It preserves deterministic expected DTO references in draft metadata
+and review comments before the P42 static validator runs, records a sanitized
+component summary, and does not use target-specific DTO answer keys.
+
+The runtime profile `openai_ai_draft_pack` selects high-quality OpenAI model
+settings for live draft-pack generation through `OPENAI_MODEL_AI_DRAFT_PACK` and
+`OPENAI_REASONING_EFFORT_AI_DRAFT_PACK`. The profile falls back to the analysis
+model family rather than `openai_fast_test`; P-GPT remains on `responses_httpx`
+until separately proven compatible.
 
 ## P35 Source Context Architecture
 

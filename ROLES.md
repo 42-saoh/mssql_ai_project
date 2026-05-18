@@ -100,3 +100,10 @@ Codex CLI에서 서브에이전트를 명시적으로 사용할 때 이 역할�
 - 생성기/템플릿/분석 모델을 다룬다 → `template_engineer`
 - 머지 전 검토가 필요하다 → `reviewer`
 - 문서가 밀렸다 → `docs_curator`
+
+## P44/P47 Runtime Role Notes
+
+- `framework_engineer` owns adopted P44+ OpenAI Agents SDK / LangGraph runtime quality work, trace/persistence policy, emergency rollback evidence, and optional live evidence review.
+- `template_engineer` keeps P42/P47 draft-pack schema, inventory, repair, and quality gates ahead of benchmark-specific naming. ManageBond is a benchmark metric, not a runtime answer key.
+- `reviewer` treats trace leakage, persistence leakage, P42/P47 gate bypass, benchmark overfit, and missing rollback as blockers.
+- `docs_curator` records live evidence, sanitized blocker codes, generic quality changes, rollback path, residual `REVIEW_REQUIRED`, and `production_ready: false`.

@@ -32,6 +32,9 @@ OPENAI_AGENTS_TRACE_ENV_LOCKS = {
     "OPENAI_AGENTS_DONT_LOG_MODEL_DATA": "1",
     "OPENAI_AGENTS_DONT_LOG_TOOL_DATA": "1",
 }
+OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT = (
+    "OPENAI_BASE_URL empty_or_https://api.openai.com/v1"
+)
 
 
 @dataclass(frozen=True)
@@ -124,7 +127,21 @@ def openai_agents_live_gate_missing_requirements(
             missing.append(f"{key}={expected}")
     if not source.get("OPENAI_API_KEY", "").strip():
         missing.append("OPENAI_API_KEY")
+    if _openai_agents_custom_base_url_configured(source):
+        missing.append(OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT)
     return missing
+
+
+def _openai_agents_custom_base_url_configured(source: Mapping[str, str]) -> bool:
+    value = source.get("OPENAI_BASE_URL", "").strip()
+    if not value:
+        return False
+    try:
+        from urllib.parse import urlparse
+
+        return (urlparse(value).hostname or "").lower() != "api.openai.com"
+    except Exception:  # noqa: BLE001 - malformed URL is not a proven Agents endpoint
+        return True
 
 
 def _normalized_generation_runtime(value: str) -> str:

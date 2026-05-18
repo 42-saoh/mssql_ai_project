@@ -33,7 +33,7 @@ config_file = "./agents/template_engineer.toml"
 nickname_candidates = ["Glyph", "Frame", "Quill"]
 
 [agents.framework_engineer]
-description = "Internal framework adapter pilot specialist for adapter seams, trace policy, redaction, and baseline-vs-candidate replay."
+description = "Adopted framework runtime specialist for adapter seams, trace policy, redaction, rollback, and quality replay."
 config_file = "./agents/framework_engineer.toml"
 nickname_candidates = ["Bridge", "Pilot", "Vector"]
 

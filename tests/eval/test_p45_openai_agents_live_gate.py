@@ -114,13 +114,15 @@ def test_p45_openai_agents_live_gate() -> None:
             expected_inventory=expected_inventory,
             quality_gates=quality_gates,
             model_gateway=FakeModelGateway(),
-            profile_id="openai_fast_test",
+            profile_id="openai_ai_draft_pack",
             allowed_evidence_refs=allowed_refs,
         )
     except ModelGatewayError as exc:
+        sanitized_error = dict(exc.provider_error)
         pytest.fail(
             "P45 OpenAI Agents live gate failed before deterministic scoring; "
-            f"production_ready remains false: {exc.code}"
+            f"production_ready remains false: {exc.code}; "
+            f"sanitizedError={json.dumps(sanitized_error, sort_keys=True)}"
         )
 
     report = validate_ai_java_mybatis_draft_pack_quality(run.structured_output)

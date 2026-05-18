@@ -18,5 +18,6 @@ Use this when commands, structure, API, schema, or policy changed.
 # Decision Gate Docs
 
 - For framework or orchestration readiness work, include the decision, verification commands, quality comparison, policy findings, rollback path, and residual `REVIEW_REQUIRED` items.
+- For P44+ actual runtime adoption and P47 quality uplift, document live evidence, sanitized blocker codes, generic coverage-first quality changes, benchmark-only metrics, and any blocked live path without exposing raw payloads.
 - State explicitly when `production_ready` remains false.
 - Do not imply automatic conversion, source apply, deploy, row-data access, procedure execution, or production adoption unless a separate gate approved it.

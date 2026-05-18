@@ -31,10 +31,13 @@ collapse to two DTOs or leave write/call responsibilities without command-style 
 
 P42G adds `test_p42_live_ai_draft_pack_replay_gate.py` as an optional live confidence gate.
 It is disabled by default, fails before live access when required env is missing, and only
-replays `PCO_GU_ManageBond_PRC` with live read-only PPM metadata and the remote
-OpenAI-compatible gateway when `P42_LIVE_REPLAY_GATE=1`. The live gate treats the
-ManageBond DTO list as a minimum benchmark count, not an exact runtime answer key: additional
-split DTOs are allowed when the generated Service/Mapper/XML wiring and P42 validator pass.
+replays `PCO_GU_ManageBond_PRC` when `P42_LIVE_REPLAY_GATE=1`.
+`P42_LIVE_REPLAY_MODE=sanitized_fixture` uses sanitized fixture facts without live
+PPM metadata or raw SP external export. `P42_LIVE_REPLAY_MODE=live_ppm` uses live
+read-only PPM metadata and remains explicit confidence evidence only. The live
+gate treats the ManageBond DTO list as benchmark metrics, not exact runtime
+answer keys: additional split DTOs are allowed when the generated
+Service/Mapper/XML wiring and P42 validator pass.
 
 P43 adds `test_p43_framework_adapter_replay.py` for framework-adoption readiness. It compares
 the baseline internal gateway adapter and fake candidate adapters with the same generic
@@ -52,8 +55,18 @@ prompt/provider response storage, raw SP/guide storage, and LangGraph checkpoint
 
 P45 adds `test_p45_openai_agents_live_gate.py` as an optional live confidence gate. It skips by
 default and runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`, OpenAI remote env, and OpenAI Agents
-trace redaction locks. P46 records the rollback decision: OpenAI stays on OpenAI Agents SDK plus
-LangGraph, while `responses_httpx` remains only for P-GPT and emergency rollback.
+trace redaction locks. The live gate requires an official OpenAI Agents endpoint
+(`OPENAI_BASE_URL` empty or `https://api.openai.com/v1`); custom/P-GPT-compatible
+endpoints are blocked as unverified Agents SDK evidence. P46 records the rollback
+decision: OpenAI stays on OpenAI Agents SDK plus LangGraph, while
+`responses_httpx` remains only for P-GPT and emergency rollback.
+
+P47 adds `test_p47_generic_ai_draft_quality_uplift_assets.py` as the contract/static evidence gate
+for generic AI Draft Pack quality. It checks `DraftPackEvidenceBundle.v0.1`, coverage matrices,
+the `openai_ai_draft_pack` model profile, and live-probe reporting that treats ManageBond DTO names
+as benchmark metrics rather than generic pass/fail gates. P47 also verifies the
+generic DTO reference guard for successful draft outputs, so Service/Mapper/XML
+DTO responsibility wiring is enforced without ManageBond-specific hardcoding.
 
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.

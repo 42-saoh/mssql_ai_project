@@ -1,0 +1,83 @@
+contract_id: p47_generic_ai_draft_quality_uplift@0.1.0
+phase: P47
+title: Generic AI Draft Pack Quality Uplift
+extends:
+  - p44_framework_runtime_adoption@0.1.0
+  - p46_rollback_removal_decision@0.1.0
+
+decision:
+  framework_runtime_status: adopted
+  quality_strategy: generic_coverage_first
+  generated_artifacts_production_ready: false
+
+prompt_contract:
+  prompt_version: prompt:ai_java_mybatis_draft_pack@0.2.0
+  evidence_bundle: DraftPackEvidenceBundle.v0.1
+  required_prompt_sections:
+    - operationCoverageMatrix
+    - dtoResponsibilityMatrix
+    - reviewMarkerContract
+    - mapperCoverageContract
+  benchmark_policy: named_benchmarks_are_quality_signals_not_runtime_answer_keys
+
+model_profile:
+  internal_profile_id: openai_ai_draft_pack
+  openai_model_env: OPENAI_MODEL_AI_DRAFT_PACK
+  default_model_source: OPENAI_MODEL_ANALYSIS
+  default_reasoning_effort_env: OPENAI_REASONING_EFFORT_AI_DRAFT_PACK
+  public_request_profile_added: false
+
+live_policy:
+  p45_gate: tests/eval/test_p45_openai_agents_live_gate.py
+  p42_gate: tests/eval/test_p42_live_ai_draft_pack_replay_gate.py
+  p45_trace_lock_override_allowed: command_scoped_only
+  p42_raw_sp_external_export_status: resolved_by_sanitized_fixture_live_mode
+  p42_safe_live_mode: P42_LIVE_REPLAY_MODE=sanitized_fixture
+  p42_live_ppm_mode: P42_LIVE_REPLAY_MODE=live_ppm
+  live_failure_diagnostics: sanitized_stage_code_only
+  latest_audit:
+    date: 2026-05-19
+    p45_status: blocked
+    p45_current_env_status: blocked_unverified_custom_or_pgpt_endpoint
+    p45_official_override_status: blocked_authentication_error
+    p45_stage: file_inventory
+    p45_blocker: P44_OPENAI_AGENTS_ADAPTER_FAILED
+    p42_status: passed_sanitized_fixture_live_mode
+    p42_live_ppm_current_rerun_status: not_rerun_without_explicit_raw_sp_export_approval
+
+quality_gates:
+  p42_schema_validator_required: true
+  deterministic_quality_validator_required: true
+  generic_failures:
+    - dto_role_collapse
+    - missing_operation_coverage
+    - missing_mapper_method_wiring
+    - missing_review_required_markers
+    - raw_trace_or_payload_leakage
+  manage_bond_role: benchmark_signal_only_not_runtime_answer_key
+
+forbidden_behavior:
+  public_api_change: true
+  db_schema_change: true
+  ui_change: true
+  public_mcp_route_change: true
+  public_artifact_type_change: true
+  source_apply: true
+  deploy: true
+  row_data_access: true
+  procedure_execution: true
+  raw_prompt_storage: true
+  raw_provider_response_storage: true
+  raw_sp_definition_storage: true
+  raw_guide_body_storage: true
+  production_ready_true: true
+
+verification:
+  default_gate:
+    - make test PYTEST_ARGS="tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/eval/test_p44_framework_runtime_replay.py tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
+    - git diff --check
+  live_gate_notes:
+    - P45 may run with command-scoped OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0.
+    - P45 official OpenAI evidence requires an official OpenAI-valid API key; custom/P-GPT endpoints are not accepted as OpenAI Agents SDK live evidence.
+    - P42 sanitized fixture live replay avoids live PPM metadata and raw SP external export.
+    - P42 live_ppm replay still requires explicit raw-SP-to-remote-model approval and remains confidence evidence only.

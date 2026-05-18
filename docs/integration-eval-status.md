@@ -30,6 +30,19 @@ P44 supersedes P43 as the active framework runtime adoption direction. OpenAI re
 
 P45 adds optional live OpenAI Agents confidence evidence behind `P44_OPENAI_AGENTS_LIVE_GATE=1`; it uses sanitized fixtures and does not require live PPM row data or procedure execution. P46 records the rollback decision: `responses_httpx` is retained for P-GPT and emergency rollback only, not as the active OpenAI default, and deletion is deferred to a separate cleanup gate.
 
+P47 adds a generic AI Draft Pack quality uplift over the adopted P44 runtime. The prompt is now `prompt:ai_java_mybatis_draft_pack@0.2.0` and receives `DraftPackEvidenceBundle.v0.1` with operation coverage, DTO responsibility, review marker, and mapper coverage matrices. ManageBond DTO names are benchmark metrics only; generic pass/fail remains schema validation, operation coverage, DTO separation, mapper wiring, and required `REVIEW_REQUIRED` markers.
+
+2026-05-19 live audit note: the P42 live replay now has a safer
+`P42_LIVE_REPLAY_MODE=sanitized_fixture` path that avoids live PPM metadata and
+raw SP external export, and that safer path is the current accepted live replay
+gate. The earlier explicit `live_ppm` confidence result is historical evidence;
+it is not rerun without explicit raw-SP-to-remote-model approval.
+The P45 OpenAI Agents + LangGraph live gate is still blocked: the current custom
+or P-GPT-compatible endpoint is rejected as unverified Agents SDK evidence, and
+the official OpenAI override reached `file_inventory` but failed with sanitized
+`P44_OPENAI_AGENTS_ADAPTER_FAILED` / `AuthenticationError`. Generated artifacts
+remain `production_ready: false`.
+
 ## Current Boundaries
 
 | Area | Status | Notes |
@@ -52,6 +65,7 @@ P45 adds optional live OpenAI Agents confidence evidence behind `P44_OPENAI_AGEN
 | P35 knowledge live confidence | explicit optional live | `P35_KNOWLEDGE_LIVE_GATE=1` runs one bounded live PPM SP workflow with OpenAI semantic analysis and live PLF v6 knowledge persistence, then verifies job-linked assets, fact-edge integrity, search, and GRAPH_JSON export. PPM remains metadata-only/read-only; PLF receives normal test workflow/knowledge/export/audit writes without review records. Success is confidence evidence only and does not imply production readiness or conversion approval. |
 | P43 framework adoption | pilot, fixture-first | `AiGenerationFrameworkAdapter.v0.1` is internal-only. Fake adapters compare candidate behavior against the Responses/httpx baseline, while P42 schema/inventory/static quality gates remain authoritative. Real framework dependencies, live evidence, OpenAI Agents SDK trace redaction, and LangGraph persistence redaction remain `REVIEW_REQUIRED`. |
 | P44-P46 framework runtime adoption | adopted internally, fixture-first plus optional live gate | OpenAI Agents SDK is the OpenAI remote AI Draft Pack runtime and LangGraph is the in-process stage orchestrator. P45 live evidence is optional with `P44_OPENAI_AGENTS_LIVE_GATE=1`. P46 keeps `responses_httpx` for P-GPT and emergency rollback only. LangGraph checkpointer persistence is disabled, and generated artifacts stay `production_ready: false`. No public API, DB schema, UI, public MCP route, artifact type, source apply, deploy, procedure execution, row data, raw prompt/provider response, raw SP/guide storage, or production conversion approval is introduced. |
+| P47 generic AI Draft Pack quality | fixture-first plus optional live audit | `DraftPackEvidenceBundle.v0.1` and `prompt:ai_java_mybatis_draft_pack@0.2.0` add coverage matrices and high-quality `openai_ai_draft_pack` model selection. ManageBond remains a benchmark signal only; hardcoded DTO/method answer keys are not generic pass/fail gates. P42 sanitized fixture replay avoids raw SP external export and is the accepted live replay gate; `live_ppm` requires explicit raw-SP export approval. P45 official live evidence remains blocked on sanitized authentication diagnostics. |
 | P27 dependency evidence tooling | fixture-first hardened | `spec/eval/p27_dependency_evidence_tooling_contract.yaml` and the MCP catalog define active read-only dependency closure/resolution tools plus optional dependency resolution evidence fields. P28 safe API invocation, P29 Web diagnostics, and workflow closure evidence wiring are fixture-first enabled; persisted artifact type and DB schema changes remain deferred. Ambiguous/dynamic/unresolved/cross-server/caller-dependent references stay `REVIEW_REQUIRED`. Explicit hard-live evidence runs only with `P27_HARD_LIVE_GATE=1`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
 | DDL | manual only | P36 retires DDL draft output from new public generation. v9 schema SQL is a manual review/apply asset only, preserves historical FK-linked retired artifacts, and blocks new retired artifact inserts/type changes. Automatic DDL execution remains forbidden. |
@@ -77,6 +91,7 @@ P45 adds optional live OpenAI Agents confidence evidence behind `P44_OPENAI_AGEN
 - `fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml`: P43 framework-adoption fixture, including ManageBond benchmark-only scope, fake adapter replay, synthetic complex-SP collapse guard, P43F `pilot` decision evidence, rollback path, and residual `REVIEW_REQUIRED` items.
 - `spec/eval/p44_framework_runtime_adoption_contract.yaml`: P44 active runtime adoption contract for OpenAI Agents SDK plus LangGraph, including `FrameworkRuntimeConfig.v0.1`, trace/persistence policy, rollback/P-GPT boundary, and `generated_artifacts_production_ready: false`.
 - `spec/eval/p46_rollback_removal_decision.yaml`: P46 rollback decision, retaining `responses_httpx` for P-GPT and emergency rollback only while keeping deletion unapproved.
+- `spec/eval/p47_generic_ai_draft_quality_uplift_contract.yaml`: P47 generic quality uplift contract, including `DraftPackEvidenceBundle.v0.1`, prompt `@0.2.0`, `openai_ai_draft_pack`, and benchmark-not-answer-key evaluation policy.
 - `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`: P23 quality contract that separates P23A contract assets, P23B fixture authoring, P23C fixture-first eval runner/scoring, and P23D readiness documentation.
 - `spec/eval/p27_dependency_evidence_tooling_contract.yaml`: P27 fixture-first hardening contract for dependency evidence fields, active read-only MCP tools, P28 safe API invocation, P29 Web diagnostics and workflow evidence wiring, explicit hard-live gate, no-raw/no-row/no-fallback policy, and deferred persisted artifact/DB schema boundaries.
 - `spec/eval/p43_framework_adoption_contract.yaml`: P43 adapter-first framework adoption contract, including tool/trace policy gates, P43E replay criteria, P43F `pilot` decision, and rollback evidence.

@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 from ai_agent_runtime import (
     OPENAI_AGENTS_TRACE_ENV_LOCKS,
+    OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT,
     P44_OPENAI_AGENTS_LIVE_GATE,
     openai_agents_live_gate_enabled,
     openai_agents_live_gate_missing_requirements,
@@ -36,6 +37,7 @@ def test_p45_live_gate_contract_is_optional_and_policy_locked() -> None:
     assert live_gate["live_ppm_row_data_allowed"] is False
     assert live_gate["live_procedure_execution_allowed"] is False
     assert live_gate["persisted_evidence"] == "sanitized_invocation_summary_only"
+    assert OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT in live_gate["required_env"]
     for key, value in OPENAI_AGENTS_TRACE_ENV_LOCKS.items():
         assert f"{key}={value}" in live_gate["required_env"]
 
@@ -57,6 +59,24 @@ def test_p45_live_gate_env_helper_is_strict_but_disabled_by_default() -> None:
     )
 
     assert missing == ["OPENAI_API_KEY"]
+
+
+def test_p45_live_gate_rejects_unverified_custom_openai_agents_base_url() -> None:
+    missing = openai_agents_live_gate_missing_requirements(
+        {
+            P44_OPENAI_AGENTS_LIVE_GATE: "1",
+            "LLM_ENABLE_REMOTE": "1",
+            "LLM_REMOTE_PROVIDER": "openai",
+            "OPENAI_API_KEY": "present",
+            "OPENAI_BASE_URL": "https://custom-openai-compatible.example/v1",
+            "OPENAI_AGENTS_DISABLE_TRACING": "1",
+            "OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA": "0",
+            "OPENAI_AGENTS_DONT_LOG_MODEL_DATA": "1",
+            "OPENAI_AGENTS_DONT_LOG_TOOL_DATA": "1",
+        }
+    )
+
+    assert missing == [OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT]
 
 
 def test_p45_env_assets_forward_live_gate_and_trace_locks() -> None:

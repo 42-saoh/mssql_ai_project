@@ -75,6 +75,20 @@ default fixture gate and must be enabled explicitly:
 
 ```powershell
 $env:P42_LIVE_REPLAY_GATE="1"
+$env:P42_LIVE_REPLAY_MODE="sanitized_fixture"
+$env:LLM_LIVE_GATE="1"
+$env:LLM_ENABLE_REMOTE="1"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
+```
+
+`P42_LIVE_REPLAY_MODE=sanitized_fixture` uses sanitized fixture facts and the
+same deterministic P42 validator without live PPM metadata or raw SP external
+export. The legacy `live_ppm` mode remains available only when raw-SP-to-remote
+model preconditions are explicitly approved:
+
+```powershell
+$env:P42_LIVE_REPLAY_GATE="1"
+$env:P42_LIVE_REPLAY_MODE="live_ppm"
 $env:LLM_LIVE_GATE="1"
 $env:LLM_ENABLE_REMOTE="1"
 $env:LLM_ALLOW_SP_TEXT="1"
@@ -83,9 +97,10 @@ $env:MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS="20"
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
 ```
 
-The probe uses an in-memory repository, live read-only `ppm` metadata, and the existing
-OpenAI-compatible Responses/httpx gateway. It does not execute the stored procedure, query row
-data, write platform DB rows, apply generated source, or claim production readiness.
+The probe uses an in-memory repository and does not execute the stored procedure,
+query row data, write platform DB rows, apply generated source, or claim
+production readiness. ManageBond DTO names are reported as benchmark metrics,
+not generic pass/fail answer keys.
 
 ## P43 Framework Adoption Verification Notes
 
@@ -152,14 +167,40 @@ definitions, or store LangGraph checkpointer state.
 The optional P45 live evidence gate is disabled by default:
 
 ```powershell
-P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=openai OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=openai OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
 ```
 
 P45 must use sanitized fixture inputs and store sanitized invocation summaries
 only. It must not require live PPM, row data, procedure execution, source apply,
-or deploy. P46 records that the OpenAI default path has moved to OpenAI Agents
-SDK plus LangGraph; `responses_httpx` remains for P-GPT and emergency rollback
-only, not as the active OpenAI default.
+or deploy. Custom/P-GPT OpenAI-compatible endpoints are not accepted as P45
+OpenAI Agents SDK live evidence; they remain on `responses_httpx`. P46 records
+that the OpenAI default path has moved to OpenAI Agents SDK plus LangGraph;
+`responses_httpx` remains for P-GPT and emergency rollback only, not as the
+active OpenAI default.
+
+## P47 Generic AI Draft Quality Uplift Verification Notes
+
+P47 keeps P44-P46 actual framework adoption and improves quality generically.
+`prompt:ai_java_mybatis_draft_pack@0.2.0` renders
+`DraftPackEvidenceBundle.v0.1`, operation coverage, DTO responsibility, review
+marker, and mapper coverage matrices. ManageBond DTO names are benchmark metrics,
+not generic pass/fail requirements.
+
+AI Draft Pack live runs should use the high-quality profile:
+
+```powershell
+OPENAI_MODEL_AI_DRAFT_PACK=gpt-5.5 OPENAI_REASONING_EFFORT_AI_DRAFT_PACK=high powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+```
+
+If `.env` has a trace-lock mismatch, use command-scoped overrides such as
+`OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0`; do not commit local secret values.
+The safer P42 live replay mode is `P42_LIVE_REPLAY_MODE=sanitized_fixture`;
+`live_ppm` remains confidence evidence only and requires explicit raw-SP-to-remote
+model approval. Fixture-first P47 checks use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
+```
 
 ## 목적
 

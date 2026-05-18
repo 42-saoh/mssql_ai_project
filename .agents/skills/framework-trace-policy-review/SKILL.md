@@ -10,7 +10,7 @@ description: Review internal framework tool context, tracing, persistence, check
 1. Inspect the adapter policy helpers and tests around tool context, trace summaries, and storage records.
 2. Confirm every framework stage receives only sanitized context: stage names, hashes, operation/DTO/statement ids or counts, deterministic inventory, allowed evidence refs, quality gates, and `REVIEW_REQUIRED` markers.
 3. Confirm stored trace summaries contain only adapter ids, candidate framework ids, stage/status, component ids, counts, hashes, blocker or failure codes, and numeric policy-safe metrics.
-4. Check OpenAI Agents SDK tracing and LangGraph persistence or checkpointer behavior against current official docs before any real-framework pilot.
+4. Check OpenAI Agents SDK tracing and LangGraph persistence or checkpointer behavior against current official docs before any adopted-runtime change or live evidence run.
 5. Report blockers before implementation proceeds.
 
 ## Blockers

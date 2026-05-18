@@ -19,3 +19,4 @@ suites:
     - tests/eval/test_p32_live_confidence_planner_effectiveness.py
     - tests/eval/test_p35_knowledge_live_confidence_gate.py
     - tests/eval/test_p42_live_ai_draft_pack_replay_gate.py
+    - tests/eval/test_p45_openai_agents_live_gate.py

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
@@ -384,7 +385,7 @@ class OpenAIAgentsFrameworkAdapter:
                     "stage": _safe_stage(stage),
                     "errorClass": exc.__class__.__name__,
                 },
-            ) from exc
+            ) from None
         latency_ms = int((time.monotonic() - started) * 1000)
         token_usage = _openai_agents_token_usage(result)
         component = self.summarize_trace(
@@ -441,12 +442,37 @@ class OpenAIAgentsFrameworkAdapter:
         if self.agent_factory is not None:
             return self.agent_factory(request)
         agents = _agents_sdk()
-        return agents.Agent(
-            name=f"AI Draft Pack {request.stage}",
-            instructions=request.prompt.system_prompt,
-            model=request.profile.model,
-            output_type=AiJavaMyBatisDraftPackOutput,
-        )
+        agent_kwargs = {
+            "name": f"AI Draft Pack {request.stage}",
+            "instructions": request.prompt.system_prompt,
+            "model": request.profile.model,
+        }
+        if _openai_agents_native_structured_output_enabled():
+            agent_kwargs["output_type"] = AiJavaMyBatisDraftPackOutput
+        return agents.Agent(**agent_kwargs)
+
+
+def _openai_agents_native_structured_output_enabled() -> bool:
+    """Use native output_type only for the official OpenAI endpoint.
+
+    Some OpenAI-compatible gateways accept Responses-style JSON generation but do not
+    support the Agents SDK structured-output payload shape. The adapter still validates
+    the final output with AiJavaMyBatisDraftPack.v0.1 immediately after the run.
+    """
+
+    base_url = os.getenv("OPENAI_BASE_URL", "").strip()
+    if not base_url:
+        return True
+    return _openai_base_url_is_official(base_url)
+
+
+def _openai_base_url_is_official(value: str) -> bool:
+    try:
+        from urllib.parse import urlparse
+
+        return (urlparse(value).hostname or "").lower() == "api.openai.com"
+    except Exception:  # noqa: BLE001 - malformed env should take conservative path
+        return False
 
 
 def _enforce_openai_agents_trace_policy() -> None:
@@ -454,6 +480,7 @@ def _enforce_openai_agents_trace_policy() -> None:
     os.environ["OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA"] = "0"
     os.environ["OPENAI_AGENTS_DONT_LOG_MODEL_DATA"] = "1"
     os.environ["OPENAI_AGENTS_DONT_LOG_TOOL_DATA"] = "1"
+    logging.getLogger("openai.agents").setLevel(logging.CRITICAL)
     agents = _agents_sdk()
     disable_tracing = getattr(agents, "set_tracing_disabled", None)
     if not callable(disable_tracing):

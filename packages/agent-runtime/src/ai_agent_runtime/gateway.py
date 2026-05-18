@@ -16,6 +16,7 @@ from ai_agent_runtime.ai_draft_pack import (
     validate_ai_java_mybatis_draft_pack_output,
 )
 from ai_agent_runtime.models import (
+    AI_DRAFT_PACK_MODEL_PROFILE_ID,
     FAST_TEST_DEFAULT_MODEL,
     FAST_TEST_MODEL_PROFILE_ID,
     SEMANTIC_MODEL_PROFILE_ID,
@@ -27,6 +28,7 @@ from ai_agent_runtime.models import (
     ModelInvocationRecord,
     ModelProfile,
     RenderedPrompt,
+    ai_draft_pack_model_registry_ref,
     fast_test_model_registry_ref,
     metadata_analysis_output_schema,
     metadata_tool_planning_output_schema,
@@ -128,6 +130,28 @@ def model_profile_from_env(profile_id: str | None) -> ModelProfile:
                 if provider == REMOTE_PROVIDER_PGPT
                 else os.getenv("OPENAI_REASONING_EFFORT_FAST_TEST", "low").strip() or "low"
             ),
+        )
+    if normalized in {AI_DRAFT_PACK_MODEL_PROFILE_ID, "ai-draft-pack", "draft-pack"}:
+        if provider == REMOTE_PROVIDER_PGPT:
+            model = os.getenv("PGPT_MODEL_ANALYSIS", PGPT_ANALYSIS_DEFAULT_MODEL).strip()
+            model = model or PGPT_ANALYSIS_DEFAULT_MODEL
+            reasoning_effort = "none"
+        else:
+            model = (
+                os.getenv("OPENAI_MODEL_AI_DRAFT_PACK", "").strip()
+                or os.getenv("OPENAI_MODEL_ANALYSIS", "gpt-5.5").strip()
+                or "gpt-5.5"
+            )
+            reasoning_effort = (
+                os.getenv("OPENAI_REASONING_EFFORT_AI_DRAFT_PACK", "").strip()
+                or os.getenv("OPENAI_REASONING_EFFORT_ANALYSIS", "medium").strip()
+                or "medium"
+            )
+        return ModelProfile(
+            profile_id=AI_DRAFT_PACK_MODEL_PROFILE_ID,
+            model=model,
+            registry_ref=ai_draft_pack_model_registry_ref(model),
+            reasoning_effort=reasoning_effort,
         )
     if provider == REMOTE_PROVIDER_PGPT:
         model = os.getenv("PGPT_MODEL_ANALYSIS", PGPT_ANALYSIS_DEFAULT_MODEL).strip()

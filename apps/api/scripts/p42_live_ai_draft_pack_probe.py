@@ -18,6 +18,8 @@ for import_root in (API_ROOT, MCP_ROOT):
 from ai_agent_domain import ArtifactType, JobStatus  # noqa: E402
 from ai_agent_runtime import (  # noqa: E402
     AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
+    AiDraftPackValidationError,
+    build_ai_java_mybatis_draft_pack_run,
     build_model_gateway_from_env,
 )
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality  # noqa: E402
@@ -37,6 +39,9 @@ from mssql_mcp_app.profiles import load_db_profiles  # noqa: E402
 from mssql_mcp_app.settings import load_live_metadata_settings  # noqa: E402
 
 LIVE_GATE_ENV = "P42_LIVE_REPLAY_GATE"
+LIVE_MODE_ENV = "P42_LIVE_REPLAY_MODE"
+LIVE_MODE_LIVE_PPM = "live_ppm"
+LIVE_MODE_SANITIZED_FIXTURE = "sanitized_fixture"
 LIVE_BLOCKER = "P42_LIVE_REPLAY_REQUIRED"
 LIVE_FAILED = "P42_LIVE_REPLAY_FAILED"
 QUALITY_BLOCKER = "P42_LIVE_QUALITY_GATE_FAILED"
@@ -59,6 +64,12 @@ REQUIRED_ENV = (
     "LLM_ALLOW_SP_TEXT",
     "OPENAI_API_KEY",
 )
+SANITIZED_FIXTURE_REQUIRED_ENV = (
+    LIVE_GATE_ENV,
+    "LLM_LIVE_GATE",
+    "LLM_ENABLE_REMOTE",
+    "OPENAI_API_KEY",
+)
 REQUIRED_DTO_CLASSES = (
     "ManageBondSearchCriteria",
     "ManageBondSearchRow",
@@ -71,18 +82,6 @@ REQUIRED_DTO_CLASSES = (
     "DeleteBondCommand",
     "VendorBondUpdateCommand",
     "OnlineBondUpdateCommand",
-)
-REQUIRED_METHODS = (
-    "readBond",
-    "approveAdvanceBond",
-    "approveDefectBond",
-    "sendFinanceTransfer",
-    "createBond",
-    "createRetentionBondBatch",
-    "updateBond",
-    "deleteBond",
-    "updateVendorBond",
-    "updateOnlineBond",
 )
 REQUIRED_REVIEW_MARKERS = {
     "CROSS_DB_WRITE_REVIEW_REQUIRED",
@@ -116,6 +115,16 @@ FORBIDDEN_FRAGMENTS = (
     "raw_openai_response_text",
     "raw_sp_definition",
     "connectionString",
+)
+POLICY_ONLY_SCAN_SKIP_KEYS = frozenset(
+    {
+        "blockerPatterns",
+        "forbiddenPayloadFields",
+        "forbiddenRuntimeActions",
+        "forbidden_payload_fields",
+        "forbidden_runtime_actions",
+        "redaction",
+    }
 )
 
 
@@ -153,6 +162,9 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
             artifact_summary={},
             diagnostics={},
         )
+
+    if _live_replay_mode() == LIVE_MODE_SANITIZED_FIXTURE:
+        return _run_sanitized_fixture_live_replay()
 
     repository = MemoryWorkflowRepository()
     try:
@@ -247,6 +259,172 @@ def _require_ppm_live_profile() -> None:
                 )
             ],
         )
+
+
+def _run_sanitized_fixture_live_replay() -> dict[str, Any]:
+    try:
+        fixture = _load_ai_draft_pack_fixture()
+        target = fixture["ai_draft_pack_quality_target"]
+        quality_gates = _fixture_quality_gates(fixture)
+        expected_inventory = list(target["expectedFiles"])
+        allowed_refs = _fixture_allowed_refs(target)
+        context = _fixture_sanitized_context(fixture)
+        run = build_ai_java_mybatis_draft_pack_run(
+            target_ref=str(target["targetRef"]),
+            sanitized_draft_context=context,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            model_gateway=build_model_gateway_from_env(),
+            profile_id=_llm_profile_id(default="openai_ai_draft_pack"),
+            allowed_evidence_refs=allowed_refs,
+        )
+        pack = dict(run.structured_output)
+        artifact_summary = _verify_pack_output(pack)
+        pack_report = _verify_pack_quality(pack)
+        for payload, check_name in (
+            (pack, "sanitized_fixture_pack"),
+            (run.model_invocation.to_storage_dict(), "sanitized_fixture_invocation"),
+        ):
+            _assert_safe_payload(payload, check_name)
+    except ProbeFailure as exc:
+        return _result(
+            status="failed",
+            blocker_code=exc.blocker_code,
+            summary=exc.summary,
+            checks=exc.checks,
+            artifact_summary={},
+            diagnostics=exc.diagnostics,
+        )
+    except AiDraftPackValidationError as exc:
+        findings = [str(item) for item in exc.findings[:10]]
+        return _result(
+            status="failed",
+            blocker_code=LIVE_FAILED,
+            summary="P42 sanitized fixture live replay failed draft-pack schema validation.",
+            checks=[
+                _check(
+                    "sanitized_fixture_live_replay",
+                    "fail",
+                    blocker_code=LIVE_FAILED,
+                    summary="; ".join(findings),
+                )
+            ],
+            artifact_summary={},
+            diagnostics={
+                "failureStage": "sanitized_fixture_live_replay",
+                "errorCode": LIVE_FAILED,
+                "errorClass": exc.__class__.__name__,
+                "validationFindingCount": len(exc.findings),
+                "validationFindings": findings,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must stay sanitized
+        return _result(
+            status="failed",
+            blocker_code=LIVE_FAILED,
+            summary="P42 sanitized fixture live replay failed before deterministic scoring.",
+            checks=[
+                _check(
+                    "sanitized_fixture_live_replay",
+                    "fail",
+                    blocker_code=LIVE_FAILED,
+                    summary=f"errorClass={exc.__class__.__name__}",
+                )
+            ],
+            artifact_summary={},
+            diagnostics={
+                "failureStage": "sanitized_fixture_live_replay",
+                "errorCode": LIVE_FAILED,
+                "errorClass": exc.__class__.__name__,
+            },
+        )
+    return _result(
+        status="passed",
+        blocker_code=None,
+        summary=(
+            "P42 sanitized fixture live AI Draft Pack replay passed without live PPM "
+            "metadata, raw SP text, row data, or procedure execution."
+        ),
+        checks=[
+            _check(
+                "sanitized_fixture_context",
+                "pass",
+                summary="Used sanitized fixture facts only; raw SP external export was not required.",
+            ),
+            _check("ai_draft_pack_agent_run", "pass", summary=run.summary),
+            _check("artifact_inventory", "pass", summary=artifact_summary["summary"]),
+            _check("p42_quality_gate", "pass", summary=pack_report["summary"]),
+            _check(
+                "stored_payload_safety",
+                "pass",
+                summary="Live fixture replay output did not expose raw SP, prompts, row data, or secrets.",
+            ),
+        ],
+        artifact_summary=artifact_summary,
+        diagnostics={},
+    )
+
+
+def _load_ai_draft_pack_fixture() -> dict[str, Any]:
+    try:
+        import yaml
+    except Exception as exc:  # noqa: BLE001
+        raise ProbeFailure(
+            blocker_code=LIVE_BLOCKER,
+            summary="PyYAML is required for sanitized fixture live replay.",
+            checks=[
+                _check(
+                    "sanitized_fixture_context",
+                    "fail",
+                    blocker_code=LIVE_BLOCKER,
+                    summary=f"errorClass={exc.__class__.__name__}",
+                )
+            ],
+        ) from None
+    path = REPO_ROOT / "fixtures" / "eval" / "ai_draft_pack_p42_manage_bond_v1.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _fixture_quality_gates(fixture: Mapping[str, Any]) -> dict[str, Any]:
+    target = fixture["ai_draft_pack_quality_target"]
+    gates = fixture["quality_gates"]
+    return {
+        "requiredDtoClasses": list(gates["required_dto_classes"]),
+        "requiredServiceMethods": list(gates["required_service_methods"]),
+        "requiredMapperMethods": list(gates["required_mapper_methods"]),
+        "requiredReviewMarkers": list(target["reviewMarkers"]),
+        "blockerPatterns": list(gates["blocker_patterns"]),
+        "blankContentIsBlocker": bool(gates["blank_content_is_blocker"]),
+        "dtoCollapseIsBlocker": bool(gates["dto_collapse_is_blocker"]),
+        "fallbackSkeletonPersistenceAllowedOnFailure": bool(
+            gates["fallback_skeleton_persistence_allowed_on_failure"]
+        ),
+    }
+
+
+def _fixture_allowed_refs(target: Mapping[str, Any]) -> list[str]:
+    refs = list(target.get("evidenceRefs", []))
+    for item in target.get("expectedFiles", []):
+        if isinstance(item, Mapping):
+            refs.extend(item.get("evidenceRefs", []))
+    return sorted(dict.fromkeys(str(ref) for ref in refs if str(ref).strip()))
+
+
+def _fixture_sanitized_context(fixture: Mapping[str, Any]) -> dict[str, Any]:
+    facts = fixture["guide_quality_facts"]
+    return {
+        "targetRef": facts["target_ref"],
+        "branchVariables": list(facts["branch_variables"]),
+        "reviewRequiredFacts": list(facts["review_required_facts"]),
+        "dependencyEvidenceSummary": {
+            "sameDatabaseCount": len(facts["major_dependencies"]["same_database"]),
+            "crossDatabaseCount": len(facts["major_dependencies"]["cross_database"]),
+            "calledProcedureCount": len(facts["major_dependencies"]["called_procedures"]),
+            "evidenceRefs": list(
+                fixture["ai_draft_pack_quality_target"].get("evidenceRefs", [])
+            ),
+        },
+    }
 
 
 def _submit_live_workflow(
@@ -346,11 +524,6 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
         ArtifactType.MAPPER_XML.value: len(by_type.get(ArtifactType.MAPPER_XML.value, [])),
     }
     count_failures: list[str] = []
-    if actual_counts[ArtifactType.DTO_DRAFT.value] < len(REQUIRED_DTO_CLASSES):
-        count_failures.append(
-            f"DTO_DRAFT expected at least {len(REQUIRED_DTO_CLASSES)}, "
-            f"got {actual_counts[ArtifactType.DTO_DRAFT.value]}"
-        )
     for artifact_type in (
         ArtifactType.SERVICE_DRAFT.value,
         ArtifactType.MAPPER_INTERFACE.value,
@@ -395,7 +568,8 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
                 )
             ],
         )
-    baseline_missing = sorted(set(REQUIRED_DTO_CLASSES) - dto_classes)
+    benchmark_missing = sorted(set(REQUIRED_DTO_CLASSES) - dto_classes)
+    benchmark_matched = sorted(set(REQUIRED_DTO_CLASSES) & dto_classes)
     additional_dtos = sorted(dto_classes - set(REQUIRED_DTO_CLASSES))
     service_text = "\n".join(
         artifact.content for artifact in by_type[ArtifactType.SERVICE_DRAFT.value]
@@ -435,11 +609,108 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
     return {
         "counts": actual_counts,
         "dtoClasses": sorted(dto_classes),
-        "baselineDtoClassesNotExactMatched": baseline_missing,
+        "benchmark": {
+            "target": "PPM.dbo.PCO_GU_ManageBond_PRC",
+            "role": "quality_signal_only_not_runtime_answer_key",
+            "expectedDtoSignalCount": len(REQUIRED_DTO_CLASSES),
+            "matchedDtoSignals": benchmark_matched,
+            "missingDtoSignals": benchmark_missing,
+        },
         "additionalDtoClasses": additional_dtos,
         "summary": (
-            "Live replay persisted the minimum DTO row count with split DTOs "
-            "and single Service/Mapper/XML rows."
+            "Live replay persisted split DTOs and single Service/Mapper/XML rows; "
+            "named ManageBond DTOs are reported as benchmark signals only."
+        ),
+    }
+
+
+def _verify_pack_output(pack: Mapping[str, Any]) -> dict[str, Any]:
+    files = [file for file in pack.get("files", []) if isinstance(file, Mapping)]
+    by_type: dict[str, list[Mapping[str, Any]]] = {}
+    for file in files:
+        artifact_type = str(file.get("artifactType") or "")
+        by_type.setdefault(artifact_type, []).append(file)
+        if not str(file.get("content") or "").strip():
+            raise ProbeFailure(
+                blocker_code=QUALITY_BLOCKER,
+                summary="Sanitized live replay produced blank draft content.",
+                checks=[
+                    _check(
+                        "artifact_inventory",
+                        "fail",
+                        blocker_code=QUALITY_BLOCKER,
+                        summary=f"Blank content in {artifact_type} {file.get('path')}.",
+                    )
+                ],
+            )
+        lowered = str(file.get("content") or "").lower()
+        if "operationmodelreviewrequired" in lowered or "managebonddto" in lowered:
+            raise ProbeFailure(
+                blocker_code=QUALITY_BLOCKER,
+                summary="Sanitized live replay produced fallback or collapsed DTO content.",
+                checks=[
+                    _check(
+                        "artifact_inventory",
+                        "fail",
+                        blocker_code=QUALITY_BLOCKER,
+                        summary=f"Fallback/collapse marker in {artifact_type} {file.get('path')}.",
+                    )
+                ],
+            )
+    actual_counts = {
+        ArtifactType.DTO_DRAFT.value: len(by_type.get(ArtifactType.DTO_DRAFT.value, [])),
+        ArtifactType.SERVICE_DRAFT.value: len(by_type.get(ArtifactType.SERVICE_DRAFT.value, [])),
+        ArtifactType.MAPPER_INTERFACE.value: len(
+            by_type.get(ArtifactType.MAPPER_INTERFACE.value, [])
+        ),
+        ArtifactType.MAPPER_XML.value: len(by_type.get(ArtifactType.MAPPER_XML.value, [])),
+    }
+    count_failures = [
+        f"{artifact_type} expected exactly 1, got {actual_counts[artifact_type]}"
+        for artifact_type in (
+            ArtifactType.SERVICE_DRAFT.value,
+            ArtifactType.MAPPER_INTERFACE.value,
+            ArtifactType.MAPPER_XML.value,
+        )
+        if actual_counts[artifact_type] != 1
+    ]
+    if actual_counts[ArtifactType.DTO_DRAFT.value] < 3:
+        count_failures.append(
+            f"DTO_DRAFT expected at least 3, got {actual_counts[ArtifactType.DTO_DRAFT.value]}"
+        )
+    if count_failures:
+        raise ProbeFailure(
+            blocker_code=QUALITY_BLOCKER,
+            summary=f"Unexpected sanitized fixture live artifact counts: {actual_counts}.",
+            checks=[
+                _check(
+                    "artifact_inventory",
+                    "fail",
+                    blocker_code=QUALITY_BLOCKER,
+                    summary="; ".join(count_failures),
+                )
+            ],
+        )
+    dto_classes = {
+        str(file.get("className") or "")
+        for file in by_type.get(ArtifactType.DTO_DRAFT.value, [])
+        if str(file.get("className") or "").strip()
+    }
+    benchmark_missing = sorted(set(REQUIRED_DTO_CLASSES) - dto_classes)
+    benchmark_matched = sorted(set(REQUIRED_DTO_CLASSES) & dto_classes)
+    return {
+        "counts": actual_counts,
+        "dtoClasses": sorted(dto_classes),
+        "benchmark": {
+            "target": "PPM.dbo.PCO_GU_ManageBond_PRC",
+            "role": "quality_signal_only_not_runtime_answer_key",
+            "expectedDtoSignalCount": len(REQUIRED_DTO_CLASSES),
+            "matchedDtoSignals": benchmark_matched,
+            "missingDtoSignals": benchmark_missing,
+        },
+        "summary": (
+            "Sanitized fixture live replay produced split DTOs and single "
+            "Service/Mapper/XML rows; benchmark DTOs are metrics only."
         ),
     }
 
@@ -543,6 +814,47 @@ def _verify_persisted_pack_quality(
         )
     return {
         "summary": "Persisted artifacts reconstruct to a valid AiJavaMyBatisDraftPack.v0.1.",
+        "manualReviewPoints": sorted(report.manual_review_points),
+        "scores": dict(report.metadata.get("scores") or {}),
+    }
+
+
+def _verify_pack_quality(pack: Mapping[str, Any]) -> dict[str, Any]:
+    report = validate_ai_java_mybatis_draft_pack_quality(dict(pack))
+    if report.status != ValidationStatus.PASSED:
+        failed = [
+            check.message
+            for check in report.checks
+            if check.result.value == "FAIL"
+        ][:10]
+        raise ProbeFailure(
+            blocker_code=QUALITY_BLOCKER,
+            summary="Sanitized fixture live AI Draft Pack failed the P42 static validator.",
+            checks=[
+                _check(
+                    "p42_quality_gate",
+                    "fail",
+                    blocker_code=QUALITY_BLOCKER,
+                    summary="; ".join(failed),
+                )
+            ],
+        )
+    missing_markers = REQUIRED_REVIEW_MARKERS - set(report.manual_review_points)
+    if missing_markers:
+        raise ProbeFailure(
+            blocker_code=QUALITY_BLOCKER,
+            summary="Sanitized fixture live output lost required REVIEW_REQUIRED markers.",
+            checks=[
+                _check(
+                    "p42_quality_gate",
+                    "fail",
+                    blocker_code=QUALITY_BLOCKER,
+                    summary="Missing marker(s): " + ", ".join(sorted(missing_markers)),
+                )
+            ],
+        )
+    return {
+        "summary": "Sanitized fixture live output passed the P42 static validator.",
         "manualReviewPoints": sorted(report.manual_review_points),
         "scores": dict(report.metadata.get("scores") or {}),
     }
@@ -779,7 +1091,12 @@ class ProbeFailure(RuntimeError):
 
 
 def _assert_safe_payload(payload: Any, check_name: str) -> None:
-    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    serialized = json.dumps(
+        _payload_for_leakage_scan(payload),
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
     lowered = serialized.lower()
     for fragment in FORBIDDEN_FRAGMENTS:
         if fragment.lower() in lowered:
@@ -815,6 +1132,20 @@ def _assert_safe_payload(payload: Any, check_name: str) -> None:
             )
 
 
+def _payload_for_leakage_scan(payload: Any) -> Any:
+    if isinstance(payload, Mapping):
+        cleaned: dict[str, Any] = {}
+        for key, value in payload.items():
+            key_text = str(key)
+            if key_text in POLICY_ONLY_SCAN_SKIP_KEYS:
+                continue
+            cleaned[key_text] = _payload_for_leakage_scan(value)
+        return cleaned
+    if isinstance(payload, list | tuple):
+        return [_payload_for_leakage_scan(item) for item in payload]
+    return payload
+
+
 def _result(
     *,
     status: str,
@@ -826,6 +1157,7 @@ def _result(
 ) -> dict[str, Any]:
     return {
         "gate": LIVE_GATE_ENV,
+        "mode": _live_replay_mode(),
         "status": status,
         "productionReady": False,
         "blockerCode": blocker_code,
@@ -854,14 +1186,17 @@ def _check(
 
 
 def _missing_required_env() -> list[str]:
-    missing = [name for name in REQUIRED_ENV if not os.getenv(name, "").strip()]
-    for enabled_name in (
-        LIVE_GATE_ENV,
-        "MSSQL_ENABLE_LIVE_METADATA",
-        "LLM_LIVE_GATE",
-        "LLM_ENABLE_REMOTE",
-        "LLM_ALLOW_SP_TEXT",
-    ):
+    mode = _live_replay_mode()
+    required = (
+        SANITIZED_FIXTURE_REQUIRED_ENV
+        if mode == LIVE_MODE_SANITIZED_FIXTURE
+        else REQUIRED_ENV
+    )
+    missing = [name for name in required if not os.getenv(name, "").strip()]
+    enabled_names = [LIVE_GATE_ENV, "LLM_LIVE_GATE", "LLM_ENABLE_REMOTE"]
+    if mode != LIVE_MODE_SANITIZED_FIXTURE:
+        enabled_names.extend(("MSSQL_ENABLE_LIVE_METADATA", "LLM_ALLOW_SP_TEXT"))
+    for enabled_name in enabled_names:
         if os.getenv(enabled_name, "").strip() != "1":
             missing.append(f"{enabled_name}=1")
     if _remote_provider() == "pgpt" and not (
@@ -872,11 +1207,18 @@ def _missing_required_env() -> list[str]:
     return sorted(dict.fromkeys(missing))
 
 
-def _llm_profile_id() -> str:
-    value = os.getenv("P42_LIVE_LLM_PROFILE_ID", "openai_sp_semantic_analysis").strip()
-    if value in {"openai_sp_semantic_analysis", "openai_fast_test"}:
+def _llm_profile_id(default: str = "openai_sp_semantic_analysis") -> str:
+    value = os.getenv("P42_LIVE_LLM_PROFILE_ID", default).strip()
+    if value in {"openai_sp_semantic_analysis", "openai_fast_test", "openai_ai_draft_pack"}:
         return value
-    return "openai_sp_semantic_analysis"
+    return default
+
+
+def _live_replay_mode() -> str:
+    value = os.getenv(LIVE_MODE_ENV, LIVE_MODE_LIVE_PPM).strip().lower()
+    if value in {LIVE_MODE_SANITIZED_FIXTURE, "fixture", "safe_fixture"}:
+        return LIVE_MODE_SANITIZED_FIXTURE
+    return LIVE_MODE_LIVE_PPM
 
 
 def _remote_provider() -> str:

@@ -106,11 +106,13 @@ generated-source deployment.
 
 P42G adds an optional live confidence replay for the remaining P42E risk. It is
 disabled by default with `P42_LIVE_REPLAY_GATE=0`; when explicitly enabled with
-live PPM read-only metadata and the remote OpenAI-compatible gateway, it replays
-`PCO_GU_ManageBond_PRC` through an in-memory workflow repository and reruns the
-same P42 static AI Draft Pack quality gate. Passing P42G is confidence evidence
-only, not production readiness or automatic conversion approval, and the default
-fixture-first P42 acceptance remains unchanged.
+`P42_LIVE_REPLAY_MODE=sanitized_fixture`, it replays sanitized fixture facts
+without live PPM metadata or raw SP external export and reruns the same P42 static
+AI Draft Pack quality gate. The explicit `live_ppm` mode still exists for live
+read-only metadata confidence evidence, but it requires raw-SP-to-remote-model
+approval. Passing P42G is confidence evidence only, not production readiness or
+automatic conversion approval, and the default fixture-first P42 acceptance
+remains unchanged.
 
 P42H removes runtime ManageBond-specific inventory overrides. ManageBond remains
 the benchmark fixture, but the workflow now derives `expectedInventory` and
@@ -142,10 +144,10 @@ LangGraph candidates. The replay preserves P42 quality on ManageBond and proves 
 synthetic complex-SP collapse guard without ManageBond-specific runtime
 hardcoding.
 
-P43F records the framework adoption decision as `pilot`: a future real-framework
-adapter may be explored only behind the internal adapter and policy gates. The
-current Responses/httpx gateway and `BaselineResponsesFrameworkAdapter` remain the
-rollback path.
+P43F historically recorded the framework adoption decision as `pilot`: real
+framework work was gated behind the internal adapter and policy gates. P44
+supersedes that direction with actual internal runtime adoption, while
+Responses/httpx remains P-GPT compatibility and emergency rollback.
 
 No framework dependency is installed in P43. P43 keeps `production_ready: false`
 and does not authorize UI changes, public API expansion, DB schema changes,
@@ -177,9 +179,29 @@ definition storage, raw guide body storage, and secret storage remain forbidden.
 P45 adds the optional live evidence gate `P44_OPENAI_AGENTS_LIVE_GATE=1` for the
 adopted OpenAI Agents runtime. It requires OpenAI remote env plus trace redaction
 locks and uses sanitized fixture inputs only; it does not require live PPM, row
-data, or procedure execution. P46 records that `responses_httpx` is no longer the
-active OpenAI default, but remains retained for P-GPT compatibility and emergency
-rollback; code deletion is not approved in this slice.
+data, or procedure execution. Custom/P-GPT-compatible endpoints are not accepted
+as P45 Agents SDK live evidence. P46 records that `responses_httpx` is no longer
+the active OpenAI default, but remains retained for P-GPT compatibility and
+emergency rollback; code deletion is not approved in this slice.
+
+## P47 Generic AI Draft Quality Uplift
+
+P47 keeps the P44-P46 real framework adoption direction and raises AI Draft Pack
+quality through generic evidence and prompt improvements, not target-specific
+hardcoding. `prompt:ai_java_mybatis_draft_pack@0.2.0` adds a transient
+`DraftPackEvidenceBundle.v0.1` with operation coverage, DTO responsibility,
+mapper coverage, and `REVIEW_REQUIRED` marker contracts. The model should split
+DTOs and wire Service/Mapper/XML methods from discovered operation ids,
+statement evidence refs, and DTO roles; benchmark names such as ManageBond DTOs
+remain comparison signals only.
+
+The OpenAI live profile for AI Draft Pack generation is `openai_ai_draft_pack`.
+`OPENAI_MODEL_AI_DRAFT_PACK` and `OPENAI_REASONING_EFFORT_AI_DRAFT_PACK` select
+the high-quality live model path, defaulting to the analysis-model family rather
+than the fast-test profile. P47 adds no public API, DB schema, UI, public MCP
+route, public artifact type, source apply, deploy, row-data access, procedure
+execution, or production readiness claim. Generated artifacts remain
+`production_ready: false`.
 
 ## 한 줄 정의
 

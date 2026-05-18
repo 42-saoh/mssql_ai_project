@@ -26,6 +26,8 @@ description: Author and refine AiJavaMyBatisDraftPack.v0.1 outputs for P42 AI Dr
 - Treat `OperationModelReviewRequired*`, single `ManageBondDTO`, blank content, and missing DTO references as blockers.
 - Keep cross-DB write, called procedure I/O, TVF/procedure uncertainty, result-shape variants, and transaction boundaries as `REVIEW_REQUIRED`.
 - Treat ManageBond names and DTO expectations as benchmark comparison signals only, not production-runtime hardcoding.
+- Prefer generic coverage-first quality: operation ids, statement refs, DTO responsibilities, mapper methods, evidence refs, and required `REVIEW_REQUIRED` markers must drive the draft.
+- Do not satisfy quality gates by copying benchmark-specific DTO/method names unless those names are present in the deterministic expected inventory.
 
 ## Output Checklist
 

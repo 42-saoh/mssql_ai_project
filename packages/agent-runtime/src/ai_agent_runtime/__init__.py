@@ -48,6 +48,7 @@ from ai_agent_runtime.framework_runtime import (
     AI_GENERATION_RUNTIME_RESPONSES_HTTPX,
     FRAMEWORK_RUNTIME_CONFIG_VERSION,
     OPENAI_AGENTS_TRACE_ENV_LOCKS,
+    OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT,
     P44_OPENAI_AGENTS_LIVE_GATE,
     P44_OPENAI_AGENTS_LIVE_REQUIRED,
     FrameworkRuntimeConfig,
@@ -66,6 +67,7 @@ from ai_agent_runtime.gateway import (
 )
 from ai_agent_runtime.metadata_analysis import build_metadata_analysis_run
 from ai_agent_runtime.models import (
+    AI_DRAFT_PACK_MODEL_PROFILE_ID,
     PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION,
     PLATFORM_TOOL_PLANNER_PROMPT_VERSION,
     AgentRunPayload,
@@ -93,7 +95,11 @@ from ai_agent_runtime.planner_effectiveness import (
     attach_planner_metrics_to_ai_tool_evidence,
     build_planner_metrics,
 )
-from ai_agent_runtime.prompts import render_ai_java_mybatis_draft_pack_prompt
+from ai_agent_runtime.prompts import (
+    DRAFT_PACK_EVIDENCE_BUNDLE_VERSION,
+    build_draft_pack_evidence_bundle,
+    render_ai_java_mybatis_draft_pack_prompt,
+)
 from ai_agent_runtime.quality_eval import (
     LLM_INFERENCE_EVIDENCE_TYPE,
     evaluate_p23_semantic_quality,
@@ -126,11 +132,13 @@ __all__ = [
     "AI_DRAFT_PACK_ORCHESTRATOR_LANGGRAPH",
     "AI_GENERATION_RUNTIME_OPENAI_AGENTS",
     "AI_GENERATION_RUNTIME_RESPONSES_HTTPX",
+    "AI_DRAFT_PACK_MODEL_PROFILE_ID",
     "BaselineResponsesFrameworkAdapter",
     "FakeModelGateway",
     "FakeAiGenerationFrameworkAdapter",
     "FRAMEWORK_RUNTIME_CONFIG_VERSION",
     "FRAMEWORK_RUNTIME_SUMMARY_VERSION",
+    "DRAFT_PACK_EVIDENCE_BUNDLE_VERSION",
     "FrameworkRuntimeConfig",
     "FrameworkRuntimeSelection",
     "LANGGRAPH_AI_DRAFT_PACK_ORCHESTRATOR_COMPONENT",
@@ -143,6 +151,7 @@ __all__ = [
     "ModelInvocationRecord",
     "ModelProfile",
     "OPENAI_AGENTS_TRACE_ENV_LOCKS",
+    "OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT",
     "OpenAIModelGateway",
     "OpenAIAgentsFrameworkAdapter",
     "OperationModelValidationError",
@@ -172,6 +181,7 @@ __all__ = [
     "build_metadata_analysis_run",
     "build_ai_java_mybatis_draft_pack_run",
     "build_framework_tool_context",
+    "build_draft_pack_evidence_bundle",
     "build_planner_metrics",
     "build_semantic_analysis_run",
     "build_semantic_analysis_runs",

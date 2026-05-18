@@ -62,6 +62,13 @@ P45/P46 do not change this package boundary. P45 live evidence is optional and s
 keeps `responses_httpx` only for P-GPT compatibility plus emergency rollback while OpenAI defaults
 to OpenAI Agents SDK plus LangGraph.
 
+P47 improves AI Draft Pack quality through generic evidence, not benchmark hardcoding. The planner
+now renders `DraftPackEvidenceBundle.v0.1`, operation coverage, DTO responsibility, review marker,
+and mapper coverage matrices into `prompt:ai_java_mybatis_draft_pack@0.2.0`. ManageBond DTO and
+method names remain benchmark comparison signals only; generic generation quality is judged by
+operation coverage, DTO separation, mapper wiring, schema validation, and required
+`REVIEW_REQUIRED` markers.
+
 Retired outputs are no longer public generation targets:
 
 - `DTO_MODEL_DRAFT`

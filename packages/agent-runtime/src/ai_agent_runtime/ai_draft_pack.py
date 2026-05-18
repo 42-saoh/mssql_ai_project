@@ -11,7 +11,7 @@ from ai_agent_runtime.models import StrictModel
 from ai_agent_runtime.storage_safety import storage_safety_findings_for_text
 
 AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION = "AiJavaMyBatisDraftPack.v0.1"
-AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION = "prompt:ai_java_mybatis_draft_pack@0.1.0"
+AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION = "prompt:ai_java_mybatis_draft_pack@0.2.0"
 AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION = (
     "schema:ai_java_mybatis_draft_pack@0.1.0"
 )

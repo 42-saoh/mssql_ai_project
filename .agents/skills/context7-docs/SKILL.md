@@ -24,10 +24,10 @@ Use this skill when the task depends on current framework/library/API documentat
 
 # Framework Adoption Notes
 
-- For OpenAI Agents SDK, LangGraph, or another orchestration framework, use official/vendor docs for tracing, configuration, persistence, and checkpointer behavior before proposing a pilot.
+- For OpenAI Agents SDK, LangGraph, or another orchestration framework, use official/vendor docs for tracing, configuration, persistence, and checkpointer behavior before changing the adopted runtime or proposing a new slice.
 - Record the exact docs source and date-sensitive version assumption in the decision report or task notes.
 - Summarize docs as policy-relevant findings; do not paste proprietary prompts, raw SP text, raw guide body, provider payloads, row data, secrets, or generated Java/XML payloads into external tools.
-- If docs show default tracing or persistence that can capture sensitive inputs or outputs, treat adoption as blocked until redaction is proven.
+- If docs show default tracing or persistence that can capture sensitive inputs or outputs, treat runtime changes as blocked until redaction is proven.
 
 # Guardrails
 

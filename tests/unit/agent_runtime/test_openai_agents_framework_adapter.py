@@ -93,6 +93,48 @@ def test_openai_agents_adapter_schema_failure_is_sanitized() -> None:
     assert "outputHash" in diagnostics
 
 
+def test_openai_agents_adapter_omits_native_output_type_for_custom_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeAgents:
+        class Agent:
+            def __init__(self, **kwargs: Any) -> None:
+                captured.update(kwargs)
+                self.name = kwargs["name"]
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://custom-openai-compatible.example/v1")
+    monkeypatch.setattr("ai_agent_runtime.framework_adapter._agents_sdk", lambda: FakeAgents)
+
+    adapter = OpenAIAgentsFrameworkAdapter()
+    agent = adapter._build_agent(request=_request(_valid_pack()))  # noqa: SLF001
+
+    assert agent.name == "AI Draft Pack file_content"
+    assert "output_type" not in captured
+
+
+def test_openai_agents_adapter_keeps_native_output_type_for_official_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeAgents:
+        class Agent:
+            def __init__(self, **kwargs: Any) -> None:
+                captured.update(kwargs)
+                self.name = kwargs["name"]
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setattr("ai_agent_runtime.framework_adapter._agents_sdk", lambda: FakeAgents)
+
+    OpenAIAgentsFrameworkAdapter()._build_agent(  # noqa: SLF001
+        request=_request(_valid_pack())
+    )
+
+    assert captured["output_type"].__name__ == "AiJavaMyBatisDraftPackOutput"
+
+
 def test_openai_agents_adapter_trace_policy_error_stays_sanitized(monkeypatch: Any) -> None:
     payload = _valid_pack()
     adapter = OpenAIAgentsFrameworkAdapter(
@@ -163,6 +205,7 @@ def test_openai_agents_adapter_runner_exception_is_sanitized() -> None:
 
     diagnostics = json.dumps(exc.value.provider_error, ensure_ascii=False)
     assert exc.value.code == P44_OPENAI_AGENTS_ADAPTER_FAILED
+    assert exc.value.__cause__ is None
     assert "CREATE PROCEDURE" not in diagnostics
     assert "secret" not in diagnostics
     assert "RuntimeError" in diagnostics

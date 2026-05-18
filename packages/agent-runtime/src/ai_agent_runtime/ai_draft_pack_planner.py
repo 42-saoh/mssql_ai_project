@@ -126,12 +126,10 @@ def _build_ai_java_mybatis_draft_pack_run_stage(
         stage=stage if framework_adapter is not None else None,
     )
     structured_output = model.to_storage_dict()
-    guard_component = None
-    if repair_context is not None:
-        guard_component = _reference_guard_component(
-            structured_output=structured_output,
-            expected_inventory=expected_inventory,
-        )
+    guard_component = _reference_guard_component(
+        structured_output=structured_output,
+        expected_inventory=expected_inventory,
+    )
     structured_output["qualityGates"] = dict(quality_gates)
     component_invocations = invocation.component_invocations
     if guard_component is not None:

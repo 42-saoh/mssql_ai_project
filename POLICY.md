@@ -62,10 +62,12 @@
 - P42 acceptance is based on a new sanitized workflow replay, not on historical failed jobs such as
   `job_6864d2734e`. The replay must keep generated files draft-only and must not write them into
   application source trees.
-- P42G live replay is opt-in confidence evidence only. It may use transient SP definition/source
-  context through the existing read-only metadata and LLM gates, but persisted probe output must
-  stay sanitized and must not store raw SP definitions, raw prompts, raw provider responses, row
-  data, secrets, or generated-source writes.
+- P42G live replay is opt-in confidence evidence only. The preferred
+  `P42_LIVE_REPLAY_MODE=sanitized_fixture` path uses sanitized fixture facts and does not require
+  live PPM metadata or raw SP external export. The explicit `live_ppm` path may use transient SP
+  definition/source context only through the existing read-only metadata and LLM gates, but
+  persisted probe output must stay sanitized and must not store raw SP definitions, raw prompts,
+  raw provider responses, row data, secrets, or generated-source writes.
 - User-provided guide files may be used as quality references, but raw guide bodies, raw SP
   definitions, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets
   must not be persisted in repo fixtures or platform storage.
@@ -120,9 +122,11 @@
   checkpointer state, tool I/O, raw prompts, raw provider responses, raw SP definitions, raw guide
   body, row data, secrets, and failed Java/XML payloads must not be stored.
 - P45 live OpenAI Agents evidence is optional and must require `P44_OPENAI_AGENTS_LIVE_GATE=1`,
-  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai`, `OPENAI_API_KEY`, and trace redaction env
-  locks. It must use sanitized fixture inputs only and must not query row data, execute procedures,
-  apply source, deploy, or store raw prompts/provider responses.
+  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai`, `OPENAI_API_KEY`, an official OpenAI Agents
+  endpoint (`OPENAI_BASE_URL` empty or `https://api.openai.com/v1`), and trace redaction env locks.
+  It must use sanitized fixture inputs only and must not query row data, execute procedures, apply
+  source, deploy, or store raw prompts/provider responses. Custom or P-GPT-compatible endpoints are
+  not accepted as OpenAI Agents SDK live evidence.
 - P46 does not delete rollback code. It records that `responses_httpx` is not the active OpenAI
   default and is retained only for P-GPT compatibility plus emergency rollback until a separate
   cleanup gate approves removal.
@@ -131,6 +135,26 @@
 - Procedure execution, row-data access, business DB DDL/DML apply, source apply, deploy, automatic
   conversion approval, production readiness claims, and ManageBond-specific production hardcoding
   remain forbidden.
+
+## P47 Generic AI Draft Quality Uplift Policy
+
+- P47 quality improvements must be generic: operation ids, statement evidence refs, DTO
+  responsibilities, mapper coverage, and `REVIEW_REQUIRED` contracts are pass/fail evidence.
+  Benchmark DTO/method names are comparison metrics only and must not become production-runtime
+  answer keys.
+- `DraftPackEvidenceBundle.v0.1` is internal-only and transient. It may contain sanitized ids,
+  counts, roles, evidence refs, blocker ids, quality gates, and review marker contracts only.
+- The AI Draft Pack live profile is `openai_ai_draft_pack`, with
+  `OPENAI_MODEL_AI_DRAFT_PACK` and `OPENAI_REASONING_EFFORT_AI_DRAFT_PACK` selecting the
+  high-quality model path. It must not use the fast-test profile as the default live quality gate.
+- P47 does not weaken P42/P44 schema, inventory, static Java/MyBatis, trace, or storage policies.
+  Raw prompts, raw provider responses, raw SP definitions, raw guide bodies, row data, secrets,
+  failed Java/XML payloads, source apply, deploy, procedure execution, and row-data access remain
+  forbidden.
+- P47 closes the P42 live replay risk with the sanitized fixture live mode and records `live_ppm`
+  as separate confidence evidence only. P45 remains blocked until an official OpenAI-valid key and
+  official endpoint pass the OpenAI Agents SDK live gate with sanitized diagnostics.
+- Generated Java/MyBatis artifacts remain draft-only with `production_ready: false`.
 
 ## P35 Source Context Policy
 

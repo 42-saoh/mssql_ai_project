@@ -13,6 +13,7 @@ description: Evaluate complex stored procedure migration outputs against MIGRATI
    - `BondKindCode`
    - `GUBUNFlag`
    - `SValue`
+   - discovered operation ids, branch predicates, and statement evidence refs
 3. Map each branch to expected responsibilities:
    - query criteria/result DTOs
    - command, batch item, and call request DTOs
@@ -33,6 +34,8 @@ description: Evaluate complex stored procedure migration outputs against MIGRATI
 
 - Default target: `PPM.dbo.PCO_GU_ManageBond_PRC`.
 - Use ManageBond as a benchmark quality target only, not as a production-runtime answer key or hardcoded generator branch.
+- For P47+ generic gates, ManageBond DTO/method names are comparison signals only. Judge pass/fail through discovered operation coverage, DTO responsibility separation, mapper statement wiring, and required `REVIEW_REQUIRED` markers.
+- Treat `CRUDFlag`, `BondKindCode`, `GUBUNFlag`, and `SValue` as benchmark examples, not universal assumptions for unrelated complex SPs.
 - Required branches: `R`, `A`, `C`, `U`, `D`, `VENDOR_U`, `ONLINE_U`.
 - Required uncertainty markers include cross-DB write, called procedure I/O, TVF/procedure kind, result-shape variants, and transaction boundaries.
 - A passing draft must show business flow in separate DTOs and branch/use-case methods, not in one merged DTO.

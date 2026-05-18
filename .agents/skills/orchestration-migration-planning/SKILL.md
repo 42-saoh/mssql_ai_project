@@ -15,7 +15,7 @@ description: Decompose a major post-P43 orchestration or framework migration int
 
 ## Planning Guardrails
 
-- Do not turn a pilot into adoption without a decision report and rollback evidence.
+- Do not expand adopted runtime scope without a decision report, rollback evidence, fixture replay, and sanitized live policy.
 - Do not broaden public API, DB schema, UI, public MCP routes, or public artifact types inside a readiness slice.
 - Do not infer metadata facts from generated code.
 - Do not run procedures, query row data, apply business DB DDL/DML, write generated source into application trees, deploy, or publish.

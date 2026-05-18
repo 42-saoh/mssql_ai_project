@@ -19,13 +19,19 @@ METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.1"
 METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.1"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
 FAST_TEST_MODEL_PROFILE_ID = "openai_fast_test"
+AI_DRAFT_PACK_MODEL_PROFILE_ID = "openai_ai_draft_pack"
 FAST_TEST_DEFAULT_MODEL = "gpt-5-nano"
 SEMANTIC_MODEL_REGISTRY_REF = "model:openai_sp_semantic_analysis@0.1.0"
 FAST_TEST_MODEL_REGISTRY_REF = f"model:openai_fast_test@{FAST_TEST_DEFAULT_MODEL}@0.1.0"
+AI_DRAFT_PACK_MODEL_REGISTRY_REF = "model:openai_ai_draft_pack@0.1.0"
 
 
 def fast_test_model_registry_ref(model: str) -> str:
     return f"model:openai_fast_test@{model}@0.1.0"
+
+
+def ai_draft_pack_model_registry_ref(model: str) -> str:
+    return f"model:openai_ai_draft_pack@{model}@0.1.0"
 
 
 class AgentRunStatus(StrEnum):

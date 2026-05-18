@@ -124,7 +124,16 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
         "deterministic_validation",
         "repair",
     ]
+    assert prompt_payload["draftPackEvidenceBundle"]["version"] == (
+        "DraftPackEvidenceBundle.v0.1"
+    )
+    assert prompt_payload["operationCoverageMatrix"]
+    assert prompt_payload["dtoResponsibilityMatrix"]
+    assert prompt_payload["reviewMarkerContract"]["requiredMarkers"]
+    assert prompt_payload["mapperCoverageContract"]["requiredMapperMethods"]
     assert prompt_payload["filePolicy"]["mustSplitDtoFiles"] is True
+    assert prompt_payload["filePolicy"]["genericCoverageFirst"] is True
+    assert prompt_payload["filePolicy"]["benchmarkNamesAreNotAnswerKeys"] is True
     assert prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["exactFiles"]
     assert "aggregate files" in prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["rule"]
     assert prompt_payload["filePolicy"]["methodCoveragePolicy"]["requiredServiceMethods"]
@@ -134,6 +143,21 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
     assert "raw_prompt" not in prompt.user_prompt
     assert "REVIEW_REQUIRED" in prompt.system_prompt
     assert prompt.metadata["expectedFileCount"] == 14
+    assert prompt.metadata["evidenceBundleVersion"] == "DraftPackEvidenceBundle.v0.1"
+
+
+def test_ai_draft_pack_model_profile_uses_high_quality_override(monkeypatch: Any) -> None:
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_MODEL_ANALYSIS", "gpt-5.5")
+    monkeypatch.setenv("OPENAI_MODEL_AI_DRAFT_PACK", "gpt-5.5")
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT_AI_DRAFT_PACK", "high")
+
+    profile = model_profile_from_env("openai_ai_draft_pack")
+
+    assert profile.profile_id == "openai_ai_draft_pack"
+    assert profile.model == "gpt-5.5"
+    assert profile.registry_ref == "model:openai_ai_draft_pack@gpt-5.5@0.1.0"
+    assert profile.reasoning_effort == "high"
 
 
 def test_fake_gateway_returns_schema_valid_ai_draft_pack() -> None:
@@ -219,6 +243,150 @@ def test_ai_draft_pack_run_preserves_deterministic_quality_gates() -> None:
 
     assert run.structured_output["qualityGates"] == payload["qualityGates"]
     assert run.model_invocation.structured_output["qualityGates"] == payload["qualityGates"]
+
+
+def test_ai_draft_pack_run_preserves_generic_expected_dto_references() -> None:
+    quality_gates = {
+        "requiredDtoClasses": ["SyntheticSearchCriteria", "SyntheticUpdateCommand"],
+        "requiredServiceMethods": ["readSynthetic", "updateSynthetic"],
+        "requiredMapperMethods": ["readSynthetic", "updateSynthetic"],
+        "requiredReviewMarkers": ["TRANSACTION_BOUNDARY_REVIEW_REQUIRED"],
+        "blockerPatterns": [],
+        "blankContentIsBlocker": True,
+        "dtoCollapseIsBlocker": True,
+        "fallbackSkeletonPersistenceAllowedOnFailure": False,
+    }
+    expected_inventory = [
+        {
+            "artifactType": "DTO_DRAFT",
+            "path": "dto/SyntheticSearchCriteria.java",
+            "role": "QUERY_DTO",
+            "className": "SyntheticSearchCriteria",
+            "operationIds": ["readSynthetic"],
+            "evidenceRefs": ["ev.synthetic.read"],
+        },
+        {
+            "artifactType": "DTO_DRAFT",
+            "path": "dto/SyntheticUpdateCommand.java",
+            "role": "COMMAND_DTO",
+            "className": "SyntheticUpdateCommand",
+            "operationIds": ["updateSynthetic"],
+            "evidenceRefs": ["ev.synthetic.update"],
+        },
+        {
+            "artifactType": "SERVICE_DRAFT",
+            "path": "service/SyntheticService.java",
+            "role": "SERVICE",
+            "className": "SyntheticService",
+            "operationIds": ["readSynthetic", "updateSynthetic"],
+            "references": ["SyntheticSearchCriteria", "SyntheticUpdateCommand"],
+            "evidenceRefs": ["ev.synthetic.read", "ev.synthetic.update"],
+        },
+        {
+            "artifactType": "MAPPER_INTERFACE",
+            "path": "mapper/SyntheticMapper.java",
+            "role": "MAPPER_INTERFACE",
+            "className": "SyntheticMapper",
+            "operationIds": ["readSynthetic", "updateSynthetic"],
+            "references": ["SyntheticSearchCriteria", "SyntheticUpdateCommand"],
+            "evidenceRefs": ["ev.synthetic.read", "ev.synthetic.update"],
+        },
+        {
+            "artifactType": "MAPPER_XML",
+            "path": "mapper/SyntheticMapper.xml",
+            "role": "MAPPER_XML",
+            "className": "SyntheticMapperSql",
+            "operationIds": ["readSynthetic", "updateSynthetic"],
+            "references": ["SyntheticSearchCriteria", "SyntheticUpdateCommand"],
+            "evidenceRefs": ["ev.synthetic.read", "ev.synthetic.update"],
+        },
+    ]
+    provider_payload = {
+        "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
+        "contractTarget": "AiJavaMyBatisDraftPack",
+        "targetRef": "PPM.dbo.SyntheticComplex_PRC",
+        "sourcePolicy": "sanitized_facts_only",
+        "productionReady": False,
+        "files": [
+            {
+                "artifactType": "DTO_DRAFT",
+                "path": "dto/SyntheticSearchCriteria.java",
+                "role": "QUERY_DTO",
+                "className": "SyntheticSearchCriteria",
+                "content": "public class SyntheticSearchCriteria {}",
+                "operationIds": ["readSynthetic"],
+                "evidenceRefs": ["ev.synthetic.read"],
+            },
+            {
+                "artifactType": "DTO_DRAFT",
+                "path": "dto/SyntheticUpdateCommand.java",
+                "role": "COMMAND_DTO",
+                "className": "SyntheticUpdateCommand",
+                "content": "public class SyntheticUpdateCommand {}",
+                "operationIds": ["updateSynthetic"],
+                "evidenceRefs": ["ev.synthetic.update"],
+                "reviewMarkers": ["TRANSACTION_BOUNDARY_REVIEW_REQUIRED"],
+            },
+            {
+                "artifactType": "SERVICE_DRAFT",
+                "path": "service/SyntheticService.java",
+                "role": "SERVICE",
+                "className": "SyntheticService",
+                "content": "public class SyntheticService { void readSynthetic() {} }",
+                "operationIds": ["readSynthetic", "updateSynthetic"],
+                "evidenceRefs": ["ev.synthetic.read", "ev.synthetic.update"],
+            },
+            {
+                "artifactType": "MAPPER_INTERFACE",
+                "path": "mapper/SyntheticMapper.java",
+                "role": "MAPPER_INTERFACE",
+                "className": "SyntheticMapper",
+                "content": "public interface SyntheticMapper { void updateSynthetic(); }",
+                "operationIds": ["readSynthetic", "updateSynthetic"],
+                "evidenceRefs": ["ev.synthetic.read", "ev.synthetic.update"],
+            },
+            {
+                "artifactType": "MAPPER_XML",
+                "path": "mapper/SyntheticMapper.xml",
+                "role": "MAPPER_XML",
+                "className": "SyntheticMapperSql",
+                "content": '<mapper><select id="readSynthetic" /></mapper>',
+                "operationIds": ["readSynthetic", "updateSynthetic"],
+                "evidenceRefs": ["ev.synthetic.read", "ev.synthetic.update"],
+            },
+        ],
+        "evidenceRefs": ["ev.synthetic.read", "ev.synthetic.update"],
+        "reviewMarkers": ["TRANSACTION_BOUNDARY_REVIEW_REQUIRED"],
+        "qualityGates": quality_gates,
+    }
+    gateway = FakeModelGateway(
+        ai_draft_pack_by_target_ref={provider_payload["targetRef"]: provider_payload}
+    )
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=provider_payload["targetRef"],
+        sanitized_draft_context={"targetRef": provider_payload["targetRef"]},
+        expected_inventory=expected_inventory,
+        quality_gates=quality_gates,
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=provider_payload["evidenceRefs"],
+    )
+
+    non_dto_files = [
+        file
+        for file in run.structured_output["files"]
+        if file["artifactType"] != "DTO_DRAFT"
+    ]
+    assert all(
+        file["references"] == ["SyntheticSearchCriteria", "SyntheticUpdateCommand"]
+        for file in non_dto_files
+    )
+    assert all("SyntheticSearchCriteria" in file["content"] for file in non_dto_files)
+    assert any(
+        component["component"] == "ai_draft_pack_reference_guard"
+        for component in run.model_invocation.component_invocations
+    )
 
 
 def test_gateway_storage_summary_keeps_only_hashes_and_structured_output() -> None:
