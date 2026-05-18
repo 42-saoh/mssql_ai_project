@@ -66,6 +66,14 @@ Mapper XML directly from sanitized analysis evidence.
 - Contract and eval tests for P42 groundwork.
 - Minimal docs sync describing the intended P42 path.
 
+## Recommended Skills
+
+- P42B schema/gateway: use `ai-draft-pack-authoring` with `contract-to-code`.
+- P42C validator: use `java-mybatis-draft-validator` with `eval-fixture-authoring`.
+- P42D workflow wiring: use `ai-draft-pack-authoring` and `quality-gate-review`.
+- P42E replay gate: use `sp-business-logic-migration-eval` and `java-mybatis-draft-validator`.
+- P42F docs/gate: use `docs-sync`, `quality-gate-review`, and `sp-business-logic-migration-eval`.
+
 ## Verification
 
 - `make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"`

@@ -29,3 +29,10 @@
 - 스킬이 너무 커지면 역할별로 분리한다.
 - 동일한 작업을 반복해서 요청하게 되면 스킬로 승격한다.
 - 불필요해진 스킬은 제거하거나 보관 처리한다.
+## P42 Additional Skills
+
+| Skill | Location | When to use | Output |
+|---|---|---|---|
+| `ai-draft-pack-authoring` | `.agents/skills/ai-draft-pack-authoring` | P42 `AiJavaMyBatisDraftPack.v0.1` file inventory/content/repair 를 작성할 때 | AI Draft Pack inventory, Java/MyBatis draft pack, repair notes |
+| `java-mybatis-draft-validator` | `.agents/skills/java-mybatis-draft-validator` | DTO/Service/Mapper/MapperXML 초안의 blank, fallback, single DTO collapse, forbidden marker 를 검증할 때 | blocker report, review marker report, validation checklist |
+| `sp-business-logic-migration-eval` | `.agents/skills/sp-business-logic-migration-eval` | `MIGRATION_GUIDE.md`와 생성 산출물을 비교해 SP business branch 품질을 평가할 때 | branch coverage report, DTO/method responsibility map, missing `REVIEW_REQUIRED` findings |
