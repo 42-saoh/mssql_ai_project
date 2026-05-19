@@ -17,12 +17,28 @@ refineRequest:
     useLlmAnalysis: false
     generateDtoDraft: true
     conversationMode: REFINE_CURRENT
+referenceDesignRequest:
+  dbProfileId: master
+  message: 테이블 명은 PCO_사전감사야. 안에 들어가는 필드는 계약번호, 주문번호, 계약변경차수, 사전감사YN 야.
+  designInputs:
+    tableNameHint: dbo.PCS_CTRT, dbo.PEM_CTRT
+  options:
+    llmProfileId: openai_fast_test
+    useLlmAnalysis: false
+    generateDtoDraft: true
+    conversationMode: NEW_DESIGN
 expected:
   tableName: PPM_ORDER_REQ
+  referenceTableName: PCO_PREV_AUDT
   newDesignFields:
     - CUSTOMER_NM
     - ADDR
     - ORDER_DT
+  referenceDesignFields:
+    - CTRT_NO
+    - ORDR_NO
+    - CTRT_CHG_SEQ_NO
+    - PREV_AUDT_YN
   refineColumns:
     - DLV_MEMO
     - ORDER_DT
@@ -37,3 +53,4 @@ expected:
     - rawProvider
     - DDL_DRAFT
     - DTO_MODEL_DRAFT
+    - FIELD_1_VAL

@@ -371,6 +371,7 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     artifact_actions = (WEB_ROOT / "components" / "artifact-actions.tsx").read_text(
         encoding="utf-8"
     )
+    global_css = (WEB_ROOT / "app" / "globals.css").read_text(encoding="utf-8")
     asset_page = (
         WEB_ROOT / "app" / "knowledge" / "assets" / "[assetId]" / "page.tsx"
     ).read_text(encoding="utf-8")
@@ -422,7 +423,35 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     assert "ArtifactActions" in artifact_preview
     assert "const displayedContent = displayArtifactContent(artifact.content)" in artifact_preview
     assert "content={displayedContent}" in artifact_preview
+    assert 'import Markdown from "react-markdown";' in artifact_preview
+    assert 'import remarkGfm from "remark-gfm";' in artifact_preview
+    assert "isMarkdownArtifactType(artifact.type)" in artifact_preview
+    markdown_type_block = re.search(
+        r"markdownArtifactTypes = new Set<Artifact\[\"type\"\]>\(\[([\s\S]*?)\]\);",
+        artifact_preview,
+    )
+    assert markdown_type_block is not None
+    assert '"SP_ANALYSIS_DOC"' in markdown_type_block.group(1)
+    assert '"DEPENDENCY_REPORT"' in markdown_type_block.group(1)
+    for code_preview_type in (
+        "METADATA_QUERY_RESULT",
+        "SCHEMA_ENRICHMENT_RESULT",
+        "MAPPER_XML",
+        "MAPPER_INTERFACE",
+        "SERVICE_DRAFT",
+        "DTO_DRAFT",
+        "VALIDATION_REPORT",
+    ):
+        assert code_preview_type not in markdown_type_block.group(1)
+    assert "remarkPlugins={[remarkGfm]}" in artifact_preview
+    assert "skipHtml" in artifact_preview
+    assert 'className="markdown-preview"' in artifact_preview
     assert "<pre>{displayedContent}</pre>" in artifact_preview
+    assert "rehypeRaw" not in artifact_preview
+    assert "dangerouslySetInnerHTML" not in artifact_preview
+    assert ".markdown-preview {" in global_css
+    assert ".markdown-preview table" in global_css
+    assert ".markdown-preview pre code" in global_css
     assert "Copy content" in artifact_actions
     assert "Download draft file" in artifact_actions
     assert "navigator.clipboard.writeText(content)" in artifact_actions
@@ -452,6 +481,8 @@ def test_knowledge_fact_graph_links_and_draft_download_controls_are_wired() -> N
     assert "0x04034b50" in zip_writer
     assert "0x02014b50" in zip_writer
     assert "0x06054b50" in zip_writer
+    assert "react-markdown" in package_json["dependencies"]
+    assert "remark-gfm" in package_json["dependencies"]
     assert package_json["scripts"]["smoke:draft-download"] == (
         "node --experimental-strip-types scripts/draft-download-helper-smoke.mjs"
     )

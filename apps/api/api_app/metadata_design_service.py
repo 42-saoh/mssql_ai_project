@@ -68,7 +68,57 @@ FIELD_CONNECTOR_RE = re.compile(
     r"\s*(?:,|/|;|\n|\r|와|과|및|하고|이랑|랑|and|with)\s*",
     re.IGNORECASE,
 )
+TABLE_NAME_PHRASE_RE = re.compile(
+    r"(?:테이블\s*명|테이블명|table\s*name)\s*(?:은|는|:|=)?\s*(?P<table>[^\s,.;]+)",
+    re.IGNORECASE,
+)
+FIELD_LIST_PHRASE_RE = re.compile(
+    r"(?:필드|컬럼|column|field)(?:\s*(?:은|는|:|=))?\s*(?P<fields>.+)",
+    re.IGNORECASE,
+)
+OBJECT_REF_RE = re.compile(
+    r"^(?:(?P<schema>[A-Za-z_][A-Za-z0-9_]*)\.)?(?P<table>[A-Za-z_][A-Za-z0-9_]*)$"
+)
 KNOWN_FIELD_TERMS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
+    (
+        ("계약번호", "계약 번호", "contract number", "contract no", "ctrt_no"),
+        "CTRT_NO",
+        "Contract number",
+        "VARCHAR(50)",
+    ),
+    (
+        ("주문번호", "주문 번호", "발주번호", "발주 번호", "order number", "ordr_no", "order_no"),
+        "ORDR_NO",
+        "Order number",
+        "VARCHAR(50)",
+    ),
+    (
+        (
+            "계약변경차수",
+            "계약 변경 차수",
+            "계약변경 순번",
+            "contract change sequence",
+            "contract change seq",
+            "ctrt_chg_seq_no",
+        ),
+        "CTRT_CHG_SEQ_NO",
+        "Contract change sequence number",
+        "INT",
+    ),
+    (
+        (
+            "사전감사yn",
+            "사전감사 yn",
+            "사전 감사 yn",
+            "사전감사 여부",
+            "pre audit yn",
+            "prior audit yn",
+            "prev audit yn",
+        ),
+        "PREV_AUDT_YN",
+        "Pre-audit yes/no",
+        "VARCHAR(1)",
+    ),
     (
         ("고객명", "고객 이름", "customer name", "customer_nm"),
         "CUSTOMER_NM",
@@ -92,6 +142,7 @@ KNOWN_FIELD_TERMS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
     (("메모", "memo"), "MEMO", "Memo", "VARCHAR(500)"),
 )
 KNOWN_TABLE_TERMS: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (("사전감사", "사전 감사", "pre audit", "prior audit"), "PCO_PREV_AUDT", "Pre-audit table"),
     (("주문 요청", "order request"), "PPM_ORDER_REQ", "Order request table"),
     (("고객 주문", "customer order"), "PPM_CUSTOMER_ORDER", "Customer order table"),
 )
@@ -257,7 +308,12 @@ def _interpret_design_intent(request: MetadataDesignRunRequest) -> MetadataDesig
     message = _safe_text(request.message)
     fields = _fields_from_request_or_message(request)
     modifications = _modifications_from_message(message, fields=fields)
-    table_name = _safe_text(request.design_inputs.table_name_hint) or _table_name_from_message(message)
+    message_table_name = _table_name_from_message(message)
+    table_hint = _safe_text(request.design_inputs.table_name_hint)
+    table_name = (
+        message_table_name
+        or ("" if _table_name_hint_is_reference_scope(table_hint) else table_hint)
+    )
     table_description = (
         _safe_text(request.design_inputs.table_description)
         or _table_description_from_message(message)
@@ -515,6 +571,11 @@ def _fields_from_request_or_message(
 
 def _fields_from_message(message: str) -> list[MetadataDesignFieldInput]:
     text = _safe_text(message)
+    field_clause = _field_clause_from_message(text)
+    if field_clause:
+        fields = _fields_from_field_clause(field_clause)
+        if fields:
+            return fields[:20]
     known = _known_fields_from_text(text)
     if known:
         return known[:20]
@@ -526,6 +587,28 @@ def _fields_from_message(message: str) -> list[MetadataDesignFieldInput]:
             continue
         inferred.append(_field_input_from_text(candidate))
     return _dedupe_field_inputs(inferred)[:20]
+
+
+def _field_clause_from_message(message: str) -> str:
+    text = _safe_text(message)
+    if not text:
+        return ""
+    matches = list(FIELD_LIST_PHRASE_RE.finditer(text))
+    if not matches:
+        return ""
+    clause = matches[-1].group("fields")
+    clause = re.split(r"(?:\.|입니다|이다|다\.|\bplease\b)", clause, maxsplit=1)[0]
+    return _strip_korean_sentence_tail(clause)
+
+
+def _fields_from_field_clause(clause: str) -> list[MetadataDesignFieldInput]:
+    fields: list[MetadataDesignFieldInput] = []
+    for part in FIELD_CONNECTOR_RE.split(clause):
+        candidate = _field_text_from_fragment(part)
+        if not candidate:
+            continue
+        fields.append(_field_input_from_text(candidate))
+    return _dedupe_field_inputs(fields)
 
 
 def _modifications_from_message(
@@ -632,12 +715,17 @@ def _dedupe_intent_changes(
 def _table_name_from_message(message: str) -> str:
     text = _safe_text(message)
     folded = _normalize_match_text(text)
+    explicit = TABLE_NAME_PHRASE_RE.search(text)
+    if explicit:
+        candidate = _standard_table_candidate(explicit.group("table"))
+        if candidate:
+            return candidate
     for terms, table_name, _description in KNOWN_TABLE_TERMS:
         if any(_normalize_match_text(term) in folded for term in terms):
             return table_name
-    explicit = re.search(r"\b([A-Za-z][A-Za-z0-9_]{2,})\b", text)
+    explicit = re.search(r"\b([A-Za-z][A-Za-z0-9_]*_[A-Za-z0-9_가-힣]+)\b", text)
     if explicit and "_" in explicit.group(1):
-        return _standard_identifier(explicit.group(1))
+        return _standard_table_candidate(explicit.group(1))
     return ""
 
 
@@ -648,6 +736,79 @@ def _table_description_from_message(message: str) -> str:
         if any(_normalize_match_text(term) in folded for term in terms):
             return description
     return text[:200]
+
+
+def _standard_table_candidate(value: str) -> str:
+    text = _strip_korean_sentence_tail(value)
+    if not text:
+        return ""
+    for terms, table_name, _description in KNOWN_TABLE_TERMS:
+        if any(_normalize_match_text(term) in _normalize_match_text(text) for term in terms):
+            prefix = _standard_identifier(text.split("_", 1)[0]) if "_" in text else ""
+            if prefix and prefix in {"PCO", "PCS", "PEM", "PPE", "PEI", "PPN", "PEX", "PAD", "PPM", "PDM", "PMA", "PEQ"}:
+                return f"{prefix}_{table_name.split('_', 1)[1]}"
+            return table_name
+    return _standard_identifier(_replace_known_korean_table_terms(text))
+
+
+def _replace_known_korean_table_terms(value: str) -> str:
+    replacements = {
+        "사전감사": "PREV_AUDT",
+        "사전 감사": "PREV_AUDT",
+        "감사": "AUDT",
+        "계약": "CTRT",
+        "주문": "ORDR",
+        "발주": "ORDR",
+    }
+    text = _strip_korean_sentence_tail(value)
+    for source, target in replacements.items():
+        text = text.replace(source, target)
+    return text
+
+
+def _table_name_hint_is_reference_scope(hint: str) -> bool:
+    text = _safe_text(hint)
+    if not text:
+        return False
+    return len(_table_reference_hints(text)) > 1
+
+
+def _table_reference_hints(hint: str) -> list[tuple[str, str]]:
+    refs: list[tuple[str, str]] = []
+    for part in re.split(r"[,;\n\r]+", _safe_text(hint)):
+        token = part.strip()
+        if not token:
+            continue
+        match = OBJECT_REF_RE.match(token)
+        if not match:
+            continue
+        schema = _standard_identifier(match.group("schema") or "dbo") or "dbo"
+        table_name = _standard_identifier(match.group("table") or "")
+        if table_name:
+            refs.append((schema, table_name))
+    deduped: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for schema, table_name in refs:
+        key = (schema.lower(), table_name.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append((schema, table_name))
+    return deduped
+
+
+def _metadata_reference_hints_for_request(
+    request: MetadataDesignRunRequest,
+) -> list[tuple[str, str]]:
+    hint = _safe_text(request.design_inputs.table_name_hint)
+    refs = _table_reference_hints(hint)
+    if not refs:
+        return []
+    if _table_name_hint_is_reference_scope(hint):
+        return refs
+    if "." in hint and _table_name_from_message(request.message):
+        return refs
+    return []
 
 
 def _field_from_change(change: MetadataDesignIntentChange) -> MetadataDesignFieldInput:
@@ -808,7 +969,13 @@ def _field_text_from_fragment(fragment: str) -> str:
         return ""
     text = re.sub(r"\b(field|column|type)\b", "", text, flags=re.IGNORECASE).strip()
     text = re.sub(r"(필드|컬럼|타입|으로|로|은|는|을|를|이|가)$", "", text).strip()
+    text = _strip_korean_sentence_tail(text)
     return text[:80]
+
+
+def _strip_korean_sentence_tail(value: str) -> str:
+    text = _safe_text(value).strip(" .:()[]{}")
+    return re.sub(r"(?:이야|야|입니다|임|다)$", "", text).strip()
 
 
 def _remove_target_text(message: str) -> str:
@@ -995,10 +1162,30 @@ def _collect_metadata_candidates(
         return data
 
     table_hint = request.design_inputs.table_name_hint
+    reference_hints = _metadata_reference_hints_for_request(request)
+    direct_schema_refs: set[tuple[str, str]] = set()
     table_description = request.design_inputs.table_description or _description_from_message(
         request.message
     )
-    if table_hint or table_description:
+    if reference_hints:
+        for schema, table_name in reference_hints[:max_candidates]:
+            data = invoke(
+                "search_tables",
+                {
+                    "physicalName": table_name,
+                    "logicalName": table_name,
+                    "description": _safe_text(table_description),
+                    "topK": max_candidates,
+                },
+            )
+            _append_table_candidates(related, facts, data, "TABLE")
+            direct_schema_refs.add((schema.lower(), table_name.lower()))
+            schema_data = invoke(
+                "get_table_schema",
+                {"schema": schema, "tableName": table_name},
+            )
+            _append_schema_metadata(related, facts, schema_data, _evidence_ids(schema_data or {}))
+    elif table_hint or table_description:
         data = invoke(
             "search_tables",
             {
@@ -1009,6 +1196,13 @@ def _collect_metadata_candidates(
             },
         )
         _append_table_candidates(related, facts, data, "TABLE")
+    column_table_filter = (
+        reference_hints[0][1]
+        if len(reference_hints) == 1
+        else _safe_text(table_hint)
+        if not reference_hints
+        else ""
+    )
     for field in fields[:10]:
         data = invoke(
             "search_columns",
@@ -1016,7 +1210,7 @@ def _collect_metadata_candidates(
                 "physicalName": _safe_text(field.name),
                 "logicalName": _safe_text(field.name),
                 "description": _safe_text(field.description),
-                "tableName": _safe_text(table_hint),
+                "tableName": column_table_filter,
                 "topK": max_candidates,
             },
         )
@@ -1043,6 +1237,9 @@ def _collect_metadata_candidates(
         schema, table_name = _split_object_ref(item.object_ref)
         if not schema or not table_name:
             continue
+        if (schema.lower(), table_name.lower()) in direct_schema_refs:
+            continue
+        direct_schema_refs.add((schema.lower(), table_name.lower()))
         data = invoke(
             "get_table_schema",
             {"schema": schema, "tableName": table_name},
@@ -1158,7 +1355,52 @@ def _append_schema_metadata(
             ),
         )
     )
-    facts.append(_fact("metadata_design.table_schema", object_ref, evidence_refs))
+    fact_prefix = _standard_identifier(table_name).lower() or "table"
+    facts.append(_fact(f"metadata_design.table_schema.{fact_prefix}", object_ref, evidence_refs))
+    for column_index, column in enumerate(data.get("columns") or []):
+        if not isinstance(column, dict):
+            continue
+        column_name = _standard_identifier(str(column.get("name") or ""))
+        lowered_name = column_name.lower()
+        if (
+            not column_name
+            or FORBIDDEN_TEXT_RE.search(column_name)
+            or any(token in lowered_name for token in ("secret", "password", "token", "definition"))
+        ):
+            continue
+        column_ref = f"{object_ref}.{column_name}"
+        column_payload = {
+            "schema": schema,
+            "tableName": table_name,
+            "columnName": column_name,
+            "logicalName": column.get("logicalName"),
+            "description": column.get("description"),
+            "descriptionStatus": column.get("descriptionStatus", "CONFIRMED"),
+            "dataType": column.get("dataType"),
+            "score": 80,
+        }
+        related.append(
+            MetadataRelatedMetadata(
+                kind="COLUMN",
+                objectRef=column_ref,
+                score=80,
+                summary=_safe_text(
+                    column.get("description")
+                    or column.get("logicalName")
+                    or column_name
+                    or column_ref
+                ),
+                evidenceRefs=evidence_refs,
+                payload=_safe_payload(column_payload),
+            )
+        )
+        facts.append(
+            _fact(
+                f"metadata_design.table_schema_column.{fact_prefix}.{column_index}",
+                column_ref,
+                evidence_refs,
+            )
+        )
 
 
 def _build_standardization_mappings(
@@ -1452,7 +1694,10 @@ def _best_column_candidate(
             _normalize_match_text(candidate.payload.get(key))
             for key in ("columnName", "logicalName", "description")
         )
-        match_bonus = 100 if any(token and token in payload_text for token in tokens) else 0
+        has_token_match = any(token and token in payload_text for token in tokens)
+        if not has_token_match:
+            continue
+        match_bonus = 100 if has_token_match else 0
         scored.append((candidate.score + match_bonus, candidate))
     scored.sort(key=lambda item: item[0], reverse=True)
     return scored[0][1] if scored and scored[0][0] > 0 else None
@@ -1475,7 +1720,7 @@ def _standardize_field(
             "REVIEW_REQUIRED: field name was inferred because metadata did not confirm it."
         )
     data_type = field.db_type or _type_from_text(source, policy)
-    if normalized == f"FIELD_{index + 1}_VAL":
+    if normalized.startswith("REVIEW_REQUIRED_FIELD_"):
         reasons.append(
             "REVIEW_REQUIRED: approved abbreviation was not found for the requested meaning."
         )
@@ -1487,14 +1732,28 @@ def _standard_table_name(
     policy: dict[str, Any],
 ) -> tuple[str, list[str]]:
     hint = request.design_inputs.table_name_hint
-    if hint:
+    message_candidate = _table_name_from_message(request.message)
+    if message_candidate:
+        return message_candidate, _table_name_review_reasons(message_candidate, policy)
+    if hint and not _table_name_hint_is_reference_scope(hint):
         candidate = _standard_identifier(hint)
         if candidate:
-            return candidate, []
+            return candidate, _table_name_review_reasons(candidate, policy)
     prefix = policy.get("schema_generation_rules", {}).get("new_platform_table_prefix", "PPM")
     return f"{prefix}_META_DESIGN_TMP", [
         "REVIEW_REQUIRED: table name was inferred because no confirmed table name was supplied."
     ]
+
+
+def _table_name_review_reasons(table_name: str, policy: dict[str, Any]) -> list[str]:
+    approved_roles = {
+        _standard_identifier(role)
+        for role in policy.get("table_naming", {}).get("approved_roles", [])
+    }
+    parts = [part for part in _standard_identifier(table_name).split("_") if part]
+    if approved_roles and parts and parts[-1] not in approved_roles:
+        return ["REVIEW_REQUIRED: table role suffix must be confirmed against platform naming rules."]
+    return []
 
 
 def _name_from_description(source: str, policy: dict[str, Any], index: int) -> str:
@@ -1502,6 +1761,9 @@ def _name_from_description(source: str, policy: dict[str, Any], index: int) -> s
     if known:
         return known[0]
     text = _normalize_match_text(source)
+    class_word = _class_word_from_text(source)
+    if class_word:
+        return f"FIELD_{index + 1}_{class_word}"
     if any(token in text for token in ("datetime", "timestamp", "일시")):
         return f"FIELD_{index + 1}_DTM"
     if any(token in text for token in ("date", "날짜", "일자")):
@@ -1514,10 +1776,7 @@ def _name_from_description(source: str, policy: dict[str, Any], index: int) -> s
         return f"FIELD_{index + 1}_CD"
     if any(token in text for token in ("name", "이름", "명")):
         return f"FIELD_{index + 1}_NM"
-    preferred = policy.get("preferred_term_columns", {})
-    if "VAL" in preferred:
-        return f"FIELD_{index + 1}_VAL"
-    return f"FIELD_{index + 1}_VAL"
+    return f"REVIEW_REQUIRED_FIELD_{index + 1}"
 
 
 def _type_from_text(source: str, policy: dict[str, Any]) -> str:
@@ -1526,6 +1785,9 @@ def _type_from_text(source: str, policy: dict[str, Any]) -> str:
         return known[2]
     text = _normalize_match_text(source)
     class_words = policy.get("column_naming", {}).get("class_words", {})
+    class_word = _class_word_from_text(source)
+    if class_word:
+        return str(class_words.get(class_word, {}).get("standard_type") or "VARCHAR(500)")
     if any(token in text for token in ("datetime", "timestamp", "일시")):
         return str(class_words.get("DTM", {}).get("standard_type") or "DATETIME2")
     if any(token in text for token in ("date", "날짜", "일자")):
@@ -1543,6 +1805,33 @@ def _type_from_text(source: str, policy: dict[str, Any]) -> str:
     if any(token in text for token in ("description", "desc", "설명", "메모")):
         return str(class_words.get("DESC", {}).get("standard_type") or "VARCHAR(500)")
     return "VARCHAR(500)"
+
+
+def _class_word_from_text(source: str) -> str:
+    text = _normalize_match_text(source)
+    if any(token in text for token in ("yn", "여부", "유무")):
+        return "YN"
+    if any(token in text for token in ("차수", "순번", "sequence", "seq")):
+        return "SEQ_NO"
+    if any(token in text for token in ("번호", "number", " no", "_no")):
+        return "NO"
+    if any(token in text for token in ("일시", "datetime", "timestamp")):
+        return "DTM"
+    if any(token in text for token in ("날짜", "일자", "date")):
+        return "DT"
+    if any(token in text for token in ("금액", "amount", "amt")):
+        return "AMT"
+    if any(token in text for token in ("수량", "quantity", "qty")):
+        return "QTY"
+    if any(token in text for token in ("건수", "count", "cnt")):
+        return "CNT"
+    if any(token in text for token in ("코드", "code")):
+        return "CD"
+    if any(token in text for token in ("설명", "메모", "description", "desc", "memo")):
+        return "DESC"
+    if any(token in text for token in ("이름", "명", "name")):
+        return "NM"
+    return ""
 
 
 def _standard_identifier(value: str) -> str:

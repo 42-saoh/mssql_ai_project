@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ArtifactActions } from "@/components/artifact-actions";
 import { StatusPill } from "@/components/status-pill";
 import type { AgentRunSummary, Artifact, ValidationReport } from "@/lib/api/types";
@@ -18,9 +20,17 @@ import {
 } from "@/lib/presentation";
 
 const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
+const markdownArtifactTypes = new Set<Artifact["type"]>([
+  "SP_ANALYSIS_DOC",
+  "DEPENDENCY_REPORT",
+]);
 
 function sameTargetHref(targetKey: string): string {
   return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
+}
+
+function isMarkdownArtifactType(type: Artifact["type"]): boolean {
+  return markdownArtifactTypes.has(type);
 }
 
 export function ArtifactPreview({
@@ -108,9 +118,17 @@ export function ArtifactPreview({
           </div>
         ) : null}
 
-        <div className="content-preview" aria-label="Draft artifact content">
-          <pre>{displayedContent}</pre>
-        </div>
+        {isMarkdownArtifactType(artifact.type) ? (
+          <div className="markdown-preview" aria-label="Draft artifact content">
+            <Markdown skipHtml remarkPlugins={[remarkGfm]}>
+              {displayedContent}
+            </Markdown>
+          </div>
+        ) : (
+          <div className="content-preview" aria-label="Draft artifact content">
+            <pre>{displayedContent}</pre>
+          </div>
+        )}
       </section>
 
       <section className="panel">

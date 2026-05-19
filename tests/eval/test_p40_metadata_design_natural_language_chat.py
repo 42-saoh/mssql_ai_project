@@ -26,6 +26,30 @@ class P40EvalRegistry:
         if self.empty:
             data = {"candidates": [], "columns": []}
         elif tool_name == "search_tables":
+            table_name = str(arguments.get("physicalName") or "").upper()
+            if table_name in {"PCS_CTRT", "PEM_CTRT"}:
+                data = {
+                    "candidates": [
+                        {
+                            "schema": "dbo",
+                            "tableName": table_name,
+                            "description": "Contract reference table",
+                            "score": 94,
+                        }
+                    ]
+                }
+            else:
+                data = {
+                    "candidates": [
+                        {
+                            "schema": "dbo",
+                            "tableName": "PPM_ORDER_REQ",
+                            "description": "Order request header",
+                            "score": 95,
+                        }
+                    ]
+                }
+        elif tool_name == "find_similar_tables":
             data = {
                 "candidates": [
                     {
@@ -36,33 +60,39 @@ class P40EvalRegistry:
                     }
                 ]
             }
-        elif tool_name == "find_similar_tables":
-            data = {
-                "candidates": [
-                    {
-                        "schema": "dbo",
-                        "tableName": "PPM_ORDER_REQ",
-                        "description": "Similar order request table",
-                        "score": 91,
-                    }
-                ]
-            }
         elif tool_name == "get_table_schema":
-            data = {
-                "schema": "dbo",
-                "tableName": "PPM_ORDER_REQ",
-                "columns": [
-                    {"name": "CUSTOMER_NM", "dataType": "VARCHAR(100)"},
-                    {"name": "ADDR", "dataType": "VARCHAR(500)"},
-                    {"name": "ORDER_DT", "dataType": "VARCHAR(8)"},
-                ],
-            }
+            table_name = str(arguments.get("tableName") or "PPM_ORDER_REQ").upper()
+            if table_name in {"PCS_CTRT", "PEM_CTRT"}:
+                data = {
+                    "schema": "dbo",
+                    "tableName": table_name,
+                    "columns": [
+                        {"name": "CTRT_NO", "dataType": "VARCHAR(50)", "description": "계약번호"},
+                        {"name": "ORDR_NO", "dataType": "VARCHAR(50)", "description": "주문번호"},
+                        {"name": "CTRT_CHG_SEQ_NO", "dataType": "INT", "description": "계약변경차수"},
+                        {"name": "PREV_AUDT_YN", "dataType": "VARCHAR(1)", "description": "사전감사 여부"},
+                    ],
+                }
+            else:
+                data = {
+                    "schema": "dbo",
+                    "tableName": "PPM_ORDER_REQ",
+                    "columns": [
+                        {"name": "CUSTOMER_NM", "dataType": "VARCHAR(100)"},
+                        {"name": "ADDR", "dataType": "VARCHAR(500)"},
+                        {"name": "ORDER_DT", "dataType": "VARCHAR(8)"},
+                    ],
+                }
         else:
             lookup = {
                 "CUSTOMER_NM": ("CUSTOMER_NM", "Customer name", "VARCHAR(100)", 96),
                 "ADDR": ("ADDR", "Address", "VARCHAR(500)", 94),
                 "ORDER_DT": ("ORDER_DT", "Order date", "VARCHAR(8)", 93),
                 "DLV_MEMO": ("DLV_MEMO", "Delivery memo", "VARCHAR(500)", 90),
+                "CTRT_NO": ("CTRT_NO", "계약번호", "VARCHAR(50)", 97),
+                "ORDR_NO": ("ORDR_NO", "주문번호", "VARCHAR(50)", 96),
+                "CTRT_CHG_SEQ_NO": ("CTRT_CHG_SEQ_NO", "계약변경차수", "INT", 95),
+                "PREV_AUDT_YN": ("PREV_AUDT_YN", "사전감사 여부", "VARCHAR(1)", 94),
             }
             requested = str(arguments.get("physicalName") or "").upper()
             column_name, description, data_type, score = lookup.get(
@@ -147,6 +177,9 @@ def test_p40_new_design_and_refine_eval_generate_chat_outputs(
     refine_response = service.design(
         MetadataDesignRunRequest.model_validate(fixture["refineRequest"])
     ).to_response()
+    reference_response = service.design(
+        MetadataDesignRunRequest.model_validate(fixture["referenceDesignRequest"])
+    ).to_response()
 
     expected = fixture["expected"]
     assert new_response["interpretedIntent"]["intent"] == "CREATE_TABLE"
@@ -167,8 +200,28 @@ def test_p40_new_design_and_refine_eval_generate_chat_outputs(
     assert "DLV_MEMO" in refine_columns
     assert refine_columns["ORDER_DT"] == "VARCHAR(8)"
     assert refine_response["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+    assert reference_response["interpretedIntent"]["intent"] == "CREATE_TABLE"
+    assert reference_response["interpretedIntent"]["tableNameCandidate"] == expected[
+        "referenceTableName"
+    ]
+    assert [
+        field["name"] for field in reference_response["interpretedIntent"]["fields"]
+    ] == expected["referenceDesignFields"]
+    assert reference_response["tableProposal"]["tableName"] == expected[
+        "referenceTableName"
+    ]
+    assert "DBO_PCS_CTRT_DBO_PEM_CTRT" not in reference_response["tableProposal"][
+        "createTableScriptPreview"
+    ]
+    reference_columns = {
+        column["name"]: column["dataType"]
+        for column in reference_response["tableProposal"]["columns"]
+    }
+    assert "FIELD_1_VAL" not in reference_columns
+    assert reference_columns["CTRT_NO"] == "VARCHAR(50)"
+    assert reference_columns["PREV_AUDT_YN"] == "VARCHAR(1)"
     serialized = json.dumps(
-        {"new": new_response, "refine": refine_response},
+        {"new": new_response, "refine": refine_response, "reference": reference_response},
         ensure_ascii=False,
         sort_keys=True,
     )

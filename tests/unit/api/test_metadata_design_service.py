@@ -123,6 +123,131 @@ class DesignSpyRegistry:
         return {"candidates": []}
 
 
+class ContractReferenceDesignRegistry:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def invoke_payload(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = payload["arguments"]
+        self.calls.append((tool_name, arguments))
+        data = self._data_for(tool_name, arguments)
+        return {
+            "ok": True,
+            "toolName": tool_name,
+            "dbProfileId": arguments["dbProfileId"],
+            "snapshotId": "contract-reference-design-snapshot-1",
+            "collectedAt": "2026-05-19T00:00:00Z",
+            "evidenceRefs": [
+                {
+                    "id": f"mcp.{tool_name}.contract_reference",
+                    "source": "fixture",
+                    "path": f"fixtures/mcp/contract_reference_design.json#/{tool_name}",
+                    "objectType": "METADATA",
+                    "objectName": "dbo.PEM_CTRT",
+                }
+            ],
+            "data": data,
+        }
+
+    def _data_for(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if tool_name == "search_tables":
+            table_name = str(arguments.get("physicalName") or "").upper()
+            if table_name in {"PCS_CTRT", "PEM_CTRT"}:
+                return {
+                    "candidates": [
+                        {
+                            "schema": "dbo",
+                            "tableName": table_name,
+                            "logicalName": "contract reference",
+                            "description": "Contract reference metadata.",
+                            "score": 95,
+                        }
+                    ]
+                }
+            return {"candidates": []}
+        if tool_name == "get_table_schema":
+            table_name = str(arguments.get("tableName") or "").upper()
+            columns = [
+                {
+                    "name": "CTRT_NO",
+                    "dataType": "VARCHAR(50)",
+                    "nullable": False,
+                    "description": "계약번호",
+                },
+                {
+                    "name": "ORDR_NO",
+                    "dataType": "VARCHAR(50)",
+                    "nullable": False,
+                    "description": "주문번호",
+                },
+                {
+                    "name": "CTRT_CHG_SEQ_NO",
+                    "dataType": "INT",
+                    "nullable": False,
+                    "description": "계약변경차수",
+                },
+            ]
+            if table_name == "PEM_CTRT":
+                columns.append(
+                    {
+                        "name": "PREV_AUDT_YN",
+                        "dataType": "VARCHAR(1)",
+                        "nullable": True,
+                        "description": "사전감사 여부",
+                    }
+                )
+            return {"schema": "dbo", "tableName": table_name, "columns": columns}
+        if tool_name == "search_columns":
+            lookup = {
+                "CTRT_NO": ("CTRT_NO", "계약번호", "VARCHAR(50)", 97),
+                "ORDR_NO": ("ORDR_NO", "주문번호", "VARCHAR(50)", 96),
+                "CTRT_CHG_SEQ_NO": ("CTRT_CHG_SEQ_NO", "계약변경차수", "INT", 95),
+                "PREV_AUDT_YN": ("PREV_AUDT_YN", "사전감사 여부", "VARCHAR(1)", 94),
+            }
+            requested = str(arguments.get("physicalName") or "").upper()
+            if requested in lookup:
+                column_name, description, data_type, score = lookup[requested]
+                return {
+                    "candidates": [
+                        {
+                            "schema": "dbo",
+                            "tableName": "PEM_CTRT",
+                            "columnName": column_name,
+                            "logicalName": description,
+                            "description": description,
+                            "dataType": data_type,
+                            "score": score,
+                        }
+                    ]
+                }
+            return {
+                "candidates": [
+                    {
+                        "schema": "dbo",
+                        "tableName": "PEM_CTRT",
+                        "columnName": "FIELD_VAL",
+                        "logicalName": "Unconfirmed value",
+                        "description": "Unconfirmed value",
+                        "dataType": "VARCHAR(500)",
+                        "score": 40,
+                    }
+                ]
+            }
+        if tool_name == "find_similar_tables":
+            return {
+                "candidates": [
+                    {
+                        "schema": "dbo",
+                        "tableName": "PEM_CTRT",
+                        "logicalName": "contract",
+                        "description": "Similar contract metadata.",
+                        "score": 88,
+                    }
+                ]
+            }
+        return {"candidates": []}
+
+
 @pytest.fixture(autouse=True)
 def metadata_design_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
@@ -334,6 +459,77 @@ def test_metadata_design_extracts_korean_natural_language_fields(
     assert "[CUSTOMER_NM]" in response["tableProposal"]["createTableScriptPreview"]
     assert "[ORDER_DT]" in response["tableProposal"]["createTableScriptPreview"]
     assert response["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+
+
+def test_metadata_design_korean_reference_scope_uses_metadata_and_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = ContractReferenceDesignRegistry()
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    service = MetadataDesignChatService(model_gateway=FakeModelGateway())
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": (
+                    "테이블 명은 PCO_사전감사야. 안에 들어가는 필드는 "
+                    "계약번호, 주문번호, 계약변경차수, 사전감사YN 야."
+                ),
+                "designInputs": {
+                    "tableNameHint": "dbo.PCS_CTRT, dbo.PEM_CTRT",
+                },
+                "options": {
+                    "useLlmAnalysis": False,
+                    "generateDtoDraft": True,
+                },
+            }
+        )
+    ).to_response()
+
+    intent = response["interpretedIntent"]
+    assert intent["tableNameCandidate"] == "PCO_PREV_AUDT"
+    assert [field["name"] for field in intent["fields"]] == [
+        "CTRT_NO",
+        "ORDR_NO",
+        "CTRT_CHG_SEQ_NO",
+        "PREV_AUDT_YN",
+    ]
+    assert {change["target"] for change in response["appliedChanges"]} >= {
+        "CTRT_NO",
+        "ORDR_NO",
+        "CTRT_CHG_SEQ_NO",
+        "PREV_AUDT_YN",
+    }
+    assert response["tableProposal"]["tableName"] == "PCO_PREV_AUDT"
+    assert response["tableProposal"]["tableName"] != "DBO_PCS_CTRT_DBO_PEM_CTRT"
+
+    columns = {
+        column["name"]: column["dataType"]
+        for column in response["tableProposal"]["columns"]
+    }
+    assert columns["CTRT_NO"] == "VARCHAR(50)"
+    assert columns["ORDR_NO"] == "VARCHAR(50)"
+    assert columns["CTRT_CHG_SEQ_NO"] == "INT"
+    assert columns["PREV_AUDT_YN"] == "VARCHAR(1)"
+    assert not any(name.startswith("FIELD_") and name.endswith("_VAL") for name in columns)
+
+    search_column_calls = [
+        arguments for tool_name, arguments in registry.calls if tool_name == "search_columns"
+    ]
+    assert search_column_calls
+    assert all("," not in str(arguments.get("tableName") or "") for arguments in search_column_calls)
+    schema_calls = [
+        arguments for tool_name, arguments in registry.calls if tool_name == "get_table_schema"
+    ]
+    assert {(call["schema"], call["tableName"]) for call in schema_calls} >= {
+        ("DBO", "PCS_CTRT"),
+        ("DBO", "PEM_CTRT"),
+    }
+    assert response["reviewRequired"] is True
 
 
 def test_metadata_design_refine_current_applies_latest_successful_baseline(

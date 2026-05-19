@@ -1141,6 +1141,124 @@ input:disabled {
   white-space: pre-wrap;
 }
 
+.markdown-preview {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  color: var(--text);
+  background: #ffffff;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+  margin: 1.35em 0 0.55em;
+  line-height: 1.2;
+}
+
+.markdown-preview h1 {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 30px;
+}
+
+.markdown-preview h2 {
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  font-size: 23px;
+}
+
+.markdown-preview h3 {
+  font-size: 18px;
+}
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview table,
+.markdown-preview pre {
+  margin: 0 0 16px;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 24px;
+}
+
+.markdown-preview li {
+  margin: 5px 0;
+}
+
+.markdown-preview blockquote {
+  border-left: 4px solid var(--border-strong);
+  padding: 10px 14px;
+  color: var(--muted);
+  background: #f7faf9;
+}
+
+.markdown-preview table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--border);
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-preview th {
+  color: var(--muted);
+  background: #f7faf9;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.markdown-preview code {
+  border-radius: 4px;
+  padding: 2px 5px;
+  color: #25313a;
+  background: #e7eef1;
+  font-size: 0.92em;
+}
+
+.markdown-preview pre {
+  overflow-x: auto;
+  border-radius: 8px;
+  padding: 16px;
+  background: #101820;
+}
+
+.markdown-preview pre code {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  color: #f2f7f8;
+  background: transparent;
+  line-height: 1.65;
+  white-space: pre;
+}
+
+.markdown-preview a {
+  overflow-wrap: anywhere;
+}
+
 .data-table-wrap {
   overflow-x: auto;
 }
