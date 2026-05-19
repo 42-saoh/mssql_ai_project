@@ -10,7 +10,11 @@ from ai_agent_runtime.ai_draft_pack_orchestrator import (
 )
 from ai_agent_runtime.framework_adapter import (
     AiGenerationFrameworkAdapter,
+    OPENAI_AGENTS_ENDPOINT_CUSTOM_COMPATIBLE,
+    OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI,
+    OPENAI_AGENTS_ENDPOINT_PGPT_COMPATIBLE,
     OpenAIAgentsFrameworkAdapter,
+    openai_agents_endpoint_class_from_env,
 )
 from ai_agent_runtime.gateway import (
     REMOTE_PROVIDER_OPENAI,
@@ -34,6 +38,12 @@ OPENAI_AGENTS_TRACE_ENV_LOCKS = {
 }
 OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT = (
     "OPENAI_BASE_URL empty_or_https://api.openai.com/v1"
+)
+OPENAI_AGENTS_COMPATIBLE_ENDPOINT_REQUIREMENT = (
+    "OPENAI_BASE_URL_or_OPENAI_RESPONSES_URL_required_for_pgpt_compatible_agents"
+)
+OPENAI_AGENTS_PGPT_RUNTIME_REQUIREMENT = (
+    "AI_GENERATION_RUNTIME=openai_agents when LLM_REMOTE_PROVIDER=pgpt"
 )
 
 
@@ -61,7 +71,7 @@ def framework_runtime_config_from_env() -> FrameworkRuntimeConfig:
     requested_generation_runtime = os.getenv("AI_GENERATION_RUNTIME", "").strip().lower()
     requested_orchestrator = os.getenv("AI_DRAFT_PACK_ORCHESTRATOR", "").strip().lower()
 
-    if provider == REMOTE_PROVIDER_PGPT:
+    if provider == REMOTE_PROVIDER_PGPT and not requested_generation_runtime:
         generation_runtime = AI_GENERATION_RUNTIME_RESPONSES_HTTPX
     elif requested_generation_runtime:
         generation_runtime = _normalized_generation_runtime(requested_generation_runtime)
@@ -118,30 +128,40 @@ def openai_agents_live_gate_missing_requirements(
     if not openai_agents_live_gate_enabled(source):
         return []
     missing: list[str] = []
-    for key, expected in (
-        ("LLM_ENABLE_REMOTE", "1"),
-        ("LLM_REMOTE_PROVIDER", REMOTE_PROVIDER_OPENAI),
-        *OPENAI_AGENTS_TRACE_ENV_LOCKS.items(),
-    ):
+    for key, expected in (("LLM_ENABLE_REMOTE", "1"), *OPENAI_AGENTS_TRACE_ENV_LOCKS.items()):
         if source.get(key, "").strip() != expected:
             missing.append(f"{key}={expected}")
+    provider = _provider_from_source(source)
+    if provider not in {REMOTE_PROVIDER_OPENAI, REMOTE_PROVIDER_PGPT}:
+        missing.append("LLM_REMOTE_PROVIDER=openai_or_pgpt")
     if not source.get("OPENAI_API_KEY", "").strip():
         missing.append("OPENAI_API_KEY")
-    if _openai_agents_custom_base_url_configured(source):
+    endpoint_class = openai_agents_endpoint_class_from_env(source)
+    if endpoint_class == OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI:
+        pass
+    elif endpoint_class == OPENAI_AGENTS_ENDPOINT_PGPT_COMPATIBLE:
+        if (
+            source.get("AI_GENERATION_RUNTIME", "").strip().lower()
+            not in {"openai_agents", "openai-agents", "openai_agents_sdk"}
+        ):
+            missing.append(OPENAI_AGENTS_PGPT_RUNTIME_REQUIREMENT)
+        if not (
+            source.get("OPENAI_BASE_URL", "").strip()
+            or source.get("OPENAI_RESPONSES_URL", "").strip()
+        ):
+            missing.append(OPENAI_AGENTS_COMPATIBLE_ENDPOINT_REQUIREMENT)
+    elif endpoint_class == OPENAI_AGENTS_ENDPOINT_CUSTOM_COMPATIBLE:
         missing.append(OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT)
     return missing
 
 
-def _openai_agents_custom_base_url_configured(source: Mapping[str, str]) -> bool:
-    value = source.get("OPENAI_BASE_URL", "").strip()
-    if not value:
-        return False
-    try:
-        from urllib.parse import urlparse
-
-        return (urlparse(value).hostname or "").lower() != "api.openai.com"
-    except Exception:  # noqa: BLE001 - malformed URL is not a proven Agents endpoint
-        return True
+def _provider_from_source(source: Mapping[str, str]) -> str:
+    provider = source.get("LLM_REMOTE_PROVIDER", REMOTE_PROVIDER_OPENAI).strip().lower()
+    if provider in {REMOTE_PROVIDER_PGPT, "p-gpt", "private-gpt"}:
+        return REMOTE_PROVIDER_PGPT
+    if provider in {REMOTE_PROVIDER_OPENAI, ""}:
+        return REMOTE_PROVIDER_OPENAI
+    return provider
 
 
 def _normalized_generation_runtime(value: str) -> str:

@@ -257,16 +257,18 @@ Passing criteria:
 P45/P46 continuation:
 - P45 adds `tests/eval/test_p45_openai_agents_live_gate.py` as an optional
   evidence gate. It runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`,
-  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai`, `OPENAI_API_KEY`, and
-  OpenAI Agents trace redaction env locks. `OPENAI_BASE_URL` must be empty or
-  `https://api.openai.com/v1`; custom/P-GPT-compatible endpoints are blocked as
-  unverified Agents SDK live evidence and remain on `responses_httpx`. The
-  default suite skips it without OpenAI, PPM, PLF, row data, or procedure
-  execution.
+  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai` or `pgpt`,
+  `OPENAI_API_KEY`, and OpenAI Agents trace redaction env locks. Official
+  evidence uses `OPENAI_BASE_URL` empty or `https://api.openai.com/v1`.
+  Approved P-GPT-compatible evidence additionally requires explicit
+  `AI_GENERATION_RUNTIME=openai_agents` and `OPENAI_BASE_URL` or
+  `OPENAI_RESPONSES_URL`; unknown custom endpoints remain blocked until
+  classified. The default suite skips it without OpenAI, PPM, PLF, row data, or
+  procedure execution.
 - P46 adds `spec/eval/p46_rollback_removal_decision.yaml`. The decision is
   `retain_limited_rollback_not_active_default`: OpenAI defaults to OpenAI Agents
-  SDK plus LangGraph, while `responses_httpx` remains only for P-GPT and
-  emergency rollback. Deletion is not approved.
+  SDK plus LangGraph, while `responses_httpx` remains only for P-GPT default
+  compatibility and emergency rollback. Deletion is not approved.
 - `make test PYTEST_ARGS="tests/contract/test_p45_p46_framework_runtime_gates.py tests/eval/test_p45_openai_agents_live_gate.py"` validates the disabled/default gate and contract assets without live calls.
 
 ## P47 Generic AI Draft Quality Uplift Eval Contract

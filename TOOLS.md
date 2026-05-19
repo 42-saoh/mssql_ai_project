@@ -145,7 +145,9 @@ P44 is the active real framework runtime adoption track. It installs
 `openai-agents==0.17.2` and `langgraph==1.2.0`, adds
 `FrameworkRuntimeConfig.v0.1`, routes OpenAI remote AI Draft Pack generation
 through OpenAI Agents SDK, and runs the draft-pack stages through LangGraph.
-P-GPT and emergency rollback remain `responses_httpx`.
+P-GPT defaults to `responses_httpx`, but explicit internal compatible-endpoint
+live evidence may use OpenAI Agents SDK plus LangGraph. Emergency rollback
+remains `responses_httpx`.
 
 The default P44 static gate is:
 
@@ -170,13 +172,21 @@ The optional P45 live evidence gate is disabled by default:
 P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=openai OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
 ```
 
+Approved P-GPT-compatible SDK evidence uses the same sanitized gate with explicit
+runtime selection:
+
+```powershell
+P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=pgpt AI_GENERATION_RUNTIME=openai_agents AI_DRAFT_PACK_ORCHESTRATOR=langgraph OPENAI_AGENTS_COMPATIBLE_API=responses OPENAI_BASE_URL=<compatible-base> OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+```
+
 P45 must use sanitized fixture inputs and store sanitized invocation summaries
 only. It must not require live PPM, row data, procedure execution, source apply,
-or deploy. Custom/P-GPT OpenAI-compatible endpoints are not accepted as P45
-OpenAI Agents SDK live evidence; they remain on `responses_httpx`. P46 records
-that the OpenAI default path has moved to OpenAI Agents SDK plus LangGraph;
-`responses_httpx` remains for P-GPT and emergency rollback only, not as the
-active OpenAI default.
+or deploy. Unknown custom OpenAI-compatible endpoints are blocked until
+explicitly classified; approved P-GPT-compatible endpoints count as SDK evidence
+only through the explicit runtime path above and immediate P42/P44 validation.
+P46 records that the OpenAI default path has moved to OpenAI Agents SDK plus
+LangGraph; `responses_httpx` remains for P-GPT default compatibility and
+emergency rollback only, not as the active OpenAI default.
 
 ## P47 Generic AI Draft Quality Uplift Verification Notes
 

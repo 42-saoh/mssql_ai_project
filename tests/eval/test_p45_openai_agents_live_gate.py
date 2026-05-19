@@ -68,7 +68,7 @@ def test_p45_gate_enabled_missing_prerequisites_returns_sanitized_blockers(
     missing = openai_agents_live_gate_missing_requirements()
 
     assert "LLM_ENABLE_REMOTE=1" in missing
-    assert "LLM_REMOTE_PROVIDER=openai" in missing
+    assert "LLM_REMOTE_PROVIDER=openai_or_pgpt" not in missing
     assert "OPENAI_API_KEY" in missing
     assert "OPENAI_AGENTS_DISABLE_TRACING=1" in missing
     assert "OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0" in missing

@@ -141,6 +141,24 @@ def test_workflow_service_keeps_pgpt_on_responses_httpx_rollback(
     assert service.ai_draft_pack_orchestrator is None
 
 
+def test_workflow_service_allows_explicit_pgpt_agents_sdk_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "1")
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
+    monkeypatch.setenv("AI_GENERATION_RUNTIME", "openai_agents")
+    monkeypatch.setenv("AI_DRAFT_PACK_ORCHESTRATOR", "langgraph")
+
+    service = WorkflowService(
+        MemoryWorkflowRepository(),
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(),
+    )
+
+    assert isinstance(service.ai_generation_framework_adapter, OpenAIAgentsFrameworkAdapter)
+    assert isinstance(service.ai_draft_pack_orchestrator, LangGraphAiDraftPackOrchestrator)
+
+
 def _passed_sp_analysis_content() -> str:
     return "\n".join(
         [

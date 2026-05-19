@@ -53,16 +53,20 @@ def test_p44_dependency_contract_imports_are_available() -> None:
     assert importlib.util.find_spec("langgraph") is not None
 
 
-def test_p44_runtime_config_keeps_internal_surface_and_pgpt_rollback() -> None:
+def test_p44_runtime_config_keeps_internal_surface_and_pgpt_compatible_sdk_path() -> None:
     runtime = _yaml(P44_CONTRACT)["runtime_config"]
 
     assert runtime["config_contract"] == "FrameworkRuntimeConfig.v0.1"
     assert runtime["env"]["AI_GENERATION_RUNTIME"]["default_when_openai_remote"] == (
         "openai_agents"
     )
-    assert runtime["env"]["AI_GENERATION_RUNTIME"]["pgpt_behavior"] == "responses_httpx"
+    assert runtime["env"]["AI_GENERATION_RUNTIME"]["pgpt_default_behavior"] == (
+        "responses_httpx"
+    )
+    assert runtime["env"]["AI_GENERATION_RUNTIME"]["pgpt_explicit_openai_agents_allowed"] is True
     assert runtime["env"]["AI_DRAFT_PACK_ORCHESTRATOR"]["default_after_p44e"] == "langgraph"
     assert runtime["rollback"]["emergency_runtime"] == "responses_httpx"
+    assert runtime["rollback"]["pgpt_explicit_sdk_runtime"] == "openai_agents"
     assert runtime["public_request_flag_added"] is False
 
 

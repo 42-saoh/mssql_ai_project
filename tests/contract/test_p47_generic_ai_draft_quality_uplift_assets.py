@@ -37,15 +37,13 @@ def test_p47_contract_declares_generic_quality_uplift() -> None:
     assert contract["quality_gates"]["manage_bond_role"] == (
         "benchmark_signal_only_not_runtime_answer_key"
     )
-    assert contract["live_policy"]["latest_audit"]["p45_stage"] == "file_inventory"
-    assert contract["live_policy"]["latest_audit"]["p45_blocker"] == (
-        "P44_OPENAI_AGENTS_ADAPTER_FAILED"
-    )
+    assert contract["live_policy"]["latest_audit"]["p45_stage"] == "final"
+    assert contract["live_policy"]["latest_audit"]["p45_blocker"] == "none"
     assert contract["live_policy"]["latest_audit"]["p45_current_env_status"] == (
-        "blocked_unverified_custom_or_pgpt_endpoint"
+        "compatible_pgpt_endpoint_passed_with_explicit_openai_agents_runtime"
     )
     assert contract["live_policy"]["latest_audit"]["p45_official_override_status"] == (
-        "blocked_authentication_error"
+        "historical_blocked_authentication_error"
     )
     assert contract["live_policy"]["latest_audit"]["p42_status"] == (
         "passed_sanitized_fixture_live_mode"
@@ -221,6 +219,6 @@ def test_p47_docs_record_live_risk_closure_without_readiness_claims() -> None:
     assert "P42_LIVE_REPLAY_MODE=sanitized_fixture" in docs_text
     assert "P42_LIVE_REPLAY_MODE=live_ppm" in docs_text
     assert "https://api.openai.com/v1" in docs_text
-    assert "custom/P-GPT-compatible endpoints" in docs_text
+    assert "approved P-GPT-compatible" in docs_text
     assert "Generated Java/MyBatis artifacts remain draft-only" in docs_text
     assert "automatic conversion approval" in docs_text

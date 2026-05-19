@@ -43,7 +43,12 @@ runtime_config:
       allowed_values:
         - openai_agents
         - responses_httpx
-      pgpt_behavior: responses_httpx
+      pgpt_default_behavior: responses_httpx
+      pgpt_explicit_openai_agents_allowed: true
+      pgpt_explicit_openai_agents_requires:
+        - AI_GENERATION_RUNTIME=openai_agents
+        - OPENAI_BASE_URL_or_OPENAI_RESPONSES_URL_required_for_pgpt_compatible_agents
+        - OPENAI_AGENTS_COMPATIBLE_API=responses_or_chat_completions
     AI_DRAFT_PACK_ORCHESTRATOR:
       default_when_openai_agents: langgraph
       default_after_p44e: langgraph
@@ -59,7 +64,9 @@ runtime_config:
   public_artifact_types_changed: false
   rollback:
     emergency_runtime: responses_httpx
-    pgpt_runtime: responses_httpx
+    pgpt_default_runtime: responses_httpx
+    pgpt_explicit_sdk_runtime: openai_agents
+    pgpt_explicit_sdk_evidence_status: accepted_when_trace_locked_and_post_validated
 
 internal_interfaces:
   generation_adapter: OpenAIAgentsFrameworkAdapter
@@ -105,6 +112,13 @@ openai_agents_policy:
 openai_agents_adapter:
   implementation: OpenAIAgentsFrameworkAdapter
   replaces_fake_candidate_behavior: true
+  endpoint_policy:
+    official_openai: native_structured_output_then_post_validation
+    pgpt_compatible: sdk_responses_or_chat_transport_with_post_validation
+    custom_compatible: blocked_until_explicit_provider_classification
+    compatible_default_transport: responses
+    compatible_transport_env: OPENAI_AGENTS_COMPATIBLE_API
+    compatible_native_output_type_enabled: false
   trace_policy:
     set_tracing_disabled: true
     run_config:
@@ -155,9 +169,11 @@ live_gate:
   test: tests/eval/test_p45_openai_agents_live_gate.py
   required_env:
     - LLM_ENABLE_REMOTE=1
-    - LLM_REMOTE_PROVIDER=openai
+    - LLM_REMOTE_PROVIDER=openai_or_pgpt
     - OPENAI_API_KEY
     - OPENAI_BASE_URL empty_or_https://api.openai.com/v1
+    - OPENAI_BASE_URL_or_OPENAI_RESPONSES_URL_required_for_pgpt_compatible_agents
+    - AI_GENERATION_RUNTIME=openai_agents when LLM_REMOTE_PROVIDER=pgpt
     - OPENAI_AGENTS_DISABLE_TRACING=1
     - OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0
     - OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1
@@ -175,6 +191,10 @@ live_gate:
   live_ppm_row_data_allowed: false
   live_procedure_execution_allowed: false
   persisted_evidence: sanitized_invocation_summary_only
+  compatible_endpoint_policy:
+    official_openai: accepted
+    pgpt_compatible: accepted_when_explicit_openai_agents_runtime_and_endpoint_present
+    custom_compatible: rejected_without_explicit_provider_classification
 
 rollback_decision:
   phase: P46
@@ -182,7 +202,7 @@ rollback_decision:
   decision_pending: false
   decision: retain_limited_rollback_not_active_default
   openai_default_runtime_after_p46: openai_agents_sdk
-  responses_httpx_status_after_p46: emergency_rollback_and_pgpt_compatibility_only
+  responses_httpx_status_after_p46: emergency_rollback_and_pgpt_default_compatibility_only
   baseline_adapter_status_after_p46: retained_for_emergency_rollback_tests_only
   removal_requires:
     - p44_fixture_regression_passed

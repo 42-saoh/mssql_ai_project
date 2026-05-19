@@ -8,12 +8,14 @@ decision_date: 2026-05-19
 runtime_default:
   openai_remote_generation_runtime: openai_agents_sdk
   openai_remote_orchestrator: langgraph
-  pgpt_generation_runtime: responses_httpx
+  pgpt_default_generation_runtime: responses_httpx
+  pgpt_explicit_sdk_generation_runtime: openai_agents_sdk
   emergency_rollback_runtime: responses_httpx
 
 rollback_status:
   responses_httpx_active_default_for_openai: false
-  responses_httpx_retained_for_pgpt: true
+  responses_httpx_retained_for_pgpt_default_compatibility: true
+  pgpt_compatible_openai_agents_sdk_live_evidence_allowed: true
   responses_httpx_retained_for_emergency_rollback: true
   baseline_responses_framework_adapter_active_default: false
   baseline_responses_framework_adapter_retained_for_tests: true
@@ -23,14 +25,17 @@ rationale:
   summary: >
     P44 moved the OpenAI provider default runtime to OpenAI Agents SDK plus
     LangGraph orchestration. The Responses/httpx gateway is no longer the active
-    OpenAI default, but it remains necessary for P-GPT compatibility and an
-    emergency rollback boundary until separate cleanup evidence approves removal.
-  p45_live_evidence_status: optional_gate_available_not_required_for_default_suite
+    OpenAI default, but it remains available as the P-GPT default compatibility
+    path and an emergency rollback boundary. P-GPT-compatible endpoints may also
+    produce OpenAI Agents SDK live evidence when the runtime is explicitly
+    selected, the endpoint is configured, and P42/P44 validation remains intact.
+  p45_live_evidence_status: compatible_pgpt_openai_agents_gate_passed_not_required_for_default_suite
   generated_artifacts_production_ready: false
 
 deletion_blockers:
   - P45 live OpenAI Agents evidence may be skipped in default environments.
-  - P-GPT structured-output compatibility through OpenAI Agents SDK is not proven.
+  - P-GPT OpenAI Agents SDK compatibility must keep passing live evidence before
+    the default can move from `responses_httpx`.
   - Emergency rollback has operational value while P44 is newly adopted.
   - Removing rollback code requires a separate post-P46 cleanup contract and gate.
 
@@ -57,3 +62,4 @@ verification:
     - git diff --check
   optional_live_gate:
     - P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=openai OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+    - P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=pgpt AI_GENERATION_RUNTIME=openai_agents AI_DRAFT_PACK_ORCHESTRATOR=langgraph OPENAI_AGENTS_COMPATIBLE_API=responses OPENAI_API_KEY=<secret> OPENAI_BASE_URL=<compatible-base> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"

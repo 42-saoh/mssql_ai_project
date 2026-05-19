@@ -5,8 +5,10 @@ from typing import Any
 
 import yaml
 from ai_agent_runtime import (
+    OPENAI_AGENTS_COMPATIBLE_ENDPOINT_REQUIREMENT,
     OPENAI_AGENTS_TRACE_ENV_LOCKS,
     OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT,
+    OPENAI_AGENTS_PGPT_RUNTIME_REQUIREMENT,
     P44_OPENAI_AGENTS_LIVE_GATE,
     openai_agents_live_gate_enabled,
     openai_agents_live_gate_missing_requirements,
@@ -37,7 +39,10 @@ def test_p45_live_gate_contract_is_optional_and_policy_locked() -> None:
     assert live_gate["live_ppm_row_data_allowed"] is False
     assert live_gate["live_procedure_execution_allowed"] is False
     assert live_gate["persisted_evidence"] == "sanitized_invocation_summary_only"
+    assert "LLM_REMOTE_PROVIDER=openai_or_pgpt" in live_gate["required_env"]
     assert OPENAI_AGENTS_OFFICIAL_BASE_URL_REQUIREMENT in live_gate["required_env"]
+    assert OPENAI_AGENTS_COMPATIBLE_ENDPOINT_REQUIREMENT in live_gate["required_env"]
+    assert OPENAI_AGENTS_PGPT_RUNTIME_REQUIREMENT in live_gate["required_env"]
     for key, value in OPENAI_AGENTS_TRACE_ENV_LOCKS.items():
         assert f"{key}={value}" in live_gate["required_env"]
 
@@ -59,6 +64,45 @@ def test_p45_live_gate_env_helper_is_strict_but_disabled_by_default() -> None:
     )
 
     assert missing == ["OPENAI_API_KEY"]
+
+
+def test_p45_live_gate_accepts_pgpt_compatible_agents_endpoint() -> None:
+    missing = openai_agents_live_gate_missing_requirements(
+        {
+            P44_OPENAI_AGENTS_LIVE_GATE: "1",
+            "LLM_ENABLE_REMOTE": "1",
+            "LLM_REMOTE_PROVIDER": "pgpt",
+            "AI_GENERATION_RUNTIME": "openai_agents",
+            "OPENAI_API_KEY": "present",
+            "OPENAI_BASE_URL": "https://custom-openai-compatible.example/gpgpta01-gpt",
+            "OPENAI_AGENTS_DISABLE_TRACING": "1",
+            "OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA": "0",
+            "OPENAI_AGENTS_DONT_LOG_MODEL_DATA": "1",
+            "OPENAI_AGENTS_DONT_LOG_TOOL_DATA": "1",
+        }
+    )
+
+    assert missing == []
+
+
+def test_p45_live_gate_requires_explicit_pgpt_agents_runtime_and_endpoint() -> None:
+    missing = openai_agents_live_gate_missing_requirements(
+        {
+            P44_OPENAI_AGENTS_LIVE_GATE: "1",
+            "LLM_ENABLE_REMOTE": "1",
+            "LLM_REMOTE_PROVIDER": "pgpt",
+            "OPENAI_API_KEY": "present",
+            "OPENAI_AGENTS_DISABLE_TRACING": "1",
+            "OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA": "0",
+            "OPENAI_AGENTS_DONT_LOG_MODEL_DATA": "1",
+            "OPENAI_AGENTS_DONT_LOG_TOOL_DATA": "1",
+        }
+    )
+
+    assert missing == [
+        OPENAI_AGENTS_PGPT_RUNTIME_REQUIREMENT,
+        OPENAI_AGENTS_COMPATIBLE_ENDPOINT_REQUIREMENT,
+    ]
 
 
 def test_p45_live_gate_rejects_unverified_custom_openai_agents_base_url() -> None:
@@ -84,7 +128,11 @@ def test_p45_env_assets_forward_live_gate_and_trace_locks() -> None:
     compose_text = DOCKER_COMPOSE.read_text(encoding="utf-8")
 
     assert "P44_OPENAI_AGENTS_LIVE_GATE=0" in env_text
+    assert "OPENAI_AGENTS_COMPATIBLE_API=responses" in env_text
     assert "P44_OPENAI_AGENTS_LIVE_GATE" in compose_text
+    assert "AI_GENERATION_RUNTIME" in compose_text
+    assert "AI_DRAFT_PACK_ORCHESTRATOR" in compose_text
+    assert "OPENAI_AGENTS_COMPATIBLE_API" in compose_text
     for key, value in OPENAI_AGENTS_TRACE_ENV_LOCKS.items():
         assert f"{key}={value}" in env_text
         assert key in compose_text
@@ -104,8 +152,13 @@ def test_p46_decision_keeps_openai_default_on_agents_and_limited_rollback() -> N
         "openai_agents_sdk"
     )
     assert p46["runtime_default"]["openai_remote_orchestrator"] == "langgraph"
+    assert p46["runtime_default"]["pgpt_default_generation_runtime"] == "responses_httpx"
+    assert p46["runtime_default"]["pgpt_explicit_sdk_generation_runtime"] == (
+        "openai_agents_sdk"
+    )
     assert p46["rollback_status"]["responses_httpx_active_default_for_openai"] is False
-    assert p46["rollback_status"]["responses_httpx_retained_for_pgpt"] is True
+    assert p46["rollback_status"]["responses_httpx_retained_for_pgpt_default_compatibility"] is True
+    assert p46["rollback_status"]["pgpt_compatible_openai_agents_sdk_live_evidence_allowed"] is True
     assert p46["rollback_status"]["responses_httpx_retained_for_emergency_rollback"] is True
     assert p46["rollback_status"]["deletion_approved"] is False
     assert p46["rationale"]["generated_artifacts_production_ready"] is False

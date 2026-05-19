@@ -235,9 +235,10 @@ rollback path.
 
 P44 supersedes P43 as the active framework direction. The internal
 `FrameworkRuntimeConfig.v0.1` factory selects OpenAI Agents SDK for OpenAI remote
-AI Draft Pack generation and keeps `responses_httpx` only for P-GPT compatibility
-or emergency rollback. This is an internal dependency construction decision, not
-a public request flag.
+AI Draft Pack generation. P-GPT defaults to `responses_httpx` for compatibility,
+but an explicit internal `AI_GENERATION_RUNTIME=openai_agents` selection may use
+the OpenAI Agents SDK with an approved P-GPT-compatible endpoint. This is an
+internal dependency construction decision, not a public request flag.
 
 `OpenAIAgentsFrameworkAdapter` implements the existing
 `AiGenerationFrameworkAdapter.v0.1` stage methods with real OpenAI Agents SDK
@@ -262,10 +263,12 @@ conversion approval remain forbidden.
 P45 is an explicit optional live gate around the same internal architecture. It
 runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`, OpenAI remote env, and trace
 redaction locks, and it uses sanitized fixture context rather than live PPM row
-data or procedure execution. It accepts only an official OpenAI Agents endpoint
-as live evidence; custom/P-GPT-compatible endpoints remain on `responses_httpx`.
+data or procedure execution. It accepts official OpenAI evidence and approved
+P-GPT-compatible SDK evidence when the runtime is explicit, the endpoint is
+configured, native SDK structured output is disabled, and P42/P44 post-validation
+passes.
 P46 keeps the architecture default on OpenAI Agents SDK plus LangGraph for
-OpenAI while retaining `responses_httpx` solely for P-GPT compatibility and
+OpenAI while retaining `responses_httpx` for P-GPT default compatibility and
 emergency rollback until a separate cleanup gate approves deletion.
 
 ## P47 Generic AI Draft Quality Uplift Architecture
@@ -296,7 +299,8 @@ The runtime profile `openai_ai_draft_pack` selects high-quality OpenAI model
 settings for live draft-pack generation through `OPENAI_MODEL_AI_DRAFT_PACK` and
 `OPENAI_REASONING_EFFORT_AI_DRAFT_PACK`. The profile falls back to the analysis
 model family rather than `openai_fast_test`; P-GPT remains on `responses_httpx`
-until separately proven compatible.
+by default, with compatible SDK evidence allowed only through explicit internal
+runtime selection.
 
 ## P35 Source Context Architecture
 

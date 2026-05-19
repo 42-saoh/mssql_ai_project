@@ -55,11 +55,14 @@ prompt/provider response storage, raw SP/guide storage, and LangGraph checkpoint
 
 P45 adds `test_p45_openai_agents_live_gate.py` as an optional live confidence gate. It skips by
 default and runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`, OpenAI remote env, and OpenAI Agents
-trace redaction locks. The live gate requires an official OpenAI Agents endpoint
-(`OPENAI_BASE_URL` empty or `https://api.openai.com/v1`); custom/P-GPT-compatible
-endpoints are blocked as unverified Agents SDK evidence. P46 records the rollback
-decision: OpenAI stays on OpenAI Agents SDK plus LangGraph, while
-`responses_httpx` remains only for P-GPT and emergency rollback.
+trace redaction locks. The live gate accepts official OpenAI evidence
+(`OPENAI_BASE_URL` empty or `https://api.openai.com/v1`) and approved
+P-GPT-compatible SDK evidence when `AI_GENERATION_RUNTIME=openai_agents`,
+`OPENAI_BASE_URL` or `OPENAI_RESPONSES_URL`, sanitized fixture inputs, and P42/P44
+post-validation are present. Unknown custom endpoints remain blocked. P46 records
+the rollback decision: OpenAI stays on OpenAI Agents SDK plus LangGraph, while
+`responses_httpx` remains only for P-GPT default compatibility and emergency
+rollback.
 
 P47 adds `test_p47_generic_ai_draft_quality_uplift_assets.py` as the contract/static evidence gate
 for generic AI Draft Pack quality. It checks `DraftPackEvidenceBundle.v0.1`, coverage matrices,

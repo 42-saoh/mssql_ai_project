@@ -15,6 +15,11 @@ from ai_agent_runtime.ai_draft_pack import (
     validate_ai_java_mybatis_draft_pack_output,
 )
 from ai_agent_runtime.gateway import ModelGateway, ModelGatewayError
+from ai_agent_runtime.gateway import (
+    REMOTE_PROVIDER_OPENAI,
+    REMOTE_PROVIDER_PGPT,
+    remote_provider_from_env,
+)
 from ai_agent_runtime.models import (
     AgentRunStatus,
     ModelInvocationRecord,
@@ -31,6 +36,11 @@ P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED = "P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED"
 P44_OPENAI_AGENTS_ADAPTER_FAILED = "P44_OPENAI_AGENTS_ADAPTER_FAILED"
 P44_OPENAI_AGENTS_SDK_UNAVAILABLE = "P44_OPENAI_AGENTS_SDK_UNAVAILABLE"
 P44_OPENAI_AGENTS_TRACE_POLICY = "P44_OPENAI_AGENTS_TRACE_POLICY"
+OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI = "official_openai"
+OPENAI_AGENTS_ENDPOINT_PGPT_COMPATIBLE = "pgpt_compatible"
+OPENAI_AGENTS_ENDPOINT_CUSTOM_COMPATIBLE = "custom_compatible"
+OPENAI_AGENTS_COMPATIBLE_API_RESPONSES = "responses"
+OPENAI_AGENTS_COMPATIBLE_API_CHAT_COMPLETIONS = "chat_completions"
 
 _ADAPTER_COMPONENT = "ai_generation_framework_adapter"
 _FRAMEWORK_STAGES = frozenset({"file_inventory", "file_content", "repair"})
@@ -388,6 +398,12 @@ class OpenAIAgentsFrameworkAdapter:
             ) from None
         latency_ms = int((time.monotonic() - started) * 1000)
         token_usage = _openai_agents_token_usage(result)
+        endpoint_class = openai_agents_endpoint_class_from_env()
+        sdk_transport = (
+            openai_agents_compatible_api_from_env()
+            if endpoint_class != OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI
+            else OPENAI_AGENTS_COMPATIBLE_API_RESPONSES
+        )
         component = self.summarize_trace(
             request=request,
             stage=stage,
@@ -395,7 +411,9 @@ class OpenAIAgentsFrameworkAdapter:
             events=(
                 {
                     "eventType": "openai_agents_sdk_run",
-                    "componentId": f"openai_agents_{stage}",
+                    "componentId": (
+                        f"openai_agents_{stage}_{endpoint_class}_{sdk_transport}"
+                    ),
                     "outputHash": stable_json_hash(structured_output),
                     "fileCount": len(structured_output.get("files", [])),
                     "latencyMs": latency_ms,
@@ -445,11 +463,51 @@ class OpenAIAgentsFrameworkAdapter:
         agent_kwargs = {
             "name": f"AI Draft Pack {request.stage}",
             "instructions": request.prompt.system_prompt,
-            "model": request.profile.model,
+            "model": _openai_agents_model_for_request(request=request),
         }
         if _openai_agents_native_structured_output_enabled():
             agent_kwargs["output_type"] = AiJavaMyBatisDraftPackOutput
         return agents.Agent(**agent_kwargs)
+
+
+def openai_agents_endpoint_class_from_env(
+    env: Mapping[str, str] | None = None,
+) -> str:
+    source = os.environ if env is None else env
+    provider = _remote_provider_from_mapping(source)
+    if provider == REMOTE_PROVIDER_PGPT:
+        return OPENAI_AGENTS_ENDPOINT_PGPT_COMPATIBLE
+    base_url = source.get("OPENAI_BASE_URL", "").strip()
+    if not base_url or _openai_base_url_is_official(base_url):
+        return OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI
+    return OPENAI_AGENTS_ENDPOINT_CUSTOM_COMPATIBLE
+
+
+def openai_agents_sdk_base_url_from_env(
+    env: Mapping[str, str] | None = None,
+) -> str:
+    source = os.environ if env is None else env
+    exact_url = source.get("OPENAI_RESPONSES_URL", "").strip().rstrip("/")
+    if exact_url:
+        return _sdk_base_url_from_responses_url(exact_url)
+    base_url = source.get("OPENAI_BASE_URL", "").strip().rstrip("/")
+    if not base_url:
+        return "https://api.openai.com/v1"
+    if base_url.endswith("/responses"):
+        return _sdk_base_url_from_responses_url(base_url)
+    if base_url.endswith("/v1"):
+        return base_url
+    return f"{base_url}/v1"
+
+
+def openai_agents_compatible_api_from_env(
+    env: Mapping[str, str] | None = None,
+) -> str:
+    source = os.environ if env is None else env
+    value = source.get("OPENAI_AGENTS_COMPATIBLE_API", "").strip().lower()
+    if value in {"chat", "chat_completion", "chat_completions", "chat-completions"}:
+        return OPENAI_AGENTS_COMPATIBLE_API_CHAT_COMPLETIONS
+    return OPENAI_AGENTS_COMPATIBLE_API_RESPONSES
 
 
 def _openai_agents_native_structured_output_enabled() -> bool:
@@ -460,10 +518,77 @@ def _openai_agents_native_structured_output_enabled() -> bool:
     the final output with AiJavaMyBatisDraftPack.v0.1 immediately after the run.
     """
 
-    base_url = os.getenv("OPENAI_BASE_URL", "").strip()
-    if not base_url:
-        return True
-    return _openai_base_url_is_official(base_url)
+    return openai_agents_endpoint_class_from_env() == OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI
+
+
+def _openai_agents_model_for_request(
+    *,
+    request: AiGenerationFrameworkAdapterRequest,
+) -> Any:
+    endpoint_class = openai_agents_endpoint_class_from_env()
+    if endpoint_class == OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI:
+        return request.profile.model
+    agents = _agents_sdk()
+    client = _openai_agents_compatible_client(agents=agents)
+    compatible_api = openai_agents_compatible_api_from_env()
+    model_class_name = (
+        "OpenAIChatCompletionsModel"
+        if compatible_api == OPENAI_AGENTS_COMPATIBLE_API_CHAT_COMPLETIONS
+        else "OpenAIResponsesModel"
+    )
+    model_class = getattr(agents, model_class_name, None)
+    if model_class is None:
+        raise ModelGatewayError(
+            "OpenAI Agents SDK compatible model transport is unavailable.",
+            code=P44_OPENAI_AGENTS_SDK_UNAVAILABLE,
+            provider_error={
+                "type": "openai_agents_framework_adapter",
+                "code": P44_OPENAI_AGENTS_SDK_UNAVAILABLE,
+                "dependency": model_class_name,
+                "endpointClass": endpoint_class,
+                "sdkTransport": compatible_api,
+            },
+        )
+    return model_class(model=request.profile.model, openai_client=client)
+
+
+def _openai_agents_compatible_client(*, agents: Any) -> Any:
+    async_openai = getattr(agents, "AsyncOpenAI", None)
+    if async_openai is None:
+        try:
+            from openai import AsyncOpenAI as async_openai  # type: ignore[no-redef]
+        except Exception as exc:  # noqa: BLE001
+            raise ModelGatewayError(
+                "OpenAI compatible client dependency is unavailable.",
+                code=P44_OPENAI_AGENTS_SDK_UNAVAILABLE,
+                provider_error={
+                    "type": "openai_agents_framework_adapter",
+                    "code": P44_OPENAI_AGENTS_SDK_UNAVAILABLE,
+                    "dependency": "AsyncOpenAI",
+                },
+            ) from exc
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    return async_openai(
+        api_key=api_key or None,
+        base_url=openai_agents_sdk_base_url_from_env(),
+    )
+
+
+def _sdk_base_url_from_responses_url(value: str) -> str:
+    normalized = value.rstrip("/")
+    suffix = "/responses"
+    if normalized.endswith(suffix):
+        return normalized[: -len(suffix)].rstrip("/")
+    return normalized
+
+
+def _remote_provider_from_mapping(source: Mapping[str, str]) -> str:
+    if source is os.environ:
+        return remote_provider_from_env()
+    provider = source.get("LLM_REMOTE_PROVIDER", REMOTE_PROVIDER_OPENAI).strip().lower()
+    if provider in {REMOTE_PROVIDER_PGPT, "p-gpt", "private-gpt"}:
+        return REMOTE_PROVIDER_PGPT
+    return REMOTE_PROVIDER_OPENAI
 
 
 def _openai_base_url_is_official(value: str) -> bool:

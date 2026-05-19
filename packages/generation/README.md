@@ -59,8 +59,9 @@ remain draft-only with `productionReady=false`; source apply, deploy, procedure 
 access, raw prompt/provider response storage, and raw SP/guide storage remain forbidden.
 
 P45/P46 do not change this package boundary. P45 live evidence is optional and sanitized, and P46
-keeps `responses_httpx` only for P-GPT compatibility plus emergency rollback while OpenAI defaults
-to OpenAI Agents SDK plus LangGraph.
+keeps `responses_httpx` for P-GPT default compatibility plus emergency rollback while OpenAI
+defaults to OpenAI Agents SDK plus LangGraph. Approved P-GPT-compatible endpoints may still produce
+SDK live evidence through explicit internal runtime selection and the same P42/P44 validation gates.
 
 P47 improves AI Draft Pack quality through generic evidence, not benchmark hardcoding. The planner
 now renders `DraftPackEvidenceBundle.v0.1`, operation coverage, DTO responsibility, review marker,

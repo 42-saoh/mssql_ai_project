@@ -122,16 +122,19 @@
   checkpointer state, tool I/O, raw prompts, raw provider responses, raw SP definitions, raw guide
   body, row data, secrets, and failed Java/XML payloads must not be stored.
 - P45 live OpenAI Agents evidence is optional and must require `P44_OPENAI_AGENTS_LIVE_GATE=1`,
-  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai`, `OPENAI_API_KEY`, an official OpenAI Agents
-  endpoint (`OPENAI_BASE_URL` empty or `https://api.openai.com/v1`), and trace redaction env locks.
+  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai` or `pgpt`, `OPENAI_API_KEY`, and trace
+  redaction env locks. Official OpenAI evidence uses `OPENAI_BASE_URL` empty or
+  `https://api.openai.com/v1`; approved P-GPT-compatible evidence additionally requires explicit
+  `AI_GENERATION_RUNTIME=openai_agents` and `OPENAI_BASE_URL` or `OPENAI_RESPONSES_URL`.
   It must use sanitized fixture inputs only and must not query row data, execute procedures, apply
-  source, deploy, or store raw prompts/provider responses. Custom or P-GPT-compatible endpoints are
-  not accepted as OpenAI Agents SDK live evidence.
+  source, deploy, or store raw prompts/provider responses. Unknown custom endpoints remain blocked
+  until explicitly classified and covered by the same post-validation policy.
 - P46 does not delete rollback code. It records that `responses_httpx` is not the active OpenAI
-  default and is retained only for P-GPT compatibility plus emergency rollback until a separate
+  default and is retained for P-GPT default compatibility plus emergency rollback until a separate
   cleanup gate approves removal.
-- P-GPT remains on `responses_httpx` until structured output through OpenAI Agents SDK is separately
-  proven. `responses_httpx` is retained for emergency rollback until P46 decides removal.
+- P-GPT remains on `responses_httpx` by default; compatible SDK evidence is allowed only through
+  explicit internal runtime selection and immediate P42/P44 validation. `responses_httpx` is
+  retained for emergency rollback until a later removal decision.
 - Procedure execution, row-data access, business DB DDL/DML apply, source apply, deploy, automatic
   conversion approval, production readiness claims, and ManageBond-specific production hardcoding
   remain forbidden.

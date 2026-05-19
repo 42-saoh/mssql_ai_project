@@ -166,8 +166,10 @@ For OpenAI remote runs, `FrameworkRuntimeConfig.v0.1` selects OpenAI Agents SDK 
 the primary generation runtime and LangGraph as the in-process stage orchestrator
 for `AiJavaMyBatisDraftPack.v0.1`. The graph runs `file_inventory`, `file_content`,
 `quality_gate`, `repair`, and `final` with no LangGraph persistent checkpointer;
-the existing platform DB remains the only persisted workflow store. P-GPT and
-emergency rollback stay on `responses_httpx`.
+the existing platform DB remains the only persisted workflow store. P-GPT
+defaults to `responses_httpx`, but explicit internal SDK live evidence is
+accepted for approved P-GPT-compatible endpoints when trace locks, sanitized
+fixture inputs, and P42/P44 post-validation are present.
 
 P44 changes the internal runtime only. It adds no public API, DB schema, UI,
 public MCP route, or public artifact type. Generated artifacts stay draft-only:
@@ -179,10 +181,12 @@ definition storage, raw guide body storage, and secret storage remain forbidden.
 P45 adds the optional live evidence gate `P44_OPENAI_AGENTS_LIVE_GATE=1` for the
 adopted OpenAI Agents runtime. It requires OpenAI remote env plus trace redaction
 locks and uses sanitized fixture inputs only; it does not require live PPM, row
-data, or procedure execution. Custom/P-GPT-compatible endpoints are not accepted
-as P45 Agents SDK live evidence. P46 records that `responses_httpx` is no longer
-the active OpenAI default, but remains retained for P-GPT compatibility and
-emergency rollback; code deletion is not approved in this slice.
+data, or procedure execution. P-GPT-compatible endpoints are accepted as SDK
+evidence only when `AI_GENERATION_RUNTIME=openai_agents` is explicit and
+`OPENAI_BASE_URL` or `OPENAI_RESPONSES_URL` is configured. P46 records that
+`responses_httpx` is no longer the active OpenAI default, but remains retained
+for P-GPT default compatibility and emergency rollback; code deletion is not
+approved in this slice.
 
 ## P47 Generic AI Draft Quality Uplift
 

@@ -37,11 +37,11 @@ live_policy:
   live_failure_diagnostics: sanitized_stage_code_only
   latest_audit:
     date: 2026-05-19
-    p45_status: blocked
-    p45_current_env_status: blocked_unverified_custom_or_pgpt_endpoint
-    p45_official_override_status: blocked_authentication_error
-    p45_stage: file_inventory
-    p45_blocker: P44_OPENAI_AGENTS_ADAPTER_FAILED
+    p45_status: passed_compatible_pgpt_openai_agents_live_gate
+    p45_current_env_status: compatible_pgpt_endpoint_passed_with_explicit_openai_agents_runtime
+    p45_official_override_status: historical_blocked_authentication_error
+    p45_stage: final
+    p45_blocker: none
     p42_status: passed_sanitized_fixture_live_mode
     p42_live_ppm_current_rerun_status: not_rerun_without_explicit_raw_sp_export_approval
 
@@ -78,6 +78,6 @@ verification:
     - git diff --check
   live_gate_notes:
     - P45 may run with command-scoped OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0.
-    - P45 official OpenAI evidence requires an official OpenAI-valid API key; custom/P-GPT endpoints are not accepted as OpenAI Agents SDK live evidence.
+    - P45 accepts either official OpenAI or approved P-GPT-compatible SDK evidence when trace locks, explicit runtime selection, sanitized fixture inputs, and P42/P44 post-validation are present.
     - P42 sanitized fixture live replay avoids live PPM metadata and raw SP external export.
     - P42 live_ppm replay still requires explicit raw-SP-to-remote-model approval and remains confidence evidence only.
