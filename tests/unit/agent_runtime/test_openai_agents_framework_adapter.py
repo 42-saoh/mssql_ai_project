@@ -152,6 +152,28 @@ def test_openai_agents_adapter_keeps_native_output_type_for_official_base_url(
     assert captured["output_type"].__name__ == "AiJavaMyBatisDraftPackOutput"
 
 
+def test_openai_agents_adapter_uses_stage_output_type_for_role_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeAgents:
+        class Agent:
+            def __init__(self, **kwargs: Any) -> None:
+                captured.update(kwargs)
+                self.name = kwargs["name"]
+
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setattr("ai_agent_runtime.framework_adapter._agents_sdk", lambda: FakeAgents)
+
+    OpenAIAgentsFrameworkAdapter()._build_agent(  # noqa: SLF001
+        request=_request(_valid_pack(), stage="service_content")
+    )
+
+    assert captured["output_type"].__name__ == "AiJavaMyBatisDraftPackStageOutput"
+
+
 def test_openai_agents_adapter_builds_pgpt_responses_model_with_custom_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

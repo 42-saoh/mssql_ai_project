@@ -14,6 +14,7 @@ from ai_agent_validation.ai_draft_pack import (
     RULE_MAPPER_METHOD,
     RULE_MAPPER_XML,
     RULE_MAPPER_XML_DB_OPERATION,
+    RULE_NON_DTO_AGGREGATE,
     RULE_NON_DTO_REFERENCE,
     RULE_REVIEW_MARKER,
     RULE_SCHEMA,
@@ -321,6 +322,40 @@ def test_p50_empty_service_body_fails_content_quality() -> None:
     )
 
     assert RULE_SERVICE_FLOW in _failed_rule_ids(payload)
+
+
+def test_p50_job_68456af0fc_service_and_mapper_xml_regression_is_blocked() -> None:
+    payload = _valid_pack()
+    service = _file_by_type(payload, "SERVICE_DRAFT")
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    service["path"] = "service/ManageBondReadQueryService.java"
+    service["className"] = "ManageBondReadQueryService"
+    service["operationIds"] = ["readBond"]
+    service["content"] = (
+        "public class ManageBondReadQueryService {\n"
+        "    public void readBond(ManageBondSearchCriteria criteria) {}\n"
+        "}"
+    )
+    mapper_xml["content"] = (
+        '<mapper namespace="ManageBondMapper">\n'
+        '  <select id="readBond"></select>\n'
+        '  <update id="approveAdvanceBond"></update>\n'
+        '  <update id="approveDefectBond"></update>\n'
+        '  <update id="sendFinanceTransfer"></update>\n'
+        '  <update id="createBond"></update>\n'
+        '  <update id="createRetentionBondBatch"></update>\n'
+        '  <update id="updateBond"></update>\n'
+        '  <update id="deleteBond"></update>\n'
+        '  <update id="updateVendorBond"></update>\n'
+        '  <update id="updateOnlineBond"></update>\n'
+        "</mapper>"
+    )
+
+    failed = _failed_rule_ids(payload)
+
+    assert RULE_SERVICE_FLOW in failed
+    assert RULE_MAPPER_XML_DB_OPERATION in failed
+    assert RULE_NON_DTO_AGGREGATE in failed
 
 
 def test_p50_mapper_interface_and_xml_must_match() -> None:

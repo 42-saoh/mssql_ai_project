@@ -10,12 +10,17 @@ import yaml
 from ai_agent_runtime import (
     AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
     AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+    AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_OUTPUT_SCHEMA_VERSION,
     FakeModelGateway,
     ModelProfile,
     build_ai_java_mybatis_draft_pack_run,
 )
 from ai_agent_runtime.gateway import ModelGatewayError, OpenAIModelGateway, model_profile_from_env
 from ai_agent_runtime.prompts import render_ai_java_mybatis_draft_pack_prompt
+from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
+from ai_agent_validation.models import ValidationStatus
+from tests.helpers.framework_adapters import FakeAiGenerationFrameworkAdapter
 
 FIXTURE_PATH = Path("fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml")
 
@@ -241,6 +246,29 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
     assert prompt.metadata["evidenceBundleVersion"] == "DraftPackEvidenceBundle.v0.1"
 
 
+def test_ai_draft_pack_role_stage_prompt_uses_stage_contract() -> None:
+    payload = _valid_pack()
+    prompt = render_ai_java_mybatis_draft_pack_prompt(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        allowed_evidence_refs=_allowed_refs(payload),
+        stage="service_content",
+    )
+    prompt_payload = json.loads(prompt.user_prompt)
+
+    assert prompt.output_schema_version == AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_OUTPUT_SCHEMA_VERSION
+    assert prompt_payload["outputContract"]["schemaVersion"] == (
+        "AiJavaMyBatisDraftPackStage.v0.1"
+    )
+    assert prompt_payload["outputContract"]["contractTarget"] == "AiJavaMyBatisDraftPackStage"
+    assert prompt_payload["outputContract"]["allowedArtifactTypesForStage"] == [
+        "SERVICE_DRAFT"
+    ]
+    assert prompt_payload["outputContract"]["stage"] == "service_content"
+
+
 def test_ai_draft_pack_model_profile_uses_high_quality_override(monkeypatch: Any) -> None:
     monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
     monkeypatch.setenv("OPENAI_MODEL_ANALYSIS", "gpt-5.5")
@@ -352,6 +380,42 @@ def test_ai_draft_pack_run_preserves_deterministic_quality_gates() -> None:
         "integration_quality_gate",
     ]
     assert composer["defaultProfile"] == "openai_ai_draft_pack"
+
+
+def test_ai_draft_pack_framework_adapter_runs_role_specific_stages() -> None:
+    payload = _valid_pack()
+    adapter = FakeAiGenerationFrameworkAdapter(
+        output=payload,
+        candidate_framework="openai_agents_sdk",
+    )
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        model_gateway=FakeModelGateway(),
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=_allowed_refs(payload),
+        framework_adapter=adapter,
+    )
+
+    adapter_stages = [
+        component["stage"]
+        for component in run.model_invocation.component_invocations
+        if component.get("component") == "ai_generation_framework_adapter"
+    ]
+    assert adapter_stages == list(AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES)
+    assert run.structured_output["schemaVersion"] == "AiJavaMyBatisDraftPack.v0.1"
+    assert validate_ai_java_mybatis_draft_pack_quality(
+        run.structured_output
+    ).status == ValidationStatus.PASSED
+    composer = next(
+        component
+        for component in run.model_invocation.component_invocations
+        if component["component"] == "ai_draft_pack_internal_composer"
+    )
+    assert composer["stage"] == "integration_quality_gate"
 
 
 def test_ai_draft_pack_run_preserves_generic_expected_dto_references() -> None:

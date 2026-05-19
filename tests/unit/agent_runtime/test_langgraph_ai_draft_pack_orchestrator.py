@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 from ai_agent_runtime import (
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
     P44_LANGGRAPH_ORCHESTRATOR_FAILED,
     FakeModelGateway,
     LangGraphAiDraftPackOrchestrator,
@@ -21,7 +22,7 @@ from tests.unit.agent_runtime.test_framework_adapter import (
 )
 
 
-def test_langgraph_orchestrator_runs_inventory_content_quality_final() -> None:
+def test_langgraph_orchestrator_runs_role_stages_integration_final() -> None:
     payload = _valid_pack()
     orchestrator = LangGraphAiDraftPackOrchestrator(
         framework_adapter=FakeAiGenerationFrameworkAdapter(
@@ -42,14 +43,13 @@ def test_langgraph_orchestrator_runs_inventory_content_quality_final() -> None:
 
     adapter_stages = _adapter_stages(run)
     langgraph_component = run.model_invocation.component_invocations[-1]
-    assert adapter_stages == ["file_inventory", "file_content"]
+    assert adapter_stages == list(AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES)
     assert langgraph_component["component"] == "langgraph_ai_draft_pack_orchestrator"
     assert langgraph_component["orchestrator"] == "langgraph"
     assert langgraph_component["checkpointer"] == "disabled"
     assert langgraph_component["stageTrace"] == [
-        "file_inventory",
-        "file_content",
-        "quality_gate",
+        *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+        "integration_quality_gate",
         "final",
     ]
     assert langgraph_component["composerStages"] == [
@@ -69,16 +69,17 @@ def test_langgraph_orchestrator_runs_inventory_content_quality_final() -> None:
 def test_langgraph_orchestrator_routes_quality_failure_to_repair() -> None:
     payload = _valid_pack()
     weak_payload = deepcopy(payload)
-    weak_payload["reviewMarkers"] = []
-    weak_payload["qualityGates"]["requiredReviewMarkers"] = []
-    for file in weak_payload["files"]:
-        file["reviewMarkers"] = []
+    _break_service_and_mapper_xml(weak_payload)
     orchestrator = LangGraphAiDraftPackOrchestrator(
         framework_adapter=FakeAiGenerationFrameworkAdapter(
             stage_outputs={
-                "file_inventory": payload,
-                "file_content": weak_payload,
-                "repair": payload,
+                "dto_inventory": payload,
+                "dto_content": payload,
+                "service_content": weak_payload,
+                "mapper_interface_content": payload,
+                "mapper_xml_content": weak_payload,
+                "service_content:repair": payload,
+                "mapper_xml_content:repair": payload,
             },
             candidate_framework="openai_agents_sdk",
         )
@@ -95,7 +96,11 @@ def test_langgraph_orchestrator_routes_quality_failure_to_repair() -> None:
     )
 
     langgraph_component = run.model_invocation.component_invocations[-1]
-    assert _adapter_stages(run) == ["file_inventory", "file_content", "repair"]
+    assert _adapter_stages(run) == [
+        *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+        "service_content",
+        "mapper_xml_content",
+    ]
     assert "repair" in langgraph_component["stageTrace"]
     assert langgraph_component["repairAttempted"] is True
     assert validate_ai_java_mybatis_draft_pack_quality(
@@ -108,9 +113,12 @@ def test_langgraph_orchestrator_routes_schema_failure_to_repair() -> None:
     orchestrator = LangGraphAiDraftPackOrchestrator(
         framework_adapter=FakeAiGenerationFrameworkAdapter(
             stage_outputs={
-                "file_inventory": payload,
-                "file_content": {"not": "an AiJavaMyBatisDraftPack"},
-                "repair": payload,
+                "dto_inventory": payload,
+                "dto_content": payload,
+                "service_content": payload,
+                "mapper_interface_content": payload,
+                "mapper_xml_content": {"not": "an AiJavaMyBatisDraftPackStage"},
+                "mapper_xml_content:repair": payload,
             },
             candidate_framework="openai_agents_sdk",
         )
@@ -126,7 +134,10 @@ def test_langgraph_orchestrator_routes_schema_failure_to_repair() -> None:
         allowed_evidence_refs=_allowed_refs(payload),
     )
 
-    assert _adapter_stages(run) == ["file_inventory", "file_content", "repair"]
+    assert _adapter_stages(run) == [
+        *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+        "mapper_xml_content",
+    ]
     assert run.model_invocation.component_invocations[-1]["repairAttempted"] is True
     assert validate_ai_java_mybatis_draft_pack_quality(
         run.structured_output
@@ -136,16 +147,17 @@ def test_langgraph_orchestrator_routes_schema_failure_to_repair() -> None:
 def test_langgraph_orchestrator_returns_failed_quality_to_workflow_gate() -> None:
     payload = _valid_pack()
     weak_payload = deepcopy(payload)
-    weak_payload["reviewMarkers"] = []
-    weak_payload["qualityGates"]["requiredReviewMarkers"] = []
-    for file in weak_payload["files"]:
-        file["reviewMarkers"] = []
+    _break_service_and_mapper_xml(weak_payload)
     orchestrator = LangGraphAiDraftPackOrchestrator(
         framework_adapter=FakeAiGenerationFrameworkAdapter(
             stage_outputs={
-                "file_inventory": payload,
-                "file_content": weak_payload,
-                "repair": weak_payload,
+                "dto_inventory": payload,
+                "dto_content": payload,
+                "service_content": weak_payload,
+                "mapper_interface_content": payload,
+                "mapper_xml_content": weak_payload,
+                "service_content:repair": weak_payload,
+                "mapper_xml_content:repair": weak_payload,
             },
             candidate_framework="openai_agents_sdk",
         )
@@ -208,4 +220,28 @@ def _adapter_stages(run) -> list[str]:
 
 class _NoOutputGraph:
     def invoke(self, _state):
-        return {"stageTrace": ["file_inventory", "final"]}
+        return {"stageTrace": ["dto_inventory", "final"]}
+
+
+def _break_service_and_mapper_xml(payload: dict) -> None:
+    for file in payload["files"]:
+        if file["artifactType"] == "SERVICE_DRAFT":
+            file["content"] = file["content"].replace(
+                "return mapper.updateOnlineBond(command);",
+                "",
+            )
+        if file["artifactType"] == "MAPPER_XML":
+            file["content"] = (
+                '<mapper namespace="ManageBondMapper">\n'
+                '  <select id="readBond"></select>\n'
+                '  <update id="approveAdvanceBond"></update>\n'
+                '  <update id="approveDefectBond"></update>\n'
+                '  <update id="sendFinanceTransfer"></update>\n'
+                '  <update id="createBond"></update>\n'
+                '  <update id="createRetentionBondBatch"></update>\n'
+                '  <update id="updateBond"></update>\n'
+                '  <update id="deleteBond"></update>\n'
+                '  <update id="updateVendorBond"></update>\n'
+                '  <update id="updateOnlineBond"></update>\n'
+                "</mapper>"
+            )

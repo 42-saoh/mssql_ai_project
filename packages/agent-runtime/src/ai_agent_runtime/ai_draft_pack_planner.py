@@ -5,7 +5,9 @@ from dataclasses import replace as dataclass_replace
 from typing import Any
 
 from ai_agent_runtime.ai_draft_pack import (
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
     AiDraftPackValidationError,
+    validate_ai_java_mybatis_draft_pack_stage_output,
     validate_ai_java_mybatis_draft_pack_output,
 )
 from ai_agent_runtime.framework_adapter import (
@@ -29,7 +31,10 @@ AI_DRAFT_PACK_COMPOSER_STAGES = (
     "mapper_xml_content",
     "integration_quality_gate",
 )
-FRAMEWORK_ADAPTER_STAGES = frozenset({"file_inventory", "file_content", "repair"})
+FRAMEWORK_ADAPTER_STAGES = frozenset(
+    {"file_inventory", "file_content", "repair", *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES}
+)
+ROLE_DRAFT_STAGES = AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES
 
 
 def build_ai_java_mybatis_draft_pack_run(
@@ -70,6 +75,18 @@ def build_ai_java_mybatis_draft_pack_run(
             stage="file_inventory",
         )
         prior_component_invocations = tuple(inventory_invocation.component_invocations)
+    if framework_adapter is not None and repair_context is None:
+        return _build_ai_java_mybatis_draft_pack_staged_run(
+            target_ref=target_ref,
+            sanitized_draft_context=sanitized_draft_context,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            model_gateway=model_gateway,
+            profile=profile,
+            allowed_refs=allowed_refs,
+            framework_adapter=framework_adapter,
+            prior_component_invocations=prior_component_invocations,
+        )
     stage = "repair" if repair_context else "file_content"
     try:
         return _build_ai_java_mybatis_draft_pack_run_stage(
@@ -183,6 +200,251 @@ def _build_ai_java_mybatis_draft_pack_run_stage(
     )
 
 
+def _build_ai_java_mybatis_draft_pack_staged_run(
+    *,
+    target_ref: str,
+    sanitized_draft_context: Mapping[str, Any],
+    expected_inventory: Sequence[Mapping[str, Any]],
+    quality_gates: Mapping[str, Any],
+    model_gateway: ModelGateway,
+    profile: Any,
+    allowed_refs: Sequence[str],
+    framework_adapter: AiGenerationFrameworkAdapter,
+    prior_component_invocations: Sequence[Mapping[str, Any]] = (),
+) -> AgentRunPayload:
+    stage_outputs: dict[str, dict[str, Any]] = {}
+    component_invocations: list[dict[str, Any]] = [
+        dict(item) for item in prior_component_invocations
+    ]
+    last_invocation: Any | None = None
+    repair_context: Mapping[str, Any] | None = None
+    for stage in ROLE_DRAFT_STAGES:
+        invocation = _invoke_ai_java_mybatis_draft_pack_stage(
+            target_ref=target_ref,
+            sanitized_draft_context=sanitized_draft_context,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            model_gateway=model_gateway,
+            profile=profile,
+            allowed_refs=allowed_refs,
+            stage=stage,
+            repair_context=None,
+            framework_adapter=framework_adapter,
+        )
+        stage_model = _validate_ai_draft_pack_stage_invocation(invocation, stage=stage)
+        stage_outputs[stage] = stage_model.to_storage_dict()
+        component_invocations.extend(dict(item) for item in invocation.component_invocations)
+        last_invocation = invocation
+    try:
+        return _build_run_from_stage_outputs(
+            target_ref=target_ref,
+            stage_outputs=stage_outputs,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            allowed_refs=allowed_refs,
+            base_invocation=last_invocation,
+            component_invocations=component_invocations,
+            repair_context=None,
+        )
+    except AiDraftPackValidationError as exc:
+        repair_context = _repair_context_from_exception(exc)
+        target_stages = _repair_stages_from_findings(exc.findings)
+        if not target_stages:
+            raise
+    for stage in target_stages:
+        stage_repair_context = {
+            **dict(repair_context or {}),
+            "targetStage": stage,
+            "targetStages": list(target_stages),
+        }
+        invocation = _invoke_ai_java_mybatis_draft_pack_stage(
+            target_ref=target_ref,
+            sanitized_draft_context=sanitized_draft_context,
+            expected_inventory=expected_inventory,
+            quality_gates=quality_gates,
+            model_gateway=model_gateway,
+            profile=profile,
+            allowed_refs=allowed_refs,
+            stage=stage,
+            repair_context=stage_repair_context,
+            framework_adapter=framework_adapter,
+        )
+        stage_model = _validate_ai_draft_pack_stage_invocation(invocation, stage=stage)
+        stage_outputs[stage] = stage_model.to_storage_dict()
+        component_invocations.extend(dict(item) for item in invocation.component_invocations)
+        last_invocation = invocation
+    return _build_run_from_stage_outputs(
+        target_ref=target_ref,
+        stage_outputs=stage_outputs,
+        expected_inventory=expected_inventory,
+        quality_gates=quality_gates,
+        allowed_refs=allowed_refs,
+        base_invocation=last_invocation,
+        component_invocations=component_invocations,
+        repair_context=repair_context,
+    )
+
+
+def _build_run_from_stage_outputs(
+    *,
+    target_ref: str,
+    stage_outputs: Mapping[str, Mapping[str, Any]],
+    expected_inventory: Sequence[Mapping[str, Any]],
+    quality_gates: Mapping[str, Any],
+    allowed_refs: Sequence[str],
+    base_invocation: Any,
+    component_invocations: Sequence[Mapping[str, Any]],
+    repair_context: Mapping[str, Any] | None,
+) -> AgentRunPayload:
+    if base_invocation is None:
+        raise AiDraftPackValidationError(["role stage composer had no model invocation."])
+    structured_output = _compose_ai_java_mybatis_draft_pack_output(
+        target_ref=target_ref,
+        stage_outputs=stage_outputs,
+        expected_inventory=expected_inventory,
+        quality_gates=quality_gates,
+        allowed_refs=allowed_refs,
+    )
+    model = validate_ai_java_mybatis_draft_pack_output(
+        structured_output,
+        allowed_evidence_refs=allowed_refs,
+    )
+    structured_output = model.to_storage_dict()
+    guard_component = _reference_guard_component(
+        structured_output=structured_output,
+        expected_inventory=expected_inventory,
+    )
+    composer_component = _composer_component(stage="integration_quality_gate")
+    components: tuple[dict[str, Any], ...] = (
+        *(dict(item) for item in component_invocations),
+        composer_component,
+    )
+    if guard_component is not None:
+        components = (*components, guard_component)
+    if repair_context is not None:
+        components = (*components, _repair_component(repair_context))
+    final_invocation = dataclass_replace(
+        base_invocation,
+        structured_output=structured_output,
+        output_hash=stable_json_hash(structured_output),
+        component_invocations=components,
+    )
+    return AgentRunPayload(
+        agent_type=AGENT_TYPE,
+        status=AgentRunStatus.SUCCEEDED,
+        target_ref=model.target_ref,
+        structured_output=structured_output,
+        model_invocation=final_invocation,
+        summary=(
+            f"AI Java/MyBatis staged draft pack planned {len(model.files)} files "
+            f"for {model.target_ref}."
+        ),
+    )
+
+
+def _compose_ai_java_mybatis_draft_pack_output(
+    *,
+    target_ref: str,
+    stage_outputs: Mapping[str, Mapping[str, Any]],
+    expected_inventory: Sequence[Mapping[str, Any]],
+    quality_gates: Mapping[str, Any],
+    allowed_refs: Sequence[str],
+) -> dict[str, Any]:
+    stage_files: dict[tuple[str, str], Mapping[str, Any]] = {}
+    stage_root_refs: list[str] = []
+    stage_root_markers: list[str] = []
+    assumptions: list[str] = []
+    for stage in ROLE_DRAFT_STAGES:
+        output = stage_outputs.get(stage) or {}
+        stage_root_refs.extend(_strings(output.get("evidenceRefs")))
+        stage_root_markers.extend(_strings(output.get("reviewMarkers")))
+        assumptions.extend(_strings(output.get("assumptions")))
+        for file in output.get("files", []):
+            if not isinstance(file, Mapping):
+                continue
+            key = (str(file.get("artifactType") or ""), str(file.get("path") or ""))
+            stage_files[key] = file
+
+    composed_files: list[dict[str, Any]] = []
+    missing: list[str] = []
+    allowed_set = {str(ref) for ref in allowed_refs if str(ref).strip()}
+    for expected in expected_inventory:
+        artifact_type = str(expected.get("artifactType") or "")
+        path = str(expected.get("path") or "")
+        actual = stage_files.get((artifact_type, path))
+        if actual is None:
+            missing.append(f"{artifact_type} {path}")
+            continue
+        expected_refs = _strings(expected.get("evidenceRefs"))
+        actual_refs = _strings(actual.get("evidenceRefs"))
+        evidence_refs = _dedupe_refs([*expected_refs, *actual_refs], allowed_set)
+        if not evidence_refs:
+            evidence_refs = _dedupe_refs([*stage_root_refs, *allowed_refs], allowed_set)
+        composed = {
+            "artifactType": artifact_type,
+            "path": path,
+            "role": str(expected.get("role") or actual.get("role") or ""),
+            "className": str(expected.get("className") or actual.get("className") or ""),
+            "content": str(actual.get("content") or ""),
+            "operationIds": _dedupe(
+                [
+                    *_strings(expected.get("operationIds")),
+                    *_strings(actual.get("operationIds")),
+                ]
+            ),
+            "evidenceRefs": evidence_refs,
+            "reviewMarkers": _dedupe(
+                [
+                    *_strings(expected.get("reviewMarkers")),
+                    *_strings(actual.get("reviewMarkers")),
+                ]
+            ),
+        }
+        for optional_key in ("dtoRole", "requiredFields", "references"):
+            values = expected.get(optional_key)
+            if values is None:
+                values = actual.get(optional_key)
+            if values is not None:
+                composed[optional_key] = values
+        if actual.get("qualityScore") is not None:
+            composed["qualityScore"] = actual.get("qualityScore")
+        composed_files.append(composed)
+    if missing:
+        raise AiDraftPackValidationError(
+            [f"integration_quality_gate: missing expected stage files: {missing}."]
+        )
+
+    root_refs = _dedupe_refs(
+        [
+            *_strings(stage_root_refs),
+            *(ref for file in composed_files for ref in _strings(file.get("evidenceRefs"))),
+            *allowed_refs,
+        ],
+        allowed_set,
+    )
+    root_markers = _dedupe(
+        [
+            *_strings(stage_root_markers),
+            *_strings(quality_gates.get("requiredReviewMarkers")),
+            *(marker for file in composed_files for marker in _strings(file.get("reviewMarkers"))),
+        ]
+    )
+    return {
+        "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
+        "contractTarget": "AiJavaMyBatisDraftPack",
+        "targetRef": target_ref,
+        "sourcePolicy": "sanitized_facts_only",
+        "productionReady": False,
+        "files": composed_files,
+        "evidenceRefs": root_refs or list(allowed_refs),
+        "reviewMarkers": root_markers,
+        "qualityGates": dict(quality_gates),
+        "assumptions": _dedupe(
+            [*assumptions, "P50 role-stage outputs were merged by deterministic composer."]
+        ),
+    }
+
+
 def _invoke_ai_java_mybatis_draft_pack_stage(
     *,
     target_ref: str,
@@ -225,7 +487,11 @@ def _invoke_ai_java_mybatis_draft_pack_stage(
             else (
                 framework_adapter.plan_file_inventory(request=adapter_request)
                 if stage == "file_inventory"
-                else framework_adapter.draft_file_content(request=adapter_request)
+                else (
+                    framework_adapter.draft_role_stage(request=adapter_request)
+                    if stage in ROLE_DRAFT_STAGES
+                    else framework_adapter.draft_file_content(request=adapter_request)
+                )
             )
         )
     return invocation
@@ -237,6 +503,18 @@ def _validate_ai_draft_pack_invocation(invocation: Any, *, stage: str | None):
     except AiDraftPackValidationError as exc:
         if stage is None:
             raise
+        raise AiDraftPackValidationError(
+            _stage_validation_findings(stage=stage, findings=exc.findings)
+        ) from exc
+
+
+def _validate_ai_draft_pack_stage_invocation(invocation: Any, *, stage: str):
+    try:
+        return validate_ai_java_mybatis_draft_pack_stage_output(
+            invocation.structured_output,
+            stage=stage,
+        )
+    except AiDraftPackValidationError as exc:
         raise AiDraftPackValidationError(
             _stage_validation_findings(stage=stage, findings=exc.findings)
         ) from exc
@@ -414,6 +692,23 @@ def _schema_failure_stage_from_findings(findings: Sequence[str]) -> str:
     return "schema_validation"
 
 
+def _repair_stages_from_findings(findings: Sequence[str]) -> tuple[str, ...]:
+    stages: list[str] = []
+    text = "\n".join(str(finding) for finding in findings)
+    for stage in ROLE_DRAFT_STAGES:
+        if f"{stage}:" in text:
+            stages.append(stage)
+    if "SERVICE_DRAFT" in text or "service" in text.lower():
+        stages.append("service_content")
+    if "MAPPER_XML" in text or "mapper_xml" in text.lower() or "xml" in text.lower():
+        stages.append("mapper_xml_content")
+    if "MAPPER_INTERFACE" in text or "mapper interface" in text.lower():
+        stages.append("mapper_interface_content")
+    if "DTO_DRAFT" in text or "dto" in text.lower():
+        stages.extend(["dto_inventory", "dto_content"])
+    return tuple(stage for stage in ROLE_DRAFT_STAGES if stage in set(stages))
+
+
 def _allowed_evidence_refs(
     *,
     context: Mapping[str, Any],
@@ -427,3 +722,22 @@ def _allowed_evidence_refs(
         refs.extend(str(ref) for ref in file.get("evidenceRefs", []) if str(ref).strip())
     refs.extend(str(ref) for ref in (additional_refs or ()) if str(ref).strip())
     return tuple(dict.fromkeys(refs))
+
+
+def _strings(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if not isinstance(value, Sequence):
+        return []
+    return _dedupe(str(item) for item in value if item is not None and str(item).strip())
+
+
+def _dedupe(values: Any) -> list[str]:
+    return list(dict.fromkeys(str(value) for value in values if str(value).strip()))
+
+
+def _dedupe_refs(values: Any, allowed_refs: set[str]) -> list[str]:
+    refs = _dedupe(values)
+    if not allowed_refs:
+        return refs
+    return [ref for ref in refs if ref in allowed_refs]

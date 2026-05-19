@@ -314,6 +314,10 @@ def render_evidence_dossier(model: Mapping[str, Any]) -> str:
         *_java_mybatis_evidence_rows(context, guide),
         *_ai_draft_pack_evidence_rows(context),
         "",
+        "### p50_stage_trace",
+        "",
+        *_ai_draft_pack_stage_trace_lines(context),
+        "",
         "## sql_statement_evidence",
         "",
         "| evidence id | operation | target | sanitized skeleton | caveat |",
@@ -954,6 +958,44 @@ def _ai_draft_pack_evidence_rows(context: GenerationContext) -> list[str]:
             f"reviewMarker: {_refs(file.get('reviewMarkers'))} |"
         )
     return rows
+
+
+def _ai_draft_pack_stage_trace_lines(context: GenerationContext) -> list[str]:
+    trace = _mapping(context.value("aiDraftPackTrace", {}) or {})
+    pack = _mapping(context.value("aiDraftPack", {}) or {})
+    components = _mapping_items(trace.get("componentInvocations")) or _mapping_items(
+        pack.get("componentInvocations")
+    )
+    stage_lines: list[str] = []
+    for component in components:
+        stage = str(component.get("stage") or "")
+        if not stage:
+            continue
+        failed_rule_ids = _sequence(component.get("failedRuleIds"))
+        stage_lines.append(
+            "- "
+            f"stage={_table_text(stage)} "
+            f"status={_table_text(component.get('status') or 'REVIEW_REQUIRED')} "
+            f"fileCount={_table_text(component.get('fileCount') or component.get('stageCount') or '')} "
+            f"failedRuleIds={_refs(failed_rule_ids)}"
+        )
+    validation = _mapping(trace.get("validation") or pack.get("validation") or {})
+    failed_rules = _sequence(validation.get("failedRuleIds"))
+    if failed_rules:
+        stage_lines.append(
+            "- validation_failure_code: "
+            f"{_refs(failed_rules)}; repair_caveat: REVIEW_REQUIRED"
+        )
+    repair = _mapping(trace.get("repair") or pack.get("repair") or {})
+    target_stages = _sequence(repair.get("targetStages"))
+    if target_stages:
+        stage_lines.append(
+            "- repair_routing: "
+            f"targetStages={_refs(target_stages)}; caveat=REVIEW_REQUIRED"
+        )
+    if not stage_lines:
+        return ["- REVIEW_REQUIRED: P50 stage trace not attached to this dossier context."]
+    return stage_lines
 
 
 def _sql_statement_evidence_rows(guide: Mapping[str, Any]) -> list[str]:

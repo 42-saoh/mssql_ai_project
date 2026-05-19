@@ -266,6 +266,13 @@ requests may still use `llmProfileId` for semantic and operation analysis, but
 Java/MyBatis draft generation resolves to the dedicated
 `openai_ai_draft_pack` profile.
 
+Role-specific model stages now return the internal
+`AiJavaMyBatisDraftPackStage.v0.1` schema. The deterministic composer merges
+those DTO, Service, Mapper interface, and Mapper XML slices into the existing
+public `AiJavaMyBatisDraftPack.v0.1` output, preserving the public artifact
+surface while routing Service and Mapper XML failures back to their owning
+stages.
+
 P50 also tightens the storage gate. Branch-heavy SPs with shallow operation
 models, such as two operations, three DTOs, or two statement-evidence entries,
 stop with `P42_INVENTORY_CONTRACT_INCOMPLETE` before any Java/MyBatis artifacts

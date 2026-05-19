@@ -15,6 +15,24 @@ AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION = "prompt:ai_java_mybatis_draft_pack@0
 AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION = (
     "schema:ai_java_mybatis_draft_pack@0.1.0"
 )
+AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_SCHEMA_VERSION = "AiJavaMyBatisDraftPackStage.v0.1"
+AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_OUTPUT_SCHEMA_VERSION = (
+    "schema:ai_java_mybatis_draft_pack_stage@0.1.0"
+)
+AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES = (
+    "dto_inventory",
+    "dto_content",
+    "service_content",
+    "mapper_interface_content",
+    "mapper_xml_content",
+)
+AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_ARTIFACT_TYPES = {
+    "dto_inventory": ("DTO_DRAFT",),
+    "dto_content": ("DTO_DRAFT",),
+    "service_content": ("SERVICE_DRAFT",),
+    "mapper_interface_content": ("MAPPER_INTERFACE",),
+    "mapper_xml_content": ("MAPPER_XML",),
+}
 
 
 class AiDraftPackValidationError(ValueError):
@@ -104,6 +122,29 @@ class AiJavaMyBatisDraftPackPlannerOutput(AiJavaMyBatisDraftPackOutput):
     pass
 
 
+class AiJavaMyBatisDraftPackStageOutput(StrictModel):
+    schema_version: str = Field(
+        default=AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_SCHEMA_VERSION,
+        alias="schemaVersion",
+    )
+    contract_target: str = Field(default="AiJavaMyBatisDraftPackStage", alias="contractTarget")
+    target_ref: str = Field(alias="targetRef", min_length=1)
+    stage: str = Field(min_length=1)
+    source_policy: str = Field(default="sanitized_facts_only", alias="sourcePolicy")
+    production_ready: bool = Field(default=False, alias="productionReady")
+    files: list[AiJavaMyBatisDraftPackFile] = Field(min_length=1)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
+    review_markers: list[str] = Field(default_factory=list, alias="reviewMarkers")
+    assumptions: list[str] = Field(default_factory=list)
+
+    def to_storage_dict(self) -> dict[str, Any]:
+        return self.model_dump(by_alias=True, mode="json")
+
+
+class AiJavaMyBatisDraftPackStagePlannerOutput(AiJavaMyBatisDraftPackStageOutput):
+    pass
+
+
 def parse_ai_java_mybatis_draft_pack_json(
     output_text: str,
     *,
@@ -114,6 +155,22 @@ def parse_ai_java_mybatis_draft_pack_json(
         raise AiDraftPackValidationError(["Root AI draft pack output must be an object."])
     return validate_ai_java_mybatis_draft_pack_output(
         payload,
+        allowed_evidence_refs=allowed_evidence_refs,
+    )
+
+
+def parse_ai_java_mybatis_draft_pack_stage_json(
+    output_text: str,
+    *,
+    stage: str,
+    allowed_evidence_refs: Sequence[str] | None = None,
+) -> AiJavaMyBatisDraftPackStagePlannerOutput:
+    payload = json.loads(output_text)
+    if not isinstance(payload, Mapping):
+        raise AiDraftPackValidationError(["Root AI draft pack stage output must be an object."])
+    return validate_ai_java_mybatis_draft_pack_stage_output(
+        payload,
+        stage=stage,
         allowed_evidence_refs=allowed_evidence_refs,
     )
 
@@ -207,8 +264,83 @@ def validate_ai_java_mybatis_draft_pack_output(
     return model
 
 
+def validate_ai_java_mybatis_draft_pack_stage_output(
+    payload: Mapping[str, Any],
+    *,
+    stage: str,
+    allowed_evidence_refs: Sequence[str] | None = None,
+) -> AiJavaMyBatisDraftPackStagePlannerOutput:
+    findings: list[str] = []
+    try:
+        model = AiJavaMyBatisDraftPackStagePlannerOutput.model_validate(payload)
+    except ValidationError as exc:
+        for error in exc.errors(include_input=False):
+            loc = ".".join(str(part) for part in error.get("loc", ())) or "<root>"
+            message = str(error.get("msg") or "schema validation failed")
+            error_type = str(error.get("type") or "validation_error")
+            findings.append(f"schema validation failed at {loc}: {message} ({error_type})")
+        if not findings:
+            findings.append("schema validation failed")
+        raise AiDraftPackValidationError(findings) from exc
+
+    allowed_artifact_types = AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_ARTIFACT_TYPES.get(stage)
+    if model.schema_version != AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_SCHEMA_VERSION:
+        findings.append(
+            f"schemaVersion must be {AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_SCHEMA_VERSION}."
+        )
+    if model.contract_target != "AiJavaMyBatisDraftPackStage":
+        findings.append("contractTarget must be AiJavaMyBatisDraftPackStage.")
+    if model.stage != stage:
+        findings.append(f"stage must be {stage}.")
+    if stage not in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES:
+        findings.append(f"stage must be one of {list(AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES)}.")
+    if model.source_policy != "sanitized_facts_only":
+        findings.append("sourcePolicy must be sanitized_facts_only.")
+    if model.production_ready is not False:
+        findings.append("productionReady must be false for P50 role stage outputs.")
+    if not model.evidence_refs:
+        findings.append("root evidenceRefs must not be empty.")
+    findings.extend(_stage_root_storage_safety_findings(model))
+
+    for file in model.files:
+        path = f"files[{file.path}]"
+        artifact_type = file.artifact_type.value
+        if allowed_artifact_types and artifact_type not in allowed_artifact_types:
+            findings.append(
+                f"{path}.artifactType must be one of {list(allowed_artifact_types)} for {stage}."
+            )
+        if not file.content.strip():
+            findings.append(f"{path}.content must not be blank.")
+        if not file.evidence_refs:
+            findings.append(f"{path}.evidenceRefs must not be empty.")
+        findings.extend(_artifact_role_findings(file, path))
+        findings.extend(_blocked_identifier_findings(file, path))
+        findings.extend(_storage_safety_findings(file, path))
+
+    allowed = {str(ref) for ref in (allowed_evidence_refs or ()) if str(ref).strip()}
+    if allowed:
+        for ref in sorted(
+            set(all_ai_java_mybatis_draft_pack_stage_evidence_refs(model)) - allowed
+        ):
+            findings.append(f"evidenceRefs contains unknown ref: {ref}.")
+
+    if findings:
+        raise AiDraftPackValidationError(findings)
+    return model
+
+
 def all_ai_java_mybatis_draft_pack_evidence_refs(
     model: AiJavaMyBatisDraftPackOutput,
+) -> tuple[str, ...]:
+    refs: list[str] = []
+    refs.extend(model.evidence_refs)
+    for file in model.files:
+        refs.extend(file.evidence_refs)
+    return tuple(ref for ref in refs if str(ref).strip())
+
+
+def all_ai_java_mybatis_draft_pack_stage_evidence_refs(
+    model: AiJavaMyBatisDraftPackStageOutput,
 ) -> tuple[str, ...]:
     refs: list[str] = []
     refs.extend(model.evidence_refs)
@@ -252,6 +384,55 @@ def ai_java_mybatis_draft_pack_output_schema(
             "evidenceRefs",
             "reviewMarkers",
             "qualityGates",
+            "assumptions",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def ai_java_mybatis_draft_pack_stage_output_schema(
+    *,
+    stage: str,
+    allowed_evidence_refs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    evidence_ref_array = _evidence_ref_array_schema(allowed_evidence_refs)
+    allowed_artifact_types = AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_ARTIFACT_TYPES.get(stage)
+    file_schema = _draft_pack_file_schema(evidence_ref_array)
+    if allowed_artifact_types:
+        file_schema = dict(file_schema)
+        properties = dict(file_schema["properties"])
+        properties["artifactType"] = {
+            "type": "string",
+            "enum": list(allowed_artifact_types),
+        }
+        file_schema["properties"] = properties
+    return {
+        "type": "object",
+        "properties": {
+            "schemaVersion": {
+                "type": "string",
+                "const": AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_SCHEMA_VERSION,
+            },
+            "contractTarget": {"type": "string", "const": "AiJavaMyBatisDraftPackStage"},
+            "targetRef": {"type": "string", "minLength": 1},
+            "stage": {"type": "string", "const": stage},
+            "sourcePolicy": {"type": "string", "const": "sanitized_facts_only"},
+            "productionReady": {"type": "boolean", "const": False},
+            "files": {"type": "array", "minItems": 1, "items": file_schema},
+            "evidenceRefs": evidence_ref_array,
+            "reviewMarkers": {"type": "array", "items": {"type": "string"}},
+            "assumptions": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": [
+            "schemaVersion",
+            "contractTarget",
+            "targetRef",
+            "stage",
+            "sourcePolicy",
+            "productionReady",
+            "files",
+            "evidenceRefs",
+            "reviewMarkers",
             "assumptions",
         ],
         "additionalProperties": False,
@@ -387,6 +568,18 @@ def _root_storage_safety_findings(model: AiJavaMyBatisDraftPackOutput) -> list[s
     for text in (*model.review_markers, *model.assumptions):
         for finding in storage_safety_findings_for_text(text):
             findings.append(f"root payload contains forbidden storage text: {finding['code']}.")
+    return findings
+
+
+def _stage_root_storage_safety_findings(
+    model: AiJavaMyBatisDraftPackStageOutput,
+) -> list[str]:
+    findings: list[str] = []
+    for text in (*model.review_markers, *model.assumptions):
+        for finding in storage_safety_findings_for_text(text):
+            findings.append(
+                f"root stage payload contains forbidden storage text: {finding['code']}."
+            )
     return findings
 
 

@@ -122,6 +122,11 @@ def test_p51_evidence_dossier_preserves_removed_evidence_and_audit_sections() ->
         assert evidence_id not in guide.content
         assert evidence_id in dossier.content
 
+    assert "### p50_stage_trace" in dossier.content
+    assert "stage=service_content" in dossier.content
+    assert "p50.ai_draft_pack.service.business_flow" in dossier.content
+    assert "repair_routing" in dossier.content
+
 
 def _render_pair():
     context = _context()
@@ -192,6 +197,37 @@ def _context() -> GenerationContext:
                 "llmTrace": {
                     "agentRunId": "p51-split-test",
                     "outputHash": "hash_agent-runtime.modelInvocation.outputHash_fixture",
+                },
+                "aiDraftPackTrace": {
+                    "componentInvocations": [
+                        {
+                            "component": "ai_generation_framework_adapter",
+                            "stage": "service_content",
+                            "status": "FAILED",
+                            "fileCount": 1,
+                            "failedRuleIds": [
+                                "p50.ai_draft_pack.service.business_flow"
+                            ],
+                        },
+                        {
+                            "component": "ai_generation_framework_adapter",
+                            "stage": "mapper_xml_content",
+                            "status": "FAILED",
+                            "fileCount": 1,
+                            "failedRuleIds": [
+                                "p50.ai_draft_pack.mapper_xml.db_operation"
+                            ],
+                        },
+                    ],
+                    "validation": {
+                        "failedRuleIds": [
+                            "p50.ai_draft_pack.service.business_flow",
+                            "p50.ai_draft_pack.mapper_xml.db_operation",
+                        ]
+                    },
+                    "repair": {
+                        "targetStages": ["service_content", "mapper_xml_content"]
+                    },
                 },
             },
             "evidence": {

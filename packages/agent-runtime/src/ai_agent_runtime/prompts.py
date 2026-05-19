@@ -7,6 +7,9 @@ from typing import Any
 from ai_agent_runtime.ai_draft_pack import (
     AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
     AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+    AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_OUTPUT_SCHEMA_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_SCHEMA_VERSION,
 )
 from ai_agent_runtime.localization import KOREAN_OUTPUT_INSTRUCTION
 from ai_agent_runtime.models import (
@@ -695,38 +698,7 @@ def render_ai_java_mybatis_draft_pack_prompt(
         "mapperCoverageContract": evidence_bundle["mapperCoverageContract"],
         "expectedInventory": inventory,
         "qualityGates": gates,
-        "outputContract": {
-            "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
-            "contractTarget": "AiJavaMyBatisDraftPack",
-            "finalStructuredOutputRequiresContent": True,
-            "productionReady": False,
-            "sourcePolicy": "sanitized_facts_only",
-            "rootKeys": [
-                "schemaVersion",
-                "contractTarget",
-                "targetRef",
-                "sourcePolicy",
-                "productionReady",
-                "files",
-                "evidenceRefs",
-                "reviewMarkers",
-                "qualityGates",
-                "assumptions",
-            ],
-            "fileKeys": [
-                "artifactType",
-                "path",
-                "role",
-                "className",
-                "content",
-                "operationIds",
-                "evidenceRefs",
-                "reviewMarkers",
-                "dtoRole",
-                "requiredFields",
-                "references",
-            ],
-        },
+        "outputContract": _ai_draft_pack_output_contract(stage),
         "filePolicy": {
             "artifactTypes": [
                 "DTO_DRAFT",
@@ -817,7 +789,11 @@ def render_ai_java_mybatis_draft_pack_prompt(
     prompt_hash = text_hash(f"{AI_JAVA_MYBATIS_DRAFT_PACK_SYSTEM_PROMPT}\n{user_prompt}")
     return RenderedPrompt(
         prompt_version=AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
-        output_schema_version=AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
+        output_schema_version=(
+            AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_OUTPUT_SCHEMA_VERSION
+            if stage in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES
+            else AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION
+        ),
         system_prompt=AI_JAVA_MYBATIS_DRAFT_PACK_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         input_hash=stable_json_hash(input_payload),
@@ -831,6 +807,76 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "evidenceBundleVersion": DRAFT_PACK_EVIDENCE_BUNDLE_VERSION,
         },
     )
+
+
+def _ai_draft_pack_output_contract(stage: str) -> dict[str, Any]:
+    file_keys = [
+        "artifactType",
+        "path",
+        "role",
+        "className",
+        "content",
+        "operationIds",
+        "evidenceRefs",
+        "reviewMarkers",
+        "dtoRole",
+        "requiredFields",
+        "references",
+    ]
+    if stage in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES:
+        stage_artifacts = {
+            "dto_inventory": ["DTO_DRAFT"],
+            "dto_content": ["DTO_DRAFT"],
+            "service_content": ["SERVICE_DRAFT"],
+            "mapper_interface_content": ["MAPPER_INTERFACE"],
+            "mapper_xml_content": ["MAPPER_XML"],
+        }[stage]
+        return {
+            "schemaVersion": AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_SCHEMA_VERSION,
+            "contractTarget": "AiJavaMyBatisDraftPackStage",
+            "stage": stage,
+            "stageStructuredOutputRequiresContent": True,
+            "allowedArtifactTypesForStage": stage_artifacts,
+            "productionReady": False,
+            "sourcePolicy": "sanitized_facts_only",
+            "rootKeys": [
+                "schemaVersion",
+                "contractTarget",
+                "targetRef",
+                "stage",
+                "sourcePolicy",
+                "productionReady",
+                "files",
+                "evidenceRefs",
+                "reviewMarkers",
+                "assumptions",
+            ],
+            "fileKeys": file_keys,
+            "composerRule": (
+                "Return only this stage's file slice. The deterministic composer will merge "
+                "role-stage files into AiJavaMyBatisDraftPack.v0.1 and run integration checks."
+            ),
+        }
+    return {
+        "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
+        "contractTarget": "AiJavaMyBatisDraftPack",
+        "finalStructuredOutputRequiresContent": True,
+        "productionReady": False,
+        "sourcePolicy": "sanitized_facts_only",
+        "rootKeys": [
+            "schemaVersion",
+            "contractTarget",
+            "targetRef",
+            "sourcePolicy",
+            "productionReady",
+            "files",
+            "evidenceRefs",
+            "reviewMarkers",
+            "qualityGates",
+            "assumptions",
+        ],
+        "fileKeys": file_keys,
+    }
 
 
 def build_draft_pack_evidence_bundle(
@@ -851,6 +897,7 @@ def build_draft_pack_evidence_bundle(
     ai_tool_summary = _safe_summary_mapping(
         sanitized_draft_context.get("aiToolEvidenceSummary")
     )
+    p51_projection = _p51_evidence_projection_summary(sanitized_draft_context)
     return {
         "version": DRAFT_PACK_EVIDENCE_BUNDLE_VERSION,
         "evidenceRefCount": len(tuple(dict.fromkeys(map(str, allowed_evidence_refs)))),
@@ -874,6 +921,7 @@ def build_draft_pack_evidence_bundle(
             "dependencyEvidenceSummary": dependency_summary,
             "platformToolEvidenceSummary": platform_summary,
             "aiToolEvidenceSummary": ai_tool_summary,
+            "p51EvidenceProjection": p51_projection,
         },
         "qualityPrinciple": (
             "Improve generic operation, DTO, mapper, and REVIEW_REQUIRED coverage. "
@@ -881,6 +929,46 @@ def build_draft_pack_evidence_bundle(
             "comparison signals only and must not be treated as runtime answer keys."
         ),
     }
+
+
+def _p51_evidence_projection_summary(
+    sanitized_draft_context: Mapping[str, Any],
+) -> dict[str, Any]:
+    explicit = sanitized_draft_context.get("p51EvidenceProjection")
+    if isinstance(explicit, Mapping):
+        return _bounded_json_summary(explicit)
+    result: dict[str, Any] = {}
+    for source_key, target_key in (
+        ("sql_statement_evidence", "sql_statement_evidence"),
+        ("sqlStatementEvidence", "sql_statement_evidence"),
+        ("java_mybatis_evidence", "java_mybatis_evidence"),
+        ("javaMybatisEvidence", "java_mybatis_evidence"),
+        ("semantic_inference_evidence", "semantic_inference_evidence"),
+        ("semanticInferenceEvidence", "semantic_inference_evidence"),
+        ("evidence_map", "evidence_map"),
+        ("evidenceMap", "evidence_map"),
+    ):
+        value = sanitized_draft_context.get(source_key)
+        if value is None or target_key in result:
+            continue
+        result[target_key] = _bounded_json_summary(value)
+    return result
+
+
+def _bounded_json_summary(value: Any, *, limit: int = 40) -> Any:
+    if isinstance(value, Mapping):
+        result: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= limit:
+                result["truncated"] = True
+                break
+            result[str(key)] = _bounded_json_summary(item, limit=limit)
+        return result
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return [_bounded_json_summary(item, limit=limit) for item in list(value)[:limit]]
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)
 
 
 def _ai_draft_pack_stage_task(stage: str) -> str:

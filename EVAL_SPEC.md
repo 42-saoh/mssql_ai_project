@@ -330,6 +330,11 @@ Acceptance checks:
 - Repair receives sanitized findings, expected inventory, and statement evidence
   only. If repair still fails deterministic quality, the workflow records
   `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and persists no fallback skeletons.
+- Role-stage outputs use the internal `AiJavaMyBatisDraftPackStage.v0.1`
+  contract and are composed into the unchanged `AiJavaMyBatisDraftPack.v0.1`
+  output. `p50.ai_draft_pack.service.business_flow` repair routes to
+  `service_content`; `p50.ai_draft_pack.mapper_xml.db_operation` repair routes
+  to `mapper_xml_content`.
 
 Passing criteria:
 - `powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-fixture PYTEST_ARGS="tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p44_framework_runtime_replay.py tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py"` passes.

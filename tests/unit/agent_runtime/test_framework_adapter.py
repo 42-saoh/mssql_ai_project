@@ -9,6 +9,7 @@ import pytest
 import yaml
 from ai_agent_runtime import (
     AI_GENERATION_FRAMEWORK_ADAPTER_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
     AiDraftPackValidationError,
     AiGenerationFrameworkAdapterRequest,
     FakeModelGateway,
@@ -375,7 +376,7 @@ def test_framework_tool_context_blocks_unsafe_request_material(
     assert "<mapper" not in diagnostics
 
 
-def test_adapter_routed_planner_runs_file_inventory_before_file_content() -> None:
+def test_adapter_routed_planner_runs_file_inventory_before_role_stages() -> None:
     payload = _valid_pack()
     adapter = BaselineResponsesFrameworkAdapter(
         model_gateway=FakeModelGateway(
@@ -390,7 +391,7 @@ def test_adapter_routed_planner_runs_file_inventory_before_file_content() -> Non
         for component in run.model_invocation.component_invocations
         if component.get("component") == "ai_generation_framework_adapter"
     ]
-    assert stages == ["file_inventory", "file_content"]
+    assert stages == ["file_inventory", *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES]
     assert run.structured_output["productionReady"] is False
 
 
@@ -410,7 +411,7 @@ def test_fake_candidate_adapters_represent_policy_safe_staged_runs() -> None:
             if component.get("component") == "ai_generation_framework_adapter"
         ]
 
-        assert stages == ["file_inventory", "file_content"]
+        assert stages == ["file_inventory", *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES]
         assert run.structured_output["schemaVersion"] == "AiJavaMyBatisDraftPack.v0.1"
         assert run.model_invocation.component_invocations[0]["candidateFramework"] == candidate
         assert validate_ai_java_mybatis_draft_pack_quality(
@@ -456,22 +457,19 @@ def test_adapter_routed_repair_stage_uses_repair_draft_pack() -> None:
 
 def test_schema_invalid_adapter_output_cannot_bypass_repair_retry() -> None:
     payload = _valid_pack()
-    repair_invalid = deepcopy(payload)
-    repair_invalid["productionReady"] = True
     adapter = FakeAiGenerationFrameworkAdapter(
         stage_outputs={
-            "file_content": {"not": "an-ai-draft-pack"},
-            "repair": repair_invalid,
+            "dto_inventory": {"not": "an-ai-draft-pack"},
         }
     )
 
     with pytest.raises(AiDraftPackValidationError) as exc:
         _build_run_with_adapter(payload, adapter)
 
-    assert "productionReady must be false" in str(exc.value)
+    assert "dto_inventory" in str(exc.value)
 
 
-def test_two_dto_collapse_still_fails_p42_quality_gate() -> None:
+def test_two_dto_collapse_is_blocked_by_staged_inventory_enforcement() -> None:
     payload = _valid_pack()
     collapsed = deepcopy(payload)
     dto_files = [file for file in collapsed["files"] if file["artifactType"] == "DTO_DRAFT"][:2]
@@ -483,16 +481,13 @@ def test_two_dto_collapse_still_fails_p42_quality_gate() -> None:
     collapsed["qualityGates"]["requiredDtoClasses"] = list(kept_dtos)
     adapter = FakeAiGenerationFrameworkAdapter(output=collapsed)
 
-    run = _build_run_with_adapter(payload, adapter)
-    report = validate_ai_java_mybatis_draft_pack_quality(run.structured_output)
+    with pytest.raises(AiDraftPackValidationError) as exc:
+        _build_run_with_adapter(payload, adapter)
 
-    assert report.status == ValidationStatus.FAILED
-    assert "requiredDtoClasses missing DTO files" in " ".join(
-        check.message for check in report.failed_checks
-    )
+    assert "missing expected stage files" in str(exc.value)
 
 
-def test_missing_review_required_markers_still_fail_p42_quality_gate() -> None:
+def test_staged_composer_restores_required_review_markers_from_quality_gate() -> None:
     payload = _valid_pack()
     missing_markers = deepcopy(payload)
     missing_markers["reviewMarkers"] = []
@@ -504,9 +499,9 @@ def test_missing_review_required_markers_still_fail_p42_quality_gate() -> None:
     run = _build_run_with_adapter(payload, adapter)
     report = validate_ai_java_mybatis_draft_pack_quality(run.structured_output)
 
-    assert report.status == ValidationStatus.FAILED
-    assert "required REVIEW_REQUIRED markers missing" in " ".join(
-        check.message for check in report.failed_checks
+    assert report.status == ValidationStatus.PASSED
+    assert set(payload["qualityGates"]["requiredReviewMarkers"]) <= set(
+        run.structured_output["reviewMarkers"]
     )
 
 

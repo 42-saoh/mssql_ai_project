@@ -8,6 +8,7 @@ from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowSte
 from ai_agent_generation import GenerationContext
 from ai_agent_runtime import (
     AI_DRAFT_PACK_MODEL_PROFILE_ID,
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
     BRANCH_PLANNER_AGENT_TYPE,
     FakeModelGateway,
     LangGraphAiDraftPackOrchestrator,
@@ -957,7 +958,8 @@ def test_p43c_workflow_ab_routes_ai_draft_pack_through_framework_adapter(
     assert job.status == JobStatus.VALIDATION_COMPLETE
     assert [component["stage"] for component in adapter_components] == [
         "file_inventory",
-        "file_content",
+        *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+        "repair",
     ]
     assert {component["candidateFramework"] for component in adapter_components} == {
         candidate_framework
@@ -1321,10 +1323,10 @@ def test_p43c_candidate_two_dto_collapse_fails_without_java_artifacts() -> None:
     assert ai_draft_run.structured_output["failureDiagnostics"]["failureStage"] == (
         "quality_validation"
     )
-    assert "p42.ai_draft_pack.schema" in str(
+    assert "missing expected stage files" in str(
         ai_draft_run.structured_output["failureDiagnostics"]
     )
-    assert "qualityGates.requiredDtoClasses missing DTO files" in str(
+    assert "DTO_DRAFT dto/CreateBondCommand.java" in str(
         ai_draft_run.structured_output["failureDiagnostics"]
     )
     assert "public class" not in stored_text

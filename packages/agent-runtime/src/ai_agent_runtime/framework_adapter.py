@@ -10,8 +10,12 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ai_agent_runtime.ai_draft_pack import (
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
     AiJavaMyBatisDraftPackOutput,
+    AiJavaMyBatisDraftPackStageOutput,
     parse_ai_java_mybatis_draft_pack_json,
+    parse_ai_java_mybatis_draft_pack_stage_json,
+    validate_ai_java_mybatis_draft_pack_stage_output,
     validate_ai_java_mybatis_draft_pack_output,
 )
 from ai_agent_runtime.gateway import (
@@ -67,7 +71,13 @@ _STRUCTURED_FRAMEWORK_STAGES = frozenset(
     }
 )
 _FRAMEWORK_STAGES = frozenset(
-    {"file_inventory", "file_content", "repair", *_STRUCTURED_FRAMEWORK_STAGES}
+    {
+        "file_inventory",
+        "file_content",
+        "repair",
+        *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+        *_STRUCTURED_FRAMEWORK_STAGES,
+    }
 )
 _TRACE_SUMMARY_FIELDS = frozenset(
     {
@@ -133,6 +143,13 @@ class AiGenerationFrameworkAdapter(Protocol):
         ...
 
     def draft_file_content(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        ...
+
+    def draft_role_stage(
         self,
         *,
         request: AiGenerationFrameworkAdapterRequest,
@@ -205,6 +222,14 @@ class OpenAIAgentsFrameworkAdapter:
         validate_framework_tool_context(request)
         return self._run_agent_stage(request=request, stage="file_content")
 
+    def draft_role_stage(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        validate_framework_tool_context(request)
+        return self._run_agent_stage(request=request, stage=request.stage)
+
     def repair_draft_pack(
         self,
         *,
@@ -243,6 +268,7 @@ class OpenAIAgentsFrameworkAdapter:
             structured_output = _coerce_openai_agents_output(
                 result,
                 allowed_evidence_refs=request.allowed_evidence_refs,
+                stage=stage,
             )
         except ModelGatewayError:
             raise
@@ -327,7 +353,11 @@ class OpenAIAgentsFrameworkAdapter:
             "model": _openai_agents_model_for_profile(profile=request.profile),
         }
         if _openai_agents_native_structured_output_enabled():
-            agent_kwargs["output_type"] = AiJavaMyBatisDraftPackOutput
+            agent_kwargs["output_type"] = (
+                AiJavaMyBatisDraftPackStageOutput
+                if request.stage in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES
+                else AiJavaMyBatisDraftPackOutput
+            )
         return agents.Agent(**agent_kwargs)
 
 
@@ -655,9 +685,40 @@ def _coerce_openai_agents_output(
     result: Any,
     *,
     allowed_evidence_refs: Sequence[str],
+    stage: str,
 ) -> dict[str, Any]:
     output = getattr(result, "final_output", result)
     try:
+        if stage in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES:
+            if isinstance(output, AiJavaMyBatisDraftPackStageOutput):
+                stage_model = output
+            elif hasattr(output, "to_storage_dict") and callable(output.to_storage_dict):
+                stage_model = validate_ai_java_mybatis_draft_pack_stage_output(
+                    output.to_storage_dict(),
+                    stage=stage,
+                    allowed_evidence_refs=allowed_evidence_refs,
+                )
+            elif hasattr(output, "model_dump") and callable(output.model_dump):
+                stage_model = validate_ai_java_mybatis_draft_pack_stage_output(
+                    output.model_dump(by_alias=True, mode="json"),
+                    stage=stage,
+                    allowed_evidence_refs=allowed_evidence_refs,
+                )
+            elif isinstance(output, Mapping):
+                stage_model = validate_ai_java_mybatis_draft_pack_stage_output(
+                    output,
+                    stage=stage,
+                    allowed_evidence_refs=allowed_evidence_refs,
+                )
+            elif isinstance(output, str):
+                stage_model = parse_ai_java_mybatis_draft_pack_stage_json(
+                    output,
+                    stage=stage,
+                    allowed_evidence_refs=allowed_evidence_refs,
+                )
+            else:
+                raise TypeError(output.__class__.__name__)
+            return stage_model.to_storage_dict()
         if isinstance(output, AiJavaMyBatisDraftPackOutput):
             model = output
         elif hasattr(output, "to_storage_dict") and callable(output.to_storage_dict):

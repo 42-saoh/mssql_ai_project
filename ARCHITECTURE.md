@@ -377,6 +377,13 @@ sanitized component metadata only; no raw prompt, raw provider response, raw SP
 definition, raw guide body, row data, secret, source apply, deploy, or procedure
 execution payload is stored.
 
+The role-specific stages return internal `AiJavaMyBatisDraftPackStage.v0.1`
+payloads scoped to their artifact type. The deterministic composer is the only
+component that creates the persisted `AiJavaMyBatisDraftPack.v0.1`; it enforces
+the exact expected inventory, merges normalized evidence refs, and limits repair
+routing to the failed owner stage where possible, such as `service_content` for
+Service flow failures and `mapper_xml_content` for SQL statement failures.
+
 `WorkflowService` now resolves Java/MyBatis draft generation through the
 dedicated `openai_ai_draft_pack` profile even when the public request's
 `llmProfileId` is used for semantic or operation-model analysis. The

@@ -29,6 +29,7 @@ from ai_agent_runtime import (
     AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
     AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION,
     AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
+    AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
     AI_JAVA_MYBATIS_DRAFT_PACK_SCHEMA_VERSION,
     SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION,
     SP_OPERATION_PLANNER_PROMPT_VERSION,
@@ -1444,22 +1445,39 @@ class WorkflowService:
                 "AI Draft Pack planner failed before producing valid artifacts.",
             ) from exc
         except AiDraftPackValidationError as exc:
+            review_required = ai_draft_pack_validation_requires_review(exc.findings)
+            failure_code = (
+                P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+                if review_required
+                else P42_AI_DRAFT_PACK_FAILED
+            )
+            failure_reason = (
+                "AI_DRAFT_PACK_VALIDATION_REVIEW_REQUIRED"
+                if review_required
+                else "AI_DRAFT_PACK_PLANNER_FAILED:AiDraftPackValidationError"
+            )
             self._save_ai_draft_pack_failure_run(
                 job_id=job_id,
                 request_record=request_record,
                 target_ref=target_ref,
-                code=P42_AI_DRAFT_PACK_FAILED,
-                reason="AI_DRAFT_PACK_PLANNER_FAILED:AiDraftPackValidationError",
-                failure_stage=ai_draft_pack_validation_failure_stage(
-                    exc.findings,
-                    framework_adapter=self.ai_generation_framework_adapter,
+                code=failure_code,
+                reason=failure_reason,
+                failure_stage=(
+                    "quality_validation"
+                    if review_required
+                    else ai_draft_pack_validation_failure_stage(
+                        exc.findings,
+                        framework_adapter=self.ai_generation_framework_adapter,
+                    )
                 ),
                 error_class=exc.__class__.__name__,
                 validation_findings=exc.findings,
             )
             raise AiDraftPackWorkflowError(
-                P42_AI_DRAFT_PACK_FAILED,
-                "AI Draft Pack planner failed before producing valid artifacts.",
+                failure_code,
+                "AI Draft Pack validation requires review."
+                if review_required
+                else "AI Draft Pack planner failed before producing valid artifacts.",
             ) from exc
         except Exception as exc:  # noqa: BLE001 - failure run must stay sanitized
             self._save_ai_draft_pack_failure_run(
@@ -2473,10 +2491,30 @@ def ai_draft_pack_validation_failure_stage(
 ) -> str:
     if framework_adapter is None:
         return "schema_validation"
-    for stage in ("file_inventory", "file_content", "repair"):
+    for stage in (
+        "file_inventory",
+        "file_content",
+        "repair",
+        *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
+    ):
         if any(str(finding).startswith(f"{stage}:") for finding in findings):
             return f"{stage}_schema_validation"
     return "framework_adapter_schema_validation"
+
+
+def ai_draft_pack_validation_requires_review(findings: Sequence[str]) -> bool:
+    text = "\n".join(str(finding) for finding in findings).lower()
+    review_markers = (
+        "integration_quality_gate",
+        "missing expected stage files",
+        "required review",
+        "qualitygate",
+        "quality gate",
+        "dto",
+        "service",
+        "mapper",
+    )
+    return any(marker in text for marker in review_markers)
 
 
 def _safe_ai_draft_validation_findings(findings: Sequence[str]) -> list[str]:

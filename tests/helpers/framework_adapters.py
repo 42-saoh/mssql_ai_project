@@ -17,6 +17,14 @@ from ai_agent_runtime.models import (
     stable_json_hash,
 )
 
+_ROLE_STAGE_ARTIFACT_TYPES = {
+    "dto_inventory": {"DTO_DRAFT"},
+    "dto_content": {"DTO_DRAFT"},
+    "service_content": {"SERVICE_DRAFT"},
+    "mapper_interface_content": {"MAPPER_INTERFACE"},
+    "mapper_xml_content": {"MAPPER_XML"},
+}
+
 
 @dataclass(frozen=True)
 class BaselineResponsesFrameworkAdapter:
@@ -41,6 +49,14 @@ class BaselineResponsesFrameworkAdapter:
     ) -> ModelInvocationRecord:
         validate_framework_tool_context(request)
         return self._invoke_gateway(request=request, stage="file_content")
+
+    def draft_role_stage(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        validate_framework_tool_context(request)
+        return self._invoke_gateway(request=request, stage=request.stage)
 
     def repair_draft_pack(
         self,
@@ -77,6 +93,18 @@ class BaselineResponsesFrameworkAdapter:
             prompt=request.prompt,
             profile=request.profile,
         )
+        structured_output = invocation.structured_output
+        if stage in _ROLE_STAGE_ARTIFACT_TYPES and isinstance(structured_output, Mapping):
+            structured_output = _stage_output_from_pack(
+                structured_output,
+                request=request,
+                stage=stage,
+            )
+            invocation = dataclass_replace(
+                invocation,
+                structured_output=structured_output,
+                output_hash=stable_json_hash(structured_output),
+            )
         component = self.summarize_trace(
             request=request,
             stage=stage,
@@ -127,6 +155,14 @@ class FakeAiGenerationFrameworkAdapter:
         validate_framework_tool_context(request)
         return self._build_invocation(request=request, stage="file_content")
 
+    def draft_role_stage(
+        self,
+        *,
+        request: AiGenerationFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        validate_framework_tool_context(request)
+        return self._build_invocation(request=request, stage=request.stage)
+
     def repair_draft_pack(
         self,
         *,
@@ -158,8 +194,10 @@ class FakeAiGenerationFrameworkAdapter:
         request: AiGenerationFrameworkAdapterRequest,
         stage: str,
     ) -> ModelInvocationRecord:
+        stage_key = f"{stage}:repair" if request.repair_context is not None else stage
         structured_output = dict(
-            self.stage_outputs.get(stage)
+            self.stage_outputs.get(stage_key)
+            or self.stage_outputs.get(stage)
             or self.output
             or {
                 "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
@@ -176,6 +214,12 @@ class FakeAiGenerationFrameworkAdapter:
                 "assumptions": [],
             }
         )
+        if stage in _ROLE_STAGE_ARTIFACT_TYPES:
+            structured_output = _stage_output_from_pack(
+                structured_output,
+                request=request,
+                stage=stage,
+            )
         component = self.summarize_trace(
             request=request,
             stage=stage,
@@ -211,3 +255,45 @@ class FakeAiGenerationFrameworkAdapter:
             provider_request_id=None,
             component_invocations=(component,),
         )
+
+
+def _stage_output_from_pack(
+    payload: Mapping[str, Any],
+    *,
+    request: AiGenerationFrameworkAdapterRequest,
+    stage: str,
+) -> dict[str, Any]:
+    if payload.get("contractTarget") == "AiJavaMyBatisDraftPackStage":
+        return dict(payload)
+    allowed_types = _ROLE_STAGE_ARTIFACT_TYPES[stage]
+    files = [
+        dict(file)
+        for file in payload.get("files", [])
+        if isinstance(file, Mapping) and str(file.get("artifactType") or "") in allowed_types
+    ]
+    refs: list[str] = []
+    markers: list[str] = []
+    for file in files:
+        refs.extend(str(ref) for ref in file.get("evidenceRefs", []) if str(ref).strip())
+        markers.extend(str(marker) for marker in file.get("reviewMarkers", []) if str(marker).strip())
+    refs.extend(str(ref) for ref in payload.get("evidenceRefs", []) if str(ref).strip())
+    markers.extend(str(marker) for marker in payload.get("reviewMarkers", []) if str(marker).strip())
+    raw_assumptions = payload.get("assumptions", [])
+    assumptions = (
+        [str(item) for item in raw_assumptions if str(item).strip()]
+        if isinstance(raw_assumptions, Sequence)
+        and not isinstance(raw_assumptions, str | bytes)
+        else []
+    )
+    return {
+        "schemaVersion": "AiJavaMyBatisDraftPackStage.v0.1",
+        "contractTarget": "AiJavaMyBatisDraftPackStage",
+        "targetRef": request.target_ref,
+        "stage": stage,
+        "sourcePolicy": "sanitized_facts_only",
+        "productionReady": False,
+        "files": files,
+        "evidenceRefs": list(dict.fromkeys(refs or request.allowed_evidence_refs)),
+        "reviewMarkers": list(dict.fromkeys(markers)),
+        "assumptions": assumptions,
+    }

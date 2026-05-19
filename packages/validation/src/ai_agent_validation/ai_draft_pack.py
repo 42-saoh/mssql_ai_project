@@ -36,6 +36,7 @@ RULE_ASCII_IDENTIFIER = "p50.ai_draft_pack.identifier.ascii"
 RULE_SERVICE_FLOW = "p50.ai_draft_pack.service.business_flow"
 RULE_MAPPER_CONSISTENCY = "p50.ai_draft_pack.mapper.interface_xml_consistency"
 RULE_MAPPER_XML_DB_OPERATION = "p50.ai_draft_pack.mapper_xml.db_operation"
+RULE_NON_DTO_AGGREGATE = "p50.ai_draft_pack.non_dto.aggregate_file"
 
 DEFAULT_REQUIRED_REVIEW_MARKERS = (
     "CROSS_DB_WRITE_REVIEW_REQUIRED",
@@ -123,6 +124,15 @@ def validate_ai_java_mybatis_draft_pack_quality(
         )
     )
     checks.extend(_service_method_checks(service_files, required_service_methods))
+    checks.extend(
+        _non_dto_aggregate_file_checks(
+            service_files=service_files,
+            mapper_files=mapper_files,
+            mapper_xml_files=mapper_xml_files,
+            required_service_methods=required_service_methods,
+            required_mapper_methods=required_mapper_methods,
+        )
+    )
     checks.extend(_service_business_flow_checks(service_files, required_service_methods))
     checks.extend(_mapper_method_checks(mapper_files, required_mapper_methods))
     checks.extend(
@@ -262,6 +272,66 @@ def _service_method_checks(
         rule_id=RULE_SERVICE_METHOD,
         label="Service",
     )
+
+
+def _non_dto_aggregate_file_checks(
+    *,
+    service_files: Sequence[AiJavaMyBatisDraftPackFile],
+    mapper_files: Sequence[AiJavaMyBatisDraftPackFile],
+    mapper_xml_files: Sequence[AiJavaMyBatisDraftPackFile],
+    required_service_methods: Sequence[str],
+    required_mapper_methods: Sequence[str],
+) -> list[ValidationCheck]:
+    checks: list[ValidationCheck] = []
+    checks.append(
+        _check(
+            len(service_files) == 1,
+            RULE_NON_DTO_AGGREGATE,
+            "Draft pack contains one aggregate Service file.",
+            "Draft pack must contain exactly one aggregate Service file.",
+            severity=ValidationSeverity.BLOCKER,
+        )
+    )
+    checks.append(
+        _check(
+            len(mapper_files) == 1,
+            RULE_NON_DTO_AGGREGATE,
+            "Draft pack contains one aggregate Mapper interface file.",
+            "Draft pack must contain exactly one aggregate Mapper interface file.",
+            severity=ValidationSeverity.BLOCKER,
+        )
+    )
+    checks.append(
+        _check(
+            len(mapper_xml_files) == 1,
+            RULE_NON_DTO_AGGREGATE,
+            "Draft pack contains one aggregate Mapper XML file.",
+            "Draft pack must contain exactly one aggregate Mapper XML file.",
+            severity=ValidationSeverity.BLOCKER,
+        )
+    )
+    aggregate_targets: list[tuple[AiJavaMyBatisDraftPackFile, Sequence[str], str]] = []
+    aggregate_targets.extend(
+        (file, required_service_methods, "Service") for file in service_files
+    )
+    aggregate_targets.extend(
+        (file, required_mapper_methods, "Mapper interface") for file in mapper_files
+    )
+    aggregate_targets.extend(
+        (file, required_mapper_methods, "Mapper XML") for file in mapper_xml_files
+    )
+    for file, required_methods, label in aggregate_targets:
+        missing = sorted(set(required_methods) - set(file.operation_ids))
+        checks.append(
+            _check(
+                not missing,
+                RULE_NON_DTO_AGGREGATE,
+                f"{label} {file.path} operationIds cover all required methods.",
+                f"{label} {file.path} must be an aggregate file covering required operationIds: {missing}.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+    return checks
 
 
 def _mapper_method_checks(
