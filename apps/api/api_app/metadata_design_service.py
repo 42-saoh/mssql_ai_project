@@ -192,6 +192,11 @@ KNOWN_FIELD_TERMS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
     (("메모", "memo"), "MEMO", "Memo", "VARCHAR(500)"),
 )
 KNOWN_TABLE_TERMS: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (
+        ("사전감사_알림", "사전감사 알림", "pre audit notification", "prior audit notification"),
+        "PCO_PREV_AUDT_NTC",
+        "Pre-audit notification table",
+    ),
     (("사전감사", "사전 감사", "pre audit", "prior audit"), "PCO_PREV_AUDT", "Pre-audit table"),
     (("주문 요청", "order request"), "PPM_ORDER_REQ", "Order request table"),
     (("고객 주문", "customer order"), "PPM_CUSTOMER_ORDER", "Customer order table"),
@@ -794,27 +799,35 @@ def _standard_table_candidate(value: str) -> str:
     text = _strip_korean_sentence_tail(value)
     if not text:
         return ""
+    replaced = _replace_known_korean_table_terms(text)
+    replaced_candidate = _standard_identifier(replaced)
+    if "_" in text and replaced_candidate != _standard_identifier(text):
+        return replaced_candidate
     for terms, table_name, _description in KNOWN_TABLE_TERMS:
         if any(_normalize_match_text(term) in _normalize_match_text(text) for term in terms):
             prefix = _standard_identifier(text.split("_", 1)[0]) if "_" in text else ""
             if prefix and prefix in {"PCO", "PCS", "PEM", "PPE", "PEI", "PPN", "PEX", "PAD", "PPM", "PDM", "PMA", "PEQ"}:
                 return f"{prefix}_{table_name.split('_', 1)[1]}"
             return table_name
-    return _standard_identifier(_replace_known_korean_table_terms(text))
+    return replaced_candidate
 
 
 def _replace_known_korean_table_terms(value: str) -> str:
     replacements = {
         "사전감사": "PREV_AUDT",
         "사전 감사": "PREV_AUDT",
+        "알림": "NTC",
         "감사": "AUDT",
         "계약": "CTRT",
         "주문": "ORDR",
         "발주": "ORDR",
+        "notification": "NTC",
+        "notice": "NTC",
+        "ntc": "NTC",
     }
     text = _strip_korean_sentence_tail(value)
     for source, target in replacements.items():
-        text = text.replace(source, target)
+        text = re.sub(re.escape(source), target, text, flags=re.IGNORECASE)
     return text
 
 
@@ -1046,7 +1059,7 @@ def _strip_field_fragment_tail(value: str) -> str:
 
 
 def _strip_korean_sentence_tail(value: str) -> str:
-    text = _safe_text(value).strip(" .:()[]{}")
+    text = _safe_text(value).strip(" .:()[]{}\"'“”‘’")
     return re.sub(r"(?:이야|야|입니다|임|다)$", "", text).strip()
 
 

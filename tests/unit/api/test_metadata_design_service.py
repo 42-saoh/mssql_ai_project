@@ -600,6 +600,9 @@ def test_metadata_design_quoted_korean_field_list_keeps_notification_content(
         )
     ).to_response()
 
+    assert response["interpretedIntent"]["tableNameCandidate"] == "PCO_PREV_AUDT_NTC"
+    assert response["tableProposal"]["tableName"] == "PCO_PREV_AUDT_NTC"
+
     intent_field_names = [field["name"] for field in response["interpretedIntent"]["fields"]]
     assert intent_field_names == [
         "CTRT_NO",
@@ -624,6 +627,7 @@ def test_metadata_design_quoted_korean_field_list_keeps_notification_content(
     assert columns["NTC_CNTNT"]["reviewRequired"] is True
 
     script = response["tableProposal"]["createTableScriptPreview"]
+    assert "CREATE TABLE [dbo].[PCO_PREV_AUDT_NTC]" in script
     assert '" 이 들어' not in script
     assert "UNCONFIRMED_5_VAL" not in script
     assert "UNCONFIRMED_7_VAL" not in script
