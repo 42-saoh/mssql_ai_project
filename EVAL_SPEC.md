@@ -118,10 +118,10 @@ P42 validates the AI Draft Pack groundwork for complex SP Java/MyBatis drafts:
 - P42D artifact `extra` metadata must include `aiDraftPackSchema`, `aiDraftPackTargetRef`,
   `aiDraftPackAgentRunId`, `aiFileRole`, `operationIds`, `dtoRole` for DTOs, `qualityScore`,
   `bundleFilePath`, `aiEvidenceRefs`, and `reviewMarkers`.
-- P42D failure behavior is explicit: gateway/schema/quality failures record
-  `P42_AI_DRAFT_PACK_FAILED`, while disabled or unavailable safe planning context records
-  `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`. Neither case may persist Java/MyBatis fallback skeleton
-  artifacts.
+- P42D failure behavior is explicit: gateway/schema failures record
+  `P42_AI_DRAFT_PACK_FAILED`, while deterministic quality failures after repair, disabled
+  planning, or unavailable safe planning context record `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`.
+  Neither case may persist Java/MyBatis fallback skeleton artifacts.
 - P42E adds a local API workflow replay gate for `PCO_GU_ManageBond_PRC`. The replay uses fake
   metadata/model gateways and sanitized fixtures, treats `job_6864d2734e` as audit history only,
   and requires a new job to persist non-empty multi-DTO AI Draft Pack artifacts.
@@ -308,6 +308,31 @@ Passing criteria:
 - P36/P41/P42/P44/P45/P46 regression gates continue to pass.
 - Optional live failures are reported with sanitized stage/blocker diagnostics
   only and do not imply production readiness.
+
+## P50 Java/MyBatis Draft Quality Split Eval Contract
+
+P50 keeps P44/P47 runtime adoption active and raises draft quality by splitting
+AI Draft Pack generation into internal role-specific composer stages.
+
+Acceptance checks:
+- Public request shape, DB schema, UI, public MCP routes, and public artifact
+  types stay unchanged. Generated artifacts remain `production_ready: false` /
+  `productionReady=false`.
+- AI Draft Pack model calls use `openai_ai_draft_pack`; the public
+  `llmProfileId` remains scoped to semantic and operation analysis.
+- Branch-heavy shallow operation models fail before draft generation as
+  `P42_INVENTORY_CONTRACT_INCOMPLETE` and persist no DTO/Service/Mapper/XML
+  artifacts.
+- The validator blocks shallow six-file packs, mojibake or non-ASCII Java
+  identifiers, missing DTO field declarations, empty Service method bodies,
+  Mapper interface/XML id mismatches, Mapper XML without statement-level
+  database logic, and wrapper-only calls to the original SP.
+- Repair receives sanitized findings, expected inventory, and statement evidence
+  only. If repair still fails deterministic quality, the workflow records
+  `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and persists no fallback skeletons.
+
+Passing criteria:
+- `powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-fixture PYTEST_ARGS="tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p44_framework_runtime_replay.py tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py"` passes.
 
 ## P48 Unified Structured Framework Runtime Eval Contract
 

@@ -162,8 +162,9 @@ rows. Artifact `extra` carries AI Draft Pack schema, target ref, agent run id,
 file role, DTO role where present, operation ids, quality score, source evidence
 refs in `aiEvidenceRefs`, and review markers. Public artifact `evidenceRefs`
 stay within the existing API evidence enum, while AI draft evidence ids remain
-internal artifact metadata. Gateway/schema/quality failures record
-`P42_AI_DRAFT_PACK_FAILED`; disabled or unavailable safe context records
+internal artifact metadata. Gateway/schema failures record
+`P42_AI_DRAFT_PACK_FAILED`; deterministic quality failures after repair,
+disabled planning, or unavailable safe context record
 `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`. Neither path persists
 `OperationModelReviewRequired*` Java/MyBatis fallback skeletons.
 
@@ -364,6 +365,36 @@ LLM runtime.
 P49 does not introduce a public API, DB schema, UI surface, public MCP route,
 public artifact type, row-data query, procedure execution, source apply, deploy,
 or production readiness change.
+
+## P50 Java/MyBatis Draft Quality Split Architecture
+
+P50 keeps the public `JAVA_MYBATIS_DRAFT` request and persisted artifact types
+unchanged while splitting the internal AI Draft Pack composer into role-specific
+stages: `dto_inventory`, `dto_content`, `service_content`,
+`mapper_interface_content`, `mapper_xml_content`, `integration_quality_gate`, and
+`repair`. The prompt and model invocation traces expose those internal stages as
+sanitized component metadata only; no raw prompt, raw provider response, raw SP
+definition, raw guide body, row data, secret, source apply, deploy, or procedure
+execution payload is stored.
+
+`WorkflowService` now resolves Java/MyBatis draft generation through the
+dedicated `openai_ai_draft_pack` profile even when the public request's
+`llmProfileId` is used for semantic or operation-model analysis. The
+operation-model adequacy gate runs before draft generation: branch-heavy SPs
+with shallow operation counts, shallow statement evidence, shallow DTO
+blueprints, weak branch predicates, or missing DML/call/result responsibilities
+record `P42_INVENTORY_CONTRACT_INCOMPLETE` and persist no Java/MyBatis artifacts.
+
+The deterministic validator now blocks token-only draft files. DTO class and
+field names must be ASCII Java identifiers and required fields must be declared.
+Service methods must have non-empty mapper orchestration or branch flow. Mapper
+interface methods and Mapper XML statement ids must match. Mapper XML statements
+must contain statement-level database logic and wrapper-only calls to the
+original target procedure cannot pass. If repair still fails the quality gate,
+the workflow records `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and stores no fallback
+skeletons. Generated artifacts remain draft-only with `productionReady=false`;
+P50 adds no public API, DB schema, UI, public MCP route, public artifact type, or
+production readiness change.
 
 ## P35 Source Context Architecture
 

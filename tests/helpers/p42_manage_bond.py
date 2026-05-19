@@ -295,13 +295,17 @@ def _p42_mapper_xml_content(file: dict[str, Any]) -> str:
         if method == "readBond":
             statements.append(
                 '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
-                'resultType="ManageBondSearchRow">'
-                "/* SQL_SKELETON_REVIEW_REQUIRED */</select>"
+                'resultType="ManageBondSearchRow">\n'
+                "    SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD\n"
+                "    FROM PPM.dbo.PCO_GUAR\n"
+                "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}\n"
+                "  </select>"
             )
         else:
             statements.append(
-                f'  <update id="{method}" parameterType="{parameter_type}">'
-                "/* SQL_SKELETON_REVIEW_REQUIRED */</update>"
+                f'  <update id="{method}" parameterType="{parameter_type}">\n'
+                f"{_p42_mapper_sql_body(method)}\n"
+                "  </update>"
             )
     references = " ".join(file["references"])
     return (
@@ -310,6 +314,56 @@ def _p42_mapper_xml_content(file: dict[str, Any]) -> str:
         f"{chr(10).join(statements)}\n"
         "</mapper>"
     )
+
+
+def _p42_mapper_sql_body(method: str) -> str:
+    return {
+        "approveAdvanceBond": (
+            "    UPDATE PPM.dbo.PCO_GUAR\n"
+            "    SET GUAR_APRV_YN = #{approvalYn}, UPD_ID = #{userId}\n"
+            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}"
+        ),
+        "approveDefectBond": (
+            "    UPDATE PPM.dbo.PCO_GUAR\n"
+            "    SET GUAR_ST_CD = 'APPROVED', UPD_ID = #{userId}\n"
+            "    WHERE CTRT_NO = #{contractNum} AND GUAR_SEQ = #{sequence}"
+        ),
+        "sendFinanceTransfer": (
+            "    EXEC PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC "
+            "#{contractNum}, #{ordNum}, #{userId}"
+        ),
+        "createBond": (
+            "    INSERT INTO PPM.dbo.PCO_GUAR "
+            "(CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_AMT, INS_ID)\n"
+            "    VALUES (#{contractNum}, #{ordNum}, #{bondKindCode}, "
+            "#{currencyInsureAmt}, #{userId})"
+        ),
+        "createRetentionBondBatch": (
+            "    UPDATE PPM.dbo.PCS_RTNM_PAYRPT\n"
+            "    SET RTNM_AMT = #{retentionAmount}\n"
+            "    WHERE RTNM_SEQ = #{retentionSeq}"
+        ),
+        "updateBond": (
+            "    UPDATE PPM.dbo.PCO_GUAR\n"
+            "    SET GUAR_AMT = #{currencyInsureAmt}, RMK = #{note}\n"
+            "    WHERE CTRT_NO = #{contractNum} AND GUAR_SEQ = #{sequence}"
+        ),
+        "deleteBond": (
+            "    DELETE FROM PPM.dbo.PCO_GUAR\n"
+            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum} "
+            "AND GUAR_SEQ = #{sequence}"
+        ),
+        "updateVendorBond": (
+            "    UPDATE PPM.dbo.PCS_ADVM_PAYRPT\n"
+            "    SET VNDR_GUAR_NO = #{sequence}\n"
+            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}"
+        ),
+        "updateOnlineBond": (
+            "    UPDATE PPM.dbo.PCS_PAY_CMPD_RPT\n"
+            "    SET ONLINE_GUAR_NO = #{sequence}\n"
+            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}"
+        ),
+    }[method]
 
 
 class ManageBondMetadataGateway:

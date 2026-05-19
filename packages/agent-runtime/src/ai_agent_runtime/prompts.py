@@ -121,6 +121,15 @@ responses, row data, procedure execution, DDL/DML apply, source apply, deploymen
 {KOREAN_OUTPUT_INSTRUCTION}"""
 
 DRAFT_PACK_EVIDENCE_BUNDLE_VERSION = "DraftPackEvidenceBundle.v0.1"
+AI_DRAFT_PACK_COMPOSER_STAGES = (
+    "dto_inventory",
+    "dto_content",
+    "service_content",
+    "mapper_interface_content",
+    "mapper_xml_content",
+    "integration_quality_gate",
+    "repair",
+)
 
 
 def render_semantic_analysis_prompt(
@@ -677,12 +686,7 @@ def render_ai_java_mybatis_draft_pack_prompt(
         "targetRef": target_ref,
         "stage": stage,
         "stageTask": _ai_draft_pack_stage_task(stage),
-        "stagedOutputFlow": [
-            "file_inventory",
-            "file_content",
-            "deterministic_validation",
-            "repair",
-        ],
+        "stagedOutputFlow": list(AI_DRAFT_PACK_COMPOSER_STAGES),
         "sanitizedDraftContext": context,
         "draftPackEvidenceBundle": evidence_bundle,
         "operationCoverageMatrix": evidence_bundle["operationCoverageMatrix"],
@@ -749,6 +753,12 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "exactExpectedInventoryRequired": True,
             "genericCoverageFirst": True,
             "benchmarkNamesAreNotAnswerKeys": True,
+            "composerStages": list(AI_DRAFT_PACK_COMPOSER_STAGES),
+            "composerRule": (
+                "Plan DTO inventory first, then draft DTO content, Service orchestration, "
+                "Mapper interface signatures, Mapper XML database statements, and finally "
+                "run integration quality checks before any repair."
+            ),
             "nonDtoAggregatePolicy": {
                 "exactFiles": non_dto_inventory,
                 "rule": (
@@ -874,6 +884,18 @@ def build_draft_pack_evidence_bundle(
 
 
 def _ai_draft_pack_stage_task(stage: str) -> str:
+    if stage == "dto_inventory":
+        return "Derive DTO file inventory from DML, SP/FN parameters, result fields, and call I/O."
+    if stage == "dto_content":
+        return "Draft DTO fields and accessors from the DTO responsibility matrix."
+    if stage == "service_content":
+        return "Draft Service business orchestration and mapper calls without SQL text."
+    if stage == "mapper_interface_content":
+        return "Draft Mapper interface signatures matching Service calls and XML ids."
+    if stage == "mapper_xml_content":
+        return "Draft Mapper XML DB-facing DML and call statements from statement evidence."
+    if stage == "integration_quality_gate":
+        return "Check DTO, Service, Mapper interface, and Mapper XML consistency before repair."
     if stage == "file_inventory":
         return (
             "Verify the expected inventory against generic operation, DTO responsibility, "
@@ -1335,6 +1357,8 @@ def _operation_task_mode_instruction(task_mode: str) -> dict[str, Any]:
                 "Cover every deterministic statementEvidence[].statementId.",
                 "Split CRUD, GUBUN, SValue, status, approval, batch, EXEC bridge, and DML branches.",
                 "Create branch-level operationIds and DTO responsibility candidates.",
+                "Every operations[].dtoBlueprintRefs value must exactly match a dtoBlueprints[].name.",
+                "Every dtoBlueprints[].operationIds value must exactly match an operations[].operationId.",
                 "Return schema-valid SpOperationModel.v0.1; do not return prose or helper objects.",
             ],
         }

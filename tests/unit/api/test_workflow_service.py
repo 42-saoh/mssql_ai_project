@@ -7,6 +7,7 @@ import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 from ai_agent_generation import GenerationContext
 from ai_agent_runtime import (
+    AI_DRAFT_PACK_MODEL_PROFILE_ID,
     BRANCH_PLANNER_AGENT_TYPE,
     FakeModelGateway,
     LangGraphAiDraftPackOrchestrator,
@@ -229,6 +230,12 @@ def _model_invocation(
         token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
         latency_ms=0,
     )
+
+
+def _operation_model_with_unknown_dto_ref(payload: dict) -> dict:
+    dirty = deepcopy(payload)
+    dirty["operations"][0]["dtoBlueprintRefs"] = ["MissingBranchCommand"]
+    return dirty
 
 
 def test_p42_inventory_derives_java_method_ids_from_operation_refs() -> None:
@@ -659,6 +666,173 @@ def test_operation_model_workflow_saves_split_and_repair_sidecar_runs() -> None:
     assert "raw provider response" not in serialized
 
 
+def test_operation_model_branch_plan_repair_allows_ai_draft_pack_generation() -> None:
+    operation_model = p41_operation_model_fixture()
+    dirty_branch_plan = _operation_model_with_unknown_dto_ref(operation_model)
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+
+    class BranchPlanRepairSpyGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack}
+            )
+            self.operation_outputs: list[object] = [dirty_branch_plan, operation_model]
+            self.operation_prompt_payloads: list[dict[str, object]] = []
+
+        def plan_sp_operation_model(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.operation_prompt_payloads.append(json.loads(prompt.user_prompt))
+            output = self.operation_outputs.pop(0)
+            if isinstance(output, Exception):
+                raise output
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-branch-plan-repair",
+                structured_output=deepcopy(output),
+            )
+
+    repository = MemoryWorkflowRepository()
+    gateway = BranchPlanRepairSpyGateway()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    runs = repository.list_agent_runs(job.job_id) or []
+    branch_run = next(run for run in runs if run.agent_type == BRANCH_PLANNER_AGENT_TYPE)
+    repair_run = next(run for run in runs if run.agent_type == REPAIR_AGENT_TYPE)
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    ai_draft_run = next(run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE)
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert branch_run.status == AgentRunStatus.FAILED.value
+    assert repair_run.status == AgentRunStatus.SUCCEEDED.value
+    assert operation_run.status == AgentRunStatus.SUCCEEDED.value
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert [payload["taskMode"] for payload in gateway.operation_prompt_payloads] == [
+        "branch_plan",
+        "repair",
+    ]
+    assert "SP_OPERATION_MODEL_VALIDATOR_REPAIRED" in operation_run.structured_output[
+        "reviewMarkers"
+    ]
+    assert len([artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]) == (
+        len(ai_draft_pack["qualityGates"]["requiredDtoClasses"])
+    )
+    assert any(artifact.type == ArtifactType.SERVICE_DRAFT for artifact in artifacts)
+    assert any(artifact.type == ArtifactType.MAPPER_INTERFACE for artifact in artifacts)
+    assert any(artifact.type == ArtifactType.MAPPER_XML for artifact in artifacts)
+    serialized = json.dumps(
+        {
+            "branchRun": branch_run.structured_output,
+            "repairPrompt": gateway.operation_prompt_payloads[1],
+            "artifacts": [
+                {
+                    "type": artifact.type.value,
+                    "title": artifact.title,
+                    "content": artifact.content,
+                }
+                for artifact in artifacts
+                if artifact.type
+                in {
+                    ArtifactType.DTO_DRAFT,
+                    ArtifactType.SERVICE_DRAFT,
+                    ArtifactType.MAPPER_INTERFACE,
+                    ArtifactType.MAPPER_XML,
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+    assert "MissingBranchCommand" in serialized
+    assert "dtoBlueprintRefs contains unknown DTOs" in serialized
+    assert "OperationModelReviewRequired" not in serialized
+    assert "ManageBondDTO" not in serialized
+    assert "CREATE PROCEDURE" not in serialized
+
+
+def test_operation_model_branch_plan_repair_failure_keeps_p42_review_required_stop() -> None:
+    operation_model = p41_operation_model_fixture()
+    dirty_branch_plan = _operation_model_with_unknown_dto_ref(operation_model)
+
+    class BranchPlanRepairFailingGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__()
+            self.operation_outputs: list[object] = [
+                dirty_branch_plan,
+                ModelGatewayError(
+                    "repair invalid",
+                    code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                    provider_error={
+                        "stage": "operation_model_repair",
+                        "schemaName": "sp_operation_model",
+                        "findings": ["dtoBlueprints must not be empty."],
+                    },
+                ),
+            ]
+
+        def plan_sp_operation_model(self, *, prompt, profile) -> ModelInvocationRecord:
+            output = self.operation_outputs.pop(0)
+            if isinstance(output, Exception):
+                raise output
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-branch-plan-repair-failure",
+                structured_output=deepcopy(output),
+            )
+
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=BranchPlanRepairFailingGateway(),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    runs = repository.list_agent_runs(job.job_id) or []
+    branch_run = next(run for run in runs if run.agent_type == BRANCH_PLANNER_AGENT_TYPE)
+    repair_run = next(run for run in runs if run.agent_type == REPAIR_AGENT_TYPE)
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    ai_draft_run = next(run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE)
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    assert branch_run.status == AgentRunStatus.FAILED.value
+    assert repair_run.status == AgentRunStatus.FAILED.value
+    assert P41_OPERATION_MODEL_REVIEW_REQUIRED in operation_run.structured_output["reviewMarkers"]
+    assert ai_draft_run.status == AgentRunStatus.FAILED.value
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
+    serialized = json.dumps(
+        {
+            "branch": branch_run.structured_output,
+            "repair": repair_run.structured_output,
+            "operation": operation_run.structured_output,
+            "draft": ai_draft_run.structured_output,
+        },
+        ensure_ascii=False,
+    )
+    assert "MissingBranchCommand" in serialized
+    assert "dtoBlueprints must not be empty" in serialized
+    assert "OperationModelReviewRequired" in serialized
+    assert "CREATE PROCEDURE" not in serialized
+
+
 def test_operation_model_repair_failure_keeps_p42_review_required_stop() -> None:
     operation_model = p41_operation_model_fixture()
 
@@ -796,6 +970,43 @@ def test_p43c_workflow_ab_routes_ai_draft_pack_through_framework_adapter(
     assert "ManageBondDTO" not in str(artifacts)
 
 
+def test_p50_workflow_uses_dedicated_ai_draft_pack_profile() -> None:
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+
+    class ProfileSpyGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+                ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+            )
+            self.ai_draft_profiles: list[str] = []
+
+        def draft_ai_java_mybatis_pack(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.ai_draft_profiles.append(profile.profile_id)
+            return super().draft_ai_java_mybatis_pack(prompt=prompt, profile=profile)
+
+    gateway = ProfileSpyGateway()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert gateway.ai_draft_profiles == [AI_DRAFT_PACK_MODEL_PROFILE_ID]
+    assert ai_draft_run.model_invocation["modelProfileId"] == AI_DRAFT_PACK_MODEL_PROFILE_ID
+
+
 def test_p42_complex_sp_inventory_contract_rejects_collapsed_operation_model() -> None:
     operation_model = p41_operation_model_fixture()
     operation_model["operations"] = operation_model["operations"][:1]
@@ -866,6 +1077,77 @@ def test_p42_complex_sp_inventory_contract_rejects_collapsed_operation_model() -
     assert ai_draft_run.structured_output["failureDiagnostics"]["failureStage"] == (
         "inventory_contract"
     )
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
+
+
+def test_p50_branchy_shallow_operation_evidence_rejects_draft_generation() -> None:
+    operation_model = p41_operation_model_fixture()
+    operations = operation_model["operations"][:2]
+    statements = operation_model["statementEvidence"][:2]
+    dto_blueprints = operation_model["dtoBlueprints"][:3]
+    operations[0]["statementRefs"] = [statements[0]["statementId"]]
+    operations[0]["dtoBlueprintRefs"] = [
+        dto_blueprints[0]["name"],
+        dto_blueprints[1]["name"],
+    ]
+    operations[1]["statementRefs"] = [statements[1]["statementId"]]
+    operations[1]["dtoBlueprintRefs"] = [dto_blueprints[2]["name"]]
+    dto_blueprints[0]["operationIds"] = [operations[0]["operationId"]]
+    dto_blueprints[1]["operationIds"] = [operations[0]["operationId"]]
+    dto_blueprints[2]["operationIds"] = [operations[1]["operationId"]]
+    operation_model["operations"] = operations
+    operation_model["dtoBlueprints"] = dto_blueprints
+    operation_model["statementEvidence"] = statements
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+
+    class InventorySpyGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+                ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+            )
+            self.draft_calls = 0
+
+        def draft_ai_java_mybatis_pack(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.draft_calls += 1
+            return super().draft_ai_java_mybatis_pack(prompt=prompt, profile=profile)
+
+    gateway = InventorySpyGateway()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    ai_draft_run = next(
+        run
+        for run in repository.list_agent_runs(job.job_id) or []
+        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
+    findings = " ".join(diagnostics["validationFindings"])
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_INVENTORY_CONTRACT_INCOMPLETE
+    assert gateway.draft_calls == 0
+    assert ai_draft_run.status == AgentRunStatus.FAILED.value
+    assert diagnostics["failureStage"] == "inventory_contract"
+    assert "has only 2 operations" in findings
+    assert "has only 2 statement evidence items" in findings
+    assert "has only 3 DTO blueprints" in findings
     assert not any(
         artifact.type
         in {
@@ -973,7 +1255,7 @@ def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() 
     )
 
     assert job.status == JobStatus.FAILED
-    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
     assert not any(
         artifact.type
         in {
@@ -985,7 +1267,7 @@ def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() 
         for artifact in artifacts
     )
     assert ai_draft_run.structured_output["reviewMarkers"][0]["code"] == (
-        P42_AI_DRAFT_PACK_FAILED
+        P42_AI_DRAFT_PACK_REVIEW_REQUIRED
     )
     failed_rule_ids = {
         finding["ruleId"]
@@ -1036,7 +1318,7 @@ def test_p43c_candidate_two_dto_collapse_fails_without_java_artifacts() -> None:
     stored_text = str(ai_draft_run.structured_output) + str(ai_draft_run.model_invocation)
 
     assert job.status == JobStatus.FAILED
-    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
     assert ai_draft_run.structured_output["failureDiagnostics"]["failureStage"] == (
         "quality_validation"
     )
@@ -1091,7 +1373,7 @@ def test_p43c_candidate_missing_review_markers_fails_quality_gate() -> None:
     diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
 
     assert job.status == JobStatus.FAILED
-    assert job.error_code == P42_AI_DRAFT_PACK_FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
     assert diagnostics["failureStage"] == "quality_validation"
     assert "p42.ai_draft_pack.schema" in str(diagnostics)
     assert "required REVIEW_REQUIRED markers missing" in str(diagnostics)

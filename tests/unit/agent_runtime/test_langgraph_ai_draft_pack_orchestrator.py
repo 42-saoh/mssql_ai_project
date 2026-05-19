@@ -52,6 +52,14 @@ def test_langgraph_orchestrator_runs_inventory_content_quality_final() -> None:
         "quality_gate",
         "final",
     ]
+    assert langgraph_component["composerStages"] == [
+        "dto_inventory",
+        "dto_content",
+        "service_content",
+        "mapper_interface_content",
+        "mapper_xml_content",
+        "integration_quality_gate",
+    ]
     assert langgraph_component["repairAttempted"] is False
     assert validate_ai_java_mybatis_draft_pack_quality(
         run.structured_output

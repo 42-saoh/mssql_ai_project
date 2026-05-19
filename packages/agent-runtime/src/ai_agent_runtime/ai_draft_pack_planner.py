@@ -20,6 +20,15 @@ AGENT_TYPE = "LLM_AI_DRAFT_PACK_PLANNER"
 REPAIRABLE_AI_DRAFT_PACK_GATEWAY_CODES = frozenset({"OPENAI_AI_DRAFT_PACK_INVALID"})
 REPAIR_COMPONENT = "ai_draft_pack_repair_stage"
 REFERENCE_GUARD_COMPONENT = "ai_draft_pack_reference_guard"
+COMPOSER_COMPONENT = "ai_draft_pack_internal_composer"
+AI_DRAFT_PACK_COMPOSER_STAGES = (
+    "dto_inventory",
+    "dto_content",
+    "service_content",
+    "mapper_interface_content",
+    "mapper_xml_content",
+    "integration_quality_gate",
+)
 FRAMEWORK_ADAPTER_STAGES = frozenset({"file_inventory", "file_content", "repair"})
 
 
@@ -130,8 +139,10 @@ def _build_ai_java_mybatis_draft_pack_run_stage(
         structured_output=structured_output,
         expected_inventory=expected_inventory,
     )
+    composer_component = _composer_component(stage=stage)
     structured_output["qualityGates"] = dict(quality_gates)
     component_invocations = invocation.component_invocations
+    component_invocations = (*component_invocations, composer_component)
     if guard_component is not None:
         component_invocations = (*component_invocations, guard_component)
     if prior_component_invocations:
@@ -141,6 +152,7 @@ def _build_ai_java_mybatis_draft_pack_run_stage(
         )
     if (
         invocation.structured_output != structured_output
+        or composer_component is not None
         or guard_component is not None
         or prior_component_invocations
     ):
@@ -311,6 +323,23 @@ def _append_reference_comment(
             return content.replace("</mapper>", f"{comment}\n</mapper>", 1)
         return f"{content}\n<!-- REVIEW_REQUIRED DTO references: {reference_text} -->"
     return f"{content}\n// REVIEW_REQUIRED DTO references: {reference_text}"
+
+
+def _composer_component(*, stage: str) -> dict[str, Any]:
+    stages = (
+        (*AI_DRAFT_PACK_COMPOSER_STAGES, "repair")
+        if stage == "repair"
+        else AI_DRAFT_PACK_COMPOSER_STAGES
+    )
+    return {
+        "component": COMPOSER_COMPONENT,
+        "status": "SUCCEEDED",
+        "stage": stage,
+        "composerStages": list(stages),
+        "stageCount": len(stages),
+        "defaultProfile": "openai_ai_draft_pack",
+        "action": "split_java_mybatis_draft_pack_by_artifact_role",
+    }
 
 
 def _repair_context_from_exception(exc: Exception) -> dict[str, Any]:

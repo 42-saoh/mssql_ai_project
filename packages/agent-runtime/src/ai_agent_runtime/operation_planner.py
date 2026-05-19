@@ -112,6 +112,51 @@ def build_sp_operation_model_run_result(
                 exc=exc,
                 failure_stage="operation_model_branch_plan",
             )
+            if _repairable_operation_model_error(exc):
+                repair_prompt = render_sp_operation_model_prompt(
+                    target_ref=target_ref,
+                    statement_evidence=statements,
+                    allowed_evidence_refs=allowed_refs,
+                    task_mode="repair",
+                    stage="operation_model_repair",
+                    branch_plan_context={},
+                    repair_context=_repair_context(exc),
+                )
+                try:
+                    repair_run = _invoke_operation_model_once(
+                        agent_type=REPAIR_AGENT_TYPE,
+                        target_ref=target_ref,
+                        prompt=repair_prompt,
+                        model_gateway=model_gateway,
+                        profile=profile,
+                        allowed_refs=allowed_refs,
+                        summary_prefix="SP operation model repair",
+                    )
+                except (ModelGatewayError, OperationModelValidationError) as repair_exc:
+                    failed_repair = _failed_sidecar_run(
+                        agent_type=REPAIR_AGENT_TYPE,
+                        target_ref=target_ref,
+                        prompt=repair_prompt,
+                        profile=profile,
+                        exc=repair_exc,
+                        failure_stage="operation_model_repair",
+                    )
+                    raise OperationModelPlanningError(
+                        "SP operation model repair failed before valid output.",
+                        code=_exception_code(repair_exc),
+                        provider_error=_exception_provider_error(
+                            repair_exc,
+                            failure_stage="operation_model_repair",
+                        ),
+                        sidecar_runs=(*sidecar_runs, failed_run, failed_repair),
+                    ) from repair_exc
+
+                sidecar_runs.extend([failed_run, repair_run])
+                final_run = _final_run_from_repair(repair_run)
+                return OperationModelRunResult(
+                    final_run=final_run,
+                    sidecar_runs=tuple(sidecar_runs),
+                )
             raise OperationModelPlanningError(
                 "SP operation branch planning failed before valid output.",
                 code=_exception_code(exc),

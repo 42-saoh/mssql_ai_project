@@ -162,6 +162,7 @@ def materialized_file(file: dict[str, Any]) -> dict[str, Any]:
 def materialized_content(file: dict[str, Any]) -> str:
     artifact_type = file["artifactType"]
     class_name = file["className"]
+    operation_ids = list(file.get("operationIds", []))
     if artifact_type == ArtifactType.DTO_DRAFT.value:
         fields = "\n".join(
             f"    private String {field};" for field in file.get("requiredFields", [])
@@ -173,18 +174,25 @@ def materialized_content(file: dict[str, Any]) -> str:
             "}"
         )
     references = " ".join(file.get("references") or ())
-    methods = "\n".join(
-        f"    public void {operation_id}() {{}}"
-        for operation_id in file.get("operationIds", [])
-    )
     if artifact_type == ArtifactType.SERVICE_DRAFT.value:
+        methods = "\n".join(
+            f"    public Object {operation_id}(Object command) "
+            f"{{ return mapper.{operation_id}(command); }}"
+            for operation_id in operation_ids
+        )
         return (
             f"public class {class_name} {{\n"
+            "    private final SyntheticOrderMapper mapper;\n"
+            f"    public {class_name}(SyntheticOrderMapper mapper) "
+            "{ this.mapper = mapper; }\n"
             f"    // REVIEW_REQUIRED DTO references: {references}\n"
             f"{methods}\n"
             "}"
         )
     if artifact_type == ArtifactType.MAPPER_INTERFACE.value:
+        methods = "\n".join(
+            f"    Object {operation_id}(Object command);" for operation_id in operation_ids
+        )
         return (
             f"public interface {class_name} {{\n"
             f"    // REVIEW_REQUIRED DTO references: {references}\n"
@@ -192,8 +200,11 @@ def materialized_content(file: dict[str, Any]) -> str:
             "}"
         )
     statements = "\n".join(
-        f'  <select id="{operation_id}">/* SQL_SKELETON_REVIEW_REQUIRED */</select>'
-        for operation_id in file.get("operationIds", [])
+        f'  <select id="{operation_id}">\n'
+        "    SELECT SYNTHETIC_ID FROM dbo.SyntheticOrderEvidence "
+        "WHERE SYNTHETIC_ID = #{syntheticId}\n"
+        "  </select>"
+        for operation_id in operation_ids
     )
     return (
         '<mapper namespace="SyntheticOrderMapper">\n'

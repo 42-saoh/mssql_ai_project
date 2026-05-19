@@ -215,6 +215,21 @@ The P47 fixture command remains:
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
 ```
 
+## P50 Java/MyBatis Draft Quality Split Verification Notes
+
+P50 verifies the internal AI Draft Pack composer split, the dedicated
+`openai_ai_draft_pack` profile route, the branch-heavy operation adequacy gate,
+and stronger DTO/Service/Mapper/XML validation. The gate remains draft-only:
+no public API, DB schema, UI, public MCP route, public artifact type, source
+apply, deploy, row-data query, procedure execution, or production readiness
+change is introduced.
+
+Use the Windows Git Bash wrapper for the focused P50 gate:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-fixture PYTEST_ARGS="tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p44_framework_runtime_replay.py tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py"
+```
+
 ## P48 Unified Structured Framework Runtime Verification Notes
 
 P48 routes all internal structured LLM paths through the adopted OpenAI Agents

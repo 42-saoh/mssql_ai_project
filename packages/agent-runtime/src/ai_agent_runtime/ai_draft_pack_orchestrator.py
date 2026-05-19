@@ -3,17 +3,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from dataclasses import replace as dataclass_replace
-from typing import Any, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict
 
-from ai_agent_validation import (
-    ValidationReport,
-    ValidationStatus,
-    validate_ai_java_mybatis_draft_pack_quality,
-)
+from ai_agent_validation.models import ValidationStatus
 
 from ai_agent_runtime.ai_draft_pack import AiDraftPackValidationError
 from ai_agent_runtime.ai_draft_pack_planner import (
     AGENT_TYPE,
+    AI_DRAFT_PACK_COMPOSER_STAGES,
     _allowed_evidence_refs,
     _build_ai_java_mybatis_draft_pack_run_stage,
     _invoke_ai_java_mybatis_draft_pack_stage,
@@ -28,6 +25,9 @@ from ai_agent_runtime.framework_adapter import (
 )
 from ai_agent_runtime.gateway import ModelGateway, ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunPayload, stable_json_hash
+
+if TYPE_CHECKING:
+    from ai_agent_validation.models import ValidationReport
 
 P44_LANGGRAPH_ORCHESTRATOR_FAILED = "P44_LANGGRAPH_ORCHESTRATOR_FAILED"
 P44_LANGGRAPH_UNAVAILABLE = "P44_LANGGRAPH_UNAVAILABLE"
@@ -149,7 +149,7 @@ class LangGraphAiDraftPackOrchestrator:
                     "needsRepair": True,
                     "stageTrace": [*state.get("stageTrace", []), "quality_gate"],
                 }
-            report = validate_ai_java_mybatis_draft_pack_quality(run_payload.structured_output)
+            report = _validate_ai_draft_pack_quality(run_payload.structured_output)
             if report.status == ValidationStatus.PASSED:
                 return {
                     "needsRepair": False,
@@ -323,6 +323,14 @@ def _quality_repair_context(report: ValidationReport) -> dict[str, Any]:
     }
 
 
+def _validate_ai_draft_pack_quality(payload: Mapping[str, Any]):
+    from ai_agent_validation.ai_draft_pack import (  # noqa: PLC0415
+        validate_ai_java_mybatis_draft_pack_quality,
+    )
+
+    return validate_ai_java_mybatis_draft_pack_quality(payload)
+
+
 def _adapter_stage_failure_component(
     *,
     adapter: AiGenerationFrameworkAdapter,
@@ -396,6 +404,7 @@ def _attach_langgraph_component(
         "checkpointer": "disabled",
         "stageTrace": safe_stage_trace,
         "stageCount": len(safe_stage_trace),
+        "composerStages": list(AI_DRAFT_PACK_COMPOSER_STAGES),
         "repairAttempted": repair_attempted,
         "qualityStatus": quality_status,
         "qualityFailedCheckCount": quality_failed_check_count,

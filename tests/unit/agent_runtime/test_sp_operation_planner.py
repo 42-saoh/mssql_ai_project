@@ -45,6 +45,12 @@ def _allowed_refs(payload: dict[str, Any]) -> list[str]:
     return sorted(set(all_sp_operation_model_evidence_refs(model)))
 
 
+def _operation_model_with_unknown_dto_ref(payload: dict[str, Any]) -> dict[str, Any]:
+    dirty = deepcopy(payload)
+    dirty["operations"][0]["dtoBlueprintRefs"] = ["MissingBranchCommand"]
+    return dirty
+
+
 def test_operation_model_prompt_uses_sanitized_statement_evidence_contract() -> None:
     payload = _fixture_operation_model()
     prompt = render_sp_operation_model_prompt(
@@ -107,6 +113,16 @@ def test_operation_model_prompt_supports_split_and_repair_task_modes() -> None:
     assert branch_payload["taskMode"] == "branch_plan"
     assert final_payload["taskMode"] == "final_model"
     assert repair_payload["taskMode"] == "repair"
+    assert any(
+        "operations[].dtoBlueprintRefs value must exactly match a dtoBlueprints[].name"
+        in requirement
+        for requirement in branch_payload["taskModeInstructions"]["requirements"]
+    )
+    assert any(
+        "dtoBlueprints[].operationIds value must exactly match an operations[].operationId"
+        in requirement
+        for requirement in branch_payload["taskModeInstructions"]["requirements"]
+    )
     assert final_payload["branchPlanContext"]["source"] == BRANCH_PLANNER_AGENT_TYPE
     assert repair_payload["repairContext"]["rawFailedOutputIncluded"] is False
     assert "failed provider payload text" in repair_prompt.user_prompt
@@ -153,6 +169,94 @@ def test_operation_model_run_records_branch_sidecar_for_complex_sp() -> None:
     assert [run.agent_type for run in result.sidecar_runs] == [BRANCH_PLANNER_AGENT_TYPE]
     assert result.final_run.agent_type == "LLM_SP_OPERATION_PLANNER"
     assert result.sidecar_runs[0].structured_output["targetRef"] == payload["targetRef"]
+
+
+def test_operation_model_run_repairs_branch_plan_validation_failure() -> None:
+    payload = _fixture_operation_model()
+    dirty_branch_plan = _operation_model_with_unknown_dto_ref(payload)
+    gateway = _SequencedOperationGateway([dirty_branch_plan, payload])
+
+    result = build_sp_operation_model_run_result(
+        target_ref=payload["targetRef"],
+        statement_evidence=_statement_evidence(payload),
+        allowed_evidence_refs=_allowed_refs(payload),
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    assert [run.agent_type for run in result.sidecar_runs] == [
+        BRANCH_PLANNER_AGENT_TYPE,
+        REPAIR_AGENT_TYPE,
+    ]
+    assert result.sidecar_runs[0].status == AgentRunStatus.FAILED
+    assert result.sidecar_runs[1].status == AgentRunStatus.SUCCEEDED
+    assert result.final_run.agent_type == "LLM_SP_OPERATION_PLANNER"
+    assert VALIDATOR_REPAIRED_MARKER in result.final_run.structured_output["reviewMarkers"]
+    assert [payload["taskMode"] for payload in gateway.prompt_payloads] == [
+        "branch_plan",
+        "repair",
+    ]
+    serialized = json.dumps(
+        {
+            "repairPrompt": gateway.prompt_payloads[1],
+            "result": result.final_run.to_storage_dict(),
+            "sidecars": [run.to_storage_dict() for run in result.sidecar_runs],
+        },
+        ensure_ascii=False,
+    )
+    assert "MissingBranchCommand" in serialized
+    assert "dtoBlueprintRefs contains unknown DTOs" in serialized
+    assert "CREATE PROCEDURE" not in serialized
+    assert "raw provider response" not in serialized
+    assert gateway.prompt_payloads[1]["repairContext"]["rawFailedOutputIncluded"] is False
+
+
+def test_operation_model_run_preserves_review_required_when_branch_plan_repair_fails() -> None:
+    payload = _fixture_operation_model()
+    dirty_branch_plan = _operation_model_with_unknown_dto_ref(payload)
+    gateway = _SequencedOperationGateway(
+        [
+            dirty_branch_plan,
+            ModelGatewayError(
+                "repair invalid",
+                code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                provider_error={
+                    "findings": ["dtoBlueprints must not be empty."],
+                    "stage": "operation_model_repair",
+                    "schemaName": "sp_operation_model",
+                },
+            ),
+        ]
+    )
+
+    try:
+        build_sp_operation_model_run_result(
+            target_ref=payload["targetRef"],
+            statement_evidence=_statement_evidence(payload),
+            allowed_evidence_refs=_allowed_refs(payload),
+            model_gateway=gateway,
+            profile_id="openai_fast_test",
+        )
+    except OperationModelPlanningError as exc:
+        assert exc.code == "OPENAI_SP_OPERATION_MODEL_INVALID"
+        assert [run.agent_type for run in exc.sidecar_runs] == [
+            BRANCH_PLANNER_AGENT_TYPE,
+            REPAIR_AGENT_TYPE,
+        ]
+        assert exc.sidecar_runs[0].status == AgentRunStatus.FAILED
+        assert exc.sidecar_runs[1].status == AgentRunStatus.FAILED
+        serialized = json.dumps(
+            {
+                "promptPayloads": gateway.prompt_payloads,
+                "sidecars": [run.to_storage_dict() for run in exc.sidecar_runs],
+            },
+            ensure_ascii=False,
+        )
+        assert "MissingBranchCommand" in serialized
+        assert "dtoBlueprints must not be empty" in serialized
+        assert "CREATE PROCEDURE" not in serialized
+    else:
+        raise AssertionError("Expected operation-model planning to fail after repair.")
 
 
 def test_operation_model_run_repairs_invalid_evidence_refs_at_boundary() -> None:

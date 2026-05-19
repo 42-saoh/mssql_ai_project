@@ -71,18 +71,109 @@ def _file_with_content(file: dict[str, Any]) -> dict[str, Any]:
 
 
 def _content_for(file: dict[str, Any]) -> str:
+    artifact_type = file["artifactType"]
     class_name = file["className"]
     operation_ids = list(file["operationIds"])
-    if file["artifactType"] == "MAPPER_XML":
+    if artifact_type == "DTO_DRAFT":
+        fields = "\n".join(f"    private String {field};" for field in file["requiredFields"])
+        return (
+            f"public class {class_name} {{\n"
+            "    // REVIEW_REQUIRED draft DTO backed by sanitized evidence.\n"
+            f"{fields}\n"
+            "}"
+        )
+    if artifact_type == "MAPPER_XML":
+        references = " ".join(file.get("references") or ())
         statements = "\n".join(
-            f'  <select id="{operation_id}" parameterType="map" resultType="map" />'
+            _xml_statement_for(operation_id)
             for operation_id in operation_ids
         )
-        return f'<mapper namespace="ManageBondMapper">\n{statements}\n</mapper>'
-    methods = "\n".join(f"    void {operation_id}();" for operation_id in operation_ids)
-    if file["artifactType"] == "MAPPER_INTERFACE":
-        return f"public interface {class_name} {{\n{methods}\n}}"
-    return f"public class {class_name} {{\n    // REVIEW_REQUIRED draft.\n{methods}\n}}"
+        return (
+            '<mapper namespace="ManageBondMapper">\n'
+            f"  <!-- REVIEW_REQUIRED DTO references: {references} -->\n"
+            f"{statements}\n"
+            "</mapper>"
+        )
+    references = " ".join(file.get("references") or ())
+    methods = "\n".join(_method_for(artifact_type, operation_id) for operation_id in operation_ids)
+    if artifact_type == "MAPPER_INTERFACE":
+        return (
+            f"public interface {class_name} {{\n"
+            f"    // REVIEW_REQUIRED DTO references: {references}\n"
+            f"{methods}\n"
+            "}"
+        )
+    return (
+        f"public class {class_name} {{\n"
+        "    private final ManageBondMapper mapper;\n"
+        "    public ManageBondService(ManageBondMapper mapper) { this.mapper = mapper; }\n"
+        f"    // REVIEW_REQUIRED DTO references: {references}\n"
+        f"{methods}\n"
+        "}"
+    )
+
+
+def _method_for(artifact_type: str, method: str) -> str:
+    parameter_type = _parameter_type(method)
+    if artifact_type == "MAPPER_INTERFACE":
+        if method == "readBond":
+            return "    List<ManageBondSearchRow> readBond(ManageBondSearchCriteria criteria);"
+        return f"    int {method}({parameter_type} command);"
+    if method == "readBond":
+        return (
+            "    public List<ManageBondSearchRow> "
+            "readBond(ManageBondSearchCriteria criteria) { return mapper.readBond(criteria); }"
+        )
+    return (
+        f"    public int {method}({parameter_type} command) "
+        f"{{ return mapper.{method}(command); }}"
+    )
+
+
+def _parameter_type(method: str) -> str:
+    return {
+        "readBond": "ManageBondSearchCriteria",
+        "approveAdvanceBond": "ApproveAdvanceBondCommand",
+        "approveDefectBond": "ApproveDefectBondCommand",
+        "sendFinanceTransfer": "FinanceTransferCommand",
+        "createBond": "CreateBondCommand",
+        "createRetentionBondBatch": "CreateRetentionBondBatchItem",
+        "updateBond": "UpdateBondCommand",
+        "deleteBond": "DeleteBondCommand",
+        "updateVendorBond": "VendorBondUpdateCommand",
+        "updateOnlineBond": "OnlineBondUpdateCommand",
+    }[method]
+
+
+def _xml_statement_for(method: str) -> str:
+    if method == "readBond":
+        return (
+            '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
+            'resultType="ManageBondSearchRow">\n'
+            "    SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD\n"
+            "    FROM PPM.dbo.PCO_GUAR\n"
+            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}\n"
+            "  </select>"
+        )
+    return (
+        f'  <update id="{method}" parameterType="{_parameter_type(method)}">\n'
+        f"{_sql_body_for(method)}\n"
+        "  </update>"
+    )
+
+
+def _sql_body_for(method: str) -> str:
+    return {
+        "approveAdvanceBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_APRV_YN = #{approvalYn} WHERE CTRT_NO = #{contractNum}",
+        "approveDefectBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_ST_CD = 'APPROVED' WHERE GUAR_SEQ = #{sequence}",
+        "sendFinanceTransfer": "    EXEC PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC #{contractNum}, #{ordNum}, #{userId}",
+        "createBond": "    INSERT INTO PPM.dbo.PCO_GUAR (CTRT_NO, ORDR_NO, GUAR_TP_CD) VALUES (#{contractNum}, #{ordNum}, #{bondKindCode})",
+        "createRetentionBondBatch": "    UPDATE PPM.dbo.PCS_RTNM_PAYRPT SET RTNM_AMT = #{retentionAmount} WHERE RTNM_SEQ = #{retentionSeq}",
+        "updateBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_AMT = #{currencyInsureAmt} WHERE GUAR_SEQ = #{sequence}",
+        "deleteBond": "    DELETE FROM PPM.dbo.PCO_GUAR WHERE CTRT_NO = #{contractNum} AND GUAR_SEQ = #{sequence}",
+        "updateVendorBond": "    UPDATE PPM.dbo.PCS_ADVM_PAYRPT SET VNDR_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
+        "updateOnlineBond": "    UPDATE PPM.dbo.PCS_PAY_CMPD_RPT SET ONLINE_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
+    }[method]
 
 
 def _allowed_refs(payload: dict[str, Any]) -> list[str]:
@@ -119,9 +210,12 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
     assert prompt.output_schema_version == AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION
     assert prompt_payload["outputContract"]["schemaVersion"] == "AiJavaMyBatisDraftPack.v0.1"
     assert prompt_payload["stagedOutputFlow"] == [
-        "file_inventory",
-        "file_content",
-        "deterministic_validation",
+        "dto_inventory",
+        "dto_content",
+        "service_content",
+        "mapper_interface_content",
+        "mapper_xml_content",
+        "integration_quality_gate",
         "repair",
     ]
     assert prompt_payload["draftPackEvidenceBundle"]["version"] == (
@@ -134,6 +228,7 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
     assert prompt_payload["filePolicy"]["mustSplitDtoFiles"] is True
     assert prompt_payload["filePolicy"]["genericCoverageFirst"] is True
     assert prompt_payload["filePolicy"]["benchmarkNamesAreNotAnswerKeys"] is True
+    assert prompt_payload["filePolicy"]["composerStages"] == prompt_payload["stagedOutputFlow"]
     assert prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["exactFiles"]
     assert "aggregate files" in prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["rule"]
     assert prompt_payload["filePolicy"]["methodCoveragePolicy"]["requiredServiceMethods"]
@@ -243,6 +338,20 @@ def test_ai_draft_pack_run_preserves_deterministic_quality_gates() -> None:
 
     assert run.structured_output["qualityGates"] == payload["qualityGates"]
     assert run.model_invocation.structured_output["qualityGates"] == payload["qualityGates"]
+    composer = next(
+        component
+        for component in run.model_invocation.component_invocations
+        if component["component"] == "ai_draft_pack_internal_composer"
+    )
+    assert composer["composerStages"] == [
+        "dto_inventory",
+        "dto_content",
+        "service_content",
+        "mapper_interface_content",
+        "mapper_xml_content",
+        "integration_quality_gate",
+    ]
+    assert composer["defaultProfile"] == "openai_ai_draft_pack"
 
 
 def test_ai_draft_pack_run_preserves_generic_expected_dto_references() -> None:

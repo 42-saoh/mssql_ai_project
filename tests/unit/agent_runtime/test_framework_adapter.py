@@ -86,6 +86,7 @@ def _file_with_content(file: dict[str, Any]) -> dict[str, Any]:
 def _content_for(file: dict[str, Any]) -> str:
     artifact_type = file["artifactType"]
     class_name = file["className"]
+    operation_ids = list(file["operationIds"])
     if artifact_type == "DTO_DRAFT":
         fields = "\n".join(f"    private String {field};" for field in file["requiredFields"])
         return (
@@ -97,9 +98,8 @@ def _content_for(file: dict[str, Any]) -> str:
     if artifact_type == "MAPPER_XML":
         references = " ".join(file["references"])
         statements = "\n".join(
-            f'  <select id="{operation_id}" parameterType="map" resultType="map">'
-            "/* SQL_SKELETON_REVIEW_REQUIRED */</select>"
-            for operation_id in file["operationIds"]
+            _xml_statement_for(operation_id)
+            for operation_id in operation_ids
         )
         return (
             '<mapper namespace="ManageBondMapper">\n'
@@ -109,7 +109,7 @@ def _content_for(file: dict[str, Any]) -> str:
         )
     references = " ".join(file.get("references") or ())
     methods = "\n".join(
-        f"    public void {operation_id}() {{}}" for operation_id in file["operationIds"]
+        _method_for(artifact_type, operation_id) for operation_id in operation_ids
     )
     if artifact_type == "MAPPER_INTERFACE":
         return (
@@ -120,10 +120,75 @@ def _content_for(file: dict[str, Any]) -> str:
         )
     return (
         f"public class {class_name} {{\n"
+        "    private final ManageBondMapper mapper;\n"
+        "    public ManageBondService(ManageBondMapper mapper) { this.mapper = mapper; }\n"
         f"    // REVIEW_REQUIRED DTO references: {references}\n"
         f"{methods}\n"
         "}"
     )
+
+
+def _method_for(artifact_type: str, method: str) -> str:
+    parameter_type = _parameter_type(method)
+    if artifact_type == "MAPPER_INTERFACE":
+        if method == "readBond":
+            return "    List<ManageBondSearchRow> readBond(ManageBondSearchCriteria criteria);"
+        return f"    int {method}({parameter_type} command);"
+    if method == "readBond":
+        return (
+            "    public List<ManageBondSearchRow> "
+            "readBond(ManageBondSearchCriteria criteria) { return mapper.readBond(criteria); }"
+        )
+    return (
+        f"    public int {method}({parameter_type} command) "
+        f"{{ return mapper.{method}(command); }}"
+    )
+
+
+def _parameter_type(method: str) -> str:
+    return {
+        "readBond": "ManageBondSearchCriteria",
+        "approveAdvanceBond": "ApproveAdvanceBondCommand",
+        "approveDefectBond": "ApproveDefectBondCommand",
+        "sendFinanceTransfer": "FinanceTransferCommand",
+        "createBond": "CreateBondCommand",
+        "createRetentionBondBatch": "CreateRetentionBondBatchItem",
+        "updateBond": "UpdateBondCommand",
+        "deleteBond": "DeleteBondCommand",
+        "updateVendorBond": "VendorBondUpdateCommand",
+        "updateOnlineBond": "OnlineBondUpdateCommand",
+    }[method]
+
+
+def _xml_statement_for(method: str) -> str:
+    if method == "readBond":
+        return (
+            '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
+            'resultType="ManageBondSearchRow">\n'
+            "    SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD\n"
+            "    FROM PPM.dbo.PCO_GUAR\n"
+            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}\n"
+            "  </select>"
+        )
+    return (
+        f'  <update id="{method}" parameterType="{_parameter_type(method)}">\n'
+        f"{_sql_body_for(method)}\n"
+        "  </update>"
+    )
+
+
+def _sql_body_for(method: str) -> str:
+    return {
+        "approveAdvanceBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_APRV_YN = #{approvalYn} WHERE CTRT_NO = #{contractNum}",
+        "approveDefectBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_ST_CD = 'APPROVED' WHERE GUAR_SEQ = #{sequence}",
+        "sendFinanceTransfer": "    EXEC PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC #{contractNum}, #{ordNum}, #{userId}",
+        "createBond": "    INSERT INTO PPM.dbo.PCO_GUAR (CTRT_NO, ORDR_NO, GUAR_TP_CD) VALUES (#{contractNum}, #{ordNum}, #{bondKindCode})",
+        "createRetentionBondBatch": "    UPDATE PPM.dbo.PCS_RTNM_PAYRPT SET RTNM_AMT = #{retentionAmount} WHERE RTNM_SEQ = #{retentionSeq}",
+        "updateBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_AMT = #{currencyInsureAmt} WHERE GUAR_SEQ = #{sequence}",
+        "deleteBond": "    DELETE FROM PPM.dbo.PCO_GUAR WHERE CTRT_NO = #{contractNum} AND GUAR_SEQ = #{sequence}",
+        "updateVendorBond": "    UPDATE PPM.dbo.PCS_ADVM_PAYRPT SET VNDR_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
+        "updateOnlineBond": "    UPDATE PPM.dbo.PCS_PAY_CMPD_RPT SET ONLINE_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
+    }[method]
 
 
 def _allowed_refs(payload: dict[str, Any]) -> list[str]:

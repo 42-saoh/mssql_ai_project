@@ -50,6 +50,7 @@ from ai_agent_runtime import (
 from ai_agent_runtime.ai_draft_pack import AiDraftPackValidationError
 from ai_agent_runtime.gateway import model_profile_from_env
 from ai_agent_runtime.models import (
+    AI_DRAFT_PACK_MODEL_PROFILE_ID,
     OUTPUT_SCHEMA_VERSION,
     PROMPT_VERSION,
     AgentRunStatus,
@@ -1373,7 +1374,7 @@ class WorkflowService:
                     expected_inventory=expected_inventory,
                     quality_gates=quality_gates,
                     model_gateway=self.model_gateway,
-                    profile_id=str(request_record.options.get("llmProfileId") or ""),
+                    profile_id=ai_draft_pack_profile_id(request_record),
                     allowed_evidence_refs=allowed_refs,
                 )
             else:
@@ -1383,7 +1384,7 @@ class WorkflowService:
                     expected_inventory=expected_inventory,
                     quality_gates=quality_gates,
                     model_gateway=self.model_gateway,
-                    profile_id=str(request_record.options.get("llmProfileId") or ""),
+                    profile_id=ai_draft_pack_profile_id(request_record),
                     allowed_evidence_refs=allowed_refs,
                     framework_adapter=self.ai_generation_framework_adapter,
                     run_file_inventory_stage=self.ai_generation_framework_adapter is not None,
@@ -1479,15 +1480,15 @@ class WorkflowService:
                 job_id=job_id,
                 request_record=request_record,
                 target_ref=target_ref,
-                code=P42_AI_DRAFT_PACK_FAILED,
-                reason="AI_DRAFT_PACK_QUALITY_GATE_FAILED",
+                code=P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                reason="AI_DRAFT_PACK_QUALITY_REVIEW_REQUIRED",
                 quality_report=quality_report,
                 failure_stage="quality_validation",
                 validation_findings=ai_draft_pack_quality_findings(quality_report),
             )
             raise AiDraftPackWorkflowError(
-                P42_AI_DRAFT_PACK_FAILED,
-                "AI Draft Pack quality gate failed.",
+                P42_AI_DRAFT_PACK_REVIEW_REQUIRED,
+                "AI Draft Pack quality gate requires review.",
             )
         record = self.repository.save_agent_run(
             job_id=job_id,
@@ -1519,7 +1520,7 @@ class WorkflowService:
             expected_inventory=expected_inventory,
             quality_gates=quality_gates,
             model_gateway=self.model_gateway,
-            profile_id=str(request_record.options.get("llmProfileId") or ""),
+            profile_id=ai_draft_pack_profile_id(request_record),
             allowed_evidence_refs=allowed_refs,
             repair_context=repair_context,
             framework_adapter=self.ai_generation_framework_adapter,
@@ -1544,7 +1545,7 @@ class WorkflowService:
         provider_error: Mapping[str, Any] | None = None,
         validation_findings: Sequence[str] | None = None,
     ) -> AgentRunRecord:
-        profile = model_profile_from_env(str(request_record.options.get("llmProfileId") or ""))
+        profile = model_profile_from_env(ai_draft_pack_profile_id(request_record))
         checks = [
             {
                 "ruleId": check.rule_id,
@@ -1950,6 +1951,10 @@ def java_mybatis_output_requested(request: WorkRequestRecord) -> bool:
     return RequestedOutputType.JAVA_MYBATIS_DRAFT.value in set(request.outputs)
 
 
+def ai_draft_pack_profile_id(_request: WorkRequestRecord) -> str:
+    return AI_DRAFT_PACK_MODEL_PROFILE_ID
+
+
 def ai_draft_pack_target_ref(context: GenerationContext, request: WorkRequestRecord) -> str:
     operation_model = context.operation_model
     if operation_model.get("targetRef"):
@@ -2137,15 +2142,74 @@ def ai_draft_pack_inventory_findings(
         return []
 
     findings: list[str] = []
+    branch_heavy = ai_draft_pack_requires_branch_evidence(context)
+    if branch_heavy:
+        branch_predicates = {
+            str((operation.get("branchCondition") or {}).get("expression") or "").strip()
+            for operation in operations
+            if isinstance(operation.get("branchCondition"), Mapping)
+        }
+        branch_predicates.discard("")
+        statement_operations = {
+            str(statement.get("operation") or "").upper()
+            for statement in statements
+            if str(statement.get("operation") or "").strip()
+        }
+        dto_roles = {
+            str(dto.get("role") or "").upper()
+            for dto in dto_blueprints
+            if str(dto.get("role") or "").strip()
+        }
+        if len(operations) < 4:
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: branch-heavy SP operation model "
+                f"has only {len(operations)} operations."
+            )
+        if len(statements) < 4:
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: branch-heavy SP operation model "
+                f"has only {len(statements)} statement evidence items."
+            )
+        if len(dto_blueprints) < 4:
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: branch-heavy SP operation model "
+                f"has only {len(dto_blueprints)} DTO blueprints."
+            )
+        if len(branch_predicates) < 2:
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: branch-heavy SP operation model "
+                "does not expose enough distinct branch predicates."
+            )
+        if not (statement_operations & {"SELECT", "INSERT", "UPDATE", "DELETE", "EXECUTE", "CALL"}):
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: statement evidence does not expose "
+                "DML, result, or call operations for draft generation."
+            )
+        if not (dto_roles & {"QUERY", "RESULT", "COMMAND", "BATCH_ITEM", "CALL_REQUEST"}):
+            findings.append(
+                f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: DTO blueprints do not expose "
+                "query/result/command/batch/call responsibilities."
+            )
+
     inventory_dtos = {
         str(item.get("className") or "")
         for item in expected_inventory
         if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
     }
     missing_dtos = sorted(
-        str(item.get("name") or "")
+        _safe_java_class_name(
+            str(item.get("name") or ""),
+            role=str(item.get("role") or ""),
+            fallback_stem=operation_model_entity_name(operation_model) or "Draft",
+        )
         for item in dto_blueprints
-        if str(item.get("name") or "") and str(item.get("name") or "") not in inventory_dtos
+        if str(item.get("name") or "")
+        and _safe_java_class_name(
+            str(item.get("name") or ""),
+            role=str(item.get("role") or ""),
+            fallback_stem=operation_model_entity_name(operation_model) or "Draft",
+        )
+        not in inventory_dtos
     )
     if missing_dtos:
         findings.append(
@@ -2457,8 +2521,12 @@ def _inventory_item_from_dto_blueprint(
     item: Mapping[str, Any],
     operation_model: Mapping[str, Any],
 ) -> dict[str, Any]:
-    dto_name = str(item.get("name") or "ReviewRequiredDto")
     role = str(item.get("role") or "REVIEW_REQUIRED").upper()
+    dto_name = _safe_java_class_name(
+        str(item.get("name") or ""),
+        role=role,
+        fallback_stem=operation_model_entity_name(operation_model) or "Draft",
+    )
     role_map = {
         "QUERY": "QUERY_DTO",
         "RESULT": "RESULT_DTO",
@@ -2469,9 +2537,25 @@ def _inventory_item_from_dto_blueprint(
     }
     fields = item.get("fields") if isinstance(item.get("fields"), list) else []
     required_fields = [
-        str(field.get("name"))
-        for field in fields
-        if isinstance(field, Mapping) and str(field.get("name") or "")
+        _safe_java_field_name(str(field.get("name") or ""), index=index)
+        for index, field in enumerate(fields, start=1)
+        if isinstance(field, Mapping)
+        and _safe_java_field_name(str(field.get("name") or ""), index=index)
+    ]
+    required_fields = list(dict.fromkeys(required_fields))
+    if not required_fields:
+        required_fields = [
+            _safe_java_field_name(str(field.get("source") or ""), index=index)
+            for index, field in enumerate(fields, start=1)
+            if isinstance(field, Mapping)
+            and _safe_java_field_name(str(field.get("source") or ""), index=index)
+        ]
+    required_fields = [
+        field
+        for field in dict.fromkeys(required_fields)
+        if field and field != "field"
+    ] or [
+        "reviewRequiredField"
     ]
     evidence_refs = [
         str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip()
@@ -2750,7 +2834,7 @@ def operation_model_entity_name(operation_model: Mapping[str, Any] | None) -> st
             continue
         stem = operation_model_entity_stem(dto_name)
         if stem:
-            return stem
+            return _pascal_from_ascii_tokens(stem) or stem
     return None
 
 
@@ -2769,6 +2853,58 @@ def operation_model_entity_stem(dto_name: str) -> str | None:
         if dto_name.endswith(suffix) and len(dto_name) > len(suffix):
             return dto_name[: -len(suffix)]
     return dto_name or None
+
+
+def _safe_java_class_name(raw_name: str, *, role: str, fallback_stem: str) -> str:
+    suffix_by_role = {
+        "QUERY": "SearchCriteria",
+        "RESULT": "SearchRow",
+        "COMMAND": "Command",
+        "BATCH_ITEM": "BatchItem",
+        "CALL_REQUEST": "CallRequest",
+        "CALL_RESULT": "CallResult",
+        "REVIEW_REQUIRED": "ReviewRequiredDto",
+    }
+    candidate = _pascal_from_ascii_tokens(raw_name)
+    fallback = _pascal_from_ascii_tokens(fallback_stem) or "Draft"
+    suffix = suffix_by_role.get(str(role or "").upper(), "Command")
+    if not candidate:
+        candidate = f"{fallback}{suffix}"
+    if not re.match(r"^[A-Za-z_$][A-Za-z0-9_$]*$", candidate):
+        candidate = f"{fallback}{suffix}"
+    if suffix and candidate == fallback:
+        candidate = f"{candidate}{suffix}"
+    return candidate
+
+
+def _safe_java_field_name(raw_name: str, *, index: int) -> str:
+    text = str(raw_name or "").lstrip("@")
+    parts = [part for part in re.split(r"[^0-9A-Za-z]+", text) if part]
+    if not parts:
+        return f"reviewRequiredField{index}"
+    candidate = parts[0][:1].lower() + parts[0][1:] + "".join(
+        part[:1].upper() + part[1:] for part in parts[1:]
+    )
+    if not re.match(r"^[A-Za-z_$]", candidate):
+        candidate = f"field{candidate[:1].upper()}{candidate[1:]}"
+    return candidate
+
+
+def _pascal_from_ascii_tokens(value: str) -> str:
+    parts = [
+        part
+        for part in re.split(
+            r"[^0-9A-Za-z]+",
+            re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", str(value or "")),
+        )
+        if part
+    ]
+    if not parts:
+        return ""
+    candidate = "".join(part[:1].upper() + part[1:] for part in parts)
+    if candidate and not re.match(r"^[A-Za-z_$]", candidate):
+        candidate = f"Draft{candidate}"
+    return candidate
 
 
 def operation_model_target_ref(

@@ -75,5 +75,12 @@ framework checks. P48 remains the active structured LLM runtime, P44 remains the
 Pack OpenAI Agents plus LangGraph runtime, and `responses_httpx` remains retained for P-GPT
 default compatibility and explicit emergency rollback.
 
+P50 raises the Java/MyBatis draft quality gate without changing public artifacts. It verifies the
+internal composer split for DTO inventory/content, Service content, Mapper interface content,
+Mapper XML content, integration quality, and repair; enforces the dedicated
+`openai_ai_draft_pack` route for draft generation; blocks branch-heavy SPs with shallow operation
+evidence before artifact storage; and rejects mojibake identifiers, empty Service methods,
+Mapper/XML mismatches, and wrapper-only calls to the original target SP.
+
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.

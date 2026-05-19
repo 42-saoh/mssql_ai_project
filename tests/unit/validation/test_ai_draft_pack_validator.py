@@ -7,13 +7,17 @@ from typing import Any
 import yaml
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
 from ai_agent_validation.ai_draft_pack import (
+    RULE_ASCII_IDENTIFIER,
     RULE_DTO_FIELD,
     RULE_FORBIDDEN_PAYLOAD,
+    RULE_MAPPER_CONSISTENCY,
     RULE_MAPPER_METHOD,
     RULE_MAPPER_XML,
+    RULE_MAPPER_XML_DB_OPERATION,
     RULE_NON_DTO_REFERENCE,
     RULE_REVIEW_MARKER,
     RULE_SCHEMA,
+    RULE_SERVICE_FLOW,
 )
 from ai_agent_validation.models import ValidationStatus
 
@@ -84,8 +88,7 @@ def _content_for(file: dict[str, Any]) -> str:
     if artifact_type == "MAPPER_XML":
         references = " ".join(file["references"])
         statements = "\n".join(
-            f'  <select id="{operation_id}" parameterType="map" resultType="map">'
-            f"/* SQL_SKELETON_REVIEW_REQUIRED */</select>"
+            _xml_statement_for(operation_id)
             for operation_id in file["operationIds"]
         )
         return (
@@ -96,7 +99,7 @@ def _content_for(file: dict[str, Any]) -> str:
         )
     references = " ".join(file.get("references") or ())
     methods = "\n".join(
-        f"    public void {operation_id}() {{}}" for operation_id in file["operationIds"]
+        _method_for(artifact_type, operation_id) for operation_id in file["operationIds"]
     )
     if artifact_type == "MAPPER_INTERFACE":
         return (
@@ -107,10 +110,75 @@ def _content_for(file: dict[str, Any]) -> str:
         )
     return (
         f"public class {class_name} {{\n"
+        "    private final ManageBondMapper mapper;\n"
+        "    public ManageBondService(ManageBondMapper mapper) { this.mapper = mapper; }\n"
         f"    // REVIEW_REQUIRED DTO references: {references}\n"
         f"{methods}\n"
         "}"
     )
+
+
+def _method_for(artifact_type: str, method: str) -> str:
+    parameter_type = _parameter_type(method)
+    if artifact_type == "MAPPER_INTERFACE":
+        if method == "readBond":
+            return "    List<ManageBondSearchRow> readBond(ManageBondSearchCriteria criteria);"
+        return f"    int {method}({parameter_type} command);"
+    if method == "readBond":
+        return (
+            "    public List<ManageBondSearchRow> "
+            "readBond(ManageBondSearchCriteria criteria) { return mapper.readBond(criteria); }"
+        )
+    return (
+        f"    public int {method}({parameter_type} command) "
+        f"{{ return mapper.{method}(command); }}"
+    )
+
+
+def _parameter_type(method: str) -> str:
+    return {
+        "readBond": "ManageBondSearchCriteria",
+        "approveAdvanceBond": "ApproveAdvanceBondCommand",
+        "approveDefectBond": "ApproveDefectBondCommand",
+        "sendFinanceTransfer": "FinanceTransferCommand",
+        "createBond": "CreateBondCommand",
+        "createRetentionBondBatch": "CreateRetentionBondBatchItem",
+        "updateBond": "UpdateBondCommand",
+        "deleteBond": "DeleteBondCommand",
+        "updateVendorBond": "VendorBondUpdateCommand",
+        "updateOnlineBond": "OnlineBondUpdateCommand",
+    }[method]
+
+
+def _xml_statement_for(method: str) -> str:
+    if method == "readBond":
+        return (
+            '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
+            'resultType="ManageBondSearchRow">\n'
+            "    SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD\n"
+            "    FROM PPM.dbo.PCO_GUAR\n"
+            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}\n"
+            "  </select>"
+        )
+    return (
+        f'  <update id="{method}" parameterType="{_parameter_type(method)}">\n'
+        f"{_sql_body_for(method)}\n"
+        "  </update>"
+    )
+
+
+def _sql_body_for(method: str) -> str:
+    return {
+        "approveAdvanceBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_APRV_YN = #{approvalYn} WHERE CTRT_NO = #{contractNum}",
+        "approveDefectBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_ST_CD = 'APPROVED' WHERE GUAR_SEQ = #{sequence}",
+        "sendFinanceTransfer": "    EXEC PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC #{contractNum}, #{ordNum}, #{userId}",
+        "createBond": "    INSERT INTO PPM.dbo.PCO_GUAR (CTRT_NO, ORDR_NO, GUAR_TP_CD) VALUES (#{contractNum}, #{ordNum}, #{bondKindCode})",
+        "createRetentionBondBatch": "    UPDATE PPM.dbo.PCS_RTNM_PAYRPT SET RTNM_AMT = #{retentionAmount} WHERE RTNM_SEQ = #{retentionSeq}",
+        "updateBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_AMT = #{currencyInsureAmt} WHERE GUAR_SEQ = #{sequence}",
+        "deleteBond": "    DELETE FROM PPM.dbo.PCO_GUAR WHERE CTRT_NO = #{contractNum} AND GUAR_SEQ = #{sequence}",
+        "updateVendorBond": "    UPDATE PPM.dbo.PCS_ADVM_PAYRPT SET VNDR_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
+        "updateOnlineBond": "    UPDATE PPM.dbo.PCS_PAY_CMPD_RPT SET ONLINE_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
+    }[method]
 
 
 def _file(payload: dict[str, Any], class_name: str) -> dict[str, Any]:
@@ -194,7 +262,10 @@ def test_missing_dto_required_field_fails_content_quality() -> None:
 def test_missing_service_dto_reference_fails_content_quality() -> None:
     payload = _valid_pack()
     service = _file_by_type(payload, "SERVICE_DRAFT")
-    service["content"] = service["content"].replace(" OnlineBondUpdateCommand", "")
+    service["content"] = service["content"].replace(
+        "OnlineBondUpdateCommand",
+        "OnlineBondCommand",
+    )
 
     assert RULE_NON_DTO_REFERENCE in _failed_rule_ids(payload)
 
@@ -202,7 +273,10 @@ def test_missing_service_dto_reference_fails_content_quality() -> None:
 def test_missing_mapper_method_fails_content_quality() -> None:
     payload = _valid_pack()
     mapper = _file_by_type(payload, "MAPPER_INTERFACE")
-    mapper["content"] = mapper["content"].replace("    public void updateOnlineBond() {}\n", "")
+    mapper["content"] = mapper["content"].replace(
+        "    int updateOnlineBond(OnlineBondUpdateCommand command);\n",
+        "",
+    )
 
     assert RULE_MAPPER_METHOD in _failed_rule_ids(payload)
 
@@ -213,6 +287,115 @@ def test_invalid_mapper_xml_fails_static_xml_quality() -> None:
     mapper_xml["content"] = "<mapper><select id='readBond'></mapper>"
 
     assert RULE_MAPPER_XML in _failed_rule_ids(payload)
+
+
+def test_p50_mojibake_identifiers_fail_content_quality() -> None:
+    payload = _valid_pack()
+    dto = _file(payload, "ManageBondSearchCriteria")
+    dto["className"] = "ManageBond검색조건"
+    dto["content"] = dto["content"].replace("ManageBondSearchCriteria", "ManageBond검색조건")
+    payload["qualityGates"]["requiredDtoClasses"] = [
+        "ManageBond검색조건" if item == "ManageBondSearchCriteria" else item
+        for item in payload["qualityGates"]["requiredDtoClasses"]
+    ]
+    for file in payload["files"]:
+        if "references" in file:
+            file["references"] = [
+                "ManageBond검색조건" if item == "ManageBondSearchCriteria" else item
+                for item in file["references"]
+            ]
+        file["content"] = file["content"].replace(
+            "ManageBondSearchCriteria",
+            "ManageBond검색조건",
+        )
+
+    assert RULE_ASCII_IDENTIFIER in _failed_rule_ids(payload)
+
+
+def test_p50_empty_service_body_fails_content_quality() -> None:
+    payload = _valid_pack()
+    service = _file_by_type(payload, "SERVICE_DRAFT")
+    service["content"] = service["content"].replace(
+        "    public int updateOnlineBond(OnlineBondUpdateCommand command) { return mapper.updateOnlineBond(command); }",
+        "    public int updateOnlineBond(OnlineBondUpdateCommand command) {}",
+    )
+
+    assert RULE_SERVICE_FLOW in _failed_rule_ids(payload)
+
+
+def test_p50_mapper_interface_and_xml_must_match() -> None:
+    payload = _valid_pack()
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    mapper_xml["content"] = mapper_xml["content"].replace('id="updateOnlineBond"', 'id="updateOnlineBondSql"')
+
+    failed = _failed_rule_ids(payload)
+
+    assert RULE_MAPPER_CONSISTENCY in failed
+    assert RULE_MAPPER_XML in failed
+
+
+def test_p50_wrapper_only_original_sp_mapper_xml_fails_content_quality() -> None:
+    payload = _valid_pack()
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    mapper_xml["content"] = (
+        '<mapper namespace="ManageBondMapper">\n'
+        '  <update id="readBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="approveAdvanceBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="approveDefectBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="sendFinanceTransfer">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="createBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="createRetentionBondBatch">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="updateBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="deleteBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="updateVendorBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        '  <update id="updateOnlineBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
+        "</mapper>"
+    )
+
+    assert RULE_MAPPER_XML_DB_OPERATION in _failed_rule_ids(payload)
+
+
+def test_p50_shallow_six_file_pack_fails_content_quality() -> None:
+    payload = _valid_pack()
+    payload["files"] = [
+        file
+        for file in payload["files"]
+        if file["artifactType"] != "DTO_DRAFT"
+        or file["className"]
+        in {
+            "ManageBondSearchCriteria",
+            "ManageBondSearchRow",
+            "CreateBondCommand",
+        }
+    ]
+    payload["qualityGates"]["requiredDtoClasses"] = [
+        "ManageBondSearchCriteria",
+        "ManageBondSearchRow",
+        "CreateBondCommand",
+    ]
+    for file in payload["files"]:
+        if "references" in file:
+            file["references"] = [
+                item
+                for item in file["references"]
+                if item
+                in {
+                    "ManageBondSearchCriteria",
+                    "ManageBondSearchRow",
+                    "CreateBondCommand",
+                }
+            ]
+    payload["files"][-1]["content"] = (
+        '<mapper namespace="ManageBondMapper">\n'
+        '  <select id="readBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</select>\n'
+        '  <update id="createBond"></update>\n'
+        "</mapper>"
+    )
+
+    failed = _failed_rule_ids(payload)
+
+    assert RULE_MAPPER_XML_DB_OPERATION in failed
+    assert RULE_MAPPER_XML in failed
 
 
 def test_forbidden_payload_markers_fail_quality_gate() -> None:

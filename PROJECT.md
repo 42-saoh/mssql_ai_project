@@ -256,6 +256,31 @@ P49 adds no public API, DB schema, UI, public MCP route, public artifact type,
 source apply, deploy, row-data query, procedure execution, automatic conversion
 approval, or production readiness claim.
 
+## P50 Java/MyBatis Draft Quality Split
+
+P50 splits AI Draft Pack generation internally by artifact role without changing
+the public request or artifact contract. The draft prompt now exposes a staged
+composer flow: DTO inventory, DTO content, Service content, Mapper interface
+content, Mapper XML content, integration quality gate, and repair. Workflow
+requests may still use `llmProfileId` for semantic and operation analysis, but
+Java/MyBatis draft generation resolves to the dedicated
+`openai_ai_draft_pack` profile.
+
+P50 also tightens the storage gate. Branch-heavy SPs with shallow operation
+models, such as two operations, three DTOs, or two statement-evidence entries,
+stop with `P42_INVENTORY_CONTRACT_INCOMPLETE` before any Java/MyBatis artifacts
+are stored. DTOs must use ASCII Java identifiers and declare expected fields;
+Service drafts need non-empty mapper orchestration or branch flow; Mapper
+interfaces and XML statement ids must match; Mapper XML must contain
+statement-level SELECT/INSERT/UPDATE/DELETE/MERGE/EXEC/CALL logic and cannot
+pass as a wrapper-only call to the original target procedure. If repair still
+does not satisfy the deterministic quality gate, the workflow records
+`P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and persists no fallback skeletons.
+
+P50 remains draft-only and internal: no public API, DB schema, UI, public MCP
+route, public artifact type, source apply, deploy, row-data query, procedure
+execution, automatic conversion approval, or production readiness change.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

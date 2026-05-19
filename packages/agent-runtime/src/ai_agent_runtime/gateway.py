@@ -693,12 +693,15 @@ def _default_fake_ai_draft_pack_output(
                 "role": "QUERY_DTO",
                 "className": "DraftSearchCriteria",
                 "content": (
-                    "public class DraftSearchCriteria { "
-                    "/* REVIEW_REQUIRED DraftSearchCriteria */ }"
+                    "public class DraftSearchCriteria {\n"
+                    "    // REVIEW_REQUIRED DraftSearchCriteria\n"
+                    "    private String reviewRequiredField;\n"
+                    "}"
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
                 "reviewMarkers": review_markers,
+                "requiredFields": ["reviewRequiredField"],
             },
             {
                 "artifactType": "DTO_DRAFT",
@@ -706,11 +709,15 @@ def _default_fake_ai_draft_pack_output(
                 "role": "RESULT_DTO",
                 "className": "DraftSearchRow",
                 "content": (
-                    "public class DraftSearchRow { /* REVIEW_REQUIRED DraftSearchRow */ }"
+                    "public class DraftSearchRow {\n"
+                    "    // REVIEW_REQUIRED DraftSearchRow\n"
+                    "    private String reviewRequiredField;\n"
+                    "}"
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
                 "reviewMarkers": review_markers,
+                "requiredFields": ["reviewRequiredField"],
             },
             {
                 "artifactType": "SERVICE_DRAFT",
@@ -718,9 +725,14 @@ def _default_fake_ai_draft_pack_output(
                 "role": "SERVICE",
                 "className": "DraftService",
                 "content": (
-                    "public class DraftService { "
-                    "/* REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow */ "
-                    "void reviewDraft() {} }"
+                    "public class DraftService {\n"
+                    "    private final DraftMapper mapper;\n"
+                    "    public DraftService(DraftMapper mapper) { this.mapper = mapper; }\n"
+                    "    // REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow\n"
+                    "    public Object reviewDraft(DraftSearchCriteria criteria) {\n"
+                    "        return mapper.reviewDraft(criteria);\n"
+                    "    }\n"
+                    "}"
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
@@ -733,9 +745,10 @@ def _default_fake_ai_draft_pack_output(
                 "role": "MAPPER_INTERFACE",
                 "className": "DraftMapper",
                 "content": (
-                    "public interface DraftMapper { "
-                    "/* REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow */ "
-                    "void reviewDraft(); }"
+                    "public interface DraftMapper {\n"
+                    "    // REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow\n"
+                    "    Object reviewDraft(DraftSearchCriteria criteria);\n"
+                    "}"
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
@@ -748,9 +761,14 @@ def _default_fake_ai_draft_pack_output(
                 "role": "MAPPER_XML",
                 "className": "DraftMapperSQL",
                 "content": (
-                    '<mapper namespace="DraftMapper">'
-                    "<!-- REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow -->"
-                    '<select id="reviewDraft" /></mapper>'
+                    '<mapper namespace="DraftMapper">\n'
+                    "  <!-- REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow -->\n"
+                    '  <select id="reviewDraft" parameterType="DraftSearchCriteria" '
+                    'resultType="DraftSearchRow">\n'
+                    "    SELECT REVIEW_REQUIRED_ID FROM dbo.ReviewRequiredEvidence\n"
+                    "    WHERE REVIEW_REQUIRED_ID = #{reviewRequiredField}\n"
+                    "  </select>\n"
+                    "</mapper>"
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
@@ -963,26 +981,36 @@ def _fake_ai_draft_pack_content(file: Mapping[str, Any]) -> str:
         return f"public class {class_name} {{\n    // {markers} draft DTO.\n{fields}\n}}"
     if artifact_type == "SERVICE_DRAFT":
         method_text = "\n".join(
-            f"    public void {method}() {{ /* REVIEW_REQUIRED {references} */ }}"
+            f"    public Object {method}(Object command) "
+            f"{{ return mapper.{method}(command); }}"
             for method in methods
         )
         return (
             f"public class {class_name} {{\n"
+            "    private final Object mapper;\n"
+            f"    public {class_name}(Object mapper) {{ this.mapper = mapper; }}\n"
             f"    // REVIEW_REQUIRED {references}\n{method_text}\n}}"
         )
     if artifact_type == "MAPPER_INTERFACE":
-        method_text = "\n".join(f"    void {method}();" for method in methods)
+        method_text = "\n".join(f"    Object {method}(Object command);" for method in methods)
         return (
             f"public interface {class_name} {{\n"
             f"    // REVIEW_REQUIRED {references}\n{method_text}\n}}"
         )
     if artifact_type == "MAPPER_XML":
         statement_text = "\n".join(
-            f'  <select id="{method}"><!-- REVIEW_REQUIRED {references} --></select>'
+            f'  <select id="{method}" parameterType="map" resultType="map">\n'
+            f"    SELECT DRAFT_ID FROM dbo.DraftEvidence WHERE DRAFT_ID = #{{draftId}}\n"
+            f"  </select>"
             for method in methods
         )
         namespace = class_name[:-3] if class_name.endswith("SQL") else class_name
-        return f'<mapper namespace="{namespace}">\n{statement_text}\n</mapper>'
+        return (
+            f'<mapper namespace="{namespace}">\n'
+            f"  <!-- REVIEW_REQUIRED {references} -->\n"
+            f"{statement_text}\n"
+            "</mapper>"
+        )
     return f"// REVIEW_REQUIRED {class_name} {markers} {references}"
 
 
