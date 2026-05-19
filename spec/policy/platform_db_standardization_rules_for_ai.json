@@ -366,6 +366,7 @@
       "DOM": "domestic",
       "GUAR": "guarantee",
       "MGMT": "management",
+      "NTC": "notification",
       "DESC": "description",
       "CNTNT": "content"
     },

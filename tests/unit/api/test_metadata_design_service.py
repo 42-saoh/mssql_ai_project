@@ -181,10 +181,22 @@ class ContractReferenceDesignRegistry:
                     "description": "주문번호",
                 },
                 {
+                    "name": "CTRT_NM",
+                    "dataType": "VARCHAR(400)",
+                    "nullable": True,
+                    "description": "계약명",
+                },
+                {
                     "name": "CTRT_CHG_SEQ_NO",
                     "dataType": "INT",
                     "nullable": False,
                     "description": "계약변경차수",
+                },
+                {
+                    "name": "CTRT_TP_CD",
+                    "dataType": "VARCHAR(20)",
+                    "nullable": True,
+                    "description": "계약종류코드",
                 },
                 {
                     "name": "CRE_USR_ID",
@@ -224,8 +236,10 @@ class ContractReferenceDesignRegistry:
         if tool_name == "search_columns":
             lookup = {
                 "CTRT_NO": ("CTRT_NO", "계약번호", "VARCHAR(50)", 97),
+                "CTRT_NM": ("CTRT_NM", "계약명", "VARCHAR(400)", 96),
                 "ORDR_NO": ("ORDR_NO", "주문번호", "VARCHAR(50)", 96),
                 "CTRT_CHG_SEQ_NO": ("CTRT_CHG_SEQ_NO", "계약변경차수", "INT", 95),
+                "CTRT_TP_CD": ("CTRT_TP_CD", "계약종류코드", "VARCHAR(20)", 95),
                 "PREV_AUDT_YN": ("PREV_AUDT_YN", "사전감사 여부", "VARCHAR(1)", 94),
             }
             requested = str(arguments.get("physicalName") or "").upper()
@@ -554,6 +568,67 @@ def test_metadata_design_korean_reference_scope_uses_metadata_and_policy(
         ("DBO", "PEM_CTRT"),
     }
     assert response["reviewRequired"] is True
+
+
+def test_metadata_design_quoted_korean_field_list_keeps_notification_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = ContractReferenceDesignRegistry()
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    service = MetadataDesignChatService(model_gateway=FakeModelGateway())
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": (
+                    '테이블 명은 "PCO_사전감사_알림" 이야. 필드로 '
+                    '"계약번호, 계약명, 주문번호, 계약금액, 계약유형, 알림여부, 알림내용" '
+                    "이 들어가."
+                ),
+                "designInputs": {
+                    "tableNameHint": "PCS_CTRT, PEM_CTRT",
+                },
+                "options": {
+                    "useLlmAnalysis": False,
+                    "generateDtoDraft": True,
+                },
+            }
+        )
+    ).to_response()
+
+    intent_field_names = [field["name"] for field in response["interpretedIntent"]["fields"]]
+    assert intent_field_names == [
+        "CTRT_NO",
+        "CTRT_NM",
+        "ORDR_NO",
+        "CTRT_AMT",
+        "CTRT_TP_CD",
+        "NTC_YN",
+        "NTC_CNTNT",
+    ]
+    assert all('" 이 들어' not in field["name"] for field in response["interpretedIntent"]["fields"])
+
+    columns = {
+        column["name"]: column
+        for column in response["tableProposal"]["columns"]
+    }
+    assert {"CTRT_TP_CD", "NTC_YN", "NTC_CNTNT"} <= set(columns)
+    assert columns["CTRT_TP_CD"]["source"] == "METADATA"
+    assert columns["CTRT_TP_CD"]["dataType"] == "VARCHAR(20)"
+    assert columns["NTC_YN"]["dataType"] == "VARCHAR(1)"
+    assert columns["NTC_CNTNT"]["dataType"] == "VARCHAR(2000)"
+    assert columns["NTC_CNTNT"]["reviewRequired"] is True
+
+    script = response["tableProposal"]["createTableScriptPreview"]
+    assert '" 이 들어' not in script
+    assert "UNCONFIRMED_5_VAL" not in script
+    assert "UNCONFIRMED_7_VAL" not in script
+    assert "[CTRT_TP_CD] VARCHAR(20)" in script
+    assert "[NTC_CNTNT] VARCHAR(2000)" in script
 
 
 def test_metadata_design_preserves_amount_fields_common_metadata_and_description_sql(

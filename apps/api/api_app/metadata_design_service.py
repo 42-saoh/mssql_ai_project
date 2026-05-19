@@ -87,6 +87,12 @@ KNOWN_FIELD_TERMS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
         "VARCHAR(50)",
     ),
     (
+        ("계약명", "계약 명", "계약 이름", "contract name", "ctrt_nm"),
+        "CTRT_NM",
+        "Contract name",
+        "VARCHAR(100)",
+    ),
+    (
         ("주문번호", "주문 번호", "발주번호", "발주 번호", "order number", "ordr_no", "order_no"),
         "ORDR_NO",
         "Order number",
@@ -106,6 +112,26 @@ KNOWN_FIELD_TERMS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
         "INT",
     ),
     (
+        ("계약금액", "계약 금액", "contract amount", "ctrt_amt"),
+        "CTRT_AMT",
+        "Contract amount",
+        "NUMERIC(18,3)",
+    ),
+    (
+        (
+            "계약유형",
+            "계약 유형",
+            "계약종류",
+            "계약 종류",
+            "contract type",
+            "contract kind",
+            "ctrt_tp_cd",
+        ),
+        "CTRT_TP_CD",
+        "Contract type code",
+        "VARCHAR(30)",
+    ),
+    (
         (
             "사전감사yn",
             "사전감사 yn",
@@ -118,6 +144,30 @@ KNOWN_FIELD_TERMS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
         "PREV_AUDT_YN",
         "Pre-audit yes/no",
         "VARCHAR(1)",
+    ),
+    (
+        (
+            "알림여부",
+            "알림 여부",
+            "notification yn",
+            "notice yn",
+            "ntc_yn",
+        ),
+        "NTC_YN",
+        "Notification yes/no",
+        "VARCHAR(1)",
+    ),
+    (
+        (
+            "알림내용",
+            "알림 내용",
+            "notification content",
+            "notice content",
+            "ntc_cntnt",
+        ),
+        "NTC_CNTNT",
+        "Notification content",
+        "VARCHAR(2000)",
     ),
     (
         ("고객명", "고객 이름", "customer name", "customer_nm"),
@@ -597,6 +647,9 @@ def _field_clause_from_message(message: str) -> str:
         return ""
     clause = matches[-1].group("fields")
     clause = re.split(r"(?:\.|입니다|이다|다\.|\bplease\b)", clause, maxsplit=1)[0]
+    quoted = re.match(r"\s*[\"“](?P<fields>[^\"”]+)[\"”]", clause)
+    if quoted:
+        clause = quoted.group("fields")
     return _strip_korean_sentence_tail(clause)
 
 
@@ -950,9 +1003,10 @@ def _type_hint_from_message(text: str) -> str:
 
 
 def _field_text_from_fragment(fragment: str) -> str:
-    text = _safe_text(fragment).strip(" .:()[]{}")
+    text = _safe_text(fragment).strip(" .:()[]{}\"'“”‘’")
     if not text:
         return ""
+    text = _strip_field_fragment_tail(text)
     folded = _normalize_match_text(text)
     blocked_terms = (
         "table",
@@ -970,6 +1024,25 @@ def _field_text_from_fragment(fragment: str) -> str:
     text = re.sub(r"(필드|컬럼|타입|으로|로|은|는|을|를|이|가)$", "", text).strip()
     text = _strip_korean_sentence_tail(text)
     return text[:80]
+
+
+def _strip_field_fragment_tail(value: str) -> str:
+    text = _safe_text(value).strip(" .:()[]{}\"'“”‘’")
+    text = re.sub(
+        r"[\"'“”‘’]\s*(?:이|가|은|는)?\s*"
+        r"(?:들어가(?:요)?|들어갑니다|들어있어(?:요)?|들어있습니다|"
+        r"포함(?:돼|되어)?(?:요|있어|있습니다)?|포함됩니다|있어(?:요)?|있습니다)$",
+        "",
+        text,
+    ).strip(" .:()[]{}\"'“”‘’")
+    text = re.sub(
+        r"\s+(?:이|가|은|는)?\s*"
+        r"(?:들어가(?:요)?|들어갑니다|들어있어(?:요)?|들어있습니다|"
+        r"포함(?:돼|되어)?(?:요|있어|있습니다)?|포함됩니다|있어(?:요)?|있습니다)$",
+        "",
+        text,
+    ).strip(" .:()[]{}\"'“”‘’")
+    return text
 
 
 def _strip_korean_sentence_tail(value: str) -> str:
@@ -1816,25 +1889,34 @@ def _best_column_candidate(
 ) -> MetadataRelatedMetadata | None:
     if not candidates:
         return None
-    tokens = {
-        _normalize_match_text(field.name),
+    expected_name = _expected_column_name_for_field(field)
+    text_tokens = {
         _normalize_match_text(field.description),
     } - {""}
-    if not tokens:
-        return candidates[0]
-    scored = []
+    if not expected_name and field.name:
+        text_tokens.add(_normalize_match_text(field.name))
+    scored: list[tuple[int, MetadataRelatedMetadata]] = []
     for candidate in candidates:
+        candidate_name = _standard_identifier(str(candidate.payload.get("columnName") or ""))
         payload_text = " ".join(
             _normalize_match_text(candidate.payload.get(key))
             for key in ("columnName", "logicalName", "description")
         )
-        has_token_match = any(token and token in payload_text for token in tokens)
-        if not has_token_match:
+        exact_name_match = bool(expected_name and candidate_name == expected_name)
+        has_text_match = any(token and token in payload_text for token in text_tokens)
+        if not exact_name_match and not has_text_match:
             continue
-        match_bonus = 100 if has_token_match else 0
+        match_bonus = 1000 if exact_name_match else 100
         scored.append((candidate.score + match_bonus, candidate))
     scored.sort(key=lambda item: item[0], reverse=True)
     return scored[0][1] if scored and scored[0][0] > 0 else None
+
+
+def _expected_column_name_for_field(field: MetadataDesignFieldInput) -> str:
+    known = _known_field_for_text(" ".join([field.name or "", field.description or ""]))
+    if known:
+        return known[0]
+    return _standard_identifier(field.name or "")
 
 
 def _standardize_field(
@@ -1922,6 +2004,7 @@ def _term_abbreviation_from_text(source: str) -> str:
     for tokens, abbreviation in (
         (("계약", "contract", "ctrt"), "CTRT"),
         (("주문", "발주", "order", "ordr"), "ORDR"),
+        (("알림", "notification", "notice", "ntc"), "NTC"),
         (("테스트", "test"), "TEST"),
     ):
         if any(token in text for token in tokens):
@@ -2008,6 +2091,10 @@ def _class_word_from_text(source: str) -> str:
         return "CNT"
     if any(token in text for token in ("코드", "code")):
         return "CD"
+    if any(token in text for token in ("유형", "종류", "type", "kind", "tp_cd")):
+        return "TP_CD"
+    if any(token in text for token in ("내용", "content", "cntnt")):
+        return "CNTNT"
     if any(token in text for token in ("설명", "메모", "description", "desc", "memo")):
         return "DESC"
     if any(token in text for token in ("이름", "명", "name")):
