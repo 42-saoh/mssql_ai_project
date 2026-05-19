@@ -39,12 +39,11 @@ gate treats the ManageBond DTO list as benchmark metrics, not exact runtime
 answer keys: additional split DTOs are allowed when the generated
 Service/Mapper/XML wiring and P42 validator pass.
 
-P43 adds `test_p43_framework_adapter_replay.py` for framework-adoption readiness. It compares
-the baseline internal gateway adapter and fake candidate adapters with the same generic
-inventory contract, reconstructs persisted ManageBond draft artifacts into
-`AiJavaMyBatisDraftPack.v0.1`, reruns the P42 static validator, and verifies a synthetic
-complex-SP guard so candidate success is not ManageBond-specific. P43F records the decision as
-`pilot` with `production_ready: false` and the current Responses/httpx gateway as rollback.
+P43 historical framework-adoption readiness is now checked by
+`tests/contract/test_p43_framework_adoption_prompt_assets.py`. P43F recorded the decision as
+`pilot` with `production_ready: false`; P44/P48 supersede it for active runtime behavior.
+The old broad P43 replay gate was removed in P49, and any baseline/fake adapters needed for
+historical fixtures live under test helpers only.
 
 P44 adds `test_p44_framework_runtime_replay.py` for actual framework runtime adoption. It runs
 mocked OpenAI Agents SDK output through the real `OpenAIAgentsFrameworkAdapter` and actual
@@ -70,6 +69,11 @@ the `openai_ai_draft_pack` model profile, and live-probe reporting that treats M
 as benchmark metrics rather than generic pass/fail gates. P47 also verifies the
 generic DTO reference guard for successful draft outputs, so Service/Mapper/XML
 DTO responsibility wiring is enforced without ManageBond-specific hardcoding.
+
+P49 adds `@framework-contracts` and `@framework-runtime` suite aliases to consolidate active
+framework checks. P48 remains the active structured LLM runtime, P44 remains the active AI Draft
+Pack OpenAI Agents plus LangGraph runtime, and `responses_httpx` remains retained for P-GPT
+default compatibility and explicit emergency rollback.
 
 Passing fixture-first evals does not imply production readiness, publish/deploy approval,
 automatic conversion approval, DDL apply, row-data access, or procedure execution.

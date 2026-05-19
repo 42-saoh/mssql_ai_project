@@ -227,9 +227,9 @@ decision gate. The final decision is `pilot`, based on fake-adapter evidence tha
 candidate output preserves the baseline P42 quality gate, reconstructs persisted
 draft artifacts into `AiJavaMyBatisDraftPack.v0.1`, rejects synthetic two-DTO
 collapse, and does not depend on ManageBond-specific runtime hardcoding. This
-does not switch the production workflow to a framework; the existing
-Responses/httpx gateway and `BaselineResponsesFrameworkAdapter` remain the
-rollback path.
+does not switch the production workflow to a framework. P49 supersedes the
+production-exported baseline adapter scaffold; the existing Responses/httpx
+gateway remains retained only for P-GPT compatibility and emergency rollback.
 
 ## P44 Real Framework Runtime Adoption Architecture
 
@@ -331,6 +331,25 @@ source apply, deploy, and procedure execution remain forbidden.
 No public surface changes are introduced: no public API, DB schema, UI, public
 MCP route, public artifact type, request flag, row-data query, procedure
 execution, source apply, deploy, or production readiness change.
+
+## P49 Framework Runtime Cleanup Architecture
+
+P49 makes `p49_framework_runtime_consolidation_cleanup@0.1.0` the cleanup index
+for framework-runtime evidence. P48 remains the active structured LLM runtime
+through `FrameworkModelGateway` and `OpenAIAgentsStructuredAdapter`; P44 remains
+the active AI Draft Pack runtime through `OpenAIAgentsFrameworkAdapter` and
+`LangGraphAiDraftPackOrchestrator`; P43 is retained only as historical adoption
+evidence.
+
+The production runtime no longer exports P43 baseline/fake framework adapter
+scaffolding. Equivalent fake adapters live under test helpers for historical
+fixtures and orchestrator unit coverage. `OpenAIModelGateway` and
+`responses_httpx` remain in the architecture for P-GPT default compatibility and
+explicit emergency rollback only.
+
+P49 does not introduce a public API, DB schema, UI surface, public MCP route,
+public artifact type, row-data query, procedure execution, source apply, deploy,
+or production readiness change.
 
 ## P35 Source Context Architecture
 

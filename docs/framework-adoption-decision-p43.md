@@ -40,11 +40,13 @@ numeric policy-safe metrics.
 ## Rollback
 
 The rollback path is the existing Responses/httpx
-`ModelGateway.draft_ai_java_mybatis_pack` flow and
-`BaselineResponsesFrameworkAdapter`. If any future real framework adapter weakens
-P42 schema validation, deterministic inventory checks, static Java/MyBatis quality
-validation, storage policy, or no-fallback behavior, the workflow can continue to
-use the current gateway path without a public contract change.
+`ModelGateway.draft_ai_java_mybatis_pack` flow. P49 supersedes the old
+production-exported `BaselineResponsesFrameworkAdapter` scaffold and keeps any
+equivalent fake/baseline adapter only under test helpers for historical fixture
+coverage. If any active framework adapter weakens P42 schema validation,
+deterministic inventory checks, static Java/MyBatis quality validation, storage
+policy, or no-fallback behavior, the workflow can continue to use the retained
+gateway path without a public contract change.
 
 ## Residual Review
 
@@ -56,10 +58,10 @@ Residual `REVIEW_REQUIRED` items:
 - `LANGGRAPH_PERSISTENCE_REDACTION_REVIEW_REQUIRED`
 - `WEAK_OR_UNSUPPORTED_FRAMEWORK_FACTS_REVIEW_REQUIRED`
 
-OpenAI Agents SDK remains blocked until tracing is disabled or configured to
-exclude sensitive inputs and outputs. LangGraph remains blocked until graph-state
-persistence and checkpointers have a proven redacted serializer/checkpointer
-boundary. Optional live OpenAI/PPM replay remains confidence evidence only.
+P43 residual items are historical. P44/P48 now carry the active OpenAI Agents
+and LangGraph runtime policy: tracing stays disabled/sanitized, LangGraph has no
+persistent checkpointer, and optional live OpenAI/PPM replay remains confidence
+evidence only.
 
 ## Verification
 
@@ -72,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTE
 Final P43 regression gate:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="@framework-contracts"
 ```
 
 Whitespace safety:

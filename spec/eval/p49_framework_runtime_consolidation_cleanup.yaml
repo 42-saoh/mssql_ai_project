@@ -1,0 +1,144 @@
+contract_id: p49_framework_runtime_consolidation_cleanup@0.1.0
+phase: P49
+title: Framework Runtime Contract Test Consolidation And Legacy Cleanup
+production_ready: false
+cleanup_mode: contract_backed_removal_of_inactive_scaffolding
+
+supersedes_cleanup_questions_from:
+  - p43_framework_adoption@0.1.0
+  - p46_rollback_removal_decision@0.1.0
+depends_on_active_contracts:
+  - p44_framework_runtime_adoption@0.1.0
+  - p47_generic_ai_draft_quality_uplift@0.1.0
+  - p48_unified_framework_runtime@0.1.0
+
+active_runtime_matrix:
+  structured_llm:
+    contract: p48_unified_framework_runtime@0.1.0
+    gateway_wrapper: FrameworkModelGateway
+    adapter: OpenAIAgentsStructuredAdapter
+    openai_remote_default: openai_agents
+    pgpt_default: responses_httpx
+    emergency_rollback_runtime: responses_httpx
+    stages:
+      - llm_semantic_analysis
+      - metadata_tool_planning
+      - metadata_analysis
+      - platform_tool_planning
+      - sp_operation_model
+  ai_draft_pack:
+    contract: p44_framework_runtime_adoption@0.1.0
+    adapter: OpenAIAgentsFrameworkAdapter
+    orchestrator: LangGraphAiDraftPackOrchestrator
+    prompt_contract: prompt:ai_java_mybatis_draft_pack@0.2.0
+    schema_contract: schema:ai_java_mybatis_draft_pack@0.1.0
+    production_ready: false
+
+historical_evidence:
+  p43_framework_adoption:
+    status: superseded_historical_only
+    active_runtime_gate: false
+    retained_assets: P43 contract, fixture, prompts, and decision docs are retained as historical evidence.
+    manage_bond_role: benchmark_fixture_only
+    broad_replay_gate_removed: true
+    replacement_check: tests/contract/test_p43_framework_adoption_prompt_assets.py
+    raw_payload_leakage_allowed: false
+
+retained_rollback:
+  responses_httpx:
+    retained: true
+    active_openai_default: false
+    pgpt_default: true
+    explicit_emergency_rollback: true
+    allowed_env:
+      - AI_STRUCTURED_LLM_RUNTIME=responses_httpx
+      - AI_GENERATION_RUNTIME=responses_httpx
+  openai_model_gateway:
+    retained: true
+    purpose: P-GPT compatibility and explicit emergency rollback path.
+  pgpt_explicit_openai_agents:
+    retained: true
+    requires_explicit_runtime_selection: true
+
+deletion_approved:
+  production_runtime_exports:
+    - symbol: BaselineResponsesFrameworkAdapter
+      reason: P43 readiness scaffold; in-repo active runtime uses P44/P48 adapters and retained ModelGateway rollback.
+      replacement: tests.helpers.framework_adapters.BaselineResponsesFrameworkAdapter
+    - symbol: FakeAiGenerationFrameworkAdapter
+      reason: Test fake for historical replay and orchestrator unit tests; not an active runtime symbol.
+      replacement: tests.helpers.framework_adapters.FakeAiGenerationFrameworkAdapter
+  broad_historical_gates:
+    - tests/eval/test_p43_framework_adapter_replay.py
+
+not_deleted:
+  - responses_httpx
+  - OpenAIModelGateway
+  - FakeModelGateway
+  - OpenAIAgentsFrameworkAdapter
+  - OpenAIAgentsStructuredAdapter
+  - FrameworkModelGateway
+  - LangGraphAiDraftPackOrchestrator
+  - summarize_framework_trace
+  - validate_framework_trace_summary
+  - validate_framework_tool_context
+
+suite_aliases:
+  framework_contracts: "@framework-contracts"
+  framework_runtime: "@framework-runtime"
+
+trace_policy:
+  store_raw_prompt: false
+  store_raw_provider_response: false
+  store_raw_sp_definition: false
+  store_raw_guide_body: false
+  store_row_data: false
+  store_secrets: false
+  store_failed_java_or_xml_payload: false
+  stored_summary_shape: hash_count_code_only
+
+public_surface:
+  public_api_changed: false
+  db_schema_changed: false
+  ui_changed: false
+  public_mcp_route_changed: false
+  public_artifact_type_changed: false
+  public_request_flag_added: false
+  source_apply_added: false
+  deploy_added: false
+  row_data_query_added: false
+  procedure_execution_added: false
+  production_readiness_changed: false
+
+forbidden_behavior:
+  public_api_change: true
+  db_schema_change: true
+  ui_change: true
+  public_mcp_route_change: true
+  public_artifact_type_change: true
+  source_apply: true
+  deploy: true
+  row_data_query: true
+  procedure_execution: true
+  business_db_ddl_or_dml_apply: true
+  automatic_conversion_approval: true
+  production_ready_true: true
+  raw_prompt_storage: true
+  raw_provider_response_storage: true
+  raw_sp_definition_storage: true
+  raw_guide_body_storage: true
+  secret_storage: true
+
+verification:
+  contract_gate:
+    - make test PYTEST_ARGS="@framework-contracts"
+  targeted_runtime_gate:
+    - make test PYTEST_ARGS="@framework-runtime"
+    - make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/api/test_workflow_service.py tests/contract"
+    - make test-quality
+    - git diff --check
+  optional_live_gate:
+    - P22/P23 OpenAI live semantic paths
+    - P45 with AI_GENERATION_RUNTIME=openai_agents
+    - P42 sanitized fixture replay with P42_LIVE_REPLAY_MODE=sanitized_fixture and AI_GENERATION_RUNTIME=openai_agents
+    - "@live-confidence -- -vv -s -x after fixture-first gates pass"

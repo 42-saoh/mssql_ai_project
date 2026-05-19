@@ -200,15 +200,17 @@ AI Draft Pack generation quality. P43A is groundwork only:
 - OpenAI Agents SDK tracing and LangGraph persistence/checkpointers remain
   adoption blockers until sensitive input/output capture and graph-state
   persistence are proven redacted.
-- P43E replay compares the baseline internal gateway adapter and fake candidate
-  adapters with the same generic inventory contract, reconstructs persisted draft
-  artifacts as `AiJavaMyBatisDraftPack.v0.1`, and reruns the P42 static
-  Java/MyBatis validator.
-- P43E includes a synthetic complex-SP collapse guard so candidate success cannot
-  depend on ManageBond-specific DTO names or a production-runtime answer key.
+- P43E replay is retained as historical evidence only. P49 removes the broad
+  replay gate from active eval collection and moves any needed fake/baseline
+  adapter behavior to test helpers.
+- Historical P43 evidence includes a synthetic complex-SP collapse guard so
+  candidate success cannot depend on ManageBond-specific DTO names or a
+  production-runtime answer key.
 - P43F records the decision as `pilot`, with `docs/framework-adoption-decision-p43.md`
-  as the evidence-backed decision report and the current Responses/httpx gateway
-  plus `BaselineResponsesFrameworkAdapter` as rollback.
+  as the evidence-backed decision report. P49 supersedes the
+  production-exported baseline adapter scaffold; the current Responses/httpx
+  gateway remains retained for P-GPT default compatibility and emergency
+  rollback.
 - The final decision must be `adopt`, `pilot`, or `defer`, and each outcome keeps
   `production_ready: false` until a separate production readiness gate exists.
 - ManageBond is a benchmark fixture for detecting generic failures such as
@@ -217,8 +219,8 @@ AI Draft Pack generation quality. P43A is groundwork only:
 
 Passing criteria:
 - `make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"` passes.
-- P43F final gate includes
-  `make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"`.
+- P49 active framework gates include `@framework-contracts` and
+  `@framework-runtime`; the removed P43 replay file is not an active gate.
 - `git diff --check` passes.
 
 ## P44 Framework Runtime Adoption Eval Contract
@@ -334,6 +336,34 @@ Acceptance checks:
 
 Passing criteria:
 - `make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py tests/unit/agent_runtime/test_semantic_runtime.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_metadata_design_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_platform_tool_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/eval/test_p38_metadata_design_chat.py tests/eval/test_p40_metadata_design_natural_language_chat.py tests/eval/test_p44_framework_runtime_replay.py"` passes.
+- `git diff --check` passes.
+
+## P49 Framework Runtime Cleanup Eval Contract
+
+P49 consolidates framework-runtime evidence and gates after the P48 migration.
+`spec/eval/p49_framework_runtime_consolidation_cleanup.yaml` is the cleanup
+index. P48 is the active structured runtime matrix, P44 is the active AI Draft
+Pack OpenAI Agents plus LangGraph runtime, and P43 is historical evidence only.
+
+Acceptance checks:
+- P49 declares retained rollback semantics: `responses_httpx` stays for P-GPT
+  default compatibility and explicit emergency rollback.
+- Production runtime exports no longer include P43 baseline/fake framework
+  adapter symbols; test-only equivalents live under `tests.helpers`.
+- Broad P43 replay gates are replaced by a small historical asset contract check
+  that verifies P43 is superseded and policy-safe.
+- Suite aliases `@framework-contracts` and `@framework-runtime` select the active
+  framework contract/runtime gates without collecting the removed P43 replay.
+- P49 adds no public API, DB schema, UI, public MCP route, public artifact type,
+  source apply, deploy, row-data query, procedure execution, automatic
+  conversion approval, or production readiness claim.
+
+Passing criteria:
+- `make test PYTEST_ARGS="@framework-runtime"` passes.
+- `make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/api/test_workflow_service.py tests/contract"` passes.
+- `make test-quality` passes.
+- Approved live-confidence fixture-first gates pass before any full
+  `@live-confidence -- -vv -s -x` run.
 - `git diff --check` passes.
 
 ## P35 Source Context Eval Gate

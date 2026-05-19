@@ -6,13 +6,13 @@ from copy import deepcopy
 import pytest
 from ai_agent_runtime import (
     P44_LANGGRAPH_ORCHESTRATOR_FAILED,
-    FakeAiGenerationFrameworkAdapter,
     FakeModelGateway,
     LangGraphAiDraftPackOrchestrator,
     ModelGatewayError,
 )
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
 from ai_agent_validation.models import ValidationStatus
+from tests.helpers.framework_adapters import FakeAiGenerationFrameworkAdapter
 
 from tests.unit.agent_runtime.test_framework_adapter import (
     _allowed_refs,

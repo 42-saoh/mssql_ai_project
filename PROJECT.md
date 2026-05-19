@@ -231,6 +231,21 @@ data query, procedure execution, automatic conversion approval, raw prompt or
 provider response storage, raw SP storage, raw guide body storage, or secret
 storage is authorized.
 
+## P49 Framework Runtime Cleanup Index
+
+P49 consolidates the P43-P48 framework-runtime contracts into one active cleanup
+index: P48 is the active structured LLM runtime, P44 remains the active AI Draft
+Pack OpenAI Agents plus LangGraph runtime, and P43 is historical readiness
+evidence only. The cleanup is contract-backed and removes only scaffolding proven
+unused by active runtime paths.
+
+`responses_httpx` remains retained for P-GPT default compatibility and explicit
+emergency rollback. The production-exported P43 baseline/fake framework adapter
+symbols are removed from the runtime package and kept only as test helpers for
+historical fixture coverage. P49 adds no public API, DB schema, UI, public MCP
+route, public artifact type, source apply, deploy, row-data query, procedure
+execution, automatic conversion approval, or production readiness claim.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

@@ -39,6 +39,11 @@ deletion_blockers:
   - Emergency rollback has operational value while P44 is newly adopted.
   - Removing rollback code requires a separate post-P46 cleanup contract and gate.
 
+p49_supersession_note: >
+  P49 supersedes the production-exported P43 baseline/fake adapter scaffold
+  retention question only. It does not delete `responses_httpx`, `OpenAIModelGateway`,
+  P-GPT default compatibility, or emergency rollback.
+
 policy:
   no_public_api_change: true
   no_db_schema_change: true

@@ -11,8 +11,6 @@ from ai_agent_runtime import (
     AI_GENERATION_FRAMEWORK_ADAPTER_VERSION,
     AiDraftPackValidationError,
     AiGenerationFrameworkAdapterRequest,
-    BaselineResponsesFrameworkAdapter,
-    FakeAiGenerationFrameworkAdapter,
     FakeModelGateway,
     ModelGatewayError,
     ModelProfile,
@@ -27,6 +25,10 @@ from ai_agent_runtime import (
 from ai_agent_runtime.prompts import render_ai_java_mybatis_draft_pack_prompt
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
 from ai_agent_validation.models import ValidationStatus
+from tests.helpers.framework_adapters import (
+    BaselineResponsesFrameworkAdapter,
+    FakeAiGenerationFrameworkAdapter,
+)
 
 FIXTURE_PATH = Path("fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml")
 

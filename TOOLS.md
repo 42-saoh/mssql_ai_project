@@ -108,23 +108,17 @@ not generic pass/fail answer keys.
 ## P43 Framework Adoption Verification Notes
 
 P43 evaluates whether a new agent/orchestration framework should be adopted. It
-does not install a framework in P43A and does not switch runtime behavior. The
-static groundwork gate is:
+does not install a framework in P43A and does not switch runtime behavior. After
+P49, P43 is historical evidence only. The historical asset gate is:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
 ```
 
-The final P43 decision gate records a `pilot` recommendation. It compares the
-current Responses/httpx baseline against fake candidate adapters, preserves
-P42/P41/P36 regressions, and keeps `production_ready: false`:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
-```
-
-Candidate framework testing must use sanitized fixtures and fake adapters by
-default. Optional live replay remains a separate confidence signal and must not
+The final P43 decision gate records a historical `pilot` recommendation. P49
+removes the old broad P43 replay gate from active suites; equivalent fake
+adapters now live under test helpers. Optional live replay remains a separate
+confidence signal and must not
 execute stored procedures, query row data, store raw prompts/provider responses,
 or apply generated source.
 
@@ -137,10 +131,11 @@ policy-safe metrics. OpenAI Agents SDK tracing must be disabled or configured to
 exclude sensitive inputs/outputs before adoption; LangGraph persistence must use
 a redacted serializer/checkpointer boundary before adoption.
 
-The P43F decision report is `docs/framework-adoption-decision-p43.md`. Its
-rollback path is the current Responses/httpx gateway plus
-`BaselineResponsesFrameworkAdapter`; it does not authorize framework dependency
-installation or a production runtime switch.
+The P43F decision report is `docs/framework-adoption-decision-p43.md`. P49
+supersedes the production-exported baseline adapter scaffold, while the current
+Responses/httpx gateway remains retained for P-GPT default compatibility and
+emergency rollback. P43 does not authorize framework dependency installation or
+a production runtime switch.
 
 ## P44 Framework Runtime Adoption Verification Notes
 
@@ -244,6 +239,29 @@ Follow with `git diff --check`. P48 tests must not execute stored procedures,
 query row data, apply source, deploy, store raw prompts/provider responses, store
 raw SP definitions, add a public API, change DB schema, add UI, add a public MCP
 route, or claim production readiness.
+
+## P49 Framework Runtime Cleanup Verification Notes
+
+P49 consolidates scattered P43-P48 framework runtime checks. Use
+`@framework-contracts` for contract/docs/static coverage and `@framework-runtime`
+for the active runtime regression bundle. P43 is historical evidence only; the
+old broad P43 replay gate is replaced by a small historical asset contract check.
+
+The default cleanup gates are:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="@framework-runtime"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/api/test_workflow_service.py tests/contract"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-quality
+git diff --check
+```
+
+Approved live confidence gates remain command-scoped. Run P22/P23, P45 with
+`AI_GENERATION_RUNTIME=openai_agents`, and P42 sanitized fixture replay with
+`P42_LIVE_REPLAY_MODE=sanitized_fixture AI_GENERATION_RUNTIME=openai_agents`
+before the full `@live-confidence -- -vv -s -x` selection. P49 does not authorize
+public surface changes, row-data access, procedure execution, source apply,
+deploy, raw prompt/provider/SP/guide storage, or production readiness.
 
 ## 목적
 

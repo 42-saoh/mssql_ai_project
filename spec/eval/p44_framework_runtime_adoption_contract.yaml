@@ -74,7 +74,7 @@ internal_interfaces:
   summary_contract: FrameworkRuntimeSummary.v0.1
   retained_rollback:
     - responses_httpx ModelGateway.draft_ai_java_mybatis_pack
-    - BaselineResponsesFrameworkAdapter
+    - P49 keeps baseline adapter behavior only as a test helper.
   existing_adapter_contract: AiGenerationFrameworkAdapter.v0.1
   adapter_contract_upgrade_required: false
 

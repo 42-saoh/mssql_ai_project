@@ -24,7 +24,7 @@ P41 connects the SP operation model renewal into the actual `JAVA_MYBATIS_DRAFT`
 
 P06 adds fixture-first coverage for the implemented request → job → artifact → validation path. The default workflow terminal state is `VALIDATION_COMPLETE`; the product surface exposes only draft and validation endpoints, not publish/deploy/apply actions. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` from dependency evidence, validation, and hard-live evidence without publish/deploy/apply flow. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; current enforcement is validation-focused with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24 now has contract assets, sanitized guide-quality fixtures, and P24C renderer/evaluator scoring over existing draft artifact types. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
 
-P43 completes framework-adoption readiness with a `pilot` decision, not adoption. The current Responses/httpx gateway remains the rollback baseline through `BaselineResponsesFrameworkAdapter`; fake OpenAI Agents SDK and LangGraph adapters prove the internal adapter seam, sanitized trace policy, ManageBond benchmark replay, and synthetic complex-SP collapse guard without installing framework dependencies or changing public interfaces. P43 remains `production_ready: false`.
+P43 completes framework-adoption readiness with a `pilot` decision, not adoption. P49 marks P43 as historical evidence only and removes the production-exported baseline/fake adapter scaffolding; equivalent fakes live under test helpers. The Responses/httpx gateway remains retained for P-GPT default compatibility and emergency rollback. P43 remains `production_ready: false`.
 
 P44 supersedes P43 as the active framework runtime adoption direction. OpenAI remote AI Draft Pack generation now routes through OpenAI Agents SDK behind `OpenAIAgentsFrameworkAdapter`, and LangGraph runs the in-process stage graph with no persistent checkpointer. `FrameworkRuntimeConfig.v0.1` is internal only; P-GPT defaults to `responses_httpx` but can produce explicit compatible-endpoint SDK evidence through the internal runtime selector. Emergency rollback remains `responses_httpx`. Generated Java/MyBatis artifacts remain draft-only with `production_ready: false`.
 
@@ -211,13 +211,14 @@ archive real PPM knowledge, or treat `REVIEW_REQUIRED` as production authorizati
 For P43 framework-adoption decision validation, run:
 
 ```bash
-make test PYTEST_ARGS="tests/eval/test_p43_framework_adapter_replay.py tests/unit/agent_runtime/test_framework_adapter.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+make test PYTEST_ARGS="@framework-contracts"
 ```
 
-This fixture-first gate records a `pilot` decision only. It does not install OpenAI Agents SDK,
-LangGraph, or another framework, and it does not change public API, UI, DB schema, public MCP
-routes, public artifact types, procedure execution, row-data access, generated-source apply, or
-deploy behavior.
+This historical gate records a `pilot` decision only. P49 removes the old broad
+P43 replay gate from active eval collection and keeps fake adapter behavior under
+test helpers. It does not change public API, UI, DB schema, public MCP routes,
+public artifact types, procedure execution, row-data access, generated-source
+apply, or deploy behavior.
 
 P24 status interpretation:
 

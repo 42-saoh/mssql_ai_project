@@ -181,6 +181,24 @@
 - P48 keeps `production_ready: false`; automatic conversion approval, row-data query,
   procedure execution, source apply, deploy, and business DB DDL/DML apply remain forbidden.
 
+## P49 Framework Runtime Cleanup Policy
+
+- P49 cleanup must be contract-backed: remove only framework-readiness scaffolding proven unused
+  by P44/P48 active runtime paths.
+- P43 assets are historical evidence only. They may remain as docs/contracts/fixtures, but they
+  must not drive active runtime or quality gates after P49.
+- Production runtime exports must not expose P43 baseline/fake framework adapter symbols. Test
+  fakes may exist only under test helper modules.
+- `responses_httpx`, `OpenAIModelGateway`, and the P-GPT default compatibility path remain
+  retained. Emergency rollback through `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` or the
+  existing rollback selection remains allowed.
+- P49 does not authorize public API, DB schema, UI, public MCP route, public artifact type,
+  source apply, deploy, row-data query, procedure execution, automatic conversion approval, or
+  production readiness changes.
+- Raw prompts, raw provider responses, raw SP definitions, raw guide bodies, row data, secrets,
+  failed Java/XML payloads, source apply, deploy, and procedure execution remain forbidden in
+  framework traces and persisted payloads.
+
 ## P35 Source Context Policy
 
 - Full stored procedure definitions must not be sent to the model by default. The semantic runtime
