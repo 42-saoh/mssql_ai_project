@@ -105,7 +105,14 @@ from ai_agent_runtime.operation_model import (
     sp_operation_model_output_schema,
     validate_sp_operation_model_output,
 )
-from ai_agent_runtime.operation_planner import build_sp_operation_model_run
+from ai_agent_runtime.operation_planner import (
+    BRANCH_PLANNER_AGENT_TYPE,
+    REPAIR_AGENT_TYPE,
+    OperationModelPlanningError,
+    OperationModelRunResult,
+    build_sp_operation_model_run,
+    build_sp_operation_model_run_result,
+)
 from ai_agent_runtime.planner_effectiveness import (
     VALID_TOOL_FACT_PREFIXES,
     attach_planner_metrics_to_ai_tool_evidence,
@@ -152,6 +159,7 @@ __all__ = [
     "AI_GENERATION_RUNTIME_OPENAI_AGENTS",
     "AI_GENERATION_RUNTIME_RESPONSES_HTTPX",
     "AI_DRAFT_PACK_MODEL_PROFILE_ID",
+    "BRANCH_PLANNER_AGENT_TYPE",
     "FakeModelGateway",
     "FRAMEWORK_RUNTIME_CONFIG_VERSION",
     "FRAMEWORK_RUNTIME_SUMMARY_VERSION",
@@ -180,6 +188,8 @@ __all__ = [
     "OpenAIModelGateway",
     "OpenAIAgentsFrameworkAdapter",
     "OpenAIAgentsStructuredAdapter",
+    "OperationModelPlanningError",
+    "OperationModelRunResult",
     "OperationModelValidationError",
     "P43_FRAMEWORK_RAW_TRACE_BLOCKED",
     "P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED",
@@ -192,6 +202,7 @@ __all__ = [
     "P44_OPENAI_AGENTS_TRACE_POLICY",
     "P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED",
     "P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID",
+    "REPAIR_AGENT_TYPE",
     "PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION",
     "PLATFORM_TOOL_PLANNER_PROMPT_VERSION",
     "RenderedPrompt",
@@ -215,6 +226,7 @@ __all__ = [
     "build_semantic_analysis_run",
     "build_semantic_analysis_runs",
     "build_sp_operation_model_run",
+    "build_sp_operation_model_run_result",
     "evaluate_p23_semantic_quality",
     "framework_runtime_config_from_env",
     "merge_llm_semantic_analysis",

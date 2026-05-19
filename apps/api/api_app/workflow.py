@@ -43,7 +43,7 @@ from ai_agent_runtime import (
     build_framework_runtime_from_env,
     build_model_gateway_from_env,
     build_semantic_analysis_run,
-    build_sp_operation_model_run,
+    build_sp_operation_model_run_result,
     validate_ai_java_mybatis_draft_pack_output,
     validate_sp_operation_model_output,
 )
@@ -786,29 +786,37 @@ class WorkflowService:
                 evidence_payload=evidence_payload,
             )
         try:
-            run_payload = build_sp_operation_model_run(
+            run_result = build_sp_operation_model_run_result(
                 target_ref=target_ref,
                 statement_evidence=extraction.statement_evidence,
                 model_gateway=self.model_gateway,
                 profile_id=str(request_record.options.get("llmProfileId") or ""),
                 allowed_evidence_refs=extraction.evidence_refs,
             )
+            for sidecar_run in run_result.sidecar_runs:
+                self._save_agent_run_payload(
+                    job_id=job_id,
+                    request_record=request_record,
+                    run_payload=sidecar_run,
+                )
+            run_payload = run_result.final_run
             if evidence_payload:
                 run_payload = _append_operation_model_evidence_component(
                     run_payload,
                     evidence_payload=evidence_payload,
                 )
-            return self.repository.save_agent_run(
+            return self._save_agent_run_payload(
                 job_id=job_id,
-                agent_type=run_payload.agent_type,
-                status=run_payload.status.value,
-                target_ref=run_payload.target_ref,
-                summary=run_payload.summary,
-                structured_output=run_payload.structured_output,
-                model_invocation=run_payload.model_invocation.to_storage_dict(),
-                target_key=request_record.target_key,
+                request_record=request_record,
+                run_payload=run_payload,
             )
         except ModelGatewayError as exc:
+            for sidecar_run in getattr(exc, "sidecar_runs", ()):
+                self._save_agent_run_payload(
+                    job_id=job_id,
+                    request_record=request_record,
+                    run_payload=sidecar_run,
+                )
             payload = operation_model_review_required_payload(
                 target_ref=target_ref,
                 reason="SP_OPERATION_MODEL_PLANNER_FAILED",
@@ -822,7 +830,10 @@ class WorkflowService:
                 reason=f"SP_OPERATION_MODEL_PLANNER_FAILED:{exc.code}",
                 evidence_payload=evidence_payload,
                 failure_diagnostics={
-                    "failureStage": "sp_operation_model_planner",
+                    "failureStage": str(
+                        exc.provider_error.get("failureStage")
+                        or "sp_operation_model_planner"
+                    ),
                     "errorCode": exc.code,
                     "errorClass": exc.__class__.__name__,
                     "providerError": dict(exc.provider_error),
@@ -875,6 +886,24 @@ class WorkflowService:
             summary=f"SP operation model requires review before multi-DTO generation: {reason}.",
             structured_output=validated,
             model_invocation=model_invocation.to_storage_dict(),
+            target_key=request_record.target_key,
+        )
+
+    def _save_agent_run_payload(
+        self,
+        *,
+        job_id: str,
+        request_record: WorkRequestRecord,
+        run_payload: AgentRunPayload,
+    ) -> AgentRunRecord:
+        return self.repository.save_agent_run(
+            job_id=job_id,
+            agent_type=run_payload.agent_type,
+            status=run_payload.status.value,
+            target_ref=run_payload.target_ref,
+            summary=run_payload.summary,
+            structured_output=run_payload.structured_output,
+            model_invocation=run_payload.model_invocation.to_storage_dict(),
             target_key=request_record.target_key,
         )
 

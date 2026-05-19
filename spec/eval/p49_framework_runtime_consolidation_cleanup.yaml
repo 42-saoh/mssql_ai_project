@@ -26,6 +26,13 @@ active_runtime_matrix:
       - metadata_analysis
       - platform_tool_planning
       - sp_operation_model
+    sp_operation_model_hardening:
+      complex_sp_task_split: branch_plan_final_model_repair
+      sidecar_agent_types:
+        - LLM_SP_OPERATION_BRANCH_PLANNER
+        - LLM_SP_OPERATION_MODEL_REPAIR
+      repair_runtime: openai_agents_structured
+      responses_httpx_fallback: false
   ai_draft_pack:
     contract: p44_framework_runtime_adoption@0.1.0
     adapter: OpenAIAgentsFrameworkAdapter

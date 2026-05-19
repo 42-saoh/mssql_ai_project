@@ -185,6 +185,46 @@ def test_openai_agents_structured_adapter_schema_failure_is_sanitized() -> None:
     assert "metadata_analysis" in diagnostics
 
 
+def test_openai_agents_structured_adapter_operation_model_diagnostics_include_findings() -> None:
+    operation_model = _operation_model_fixture()
+    invalid_output = dict(operation_model)
+    invalid_output["operations"] = []
+    invalid_output["dtoBlueprints"] = []
+
+    gateway = FrameworkModelGateway(
+        fallback_gateway=FakeModelGateway(),
+        structured_adapter=OpenAIAgentsStructuredAdapter(
+            runner=lambda _agent, _prompt, _config: SimpleNamespace(
+                final_output=invalid_output
+            ),
+            agent_factory=lambda request: SimpleNamespace(stage=request.stage),
+        ),
+    )
+
+    with pytest.raises(ModelGatewayError) as exc:
+        gateway.plan_sp_operation_model(
+            prompt=_prompt(
+                schema="schema:sp_operation_model@0.1.0",
+                metadata={
+                    "targetRef": operation_model["targetRef"],
+                    "allowedEvidenceRefs": _allowed_operation_refs(operation_model),
+                },
+                payload={"statementEvidence": operation_model["statementEvidence"]},
+            ),
+            profile=_profile(),
+        )
+
+    provider_error = exc.value.provider_error
+    diagnostics = json.dumps(provider_error, ensure_ascii=False)
+    assert exc.value.code == "OPENAI_SP_OPERATION_MODEL_INVALID"
+    assert provider_error["schemaName"] == "sp_operation_model"
+    assert provider_error["stage"] == "sp_operation_model"
+    assert provider_error["findingCount"] >= 1
+    assert any("operations must not be empty" in item for item in provider_error["findings"])
+    assert "input_value" not in diagnostics
+    assert "CREATE PROCEDURE" not in diagnostics
+
+
 def test_openai_agents_structured_adapter_hard_fails_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

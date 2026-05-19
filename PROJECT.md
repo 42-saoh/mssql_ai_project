@@ -73,6 +73,13 @@ files. P41 remains
 change, live MCP public tool expansion, row-data access, procedure execution,
 automatic DDL/DML apply, or generated-source deployment.
 
+After the `job_89890af79b` failure audit, complex-SP operation-model planning is
+hardened with internal `branch_plan`, `final_model`, and validator-guided
+`repair` tasks. The workflow may persist `LLM_SP_OPERATION_BRANCH_PLANNER` and
+`LLM_SP_OPERATION_MODEL_REPAIR` sidecar AgentRuns, but the final contract remains
+`SpOperationModel.v0.1`; repair receives sanitized validation findings only and
+does not store raw provider payloads or fall back to `responses_httpx`.
+
 ## P42 AI Draft Pack Renewal
 
 P42 starts after the observed `job_6864d2734e` failure mode: Java/MyBatis
@@ -221,7 +228,8 @@ OpenAI remote structured calls now default to `openai_agents` for both official
 OpenAI and P-GPT-compatible endpoints. `AI_STRUCTURED_LLM_RUNTIME=responses_httpx`
 is retained only as an explicit emergency rollback path for structured calls.
 P48 preserves evidence-ref repair,
-planner fallback, tool allowlists, SP source text gates, metadata/design
+planner fallback, complex-SP operation-model task split, validator-guided
+operation-model repair, tool allowlists, SP source text gates, metadata/design
 sanitization, knowledge persistence sanitization, and `REVIEW_REQUIRED`
 behavior. It also fixes the metadata design planner prompt metadata so
 `toolNames` is present for remote structured validation.

@@ -8,15 +8,24 @@ from typing import Any
 import httpx
 import yaml
 from ai_agent_runtime import (
+    BRANCH_PLANNER_AGENT_TYPE,
     FakeModelGateway,
+    ModelGatewayError,
+    REPAIR_AGENT_TYPE,
     build_sp_operation_model_run,
+    build_sp_operation_model_run_result,
 )
 from ai_agent_runtime.gateway import OpenAIModelGateway, model_profile_from_env
+from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from ai_agent_runtime.operation_model import (
     all_sp_operation_model_evidence_refs,
     validate_sp_operation_model_output,
 )
-from ai_agent_runtime.operation_planner import EVIDENCE_REPAIRED_MARKER
+from ai_agent_runtime.operation_planner import (
+    EVIDENCE_REPAIRED_MARKER,
+    VALIDATOR_REPAIRED_MARKER,
+    OperationModelPlanningError,
+)
 from ai_agent_runtime.prompts import render_sp_operation_model_prompt
 
 FIXTURE_PATH = Path("fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml")
@@ -59,6 +68,53 @@ def test_operation_model_prompt_uses_sanitized_statement_evidence_contract() -> 
     assert prompt.metadata["statementEvidenceCount"] == len(payload["statementEvidence"])
 
 
+def test_operation_model_prompt_supports_split_and_repair_task_modes() -> None:
+    payload = _fixture_operation_model()
+    statements = _statement_evidence(payload)
+    allowed_refs = _allowed_refs(payload)
+
+    branch_prompt = render_sp_operation_model_prompt(
+        target_ref=payload["targetRef"],
+        statement_evidence=statements,
+        allowed_evidence_refs=allowed_refs,
+        task_mode="branch_plan",
+        stage="operation_model_branch_plan",
+    )
+    final_prompt = render_sp_operation_model_prompt(
+        target_ref=payload["targetRef"],
+        statement_evidence=statements,
+        allowed_evidence_refs=allowed_refs,
+        task_mode="final_model",
+        branch_plan_context={"operationCount": 10, "source": BRANCH_PLANNER_AGENT_TYPE},
+    )
+    repair_prompt = render_sp_operation_model_prompt(
+        target_ref=payload["targetRef"],
+        statement_evidence=statements,
+        allowed_evidence_refs=allowed_refs,
+        task_mode="repair",
+        stage="operation_model_repair",
+        branch_plan_context={"operationCount": 10, "source": BRANCH_PLANNER_AGENT_TYPE},
+        repair_context={
+            "validationFindings": ["operations must not be empty."],
+            "rawFailedOutputIncluded": False,
+        },
+    )
+
+    branch_payload = json.loads(branch_prompt.user_prompt)
+    final_payload = json.loads(final_prompt.user_prompt)
+    repair_payload = json.loads(repair_prompt.user_prompt)
+
+    assert branch_payload["taskMode"] == "branch_plan"
+    assert final_payload["taskMode"] == "final_model"
+    assert repair_payload["taskMode"] == "repair"
+    assert final_payload["branchPlanContext"]["source"] == BRANCH_PLANNER_AGENT_TYPE
+    assert repair_payload["repairContext"]["rawFailedOutputIncluded"] is False
+    assert "failed provider payload text" in repair_prompt.user_prompt
+    assert "CREATE PROCEDURE" not in branch_prompt.user_prompt
+    assert "CREATE PROCEDURE" not in final_prompt.user_prompt
+    assert "CREATE PROCEDURE" not in repair_prompt.user_prompt
+
+
 def test_build_sp_operation_model_run_keeps_multi_dto_blueprints_with_fake_gateway() -> None:
     payload = _fixture_operation_model()
     run = build_sp_operation_model_run(
@@ -80,6 +136,23 @@ def test_build_sp_operation_model_run_keeps_multi_dto_blueprints_with_fake_gatew
     assert "ManageBondSearchCriteria" in dto_names
     assert "ManageBondSearchRow" in dto_names
     assert "ManageBondDTO" not in dto_names
+
+
+def test_operation_model_run_records_branch_sidecar_for_complex_sp() -> None:
+    payload = _fixture_operation_model()
+    result = build_sp_operation_model_run_result(
+        target_ref=payload["targetRef"],
+        statement_evidence=_statement_evidence(payload),
+        allowed_evidence_refs=_allowed_refs(payload),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={payload["targetRef"]: payload}
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    assert [run.agent_type for run in result.sidecar_runs] == [BRANCH_PLANNER_AGENT_TYPE]
+    assert result.final_run.agent_type == "LLM_SP_OPERATION_PLANNER"
+    assert result.sidecar_runs[0].structured_output["targetRef"] == payload["targetRef"]
 
 
 def test_operation_model_run_repairs_invalid_evidence_refs_at_boundary() -> None:
@@ -105,6 +178,110 @@ def test_operation_model_run_repairs_invalid_evidence_refs_at_boundary() -> None
         "sp_operation_model_evidence_guard"
     )
     assert "ev.not_allowed" not in str(run.to_storage_dict())
+
+
+def test_operation_model_run_repairs_structural_validation_failure_without_raw_payload() -> None:
+    payload = _fixture_operation_model()
+    gateway = _SequencedOperationGateway(
+        [
+            payload,
+            ModelGatewayError(
+                "invalid operation model",
+                code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                provider_error={
+                    "type": "openai_agents_structured_adapter",
+                    "stage": "sp_operation_model",
+                    "schemaName": "sp_operation_model",
+                    "findingCount": 3,
+                    "findings": [
+                        "operations must not be empty.",
+                        "CREATE PROCEDURE dbo.secret-token raw provider response",
+                    ],
+                },
+            ),
+            payload,
+        ]
+    )
+
+    result = build_sp_operation_model_run_result(
+        target_ref=payload["targetRef"],
+        statement_evidence=_statement_evidence(payload),
+        allowed_evidence_refs=_allowed_refs(payload),
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    assert [run.agent_type for run in result.sidecar_runs] == [
+        BRANCH_PLANNER_AGENT_TYPE,
+        REPAIR_AGENT_TYPE,
+    ]
+    assert result.final_run.agent_type == "LLM_SP_OPERATION_PLANNER"
+    assert VALIDATOR_REPAIRED_MARKER in result.final_run.structured_output["reviewMarkers"]
+    repair_prompt_payload = gateway.prompt_payloads[2]
+    serialized = json.dumps(
+        {
+            "repairPrompt": repair_prompt_payload,
+            "result": result.final_run.to_storage_dict(),
+            "sidecars": [run.to_storage_dict() for run in result.sidecar_runs],
+        },
+        ensure_ascii=False,
+    )
+    assert "operations must not be empty" in serialized
+    assert "CREATE PROCEDURE" not in serialized
+    assert "secret-token" not in serialized
+    assert "raw provider response" not in serialized
+    assert repair_prompt_payload["repairContext"]["rawFailedOutputIncluded"] is False
+
+
+def test_operation_model_run_preserves_review_required_when_validator_repair_fails() -> None:
+    payload = _fixture_operation_model()
+    gateway = _SequencedOperationGateway(
+        [
+            payload,
+            ModelGatewayError(
+                "invalid operation model",
+                code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                provider_error={
+                    "findings": ["operations must not be empty."],
+                    "stage": "sp_operation_model",
+                    "schemaName": "sp_operation_model",
+                },
+            ),
+            ModelGatewayError(
+                "repair invalid",
+                code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                provider_error={
+                    "findings": ["dtoBlueprints must not be empty."],
+                    "stage": "operation_model_repair",
+                    "schemaName": "sp_operation_model",
+                },
+            ),
+        ]
+    )
+
+    try:
+        build_sp_operation_model_run_result(
+            target_ref=payload["targetRef"],
+            statement_evidence=_statement_evidence(payload),
+            allowed_evidence_refs=_allowed_refs(payload),
+            model_gateway=gateway,
+            profile_id="openai_fast_test",
+        )
+    except OperationModelPlanningError as exc:
+        assert exc.code == "OPENAI_SP_OPERATION_MODEL_INVALID"
+        assert [run.agent_type for run in exc.sidecar_runs] == [
+            BRANCH_PLANNER_AGENT_TYPE,
+            REPAIR_AGENT_TYPE,
+        ]
+        assert exc.sidecar_runs[-1].status == AgentRunStatus.FAILED
+        serialized = json.dumps(
+            [run.to_storage_dict() for run in exc.sidecar_runs],
+            ensure_ascii=False,
+        )
+        assert "dtoBlueprints must not be empty" in serialized
+        assert "CREATE PROCEDURE" not in serialized
+    else:
+        raise AssertionError("Expected operation-model planning to fail after repair.")
 
 
 def test_openai_gateway_uses_responses_json_schema_for_operation_model(monkeypatch: Any) -> None:
@@ -226,3 +403,40 @@ def _capture_post(monkeypatch: Any, response: httpx.Response) -> dict[str, Any]:
 
     monkeypatch.setattr("ai_agent_runtime.gateway.httpx.post", fake_post)
     return captured
+
+
+class _SequencedOperationGateway:
+    provider = "sequenced-operation-model"
+
+    def __init__(self, outputs: list[Any]) -> None:
+        self.outputs = list(outputs)
+        self.prompt_payloads: list[dict[str, Any]] = []
+
+    def plan_sp_operation_model(
+        self,
+        *,
+        prompt: Any,
+        profile: Any,
+    ) -> ModelInvocationRecord:
+        self.prompt_payloads.append(json.loads(prompt.user_prompt))
+        output = self.outputs.pop(0)
+        if isinstance(output, Exception):
+            raise output
+        structured_output = deepcopy(output)
+        return ModelInvocationRecord(
+            provider=self.provider,
+            model=profile.model,
+            model_profile_id=profile.profile_id,
+            model_registry_ref=profile.registry_ref,
+            reasoning_effort=profile.reasoning_effort,
+            prompt_version=prompt.prompt_version,
+            output_schema_version=prompt.output_schema_version,
+            input_hash=prompt.input_hash,
+            prompt_hash=prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage={"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+            latency_ms=0,
+            provider_request_id="seq-operation-model",
+        )

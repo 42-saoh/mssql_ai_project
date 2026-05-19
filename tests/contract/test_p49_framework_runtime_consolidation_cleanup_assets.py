@@ -76,6 +76,9 @@ def test_p49_contract_declares_active_runtime_and_historical_boundary() -> None:
     assert contract["active_runtime_matrix"]["structured_llm"]["adapter"] == (
         "OpenAIAgentsStructuredAdapter"
     )
+    assert contract["active_runtime_matrix"]["structured_llm"][
+        "sp_operation_model_hardening"
+    ]["responses_httpx_fallback"] is False
     assert contract["active_runtime_matrix"]["ai_draft_pack"]["adapter"] == (
         "OpenAIAgentsFrameworkAdapter"
     )

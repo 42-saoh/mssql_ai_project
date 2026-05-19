@@ -43,6 +43,9 @@ changes, or a new public MCP invoke tool. `DTO_DRAFT` may be a multi-file bundle
 the unchanged `JAVA_MYBATIS_DRAFT` artifact contract. Workflow tests verify that a new
 manage-bond job stores DTO bundle files individually and preserves a review-required fallback
 operation model when planning is disabled or unavailable.
+For complex SPs, the same gate now also covers internal branch-plan and validator-repair
+sidecar AgentRuns. These are persisted only as sanitized workflow evidence and do not add
+public API, DB schema, or artifact-type surface.
 
 ## P42 Verification Notes
 
@@ -220,6 +223,11 @@ analysis, metadata tool planning, metadata analysis, platform tool planning, and
 SP operation-model planning to `OpenAIAgentsStructuredAdapter` under
 `AiStructuredFrameworkAdapter.v0.1`. AI Draft Pack stays on the existing P44
 OpenAI Agents plus LangGraph workflow path.
+
+For the `sp_operation_model` stage, complex SPs use `branch_plan`, `final_model`,
+and at most one validator-guided `repair` task through the same structured runtime.
+Repair prompts contain sanitized validation findings and branch summaries only; they
+do not include raw failed payloads or call the `responses_httpx` rollback path.
 
 Remote structured calls default to `openai_agents` for both official OpenAI and
 P-GPT-compatible endpoints. `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` is the

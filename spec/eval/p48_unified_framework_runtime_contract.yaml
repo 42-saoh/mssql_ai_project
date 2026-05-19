@@ -76,9 +76,22 @@ runtime_matrix:
     schema_name: sp_operation_model
     output_schema: schema:sp_operation_model@0.1.0
     runtime: openai_agents_structured
+    task_split:
+      complex_sp_modes:
+        - branch_plan
+        - final_model
+        - repair
+      sidecar_agent_types:
+        - LLM_SP_OPERATION_BRANCH_PLANNER
+        - LLM_SP_OPERATION_MODEL_REPAIR
+      repair_retry_max: 1
+      repair_runtime: openai_agents_structured
+      raw_failed_payload_allowed: false
     deterministic_safeguards:
       - sanitized statement evidence defaults
       - evidence-ref repair
+      - validator findings sanitized diagnostics
+      - validator-guided repair without responses_httpx fallback
       - REVIEW_REQUIRED fallback behavior
   - stage_id: ai_java_mybatis_draft_pack
     gateway_method: draft_ai_java_mybatis_pack

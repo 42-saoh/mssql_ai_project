@@ -86,10 +86,17 @@ and `REVIEW_REQUIRED` markers. It also records DTO blueprints by role such as
 
 The implementation path is split deliberately:
 deterministic analysis creates sanitized `statementEvidence`, the structured planner
-uses the existing Responses/httpx gateway and strict JSON schema to produce
+uses the configured structured `ModelGateway` runtime and strict JSON schema to produce
 `SpOperationModel.v0.1`, and the Java/MyBatis renderer consumes that model
 deterministically. `OperationModel` inference is not promoted to metadata fact; weak
 branch/DTO naming and uncertain dependencies stay `REVIEW_REQUIRED`.
+
+For complex SPs, operation-model planning now uses internal task splitting:
+`LLM_SP_OPERATION_BRANCH_PLANNER` stabilizes branch/use-case coverage, the final
+`LLM_SP_OPERATION_PLANNER` assembles the complete model, and
+`LLM_SP_OPERATION_MODEL_REPAIR` may run once with sanitized validator findings.
+The repair pass does not receive raw failed provider payloads and does not use
+`responses_httpx` fallback.
 
 In the workflow orchestrator, `JAVA_MYBATIS_DRAFT` now has an operation-model
 planning stage between semantic analysis and artifact generation. The stage calls the
@@ -312,6 +319,12 @@ analysis, metadata tool planning, metadata analysis, platform tool planning, and
 SP operation-model planning to `OpenAIAgentsStructuredAdapter`. The adapter
 reuses the existing prompt renderers, strict schema parsers, P-GPT normalizers,
 and post-validation logic instead of creating a parallel schema stack.
+
+The `sp_operation_model` structured stage adds the complex-SP branch split and
+validator-guided repair sidecar AgentRuns described in P41. These are internal
+AgentRun records only; the persisted final model remains `SpOperationModel.v0.1`,
+and failed repair still falls back to `P41_OPERATION_MODEL_REVIEW_REQUIRED` so
+P42 stops before Java/MyBatis fallback skeletons.
 
 `FrameworkRuntimeConfig.v0.1` now records both `ai_generation_runtime` and
 `structured_llm_runtime`. Remote structured LLM paths default to

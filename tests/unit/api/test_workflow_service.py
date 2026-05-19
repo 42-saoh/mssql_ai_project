@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 
 import pytest
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 from ai_agent_generation import GenerationContext
 from ai_agent_runtime import (
+    BRANCH_PLANNER_AGENT_TYPE,
     FakeModelGateway,
     LangGraphAiDraftPackOrchestrator,
     OpenAIAgentsFrameworkAdapter,
+    REPAIR_AGENT_TYPE,
 )
 from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
@@ -569,6 +572,166 @@ def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts()
     )
     assert context.request["aiDraftPack"]["schemaVersion"] == "AiJavaMyBatisDraftPack.v0.1"
     assert context.request["aiDraftPackTrace"]["agentRunId"] == ai_draft_runs[0].agent_run_id
+
+
+def test_operation_model_workflow_saves_split_and_repair_sidecar_runs() -> None:
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+
+    class OperationRepairSpyGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack}
+            )
+            self.operation_outputs: list[object] = [
+                operation_model,
+                ModelGatewayError(
+                    "invalid operation model",
+                    code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                    provider_error={
+                        "type": "openai_agents_structured_adapter",
+                        "stage": "sp_operation_model",
+                        "schemaName": "sp_operation_model",
+                        "findings": [
+                            "operations must not be empty.",
+                            "CREATE PROCEDURE dbo.secret-token raw provider response",
+                        ],
+                    },
+                ),
+                operation_model,
+            ]
+            self.operation_prompt_payloads: list[dict[str, object]] = []
+
+        def plan_sp_operation_model(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.operation_prompt_payloads.append(json.loads(prompt.user_prompt))
+            output = self.operation_outputs.pop(0)
+            if isinstance(output, Exception):
+                raise output
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-operation-repair",
+                structured_output=deepcopy(output),
+            )
+
+    repository = MemoryWorkflowRepository()
+    gateway = OperationRepairSpyGateway()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    runs = repository.list_agent_runs(job.job_id) or []
+    sidecar_and_final = [
+        run.agent_type
+        for run in sorted(runs, key=lambda item: item.created_at)
+        if run.agent_type
+        in {BRANCH_PLANNER_AGENT_TYPE, REPAIR_AGENT_TYPE, OPERATION_MODEL_AGENT_TYPE}
+    ]
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    repair_run = next(run for run in runs if run.agent_type == REPAIR_AGENT_TYPE)
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert sidecar_and_final[:3] == [
+        BRANCH_PLANNER_AGENT_TYPE,
+        REPAIR_AGENT_TYPE,
+        OPERATION_MODEL_AGENT_TYPE,
+    ]
+    assert gateway.operation_prompt_payloads[0]["taskMode"] == "branch_plan"
+    assert gateway.operation_prompt_payloads[1]["taskMode"] == "final_model"
+    assert gateway.operation_prompt_payloads[2]["taskMode"] == "repair"
+    assert operation_run.structured_output["targetRef"] == operation_model["targetRef"]
+    assert repair_run.status == AgentRunStatus.SUCCEEDED.value
+    serialized = json.dumps(
+        {
+            "operationRun": operation_run.structured_output,
+            "repairRun": repair_run.structured_output,
+            "repairPrompt": gateway.operation_prompt_payloads[2],
+        },
+        ensure_ascii=False,
+    )
+    assert "operations must not be empty" in serialized
+    assert "CREATE PROCEDURE" not in serialized
+    assert "secret-token" not in serialized
+    assert "raw provider response" not in serialized
+
+
+def test_operation_model_repair_failure_keeps_p42_review_required_stop() -> None:
+    operation_model = p41_operation_model_fixture()
+
+    class OperationRepairFailingGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__()
+            self.operation_outputs: list[object] = [
+                operation_model,
+                ModelGatewayError(
+                    "invalid operation model",
+                    code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                    provider_error={
+                        "stage": "sp_operation_model",
+                        "schemaName": "sp_operation_model",
+                        "findings": ["operations must not be empty."],
+                    },
+                ),
+                ModelGatewayError(
+                    "repair invalid",
+                    code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                    provider_error={
+                        "stage": "operation_model_repair",
+                        "schemaName": "sp_operation_model",
+                        "findings": ["dtoBlueprints must not be empty."],
+                    },
+                ),
+            ]
+
+        def plan_sp_operation_model(self, *, prompt, profile) -> ModelInvocationRecord:
+            output = self.operation_outputs.pop(0)
+            if isinstance(output, Exception):
+                raise output
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-operation-repair-failure",
+                structured_output=deepcopy(output),
+            )
+
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=OperationRepairFailingGateway(),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    runs = repository.list_agent_runs(job.job_id) or []
+    branch_run = next(run for run in runs if run.agent_type == BRANCH_PLANNER_AGENT_TYPE)
+    repair_run = next(run for run in runs if run.agent_type == REPAIR_AGENT_TYPE)
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    ai_draft_run = next(run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE)
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    assert branch_run.status == AgentRunStatus.SUCCEEDED.value
+    assert repair_run.status == AgentRunStatus.FAILED.value
+    assert P41_OPERATION_MODEL_REVIEW_REQUIRED in operation_run.structured_output["reviewMarkers"]
+    assert ai_draft_run.status == AgentRunStatus.FAILED.value
+    assert not any(artifact.type == ArtifactType.DTO_DRAFT for artifact in artifacts)
+    assert not any(artifact.type == ArtifactType.SERVICE_DRAFT for artifact in artifacts)
+    serialized = json.dumps(
+        {
+            "repair": repair_run.structured_output,
+            "operation": operation_run.structured_output,
+            "draft": ai_draft_run.structured_output,
+        },
+        ensure_ascii=False,
+    )
+    assert "dtoBlueprints must not be empty" in serialized
+    assert "CREATE PROCEDURE" not in serialized
 
 
 @pytest.mark.parametrize(

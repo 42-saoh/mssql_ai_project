@@ -53,6 +53,13 @@ def test_p48_contract_declares_unified_structured_runtime_matrix() -> None:
     assert stages["metadata_analysis"]["schema_name"] == "metadata_analysis"
     assert stages["platform_tool_planning"]["schema_name"] == "platform_tool_plan"
     assert stages["sp_operation_model"]["schema_name"] == "sp_operation_model"
+    assert stages["sp_operation_model"]["task_split"]["complex_sp_modes"] == [
+        "branch_plan",
+        "final_model",
+        "repair",
+    ]
+    assert stages["sp_operation_model"]["task_split"]["repair_retry_max"] == 1
+    assert stages["sp_operation_model"]["task_split"]["raw_failed_payload_allowed"] is False
     assert stages["ai_java_mybatis_draft_pack"]["runtime"] == "p44_openai_agents_langgraph"
 
 

@@ -173,6 +173,13 @@ failure_policy:
 future_workflow_expectation:
   default_for_java_mybatis_draft: ai_draft_pack
   p41_renderer_status: regression_and_backward_compatibility_path
+  operation_model_prerequisite:
+    branch_level_required_for_complex_sp: true
+    hardened_by:
+      - LLM_SP_OPERATION_BRANCH_PLANNER sidecar
+      - LLM_SP_OPERATION_MODEL_REPAIR sidecar
+      - validator-guided single repair retry
+    fallback_skeleton_persistence_allowed: false
   artifact_storage:
     dto_draft: one_artifact_row_per_dto_file
     service_draft: one_artifact_row

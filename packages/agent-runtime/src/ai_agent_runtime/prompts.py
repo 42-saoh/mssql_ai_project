@@ -480,6 +480,8 @@ def render_sp_operation_model_prompt(
     target_ref: str,
     statement_evidence: list[dict[str, Any]],
     allowed_evidence_refs: list[str] | tuple[str, ...] | None = None,
+    task_mode: str = "final_model",
+    branch_plan_context: Mapping[str, Any] | None = None,
     stage: str = "operation_model_planning",
     repair_context: dict[str, Any] | None = None,
 ) -> RenderedPrompt:
@@ -489,7 +491,10 @@ def render_sp_operation_model_prompt(
     input_payload = {
         "targetRef": target_ref,
         "stage": stage,
+        "taskMode": task_mode,
+        "taskModeInstructions": _operation_task_mode_instruction(task_mode),
         "statementEvidence": statement_evidence,
+        "branchPlanContext": dict(branch_plan_context or {}),
         "task": (
             "Create a SpOperationModel.v0.1 object with branch-level operations, "
             "statementRefs, dtoBlueprintRefs, and multi-DTO blueprints. Keep QUERY and "
@@ -626,6 +631,7 @@ def render_sp_operation_model_prompt(
         metadata={
             "targetRef": target_ref,
             "stage": stage,
+            "taskMode": task_mode,
             "allowedEvidenceRefs": allowed_refs,
             "statementEvidenceCount": len(statement_evidence),
         },
@@ -1316,6 +1322,42 @@ def _operation_branch_contract(statement_evidence: list[dict[str, Any]]) -> dict
             "Operation grouping may be higher-level, but coverage must be total and "
             "branch-like phases should not be collapsed into one method/DTO responsibility."
         ),
+    }
+
+
+def _operation_task_mode_instruction(task_mode: str) -> dict[str, Any]:
+    if task_mode == "branch_plan":
+        return {
+            "goal": (
+                "First stabilize branch/use-case grouping before final DTO assembly."
+            ),
+            "requirements": [
+                "Cover every deterministic statementEvidence[].statementId.",
+                "Split CRUD, GUBUN, SValue, status, approval, batch, EXEC bridge, and DML branches.",
+                "Create branch-level operationIds and DTO responsibility candidates.",
+                "Return schema-valid SpOperationModel.v0.1; do not return prose or helper objects.",
+            ],
+        }
+    if task_mode == "repair":
+        return {
+            "goal": (
+                "Repair a previous operation-model attempt using only validator findings."
+            ),
+            "requirements": [
+                "Do not depend on failed provider payload text.",
+                "Use repairContext.validationFindings as constraints to satisfy.",
+                "Preserve total statement coverage and allowed evidenceRefs discipline.",
+                "Return a complete schema-valid SpOperationModel.v0.1 object.",
+            ],
+        }
+    return {
+        "goal": "Assemble the final branch-level operation model for Java/MyBatis drafting.",
+        "requirements": [
+            "Use branchPlanContext when present as sanitized planning guidance.",
+            "Connect every operation to statementRefs and dtoBlueprintRefs.",
+            "Create separate QUERY, RESULT, COMMAND, BATCH_ITEM, and CALL_REQUEST DTOs when evidence supports them.",
+            "Keep weak inferences as REVIEW_REQUIRED markers instead of collapsing responsibilities.",
+        ],
     }
 
 

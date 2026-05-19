@@ -45,6 +45,22 @@ operation_model_contract:
   schema_ref: SpOperationModel.v0.1
   contract_target: SpOperationModel
   source_policy: sanitized_facts_only
+  runtime_hardening:
+    complex_sp_task_split:
+      enabled: true
+      sidecar_agent_types:
+        - LLM_SP_OPERATION_BRANCH_PLANNER
+        - LLM_SP_OPERATION_MODEL_REPAIR
+      final_agent_type: LLM_SP_OPERATION_PLANNER
+      modes:
+        - branch_plan
+        - final_model
+        - repair
+    validator_repair:
+      max_retries: 1
+      input_policy: sanitized_statement_evidence_branch_plan_and_validation_findings_only
+      raw_failed_payload_allowed: false
+      fallback_on_failure: P41_OPERATION_MODEL_REVIEW_REQUIRED
   required_top_level_fields:
     - schemaVersion
     - targetRef

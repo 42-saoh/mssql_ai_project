@@ -712,18 +712,23 @@ def _coerce_openai_agents_structured_output(
             provider=remote_provider_from_env(),
         )
     except Exception as exc:  # noqa: BLE001 - raw adapter output must not be stored
+        findings = _safe_exception_findings(exc)
+        provider_error: dict[str, Any] = {
+            "type": "openai_agents_structured_adapter",
+            "code": request.invalid_code
+            or P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID,
+            "stage": _safe_stage(request.stage),
+            "schemaName": _safe_schema_name(request.schema_name),
+            "outputHash": _safe_output_hash(output),
+            "errorClass": exc.__class__.__name__,
+        }
+        if findings:
+            provider_error["findingCount"] = len(getattr(exc, "findings", findings))
+            provider_error["findings"] = findings
         raise ModelGatewayError(
             "OpenAI Agents SDK structured output failed validation.",
             code=request.invalid_code or P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID,
-            provider_error={
-                "type": "openai_agents_structured_adapter",
-                "code": request.invalid_code
-                or P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID,
-                "stage": _safe_stage(request.stage),
-                "schemaName": _safe_schema_name(request.schema_name),
-                "outputHash": _safe_output_hash(output),
-                "errorClass": exc.__class__.__name__,
-            },
+            provider_error=provider_error,
         ) from exc
     if hasattr(model, "to_storage_dict") and callable(model.to_storage_dict):
         return model.to_storage_dict(), tuple(normalizer_components)
@@ -765,6 +770,32 @@ def _structured_output_text(output: Any) -> str:
             separators=(",", ":"),
         )
     raise TypeError(output.__class__.__name__)
+
+
+def _safe_exception_findings(exc: Exception) -> list[str]:
+    findings = getattr(exc, "findings", None)
+    if not isinstance(findings, Sequence) or isinstance(findings, str | bytes):
+        return []
+    safe: list[str] = []
+    for finding in findings[:12]:
+        text = " ".join(str(finding).split())
+        text = _redact_secret_text(text)
+        if text:
+            safe.append(text[:240])
+    return safe
+
+
+def _redact_secret_text(text: str) -> str:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if api_key:
+        text = text.replace(api_key, "[REDACTED]")
+    text = re.sub(r"(?i)create\s+procedure\b.*", "[REDACTED_SQL]", text)
+    text = re.sub(r"(?i)alter\s+procedure\b.*", "[REDACTED_SQL]", text)
+    text = re.sub(r"(?i)raw\s+provider\s+response\b.*", "[REDACTED_PROVIDER_RESPONSE]", text)
+    text = re.sub(r"(?i)bearer\s+[a-z0-9._~+/=-]+", "Bearer [REDACTED]", text)
+    text = re.sub(r"\bsk-[A-Za-z0-9_-]{8,}\b", "[REDACTED]", text)
+    text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[REDACTED]", text)
+    return text
 
 
 def _safe_output_hash(output: Any) -> str:

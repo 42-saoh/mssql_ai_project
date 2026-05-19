@@ -67,6 +67,10 @@ P41 validates the operation-model renewal path for complex SP code generation:
 - The SP workflow must create or reuse an `LLM_SP_OPERATION_PLANNER` AgentRun for
   `JAVA_MYBATIS_DRAFT`, inject the validated `operationModel` into
   `GenerationContext.request`, and persist one `DTO_DRAFT` artifact row per DTO file.
+- Complex-SP planning may also create `LLM_SP_OPERATION_BRANCH_PLANNER` and
+  `LLM_SP_OPERATION_MODEL_REPAIR` sidecar AgentRuns. Tests must prove the modes
+  `branch_plan`, `final_model`, and `repair` stay sanitized and that validator repair
+  succeeds at most once before falling back to review-required behavior.
 - Workflow fallback cases such as missing procedure definition, disabled LLM planning,
   or planner failure must emit `P41_OPERATION_MODEL_REVIEW_REQUIRED` and an explicit
   `OperationModelReviewRequired` DTO instead of silently producing the legacy single DTO.
@@ -323,6 +327,9 @@ Acceptance checks:
 - Unit tests prove the structured adapter validates semantic analysis, metadata
   tool planning, metadata analysis, platform tool planning, and SP operation
   model outputs through existing strict parsers and sanitized trace summaries.
+- SP operation-model tests prove complex SPs use branch split plus validator-guided
+  repair through the same structured runtime and do not fall back to `responses_httpx`
+  after `OPENAI_SP_OPERATION_MODEL_INVALID`.
 - Regression tests prove metadata analyze, durable analysis runs, metadata
   design chat, SP workflow semantic analysis, SP operation planning, platform
   planners, MCP tool planners, and P44 AI Draft Pack replay still pass.

@@ -20,7 +20,15 @@ SP_OPERATION_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:sp_operation_model@0.1.0"
 
 class OperationModelValidationError(ValueError):
     def __init__(self, findings: Sequence[str]) -> None:
-        self.findings = tuple(str(finding) for finding in findings if str(finding).strip())
+        unique_findings: list[str] = []
+        seen: set[str] = set()
+        for finding in findings:
+            text = str(finding).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            unique_findings.append(text)
+        self.findings = tuple(unique_findings)
         message = "; ".join(self.findings) or "SP operation model validation failed."
         super().__init__(message)
 
@@ -54,7 +62,7 @@ def validate_sp_operation_model_output(
     try:
         model = SpOperationModelPlannerOutput.model_validate(payload)
     except ValidationError as exc:
-        findings.append(f"schema validation failed: {exc}")
+        findings.append(f"schema validation failed: {_safe_validation_error_summary(exc)}")
         raise OperationModelValidationError(findings) from exc
 
     if model.schema_version != SP_OPERATION_MODEL_SCHEMA_VERSION:
@@ -146,6 +154,21 @@ def all_sp_operation_model_evidence_refs(model: SpOperationModel) -> tuple[str, 
         for field in dto.fields:
             refs.extend(field.evidence_refs)
     return tuple(ref for ref in refs if str(ref).strip())
+
+
+def _safe_validation_error_summary(exc: ValidationError) -> str:
+    items: list[str] = []
+    for error in exc.errors(include_input=False)[:12]:
+        loc = ".".join(str(part) for part in error.get("loc", ()) if str(part))
+        error_type = str(error.get("type") or "validation_error")
+        message = " ".join(str(error.get("msg") or "").split())
+        if loc:
+            items.append(f"{loc}:{error_type}:{message}"[:240])
+        else:
+            items.append(f"{error_type}:{message}"[:240])
+    if len(exc.errors(include_input=False)) > len(items):
+        items.append(f"... {len(exc.errors(include_input=False)) - len(items)} more")
+    return "; ".join(items) or "schema validation failed"
 
 
 def sp_operation_model_output_schema(
@@ -359,6 +382,15 @@ def _strict_shape_findings(payload: Mapping[str, Any]) -> list[str]:
         "assumptions",
     }
     findings.extend(_unexpected_keys("$.operationModel", payload, root_keys))
+    for key, label in (
+        ("operations", "operations"),
+        ("statementEvidence", "statementEvidence"),
+        ("dtoBlueprints", "dtoBlueprints"),
+        ("evidenceRefs", "root evidenceRefs"),
+    ):
+        value = payload.get(key)
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) and len(value) == 0:
+            findings.append(f"{label} must not be empty.")
     _check_sequence_items(
         findings,
         payload.get("operations"),

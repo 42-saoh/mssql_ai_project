@@ -37,6 +37,7 @@ from ai_agent_runtime.models import (
     stable_json_hash,
 )
 from ai_agent_runtime.operation_model import (
+    OperationModelValidationError,
     parse_sp_operation_model_json,
     sp_operation_model_output_schema,
     validate_sp_operation_model_output,
@@ -1490,6 +1491,12 @@ def _parser_error_summary(exc: Exception, *, invalid_code: str) -> dict[str, str
         summary["message"] = str(exc)[:300]
     elif isinstance(exc, AiDraftPackValidationError):
         summary["message"] = "AiJavaMyBatisDraftPack validation failed."
+        summary["findingCount"] = str(len(exc.findings))
+        findings = _sanitized_parser_findings(exc.findings)
+        if findings:
+            summary["findings"] = " | ".join(findings)
+    elif isinstance(exc, OperationModelValidationError):
+        summary["message"] = "SpOperationModel validation failed."
         summary["findingCount"] = str(len(exc.findings))
         findings = _sanitized_parser_findings(exc.findings)
         if findings:

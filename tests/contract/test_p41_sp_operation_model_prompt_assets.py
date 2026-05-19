@@ -54,6 +54,13 @@ def test_p41_contract_declares_operation_model_and_multi_dto_boundaries() -> Non
         "multi_file_bundle_allowed"
     )
     assert contract["operation_model_contract"]["schema_ref"] == "SpOperationModel.v0.1"
+    hardening = contract["operation_model_contract"]["runtime_hardening"]
+    assert hardening["complex_sp_task_split"]["sidecar_agent_types"] == [
+        "LLM_SP_OPERATION_BRANCH_PLANNER",
+        "LLM_SP_OPERATION_MODEL_REPAIR",
+    ]
+    assert hardening["validator_repair"]["max_retries"] == 1
+    assert hardening["validator_repair"]["raw_failed_payload_allowed"] is False
     assert contract["generator_gap_expectation"]["current_behavior"] == "single_dto_file"
     assert contract["generator_gap_expectation"]["required_next_slice"] == "P41B"
 

@@ -31,6 +31,11 @@
   and sanitized extractor summaries. If planning cannot produce a branch-level model, generated
   Java/MyBatis output must carry `P41_OPERATION_MODEL_REVIEW_REQUIRED` rather than presenting the
   legacy single DTO as adequate for a complex SP.
+- Complex-SP operation-model hardening may store `LLM_SP_OPERATION_BRANCH_PLANNER` and
+  `LLM_SP_OPERATION_MODEL_REPAIR` sidecar AgentRuns. Those records may contain only sanitized
+  branch summaries, schema-valid models, validator finding counts/codes, hashes, and
+  `REVIEW_REQUIRED` markers; raw failed provider payloads, raw prompts, raw SP text, row data,
+  and secrets remain forbidden.
 - User-provided guide files may be used as quality references, but raw SP definitions, raw guide body
   copies, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets must not
   be persisted in repo fixtures or platform storage.
@@ -170,8 +175,9 @@
 - AI Draft Pack routing remains on the existing P44 `OpenAIAgentsFrameworkAdapter` and
   LangGraph orchestrator in `WorkflowService`.
 - P48 must preserve deterministic safeguards: evidence-ref repair, planner fallback, tool
-  allowlists, SP source text gates, metadata/design sanitization, knowledge persistence
-  sanitization, and `REVIEW_REQUIRED` behavior.
+  allowlists, complex-SP operation-model task split, validator-guided repair without
+  `responses_httpx` fallback, SP source text gates, metadata/design sanitization, knowledge
+  persistence sanitization, and `REVIEW_REQUIRED` behavior.
 - Metadata design planner prompts must include the bounded allowed tool names in prompt metadata
   as `toolNames`; model-generated tools outside the allowlist remain invalid.
 - Framework traces may store only sanitized stage names, adapter ids, framework ids, counts,
