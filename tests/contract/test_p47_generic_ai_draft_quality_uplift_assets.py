@@ -175,6 +175,9 @@ def test_p47_live_probe_treats_manage_bond_names_as_benchmark_metrics() -> None:
     assert "quality_signal_only_not_runtime_answer_key" in source
     assert "missingDtoSignals" in source
     assert "benchmark_missing" in source
+    assert "REQUIRED_DTO_CLASSES =" not in source
+    assert "required_dto_classes" in source
+    assert "blocker_patterns" in source
     assert "if benchmark_missing" not in source
 
 

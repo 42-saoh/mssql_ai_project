@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -268,6 +269,11 @@ def test_p15_fixture_workflow_latency_reproducibility_and_draft_completeness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("P44_OPENAI_AGENTS_LIVE_GATE", "0")
+    monkeypatch.setenv("LLM_LIVE_GATE", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    monkeypatch.setenv("AI_GENERATION_RUNTIME", "responses_httpx")
+    monkeypatch.setenv("AI_STRUCTURED_LLM_RUNTIME", "responses_httpx")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     fixture = _yaml_fixture("eval_observability_security_ops_p15_v1.yaml")
     expectations = _json_fixture("artifact_payloads.json")
@@ -285,7 +291,10 @@ def test_p15_fixture_workflow_latency_reproducibility_and_draft_completeness(
 
     assert first["jobStatus"] == expectations["workflow"]["jobStatus"]
     assert first["currentStep"] == expectations["workflow"]["currentStep"]
-    assert first["artifactTypes"] == expectations["workflow"]["artifactTypes"]
+    _assert_artifact_counts(
+        first["artifactTypes"],
+        expectations["workflow"]["artifactCounts"],
+    )
     assert "PUBLISHED" not in first["artifactStatuses"]
 
     complete_artifacts = [
@@ -357,6 +366,22 @@ def _workflow_summary() -> dict[str, Any]:
             for artifact in artifacts
         ],
     }
+
+
+def _assert_artifact_counts(
+    artifact_types: list[str],
+    expectations: dict[str, dict[str, int]],
+) -> None:
+    counts = Counter(artifact_types)
+    exact = expectations.get("exact", {})
+    minimum = expectations.get("minimum", {})
+    expected_types = set(exact) | set(minimum)
+
+    assert set(counts) == expected_types
+    for artifact_type, expected_count in exact.items():
+        assert counts[artifact_type] == expected_count
+    for artifact_type, minimum_count in minimum.items():
+        assert counts[artifact_type] >= minimum_count
 
 
 def _require_live_manifest(fixture: dict[str, Any], manifest: dict[str, Any]) -> None:

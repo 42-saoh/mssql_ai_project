@@ -70,25 +70,10 @@ SANITIZED_FIXTURE_REQUIRED_ENV = (
     "LLM_ENABLE_REMOTE",
     "OPENAI_API_KEY",
 )
-REQUIRED_DTO_CLASSES = (
-    "ManageBondSearchCriteria",
-    "ManageBondSearchRow",
-    "ApproveAdvanceBondCommand",
-    "ApproveDefectBondCommand",
-    "FinanceTransferCommand",
-    "CreateBondCommand",
-    "CreateRetentionBondBatchItem",
-    "UpdateBondCommand",
-    "DeleteBondCommand",
-    "VendorBondUpdateCommand",
-    "OnlineBondUpdateCommand",
+GENERIC_FALLBACK_BLOCKER_PATTERNS = (
+    "OperationModelReviewRequired",
+    "P41_OPERATION_MODEL_REVIEW_REQUIRED",
 )
-REQUIRED_REVIEW_MARKERS = {
-    "CROSS_DB_WRITE_REVIEW_REQUIRED",
-    "CALLED_PROCEDURE_IO_REVIEW_REQUIRED",
-    "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
-    "TRANSACTION_BOUNDARY_REVIEW_REQUIRED",
-}
 REDACTION = {
     "tokens": "not_returned",
     "ppmRows": "not_returned",
@@ -385,6 +370,32 @@ def _load_ai_draft_pack_fixture() -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def _benchmark_quality_gates() -> dict[str, Any]:
+    return _fixture_quality_gates(_load_ai_draft_pack_fixture())
+
+
+def _benchmark_dto_signals() -> set[str]:
+    return set(_benchmark_quality_gates()["requiredDtoClasses"])
+
+
+def _required_review_markers() -> set[str]:
+    return set(_benchmark_quality_gates()["requiredReviewMarkers"])
+
+
+def _blocker_patterns() -> tuple[str, ...]:
+    gates = _benchmark_quality_gates()
+    patterns = [
+        *GENERIC_FALLBACK_BLOCKER_PATTERNS,
+        *[str(item) for item in gates.get("blockerPatterns", [])],
+    ]
+    return tuple(dict.fromkeys(pattern for pattern in patterns if pattern.strip()))
+
+
+def _contains_blocker_pattern(value: str, patterns: tuple[str, ...]) -> bool:
+    lowered = value.lower()
+    return any(pattern.lower() in lowered for pattern in patterns)
+
+
 def _fixture_quality_gates(fixture: Mapping[str, Any]) -> dict[str, Any]:
     target = fixture["ai_draft_pack_quality_target"]
     gates = fixture["quality_gates"]
@@ -505,12 +516,12 @@ def _submit_live_workflow(
 
 def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
     by_type: dict[str, list[ArtifactRecord]] = {}
+    blocker_patterns = _blocker_patterns()
     for artifact in artifacts:
         by_type.setdefault(artifact.type.value, []).append(artifact)
         if not artifact.content.strip():
             raise _artifact_failure("Artifact content was blank.", artifact)
-        lowered = artifact.content.lower()
-        if "operationmodelreviewrequired" in lowered or "managebonddto" in lowered:
+        if _contains_blocker_pattern(artifact.content, blocker_patterns):
             raise _artifact_failure(
                 "Fallback skeleton or single DTO collapse was detected.",
                 artifact,
@@ -533,6 +544,10 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
             count_failures.append(
                 f"{artifact_type} expected exactly 1, got {actual_counts[artifact_type]}"
             )
+    if actual_counts[ArtifactType.DTO_DRAFT.value] < 3:
+        count_failures.append(
+            f"DTO_DRAFT expected at least 3, got {actual_counts[ArtifactType.DTO_DRAFT.value]}"
+        )
     if count_failures:
         raise ProbeFailure(
             blocker_code=QUALITY_BLOCKER,
@@ -553,7 +568,7 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
     collapsed_dtos = sorted(
         dto
         for dto in dto_classes
-        if dto == "ManageBondDTO" or dto.startswith("OperationModelReviewRequired")
+        if _contains_blocker_pattern(dto, blocker_patterns)
     )
     if collapsed_dtos:
         raise ProbeFailure(
@@ -568,9 +583,10 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
                 )
             ],
         )
-    benchmark_missing = sorted(set(REQUIRED_DTO_CLASSES) - dto_classes)
-    benchmark_matched = sorted(set(REQUIRED_DTO_CLASSES) & dto_classes)
-    additional_dtos = sorted(dto_classes - set(REQUIRED_DTO_CLASSES))
+    benchmark_dto_signals = _benchmark_dto_signals()
+    benchmark_missing = sorted(benchmark_dto_signals - dto_classes)
+    benchmark_matched = sorted(benchmark_dto_signals & dto_classes)
+    additional_dtos = sorted(dto_classes - benchmark_dto_signals)
     service_text = "\n".join(
         artifact.content for artifact in by_type[ArtifactType.SERVICE_DRAFT.value]
     )
@@ -612,7 +628,7 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
         "benchmark": {
             "target": "PPM.dbo.PCO_GU_ManageBond_PRC",
             "role": "quality_signal_only_not_runtime_answer_key",
-            "expectedDtoSignalCount": len(REQUIRED_DTO_CLASSES),
+            "expectedDtoSignalCount": len(benchmark_dto_signals),
             "matchedDtoSignals": benchmark_matched,
             "missingDtoSignals": benchmark_missing,
         },
@@ -627,6 +643,7 @@ def _verify_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, Any]:
 def _verify_pack_output(pack: Mapping[str, Any]) -> dict[str, Any]:
     files = [file for file in pack.get("files", []) if isinstance(file, Mapping)]
     by_type: dict[str, list[Mapping[str, Any]]] = {}
+    blocker_patterns = _blocker_patterns()
     for file in files:
         artifact_type = str(file.get("artifactType") or "")
         by_type.setdefault(artifact_type, []).append(file)
@@ -643,8 +660,12 @@ def _verify_pack_output(pack: Mapping[str, Any]) -> dict[str, Any]:
                     )
                 ],
             )
-        lowered = str(file.get("content") or "").lower()
-        if "operationmodelreviewrequired" in lowered or "managebonddto" in lowered:
+        content = str(file.get("content") or "")
+        class_name = str(file.get("className") or "")
+        if _contains_blocker_pattern(content, blocker_patterns) or _contains_blocker_pattern(
+            class_name,
+            blocker_patterns,
+        ):
             raise ProbeFailure(
                 blocker_code=QUALITY_BLOCKER,
                 summary="Sanitized live replay produced fallback or collapsed DTO content.",
@@ -696,15 +717,16 @@ def _verify_pack_output(pack: Mapping[str, Any]) -> dict[str, Any]:
         for file in by_type.get(ArtifactType.DTO_DRAFT.value, [])
         if str(file.get("className") or "").strip()
     }
-    benchmark_missing = sorted(set(REQUIRED_DTO_CLASSES) - dto_classes)
-    benchmark_matched = sorted(set(REQUIRED_DTO_CLASSES) & dto_classes)
+    benchmark_dto_signals = _benchmark_dto_signals()
+    benchmark_missing = sorted(benchmark_dto_signals - dto_classes)
+    benchmark_matched = sorted(benchmark_dto_signals & dto_classes)
     return {
         "counts": actual_counts,
         "dtoClasses": sorted(dto_classes),
         "benchmark": {
             "target": "PPM.dbo.PCO_GU_ManageBond_PRC",
             "role": "quality_signal_only_not_runtime_answer_key",
-            "expectedDtoSignalCount": len(REQUIRED_DTO_CLASSES),
+            "expectedDtoSignalCount": len(benchmark_dto_signals),
             "matchedDtoSignals": benchmark_matched,
             "missingDtoSignals": benchmark_missing,
         },
@@ -798,7 +820,7 @@ def _verify_persisted_pack_quality(
                 )
             ],
         )
-    missing_markers = REQUIRED_REVIEW_MARKERS - set(report.manual_review_points)
+    missing_markers = _required_review_markers() - set(report.manual_review_points)
     if missing_markers:
         raise ProbeFailure(
             blocker_code=QUALITY_BLOCKER,
@@ -839,7 +861,7 @@ def _verify_pack_quality(pack: Mapping[str, Any]) -> dict[str, Any]:
                 )
             ],
         )
-    missing_markers = REQUIRED_REVIEW_MARKERS - set(report.manual_review_points)
+    missing_markers = _required_review_markers() - set(report.manual_review_points)
     if missing_markers:
         raise ProbeFailure(
             blocker_code=QUALITY_BLOCKER,

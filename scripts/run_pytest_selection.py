@@ -113,16 +113,25 @@ def expand_targets(raw_targets: list[str]) -> list[str]:
     return result
 
 
+def split_targets_and_pytest_args(raw_args: list[str]) -> tuple[list[str], list[str]]:
+    """Split suite/path targets from pytest options after a literal ``--``."""
+    if "--" not in raw_args:
+        return raw_args, []
+    separator_index = raw_args.index("--")
+    return raw_args[:separator_index], raw_args[separator_index + 1 :]
+
+
 def main(argv: list[str]) -> int:
+    raw_targets, pytest_args = split_targets_and_pytest_args(argv[1:])
     try:
-        selected = expand_targets(argv[1:])
+        selected = expand_targets(raw_targets)
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     if not selected:
         print("No matching pytest files found.", file=sys.stderr)
         return 2
-    cmd = [sys.executable, "-m", "pytest", "-q", *selected]
+    cmd = [sys.executable, "-m", "pytest", "-q", *pytest_args, *selected]
     print("Running:", " ".join(cmd))
     return subprocess.call(cmd)
 

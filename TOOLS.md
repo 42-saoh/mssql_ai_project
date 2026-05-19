@@ -1,5 +1,8 @@
 # TOOLS.md
 
+Note: `scripts/run_pytest_selection.py` accepts pytest passthrough options after `--`,
+for example `PYTEST_ARGS="@live-confidence -- -vv -s -x"`.
+
 ## P36 Verification Notes
 
 P36 uses the normal dockerized test interface when available. The key targeted suites are:

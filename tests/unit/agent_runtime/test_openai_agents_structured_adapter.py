@@ -184,7 +184,8 @@ def test_openai_agents_structured_adapter_schema_failure_is_sanitized() -> None:
     assert "metadata_analysis" in diagnostics
 
 
-def test_framework_model_gateway_keeps_sp_text_gate() -> None:
+def test_framework_model_gateway_keeps_sp_text_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_ALLOW_SP_TEXT", "0")
     gateway = FrameworkModelGateway(
         fallback_gateway=FakeModelGateway(),
         structured_adapter=OpenAIAgentsStructuredAdapter(

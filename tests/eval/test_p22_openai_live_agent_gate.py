@@ -4,6 +4,10 @@ import json
 import os
 
 import pytest
+from ai_agent_runtime import (
+    AI_GENERATION_RUNTIME_OPENAI_AGENTS,
+    framework_runtime_config_from_env,
+)
 from api_app.memory_repository import MemoryWorkflowRepository
 from api_app.schemas import SPAnalysisRequest
 from api_app.workflow import WorkflowService
@@ -69,6 +73,11 @@ def test_p22_openai_live_agent_gate(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _expected_remote_provider() -> str:
+    if (
+        framework_runtime_config_from_env().structured_llm_runtime
+        == AI_GENERATION_RUNTIME_OPENAI_AGENTS
+    ):
+        return "openai-agents-sdk"
     provider = os.getenv("LLM_REMOTE_PROVIDER", "openai").strip().lower()
     if provider in {"pgpt", "p-gpt", "private-gpt"}:
         return "pgpt"

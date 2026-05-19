@@ -16,7 +16,16 @@ from ai_agent_analysis.source_map import ProcedureSourceMap, build_procedure_sou
 STATEMENT_EVIDENCE_EXTRACTOR_VERSION = "sp_statement_evidence_extractor@0.1.0"
 
 _PARAM_RE = re.compile(r"@\w+")
-_CRUD_BRANCH_RE = re.compile(r"(?i)@CRUDFlag\s*=\s*'(?P<flag>[^']+)'")
+_BRANCH_EQ_RE = re.compile(
+    r"(?i)(?P<param>@[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
+    r"(?P<value>N?'(?:''|[^'])*'|-?\d+(?:\.\d+)?)"
+)
+_BRANCH_IN_RE = re.compile(
+    r"(?i)(?P<param>@[A-Za-z_][A-Za-z0-9_]*)\s+IN\s*\((?P<values>[^)]{1,240})\)"
+)
+_BRANCH_LITERAL_RE = re.compile(r"(?i)N?'(?P<text>(?:''|[^'])*)'|(?P<number>-?\d+(?:\.\d+)?)")
+_SANITIZED_BRANCH_VALUE_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
+_MAX_BRANCH_VALUES = 4
 _SQL_IDENTIFIER_RE = re.compile(r"(?:\[[^\]]+\]|\w+)(?:\s*\.\s*(?:\[[^\]]+\]|\w+))*")
 _AS_ALIAS_RE = re.compile(r"(?i)\bAS\s+(\[[^\]]+\]|\w+)\s*$")
 _UPDATE_SET_RE = re.compile(r"(?is)\bSET\b(?P<body>.*?)(?:\bWHERE\b|$)")
@@ -260,11 +269,10 @@ def _branch_hints(*, source_map: ProcedureSourceMap, lines: Sequence[str]) -> li
         if span.kind != "CONTROL_FLOW":
             continue
         text = _line_range_text(lines, span.start_line, span.end_line)
-        match = _CRUD_BRANCH_RE.search(text)
-        if not match:
+        predicates = _branch_predicate_expressions(text)
+        if not predicates:
             continue
-        flag = match.group("flag")
-        hints.append((span.start_line, f"@CRUDFlag = '{flag}'"))
+        hints.append((span.start_line, " AND ".join(predicates)))
     return hints
 
 
@@ -276,11 +284,99 @@ def _nearest_branch_hint(start_line: int, hints: Sequence[tuple[int, str]]) -> s
 def _phase(*, operation: SpStatementOperation, branch_expression: str | None) -> str:
     if not branch_expression:
         return operation.value.lower()
-    flag_match = _CRUD_BRANCH_RE.search(branch_expression)
-    if not flag_match:
+    predicate = _first_branch_predicate(branch_expression)
+    if not predicate:
         return operation.value.lower()
-    flag = re.sub(r"[^a-z0-9]+", "_", flag_match.group("flag").lower()).strip("_")
-    return f"crud_{flag}_{operation.value.lower()}"
+    parameter, values = predicate
+    parameter_label = parameter.removeprefix("@").lower()
+    prefix = "crud" if parameter_label == "crudflag" else _phase_token(parameter_label)
+    value_label = "_".join(_phase_token(value) for value in values if _phase_token(value))
+    if not prefix or not value_label:
+        return operation.value.lower()
+    return f"{prefix}_{value_label}_{operation.value.lower()}"
+
+
+def _branch_predicate_expressions(text: str) -> list[str]:
+    matches: list[tuple[int, str]] = []
+    for match in _BRANCH_EQ_RE.finditer(text):
+        matches.append(
+            (
+                match.start(),
+                f"{match.group('param')} = {_literal_display(match.group('value'))}",
+            )
+        )
+    for match in _BRANCH_IN_RE.finditer(text):
+        values = _literal_values(match.group("values"))
+        if values:
+            rendered_values = ", ".join(_quoted_literal(value) for value in values)
+            matches.append((match.start(), f"{match.group('param')} IN ({rendered_values})"))
+    matches.sort(key=lambda item: item[0])
+    expressions: list[str] = []
+    seen: set[str] = set()
+    for _position, expression in matches:
+        if expression not in seen:
+            expressions.append(expression)
+            seen.add(expression)
+    return expressions
+
+
+def _first_branch_predicate(branch_expression: str) -> tuple[str, list[str]] | None:
+    eq_match = _BRANCH_EQ_RE.search(branch_expression)
+    in_match = _BRANCH_IN_RE.search(branch_expression)
+    candidates = [
+        (match.start(), match)
+        for match in (eq_match, in_match)
+        if match is not None
+    ]
+    if not candidates:
+        return None
+    _position, match = min(candidates, key=lambda item: item[0])
+    if "value" in match.groupdict() and match.group("value") is not None:
+        return match.group("param"), [_literal_value(match.group("value"))]
+    values = _literal_values(match.group("values"))
+    return (match.group("param"), values) if values else None
+
+
+def _literal_values(raw_values: str) -> list[str]:
+    values: list[str] = []
+    for match in _BRANCH_LITERAL_RE.finditer(raw_values):
+        value = match.group("text") if match.group("text") is not None else match.group("number")
+        sanitized = _sanitize_branch_value(value or "")
+        if sanitized:
+            values.append(sanitized)
+        if len(values) >= _MAX_BRANCH_VALUES:
+            break
+    return values
+
+
+def _literal_value(raw_value: str) -> str:
+    match = _BRANCH_LITERAL_RE.fullmatch(raw_value.strip())
+    if not match:
+        return _sanitize_branch_value(raw_value)
+    value = match.group("text") if match.group("text") is not None else match.group("number")
+    return _sanitize_branch_value(value or "")
+
+
+def _literal_display(raw_value: str) -> str:
+    raw_value = raw_value.strip()
+    value = _literal_value(raw_value)
+    if re.fullmatch(r"-?\d+(?:\.\d+)?", raw_value):
+        return value
+    return _quoted_literal(value)
+
+
+def _quoted_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _sanitize_branch_value(value: str) -> str:
+    value = value.replace("''", "'").strip()
+    sanitized = _SANITIZED_BRANCH_VALUE_RE.sub("_", value).strip("_")
+    return sanitized[:40] or "VALUE_REVIEW_REQUIRED"
+
+
+def _phase_token(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
 
 def _is_cross_database(*, target: str, root_target_ref: str) -> bool:

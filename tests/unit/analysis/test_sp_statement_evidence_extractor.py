@@ -168,3 +168,41 @@ END
 
     assert "FROM" not in insert_statement.writes
     assert "SELECT" not in insert_statement.writes
+
+
+def test_extractor_uses_generic_parameter_branch_predicates() -> None:
+    sql = """
+CREATE PROCEDURE PPM.dbo.usp_GenericWorkflow
+    @Mode varchar(20),
+    @Status varchar(20),
+    @ContractNum varchar(10)
+AS
+BEGIN
+    IF @Mode = 'ARCHIVE'
+    BEGIN
+        UPDATE PPM.dbo.TargetBond
+        SET ArchivedFlag = 'Y'
+        WHERE CTRT_NO = @ContractNum;
+    END
+
+    IF @Status IN ('OPEN', 'PENDING')
+    BEGIN
+        SELECT CTRT_NO, GUAR_SEQ
+        FROM PPM.dbo.TargetBond
+        WHERE CTRT_NO = @ContractNum;
+    END
+END
+""".strip()
+
+    result = extract_statement_evidence(
+        sql,
+        target_ref="PPM.dbo.usp_GenericWorkflow",
+        source_name="sanitized_generic_workflow.sql",
+    )
+
+    phases = {statement.phase for statement in result.statement_evidence}
+
+    assert "mode_archive_update" in phases
+    assert "status_open_pending_select" in phases
+    assert "@Mode = 'ARCHIVE'" in result.branch_hints.values()
+    assert "@Status IN ('OPEN', 'PENDING')" in result.branch_hints.values()

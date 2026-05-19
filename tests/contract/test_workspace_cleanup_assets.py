@@ -48,6 +48,20 @@ def test_pytest_suite_aliases_expand_to_existing_test_files() -> None:
     assert all((ROOT / target.partition("::")[0]).exists() for target in web_targets)
 
 
+def test_pytest_selection_runner_supports_passthrough_options() -> None:
+    runner = _load_pytest_selection_runner()
+
+    targets, pytest_args = runner.split_targets_and_pytest_args(
+        ["tests/eval/test_p45_openai_agents_live_gate.py", "--", "-vv", "-s", "-x"]
+    )
+
+    assert targets == ["tests/eval/test_p45_openai_agents_live_gate.py"]
+    assert pytest_args == ["-vv", "-s", "-x"]
+    assert runner.expand_targets(targets) == [
+        "tests/eval/test_p45_openai_agents_live_gate.py"
+    ]
+
+
 def test_makefile_exposes_safe_consolidated_test_gates() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
@@ -69,6 +83,7 @@ def test_makefile_exposes_safe_consolidated_test_gates() -> None:
         "P27_HARD_LIVE_GATE=0",
         "P35_KNOWLEDGE_LIVE_GATE=0",
         "P42_LIVE_REPLAY_GATE=0",
+        "P44_OPENAI_AGENTS_LIVE_GATE=0",
         "AUTH_RBAC_LIVE_GATE=0",
         "LLM_ENABLE_REMOTE=0",
         "MSSQL_ENABLE_LIVE_METADATA=0",

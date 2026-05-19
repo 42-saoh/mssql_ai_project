@@ -5,14 +5,18 @@
     "jobStatus": "VALIDATION_COMPLETE",
     "currentStep": "VALIDATE",
     "latestValidationStatus": "REVIEW_REQUIRED",
-    "artifactTypes": [
-      "SP_ANALYSIS_DOC",
-      "DEPENDENCY_REPORT",
-      "DTO_DRAFT",
-      "SERVICE_DRAFT",
-      "MAPPER_INTERFACE",
-      "MAPPER_XML"
-    ]
+    "artifactCounts": {
+      "exact": {
+        "SP_ANALYSIS_DOC": 1,
+        "DEPENDENCY_REPORT": 1,
+        "SERVICE_DRAFT": 1,
+        "MAPPER_INTERFACE": 1,
+        "MAPPER_XML": 1
+      },
+      "minimum": {
+        "DTO_DRAFT": 1
+      }
+    }
   },
   "artifactExpectations": [
     {

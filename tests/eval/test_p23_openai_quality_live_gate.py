@@ -8,11 +8,13 @@ from typing import Any
 import pytest
 import yaml
 from ai_agent_runtime import (
+    AI_GENERATION_RUNTIME_OPENAI_AGENTS,
     ModelGatewayError,
     SemanticAnalysisTask,
     build_model_gateway_from_env,
     build_semantic_analysis_runs,
     evaluate_p23_semantic_quality,
+    framework_runtime_config_from_env,
 )
 from ai_agent_runtime.gateway import model_profile_from_env
 
@@ -90,6 +92,11 @@ def _fixture() -> dict[str, Any]:
 
 
 def _expected_remote_provider() -> str:
+    if (
+        framework_runtime_config_from_env().structured_llm_runtime
+        == AI_GENERATION_RUNTIME_OPENAI_AGENTS
+    ):
+        return "openai-agents-sdk"
     provider = os.getenv("LLM_REMOTE_PROVIDER", "openai").strip().lower()
     if provider in {"pgpt", "p-gpt", "private-gpt"}:
         return "pgpt"

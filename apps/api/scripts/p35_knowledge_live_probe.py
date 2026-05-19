@@ -18,6 +18,10 @@ for import_root in (API_ROOT, MCP_ROOT):
 
 from api_app.dependencies import reset_application_state  # noqa: E402
 from api_app.main import app  # noqa: E402
+from ai_agent_runtime import (  # noqa: E402
+    AI_GENERATION_RUNTIME_OPENAI_AGENTS,
+    framework_runtime_config_from_env,
+)
 from fastapi.testclient import TestClient  # noqa: E402
 from mssql_mcp_app.profiles import load_db_profiles  # noqa: E402
 from mssql_mcp_app.settings import load_live_metadata_settings  # noqa: E402
@@ -721,6 +725,11 @@ def _flag_enabled(name: str) -> bool:
 
 
 def _expected_remote_provider() -> str:
+    if (
+        framework_runtime_config_from_env().structured_llm_runtime
+        == AI_GENERATION_RUNTIME_OPENAI_AGENTS
+    ):
+        return "openai-agents-sdk"
     provider = os.getenv("LLM_REMOTE_PROVIDER", "openai").strip().lower()
     if provider in {"pgpt", "p-gpt", "private-gpt"}:
         return "pgpt"
