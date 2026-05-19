@@ -186,6 +186,30 @@ class ContractReferenceDesignRegistry:
                     "nullable": False,
                     "description": "계약변경차수",
                 },
+                {
+                    "name": "CRE_USR_ID",
+                    "dataType": "UNIQUEIDENTIFIER",
+                    "nullable": False,
+                    "description": "등록 사용자 ID",
+                },
+                {
+                    "name": "CRE_DTM",
+                    "dataType": "DATETIME2(3)",
+                    "nullable": False,
+                    "description": "등록 일시",
+                },
+                {
+                    "name": "UPD_USR_ID",
+                    "dataType": "UNIQUEIDENTIFIER",
+                    "nullable": False,
+                    "description": "수정 사용자 ID",
+                },
+                {
+                    "name": "UPD_DTM",
+                    "dataType": "DATETIME2(3)",
+                    "nullable": False,
+                    "description": "수정 일시",
+                },
             ]
             if table_name == "PEM_CTRT":
                 columns.append(
@@ -530,6 +554,62 @@ def test_metadata_design_korean_reference_scope_uses_metadata_and_policy(
         ("DBO", "PEM_CTRT"),
     }
     assert response["reviewRequired"] is True
+
+
+def test_metadata_design_preserves_amount_fields_common_metadata_and_description_sql(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = ContractReferenceDesignRegistry()
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    service = MetadataDesignChatService(model_gateway=FakeModelGateway())
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "PCS_CTRT 계약번호, 계약금액, 테스트금액",
+                "designInputs": {
+                    "tableNameHint": "dbo.PCS_CTRT",
+                    "tableDescription": "PCS_CTRT O'Brien request",
+                },
+                "options": {
+                    "useLlmAnalysis": False,
+                    "generateDtoDraft": True,
+                },
+            }
+        )
+    ).to_response()
+
+    columns = {
+        column["name"]: column
+        for column in response["tableProposal"]["columns"]
+    }
+    assert {"CTRT_NO", "CTRT_AMT", "TEST_AMT"} <= set(columns)
+    assert columns["CTRT_AMT"]["dataType"] == "NUMERIC(18,3)"
+    assert columns["TEST_AMT"]["dataType"] == "NUMERIC(18,3)"
+    assert columns["CTRT_AMT"]["reviewRequired"] is True
+    assert columns["TEST_AMT"]["reviewRequired"] is True
+    assert any(
+        "TEST" in reason
+        for reason in columns["TEST_AMT"]["reviewReasons"]
+    )
+    assert columns["UPD_DTM"]["dataType"] == "DATETIME2(3)"
+    assert columns["UPD_DTM"]["source"] == "METADATA"
+
+    script = response["tableProposal"]["createTableScriptPreview"]
+    assert "FIELD_1_VAL" not in script
+    assert "REVIEW_REQUIRED_FIELD" not in script
+    assert "[CTRT_AMT] NUMERIC(18,3)" in script
+    assert "[TEST_AMT] NUMERIC(18,3)" in script
+    assert "EXEC sys.sp_addextendedproperty" in script
+    assert "@name = N'MS_Description'" in script
+    assert "@value = N'PCS_CTRT O''Brien request'" in script
+    assert "@level2type = N'COLUMN'" in script
+    assert "@level2name = N'TEST_AMT'" in script
+    assert "-- REVIEW_REQUIRED: [TEST_AMT]" in script
 
 
 def test_metadata_design_refine_current_applies_latest_successful_baseline(

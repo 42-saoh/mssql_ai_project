@@ -207,6 +207,7 @@ class MetadataDesignChatService:
         table_proposal = _build_table_proposal(
             effective_request,
             mappings=mappings,
+            candidate_context=candidate_context,
             policy=self._policy,
         )
         dto_draft = (
@@ -577,8 +578,6 @@ def _fields_from_message(message: str) -> list[MetadataDesignFieldInput]:
         if fields:
             return fields[:20]
     known = _known_fields_from_text(text)
-    if known:
-        return known[:20]
 
     inferred: list[MetadataDesignFieldInput] = []
     for part in FIELD_CONNECTOR_RE.split(text):
@@ -586,7 +585,7 @@ def _fields_from_message(message: str) -> list[MetadataDesignFieldInput]:
         if not candidate:
             continue
         inferred.append(_field_input_from_text(candidate))
-    return _dedupe_field_inputs(inferred)[:20]
+    return _dedupe_field_inputs([*known, *inferred])[:20]
 
 
 def _field_clause_from_message(message: str) -> str:
@@ -1462,9 +1461,13 @@ def _build_table_proposal(
     request: MetadataDesignRunRequest,
     *,
     mappings: list[MetadataStandardizationMapping],
+    candidate_context: CandidateContext,
     policy: dict[str, Any],
 ) -> MetadataTableProposal:
     table_name, table_reasons = _standard_table_name(request, policy)
+    table_description = _safe_text(
+        request.design_inputs.table_description or request.message[:200]
+    )
     columns = [
         MetadataTableProposalColumn(
             name=mapping.proposed_name,
@@ -1492,18 +1495,9 @@ def _build_table_proposal(
         name = _standard_identifier(str(common.get("name") or ""))
         if not name or name in existing_names:
             continue
-        columns.append(
-            MetadataTableProposalColumn(
-                name=name,
-                dataType=str(common.get("type") or "VARCHAR(500)"),
-                nullable=False,
-                description="standard audit column",
-                source="STANDARD_POLICY",
-                evidenceRefs=[POLICY_REF],
-                reviewRequired=False,
-                reviewReasons=[],
-            )
-        )
+        metadata_column = _common_column_from_metadata(name, candidate_context)
+        columns.append(metadata_column or _common_column_from_policy(name, common))
+        existing_names.add(name)
     proposal_reasons = [
         *table_reasons,
         "REVIEW_REQUIRED: PK/FK and index structure must be confirmed before applying.",
@@ -1511,15 +1505,14 @@ def _build_table_proposal(
     script = _render_create_table_preview(
         schema_name="dbo",
         table_name=table_name,
+        table_description=table_description,
         columns=columns,
         review_reasons=proposal_reasons,
     )
     return MetadataTableProposal(
         schema="dbo",
         tableName=table_name,
-        tableDescription=_safe_text(
-            request.design_inputs.table_description or request.message[:200]
-        ),
+        tableDescription=table_description,
         columns=columns,
         createTableScriptPreview=script,
         evidenceRefs=_dedupe_strings(
@@ -1528,6 +1521,63 @@ def _build_table_proposal(
         reviewRequired=True,
         reviewReasons=proposal_reasons,
     )
+
+
+def _common_column_from_metadata(
+    name: str,
+    candidate_context: CandidateContext,
+) -> MetadataTableProposalColumn | None:
+    for item in candidate_context.related_metadata:
+        if item.kind != "COLUMN":
+            continue
+        payload = item.payload
+        column_name = _standard_identifier(
+            str(payload.get("columnName") or item.object_ref.rsplit(".", 1)[-1])
+        )
+        if column_name != name:
+            continue
+        data_type = _safe_text(payload.get("dataType"))
+        if not data_type:
+            continue
+        description = _safe_text(payload.get("description") or payload.get("logicalName"))
+        return MetadataTableProposalColumn(
+            name=name,
+            dataType=data_type,
+            nullable=False,
+            description=description or _common_column_description(name),
+            source="METADATA",
+            evidenceRefs=item.evidence_refs,
+            reviewRequired=not bool(description),
+            reviewReasons=(
+                []
+                if description
+                else ["REVIEW_REQUIRED: common column description was not confirmed."]
+            ),
+        )
+    return None
+
+
+def _common_column_from_policy(name: str, common: dict[str, Any]) -> MetadataTableProposalColumn:
+    return MetadataTableProposalColumn(
+        name=name,
+        dataType=str(common.get("type") or "VARCHAR(500)"),
+        nullable=False,
+        description=_common_column_description(name),
+        source="STANDARD_POLICY",
+        evidenceRefs=[POLICY_REF],
+        reviewRequired=False,
+        reviewReasons=[],
+    )
+
+
+def _common_column_description(name: str) -> str:
+    descriptions = {
+        "CRE_USR_ID": "등록 사용자 ID",
+        "CRE_DTM": "등록 일시",
+        "UPD_USR_ID": "수정 사용자 ID",
+        "UPD_DTM": "수정 일시",
+    }
+    return descriptions.get(name, "표준 공통 컬럼")
 
 
 def _build_dto_draft(table_proposal: MetadataTableProposal) -> MetadataGeneratedDraft:
@@ -1587,6 +1637,7 @@ def _render_create_table_preview(
     *,
     schema_name: str,
     table_name: str,
+    table_description: str,
     columns: list[MetadataTableProposalColumn],
     review_reasons: list[str],
 ) -> str:
@@ -1606,7 +1657,90 @@ def _render_create_table_preview(
         column_lines.append(f"    [{column.name}] {column.data_type} {nullability}{comment}")
     lines.append(",\n".join(column_lines))
     lines.append(");")
+    lines.extend(
+        _render_description_preview(
+            schema_name=schema_name,
+            table_name=table_name,
+            table_description=table_description,
+            columns=columns,
+        )
+    )
     return ensure_trailing_newline("\n".join(lines))
+
+
+def _render_description_preview(
+    *,
+    schema_name: str,
+    table_name: str,
+    table_description: str,
+    columns: list[MetadataTableProposalColumn],
+) -> list[str]:
+    lines = [
+        "",
+        "-- REVIEW_REQUIRED: MS_Description preview only; manual schema review required.",
+    ]
+    if table_description:
+        lines.extend(
+            [
+                "-- REVIEW_REQUIRED: table description must be confirmed before applying.",
+                _extended_property_sql(
+                    value=table_description,
+                    schema_name=schema_name,
+                    table_name=table_name,
+                ),
+            ]
+        )
+    for column in columns:
+        description = _safe_text(column.description)
+        if not description:
+            lines.append(
+                f"-- REVIEW_REQUIRED: [{column.name}] has no confirmed description."
+            )
+            continue
+        if column.review_required:
+            reasons = "; ".join(column.review_reasons) or "column metadata requires review"
+            lines.append(f"-- REVIEW_REQUIRED: [{column.name}] {reasons}")
+        lines.append(
+            _extended_property_sql(
+                value=description,
+                schema_name=schema_name,
+                table_name=table_name,
+                column_name=column.name,
+            )
+        )
+    return lines
+
+
+def _extended_property_sql(
+    *,
+    value: str,
+    schema_name: str,
+    table_name: str,
+    column_name: str | None = None,
+) -> str:
+    parts = [
+        "EXEC sys.sp_addextendedproperty",
+        "    @name = N'MS_Description',",
+        f"    @value = N'{_escape_sql_unicode_literal(value)}',",
+        "    @level0type = N'SCHEMA',",
+        f"    @level0name = N'{_escape_sql_unicode_literal(schema_name)}',",
+        "    @level1type = N'TABLE',",
+        f"    @level1name = N'{_escape_sql_unicode_literal(table_name)}'",
+    ]
+    if column_name:
+        parts[-1] = f"{parts[-1]},"
+        parts.extend(
+            [
+                "    @level2type = N'COLUMN',",
+                f"    @level2name = N'{_escape_sql_unicode_literal(column_name)}'",
+            ]
+        )
+    parts[-1] = f"{parts[-1]};"
+    return "\n".join(parts)
+
+
+def _escape_sql_unicode_literal(value: str) -> str:
+    return _safe_text(value).replace("'", "''")
 
 
 def _review_markers_for_design(
@@ -1724,6 +1858,7 @@ def _standardize_field(
         reasons.append(
             "REVIEW_REQUIRED: approved abbreviation was not found for the requested meaning."
         )
+    reasons.extend(_identifier_policy_review_reasons(normalized, policy))
     return normalized, data_type, reasons
 
 
@@ -1763,20 +1898,66 @@ def _name_from_description(source: str, policy: dict[str, Any], index: int) -> s
     text = _normalize_match_text(source)
     class_word = _class_word_from_text(source)
     if class_word:
-        return f"FIELD_{index + 1}_{class_word}"
+        term = _term_abbreviation_from_text(source)
+        if term:
+            return f"{term}_{class_word}"
+        return f"UNCONFIRMED_{index + 1}_{class_word}"
     if any(token in text for token in ("datetime", "timestamp", "일시")):
-        return f"FIELD_{index + 1}_DTM"
+        return f"UNCONFIRMED_{index + 1}_DTM"
     if any(token in text for token in ("date", "날짜", "일자")):
-        return f"FIELD_{index + 1}_DT"
+        return f"UNCONFIRMED_{index + 1}_DT"
     if any(token in text for token in ("amount", "amt", "금액")):
-        return f"FIELD_{index + 1}_AMT"
+        return f"UNCONFIRMED_{index + 1}_AMT"
     if any(token in text for token in ("quantity", "qty", "수량")):
-        return f"FIELD_{index + 1}_QTY"
+        return f"UNCONFIRMED_{index + 1}_QTY"
     if any(token in text for token in ("code", "코드")):
-        return f"FIELD_{index + 1}_CD"
+        return f"UNCONFIRMED_{index + 1}_CD"
     if any(token in text for token in ("name", "이름", "명")):
-        return f"FIELD_{index + 1}_NM"
-    return f"REVIEW_REQUIRED_FIELD_{index + 1}"
+        return f"UNCONFIRMED_{index + 1}_NM"
+    return f"UNCONFIRMED_{index + 1}_VAL"
+
+
+def _term_abbreviation_from_text(source: str) -> str:
+    text = _normalize_match_text(source)
+    for tokens, abbreviation in (
+        (("계약", "contract", "ctrt"), "CTRT"),
+        (("주문", "발주", "order", "ordr"), "ORDR"),
+        (("테스트", "test"), "TEST"),
+    ):
+        if any(token in text for token in tokens):
+            return abbreviation
+    return ""
+
+
+def _identifier_policy_review_reasons(identifier: str, policy: dict[str, Any]) -> list[str]:
+    name = _standard_identifier(identifier)
+    if not name:
+        return ["REVIEW_REQUIRED: approved abbreviation was not found for the requested meaning."]
+    class_words = {
+        _standard_identifier(key)
+        for key in policy.get("column_naming", {}).get("class_words", {})
+    }
+    qualifiers = {
+        _standard_identifier(item)
+        for item in policy.get("column_naming", {}).get("qualifiers", [])
+    }
+    approved = set()
+    for group in policy.get("approved_abbreviations", {}).values():
+        if isinstance(group, dict):
+            approved.update(_standard_identifier(key) for key in group)
+    ignored = class_words | qualifiers | {"", "UNCONFIRMED"}
+    unknown = [
+        part
+        for part in name.split("_")
+        if part and not part.isdigit() and part not in ignored and part not in approved
+    ]
+    if not unknown:
+        return []
+    return [
+        "REVIEW_REQUIRED: approved abbreviation was not confirmed for "
+        + ", ".join(_dedupe_strings(unknown))
+        + "."
+    ]
 
 
 def _type_from_text(source: str, policy: dict[str, Any]) -> str:
