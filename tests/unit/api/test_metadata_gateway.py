@@ -34,6 +34,23 @@ def test_mcp_metadata_gateway_collects_fixture_metadata_through_registry(
     assert metadata.evidence_refs
 
 
+def test_mcp_metadata_gateway_collects_table_schema_directly(monkeypatch) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+
+    payload = McpMetadataGateway().collect_table_schema(
+        db_profile_id="master",
+        schema="dbo",
+        table_name="TB_ORDER",
+    )
+
+    assert payload is not None
+    assert payload["data"]["schema"] == "dbo"
+    assert payload["data"]["tableName"] == "TB_ORDER"
+    assert payload["data"]["descriptionStatus"] == "CONFIRMED"
+    assert "Synthetic order header table" in payload["data"]["description"]
+
+
 def test_mcp_metadata_gateway_uses_closure_without_auto_resolver(monkeypatch) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")

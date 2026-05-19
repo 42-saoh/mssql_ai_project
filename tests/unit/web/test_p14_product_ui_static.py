@@ -151,6 +151,7 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     component = (WEB_ROOT / "components" / "metadata-design-chat.tsx").read_text(
         encoding="utf-8"
     )
+    styles = (WEB_ROOT / "app" / "globals.css").read_text(encoding="utf-8")
     submit_route = (
         WEB_ROOT / "app" / "api" / "metadata" / "design-runs" / "route.ts"
     ).read_text(encoding="utf-8")
@@ -184,18 +185,42 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert "api.listMetadataProfiles()" in page
     assert 'fetch("/api/metadata/design-runs"' in component
     assert "/api/metadata/design-runs/${encodeURIComponent(nextRun.runId)}" in component
+    assert "metadata-chat-shell" in component
     assert "metadata-chat-transcript" in component
+    assert "metadata-chat-composer" in component
+    assert "metadata-design-output-stack" in component
+    assert component.index("metadata-chat-transcript") < component.index(
+        "metadata-chat-composer"
+    )
+    assert component.index("metadata-chat-composer") < component.index(
+        "metadata-design-output-stack"
+    )
     assert "Conversation mode" in component
     assert "conversationMode" in component
+    assert 'const [message, setMessage] = useState("")' in component
+    assert "messagePlaceholder" in component
+    assert "placeholder={messagePlaceholder}" in component
+    assert "const canSubmit = !isLoading && message.trim().length > 0" in component
+    assert "disabled={!canSubmit}" in component
     assert "interpretedIntent" in component
     assert "appliedChanges" in component
     assert "createTableScriptPreview" in component
     assert "Download SQL preview" in component
     assert "Download DTO draft" in component
     assert "new Blob([content]" in component
+    assert 'className="metadata-chat-compose"' not in component
+    assert "metadata-chat-layout" not in component
     assert "metadata-design-field-row" not in component
     assert "Add field" not in component
     assert "Field 1 name" not in component
+    assert ".metadata-chat-transcript" in styles
+    assert "overflow-y: auto" in styles
+    assert "height: clamp(360px, 52vh, 620px)" in styles
+    assert ".metadata-chat-composer" in styles
+    assert ".metadata-chat-controls" in styles
+    assert ".metadata-design-output-stack" in styles
+    assert "grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr)" not in styles
+    assert ".metadata-chat-layout" not in styles
     assert "api.submitMetadataDesignRun(payload)" in submit_route
     assert "conversationMode: request.options?.conversationMode ?? \"NEW_DESIGN\"" in submit_route
     assert "api.getMetadataDesignRun(runId)" in poll_route

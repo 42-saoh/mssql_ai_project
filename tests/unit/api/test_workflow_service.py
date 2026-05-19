@@ -345,6 +345,121 @@ def test_sp_analysis_can_be_submitted_then_executed_later() -> None:
     assert repository.list_job_artifacts(submitted.job_id)
 
 
+def test_workflow_enriches_static_dml_table_descriptions_without_failing_on_misses() -> None:
+    class StaticDmlMetadataGateway:
+        def __init__(self) -> None:
+            self.table_schema_calls: list[tuple[str, str]] = []
+
+        def collect_procedure_metadata(
+            self,
+            *,
+            db_profile_id: str,
+            schema: str,
+            procedure_name: str,
+        ) -> MetadataCollectionResult:
+            return MetadataCollectionResult(
+                db_profile_id=db_profile_id,
+                object_ref=f"{schema}.{procedure_name}",
+                snapshot_id="snapshot-static-dml",
+                collected_at="2026-05-19T00:00:00Z",
+                evidence_refs=(
+                    {
+                        "type": "MSSQL_METADATA",
+                        "objectRef": f"{schema}.{procedure_name}",
+                        "locator": "fixture#/static-dml",
+                    },
+                ),
+                procedure_definition={
+                    "definition": """
+                    CREATE PROCEDURE dbo.usp_StaticDmlDescriptions
+                    AS
+                    BEGIN
+                        SELECT ContractNum FROM PPM.dbo.PCS_CTRT;
+                        SELECT HeaderId FROM ERP.dbo.XXEAI_TRX_HEADER_II;
+                        UPDATE dbo.PCS_MISSING SET StatusCode = 'DONE';
+                    END
+                    """,
+                    "definitionHash": "sha256:static-dml-descriptions",
+                    "hasDefinitionAccess": True,
+                },
+                procedure_parameters={"parameters": []},
+                table_schemas=(),
+            )
+
+        def collect_procedure_definition(
+            self,
+            *,
+            db_profile_id: str,
+            schema: str,
+            procedure_name: str,
+            referenced_database: str | None = None,
+        ) -> dict[str, object] | None:
+            return None
+
+        def collect_table_schema(
+            self,
+            *,
+            db_profile_id: str,
+            schema: str,
+            table_name: str,
+            referenced_database: str | None = None,
+        ) -> dict[str, object] | None:
+            self.table_schema_calls.append((schema, table_name))
+            if (schema, table_name) != ("dbo", "PCS_CTRT"):
+                return None
+            return {
+                "data": {
+                    "schema": "dbo",
+                    "tableName": "PCS_CTRT",
+                    "description": "Contract master table",
+                    "descriptionStatus": "CONFIRMED",
+                    "columns": [],
+                }
+            }
+
+    metadata_gateway = StaticDmlMetadataGateway()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=metadata_gateway,
+        model_gateway=FakeModelGateway(),
+    )
+    request = SPAnalysisRequest.model_validate(
+        {
+            "dbProfileId": "ppm",
+            "target": {
+                "type": "PROCEDURE",
+                "schema": "dbo",
+                "name": "usp_StaticDmlDescriptions",
+            },
+            "outputs": ["SP_ANALYSIS_DOCUMENT"],
+            "options": {
+                "includeEvidenceRefs": True,
+                "useLlmAnalysis": False,
+                "useAiToolOrchestration": False,
+                "usePlatformToolOrchestration": False,
+                "allowSpDefinitionToModel": False,
+            },
+        }
+    )
+
+    _request_record, job = service.submit_sp_analysis(request)
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    content = artifacts[0].content
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert set(metadata_gateway.table_schema_calls) == {
+        ("dbo", "PCS_CTRT"),
+        ("dbo", "PCS_MISSING"),
+    }
+    assert ("dbo", "XXEAI_TRX_HEADER_II") not in metadata_gateway.table_schema_calls
+    assert "`PPM.dbo.PCS_CTRT`" in content
+    assert "Contract master table" in content
+    assert "`ERP.dbo.XXEAI_TRX_HEADER_II`" in content
+    assert "| table | `ERP.dbo.XXEAI_TRX_HEADER_II` | REVIEW_REQUIRED | SELECT |" in content
+    assert "`dbo.PCS_MISSING`" in content
+
+
 def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts() -> None:
     operation_model = p41_operation_model_fixture()
     ai_draft_pack = p42_ai_draft_pack_fixture()

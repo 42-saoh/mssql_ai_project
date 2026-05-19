@@ -8,9 +8,9 @@ from ai_agent_analysis.models import EvidenceRef, EvidenceStatus
 
 IDENTIFIER_PATTERN = r"(?:\[[^\]]+\]|#?[A-Za-z_][A-Za-z0-9_#$]*)"
 VARIABLE_OR_IDENTIFIER_PATTERN = r"(?:\[[^\]]+\]|[@#]?[A-Za-z_][A-Za-z0-9_#$]*)"
-QUALIFIED_IDENTIFIER_PATTERN = rf"{IDENTIFIER_PATTERN}(?:\s*\.\s*{IDENTIFIER_PATTERN})?"
+QUALIFIED_IDENTIFIER_PATTERN = rf"{IDENTIFIER_PATTERN}(?:\s*\.\s*{IDENTIFIER_PATTERN}){{0,3}}"
 QUALIFIED_VARIABLE_OR_IDENTIFIER_PATTERN = (
-    rf"{VARIABLE_OR_IDENTIFIER_PATTERN}(?:\s*\.\s*{VARIABLE_OR_IDENTIFIER_PATTERN})?"
+    rf"{VARIABLE_OR_IDENTIFIER_PATTERN}(?:\s*\.\s*{VARIABLE_OR_IDENTIFIER_PATTERN}){{0,3}}"
 )
 CTE_START_RE = re.compile(r"\bWITH\b", re.IGNORECASE)
 CTE_DEFINITION_RE = re.compile(
@@ -100,7 +100,7 @@ def parse_identifier(token: str) -> Identifier:
     if len(parts) >= 2:
         schema_name = parts[-2]
         object_name = parts[-1]
-        full_name = f"{schema_name}.{object_name}"
+        full_name = ".".join(parts)
         return Identifier(schema_name=schema_name, object_name=object_name, full_name=full_name)
     if len(parts) == 1:
         return Identifier(schema_name=None, object_name=parts[0], full_name=parts[0])

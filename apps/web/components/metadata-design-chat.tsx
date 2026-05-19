@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StatusPill } from "@/components/status-pill";
 import type {
   MetadataDesignRunRequest,
@@ -10,6 +10,10 @@ import type {
 
 const DESIGN_TIMEOUT_MS = 120_000;
 const DESIGN_POLL_INTERVAL_MS = 1_500;
+const NEW_DESIGN_MESSAGE_PLACEHOLDER =
+  "고객명, 주소, 주문일이 있는 주문 요청 테이블을 만들어줘.";
+const REFINE_CURRENT_MESSAGE_PLACEHOLDER =
+  "배송메모를 추가하고, 주문일은 날짜 타입으로 바꿔줘.";
 
 interface DesignError {
   code: string;
@@ -26,9 +30,7 @@ export function MetadataDesignChat({
   profiles: MetadataProfile[];
 }>) {
   const [dbProfileId, setDbProfileId] = useState(defaultDbProfileId);
-  const [message, setMessage] = useState(
-    "고객명, 주소, 주문일이 있는 주문 요청 테이블을 만들어줘.",
-  );
+  const [message, setMessage] = useState("");
   const [tableNameHint, setTableNameHint] = useState("PPM_ORDER_REQ");
   const [conversationMode, setConversationMode] =
     useState<ConversationMode>("NEW_DESIGN");
@@ -39,6 +41,12 @@ export function MetadataDesignChat({
   const [isLoading, setIsLoading] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const messagePlaceholder =
+    conversationMode === "REFINE_CURRENT"
+      ? REFINE_CURRENT_MESSAGE_PLACEHOLDER
+      : NEW_DESIGN_MESSAGE_PLACEHOLDER;
+  const canSubmit = !isLoading && message.trim().length > 0;
 
   const request = useMemo<MetadataDesignRunRequest>(
     () => ({
@@ -69,6 +77,14 @@ export function MetadataDesignChat({
     }, 1000);
     return () => window.clearInterval(timer);
   }, [isLoading, startedAt]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript) {
+      return;
+    }
+    transcript.scrollTop = transcript.scrollHeight;
+  }, [isLoading, runs.length]);
 
   async function submitDesign() {
     const controller = new AbortController();
@@ -104,7 +120,7 @@ export function MetadataDesignChat({
         setRun(nextRun);
         setRuns((current) => [...current, nextRun]);
         setConversationMode("REFINE_CURRENT");
-        setMessage("배송메모 추가하고, 주문일은 날짜 타입으로 바꿔줘.");
+        setMessage("");
       } else {
         throw {
           code: nextRun.error?.code ?? "METADATA_DESIGN_RUN_FAILED",
@@ -130,8 +146,12 @@ export function MetadataDesignChat({
           <span className="quiet-label">durable run</span>
         </div>
 
-        <div className="metadata-chat-layout">
-          <div className="metadata-chat-transcript" aria-label="Metadata design conversation">
+        <div className="metadata-chat-shell">
+          <div
+            ref={transcriptRef}
+            className="metadata-chat-transcript"
+            aria-label="Metadata design conversation"
+          >
             {runs.length === 0 ? (
               <div className="chat-message chat-message--assistant">
                 <strong>Assistant</strong>
@@ -161,8 +181,8 @@ export function MetadataDesignChat({
             ) : null}
           </div>
 
-          <div className="metadata-chat-compose">
-            <div className="form-grid">
+          <div className="metadata-chat-composer" aria-label="Metadata design composer">
+            <div className="metadata-chat-controls">
               <label>
                 <span>Metadata profile</span>
                 <select
@@ -186,24 +206,25 @@ export function MetadataDesignChat({
                   <option value="REFINE_CURRENT">Refine current</option>
                 </select>
               </label>
-              <label className="form-field--wide">
+              <label>
                 <span>Table name hint</span>
                 <input
                   value={tableNameHint}
                   onChange={(event) => setTableNameHint(event.target.value)}
                 />
               </label>
-              <label className="form-field--wide">
-                <span>Message</span>
-                <textarea
-                  className="metadata-chat-input"
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                />
-              </label>
             </div>
+            <label className="metadata-chat-message-field">
+              <span>Message</span>
+              <textarea
+                className="metadata-chat-input"
+                value={message}
+                placeholder={messagePlaceholder}
+                onChange={(event) => setMessage(event.target.value)}
+              />
+            </label>
             <div className="form-actions">
-              <button type="button" onClick={submitDesign} disabled={isLoading}>
+              <button type="button" onClick={submitDesign} disabled={!canSubmit}>
                 {isLoading ? `Designing ${elapsedSeconds}s` : "Send message"}
               </button>
             </div>
@@ -220,7 +241,11 @@ export function MetadataDesignChat({
         </div>
       </section>
 
-      {run?.result ? <MetadataDesignResultView run={run} /> : null}
+      {run?.result ? (
+        <div className="metadata-design-output-stack">
+          <MetadataDesignResultView run={run} />
+        </div>
+      ) : null}
     </div>
   );
 }

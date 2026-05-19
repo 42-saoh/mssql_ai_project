@@ -10,6 +10,7 @@ from ai_agent_domain import ArtifactType
 from ai_agent_generation import (
     P24_REQUIRED_SECTION_IDS,
     GenerationContext,
+    build_migration_guide_payload,
     evaluate_p24_migration_guide_quality,
     render_artifact,
 )
@@ -81,6 +82,87 @@ def test_p24_quality_report_flags_raw_sql_marker_without_echoing_text() -> None:
     assert report["status"] == "FAILED"
     assert report["storageSafetyFindings"] == ["PROCEDURE_TEXT_MARKER_PRESENT"]
     assert "CREATE PROCEDURE dbo.demo" not in serialized
+
+
+def test_dependency_inventory_renders_full_table_names_and_descriptions() -> None:
+    guide = build_migration_guide_payload(
+        target_ref="dbo.usp_FullInventory",
+        db_profile_id="ppm",
+        metadata={
+            "evidenceRefs": [
+                {
+                    "type": "MSSQL_METADATA",
+                    "objectRef": "dbo.usp_FullInventory",
+                    "locator": "fixture#/procedure",
+                }
+            ],
+            "tableSchemas": [
+                {
+                    "schema": "dbo",
+                    "tableName": "PCS_CTRT",
+                    "description": "Contract master table",
+                    "descriptionStatus": "CONFIRMED",
+                    "columns": [],
+                }
+            ],
+        },
+        static_analysis={
+            "dependencies": {"table_references": []},
+            "migrationGuideStaticMetrics": {
+                "dmlOperations": [
+                    {
+                        "operation": "SELECT",
+                        "targetRef": "PPM.dbo.PCS_CTRT",
+                        "evidenceRef": "static.dml.select.ppm_dbo_pcs_ctrt",
+                    },
+                    {
+                        "operation": "UPDATE",
+                        "targetRef": "PPM.dbo.PCS_CTRT",
+                        "evidenceRef": "static.dml.update.ppm_dbo_pcs_ctrt",
+                    },
+                    {
+                        "operation": "SELECT",
+                        "targetRef": "ERP.dbo.XXEAI_TRX_HEADER_II",
+                        "evidenceRef": "static.dml.select.erp_dbo_xxeai_trx_header_ii",
+                    },
+                    {
+                        "operation": "SELECT",
+                        "targetRef": "ERP.dbo.PCS_CTRT",
+                        "evidenceRef": "static.dml.select.erp_dbo_pcs_ctrt",
+                    },
+                ],
+                "complexityMetrics": [],
+            },
+        },
+        llm_analysis={},
+        input_params=[],
+        result_shape=[],
+        sample_id="full-inventory",
+    )
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "full-inventory",
+            "request": {
+                "entityName": "FullInventory",
+                "spName": "dbo.usp_FullInventory",
+                "description": "fixture",
+                "migrationGuide": guide,
+                "inputParams": [],
+                "resultShape": [],
+                "llmAnalysis": {},
+            },
+        }
+    )
+
+    artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, context)
+
+    assert "| 종류 | 객체 | description | operation |" in artifact.content
+    assert "`PPM.dbo.PCS_CTRT`" in artifact.content
+    assert "Contract master table" in artifact.content
+    assert "SELECT, UPDATE" in artifact.content
+    assert "`ERP.dbo.XXEAI_TRX_HEADER_II`" in artifact.content
+    assert "| table | `ERP.dbo.XXEAI_TRX_HEADER_II` | REVIEW_REQUIRED | SELECT |" in artifact.content
+    assert "| table | `ERP.dbo.PCS_CTRT` | REVIEW_REQUIRED | SELECT |" in artifact.content
 
 
 def _fixture() -> dict[str, Any]:

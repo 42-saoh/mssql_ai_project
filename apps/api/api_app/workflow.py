@@ -66,6 +66,7 @@ from ai_agent_validation import (
     validate_artifact,
 )
 from ai_agent_validation.ai_draft_pack import DEFAULT_REQUIRED_REVIEW_MARKERS
+from mssql_mcp_app.metadata_discovery import source_database_for_profile
 
 from api_app.ai_tool_orchestrator import AiToolOrchestrator
 from api_app.backpressure import workflow_admission
@@ -318,6 +319,11 @@ class WorkflowService:
             source_name=f"{request.target['schema']}.{request.target['name']}",
             snapshot_id=metadata.snapshot_id,
         )
+        metadata = metadata_with_static_dml_table_schemas(
+            metadata,
+            static_analysis=static_analysis,
+            metadata_gateway=self.metadata_gateway,
+        )
         orchestration = self.ai_tool_orchestrator.run(
             request_record=request,
             metadata=metadata,
@@ -461,6 +467,11 @@ class WorkflowService:
                 source_name=f"{request.target['schema']}.{request.target['name']}",
                 snapshot_id=metadata.snapshot_id,
             )
+            metadata = metadata_with_static_dml_table_schemas(
+                metadata,
+                static_analysis=static_analysis,
+                metadata_gateway=self.metadata_gateway,
+            )
             if job.status in {JobStatus.SUBMITTED, JobStatus.COLLECTING_METADATA}:
                 self.repository.transition_job(
                     job.job_id,
@@ -538,6 +549,11 @@ class WorkflowService:
                     definition_text,
                     source_name=f"{request.target['schema']}.{request.target['name']}",
                     snapshot_id=metadata.snapshot_id,
+                )
+                metadata = metadata_with_static_dml_table_schemas(
+                    metadata,
+                    static_analysis=static_analysis,
+                    metadata_gateway=self.metadata_gateway,
                 )
             if operation_model_run is None:
                 operation_model_run = self._run_sp_operation_model_planning(
@@ -3121,6 +3137,127 @@ def _deterministic_facts_with_prefix(
         for fact in metadata.deterministic_facts
         if any(str(fact.get("id") or "").startswith(prefix) for prefix in prefixes)
     )
+
+
+def metadata_with_static_dml_table_schemas(
+    metadata: MetadataCollectionResult,
+    *,
+    static_analysis: Mapping[str, Any] | None,
+    metadata_gateway: object,
+) -> MetadataCollectionResult:
+    collect_table_schema = getattr(metadata_gateway, "collect_table_schema", None)
+    if not callable(collect_table_schema):
+        return metadata
+
+    existing_keys = {
+        _table_schema_key(table)
+        for table in metadata.table_schemas
+        if _table_schema_key(table)
+    }
+    table_schemas = list(metadata.table_schemas)
+    for target in _static_dml_table_schema_targets(
+        static_analysis,
+        db_profile_id=metadata.db_profile_id,
+    ):
+        key = _table_schema_key(target)
+        if not key or key in existing_keys:
+            continue
+        try:
+            payload = collect_table_schema(
+                db_profile_id=metadata.db_profile_id,
+                schema=target["schema"],
+                table_name=target["tableName"],
+            )
+        except Exception:
+            continue
+        table_schema = _table_schema_data(payload)
+        if table_schema is None:
+            continue
+        table_schemas.append(table_schema)
+        existing_keys.add(key)
+
+    if len(table_schemas) == len(metadata.table_schemas):
+        return metadata
+    return dataclass_replace(
+        metadata,
+        table_schemas=tuple(table_schemas),
+        notes=tuple(
+            dedupe_strings(
+                (
+                    *metadata.notes,
+                    "Static DML table schema metadata enriched through read-only get_table_schema.",
+                )
+            )
+        ),
+    )
+
+
+def _static_dml_table_schema_targets(
+    static_analysis: Mapping[str, Any] | None,
+    *,
+    db_profile_id: str,
+) -> tuple[dict[str, str], ...]:
+    if not isinstance(static_analysis, Mapping):
+        return ()
+    source_database = source_database_for_profile(db_profile_id)
+    metrics = static_analysis.get("migrationGuideStaticMetrics")
+    dml_operations = metrics.get("dmlOperations") if isinstance(metrics, Mapping) else ()
+    if not isinstance(dml_operations, Sequence) or isinstance(dml_operations, str | bytes):
+        return ()
+    targets: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in dml_operations:
+        if not isinstance(item, Mapping):
+            continue
+        parts = _sql_identifier_parts(str(item.get("targetRef") or ""))
+        if len(parts) < 2 or parts[-1].startswith("#"):
+            continue
+        database = parts[-3] if len(parts) >= 3 else None
+        if database and not _same_text(database, source_database):
+            continue
+        target = {"schema": parts[-2], "tableName": parts[-1]}
+        key = _table_schema_key(target)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        targets.append(target)
+    return tuple(targets)
+
+
+def _table_schema_data(payload: object) -> dict[str, Any] | None:
+    if not isinstance(payload, Mapping):
+        return None
+    data = payload.get("data") if isinstance(payload.get("data"), Mapping) else payload
+    if not isinstance(data, Mapping):
+        return None
+    schema = str(data.get("schema") or "").strip()
+    table_name = str(data.get("tableName") or data.get("name") or "").strip()
+    if not schema or not table_name:
+        return None
+    return dict(data)
+
+
+def _table_schema_key(table: Mapping[str, Any]) -> tuple[str, str] | None:
+    schema = str(table.get("schema") or "").strip()
+    table_name = str(table.get("tableName") or table.get("name") or "").strip()
+    if not schema or not table_name:
+        return None
+    return (schema.casefold(), table_name.casefold())
+
+
+def _sql_identifier_parts(value: str) -> list[str]:
+    return [
+        _strip_sql_identifier_part(part)
+        for part in str(value).strip().split(".")
+        if _strip_sql_identifier_part(part)
+    ]
+
+
+def _strip_sql_identifier_part(value: str) -> str:
+    stripped = value.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        return stripped[1:-1].strip()
+    return stripped
 
 
 def metadata_detail_lines(metadata: MetadataCollectionResult) -> list[str]:

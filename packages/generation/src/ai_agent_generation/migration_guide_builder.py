@@ -38,6 +38,7 @@ def build_migration_guide_payload(
         metadata_payload=metadata_payload,
         static_analysis=static_payload,
         static_ref=static_ref,
+        target_db=_target_db(db_profile_id),
     )
     dml_matrix, table_dml_matrix = _dml_matrices(static_payload, static_ref=static_ref)
     complexity_metrics = _complexity_metrics(static_payload, static_ref=static_ref)
@@ -301,8 +302,9 @@ def _dependency_inventory(
     metadata_payload: Mapping[str, Any],
     static_analysis: Mapping[str, Any],
     static_ref: str,
+    target_db: str,
 ) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
+    items_by_key: dict[str, dict[str, Any]] = {}
     for edge in _sequence(_mapping(metadata_payload.get("dependencyEvidence")).get("edges")):
         if not isinstance(edge, Mapping):
             continue
@@ -311,7 +313,8 @@ def _dependency_inventory(
             if str(edge.get("resolutionStatus")) == "CONFIRMED"
             else "Needs verification"
         )
-        items.append(
+        _merge_dependency_item(
+            items_by_key,
             {
                 "object_kind": str(edge.get("dependencyType") or "dependency").lower(),
                 "object_ref": str(edge.get("to") or "REVIEW_REQUIRED"),
@@ -343,7 +346,8 @@ def _dependency_inventory(
             for part in ("schema", "name")
             if unresolved.get(part)
         )
-        items.append(
+        _merge_dependency_item(
+            items_by_key,
             {
                 "object_kind": str(unresolved.get("dependencyType") or "dependency").lower(),
                 "object_ref": name or "REVIEW_REQUIRED",
@@ -361,10 +365,12 @@ def _dependency_inventory(
             }
         )
     for reference in _static_dependency_refs(static_analysis):
-        if not any(item.get("object_ref") == reference["object_ref"] for item in items):
-            items.append(reference)
+        _merge_dependency_item(items_by_key, reference)
+    for reference in _static_dml_dependency_refs(static_analysis, static_ref=static_ref):
+        _merge_dependency_item(items_by_key, reference)
     if _dynamic_sql_detected(static_analysis):
-        items.append(
+        _merge_dependency_item(
+            items_by_key,
             {
                 "object_kind": "dynamic_sql",
                 "object_ref": "sp_executesql/EXEC dynamic candidate",
@@ -384,6 +390,8 @@ def _dependency_inventory(
                 ),
             }
         )
+    items = list(items_by_key.values())
+    _attach_table_descriptions(items, metadata_payload, target_db=target_db)
     return items
 
 
@@ -455,6 +463,193 @@ def _static_dependency_refs(static_analysis: Mapping[str, Any]) -> list[dict[str
             }
         )
     return refs
+
+
+def _static_dml_dependency_refs(
+    static_analysis: Mapping[str, Any],
+    *,
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    operations_by_target: dict[str, dict[str, Any]] = {}
+    for item in _sequence(
+        _mapping(static_analysis.get("migrationGuideStaticMetrics")).get("dmlOperations")
+    ):
+        if not isinstance(item, Mapping):
+            continue
+        target = str(item.get("targetRef") or "").strip()
+        if not target:
+            continue
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        evidence_ref = str(item.get("evidenceRef") or static_ref)
+        entry = operations_by_target.setdefault(
+            target,
+            {
+                "object_kind": "temp_table" if target.startswith("#") else "table",
+                "object_ref": target,
+                "operations": [],
+                "key_columns": [],
+                "join_or_where_summary": "static DML scan",
+                "value_or_state_patterns": "",
+                "evidence_refs": [],
+                "status": "Confirmed",
+                "how_referenced": "static DML scan",
+                "why_uncertain": "",
+                "what_to_extract_next": "",
+            },
+        )
+        entry["operations"].append(operation)
+        entry["evidence_refs"].append(evidence_ref)
+    for entry in operations_by_target.values():
+        entry["operations"] = _ordered_unique_operations(entry["operations"])
+        entry["evidence_refs"] = _ordered_unique(entry["evidence_refs"])
+    return [operations_by_target[target] for target in sorted(operations_by_target)]
+
+
+def _merge_dependency_item(
+    items_by_key: dict[str, dict[str, Any]],
+    item: Mapping[str, Any],
+) -> None:
+    key = _dependency_key(item)
+    if key not in items_by_key:
+        copied = dict(item)
+        copied["operations"] = _ordered_unique_operations(_sequence(copied.get("operations")))
+        copied["evidence_refs"] = _ordered_unique(_sequence(copied.get("evidence_refs")))
+        items_by_key[key] = copied
+        return
+
+    existing = items_by_key[key]
+    existing["operations"] = _ordered_unique_operations(
+        [*_sequence(existing.get("operations")), *_sequence(item.get("operations"))]
+    )
+    existing["evidence_refs"] = _ordered_unique(
+        [*_sequence(existing.get("evidence_refs")), *_sequence(item.get("evidence_refs"))]
+    )
+    if str(item.get("status") or "") == "Confirmed":
+        existing["status"] = "Confirmed"
+    for field in (
+        "how_referenced",
+        "join_or_where_summary",
+        "value_or_state_patterns",
+        "why_uncertain",
+        "what_to_extract_next",
+    ):
+        merged = _join_unique_text(existing.get(field), item.get(field))
+        if merged:
+            existing[field] = merged
+    if len(_identifier_parts(str(item.get("object_ref") or ""))) > len(
+        _identifier_parts(str(existing.get("object_ref") or ""))
+    ):
+        existing["object_ref"] = str(item.get("object_ref"))
+
+
+def _dependency_key(item: Mapping[str, Any]) -> str:
+    kind = str(item.get("object_kind") or "dependency").lower()
+    object_ref = _normalized_identifier(str(item.get("object_ref") or "REVIEW_REQUIRED"))
+    return f"{kind}:{object_ref or 'review_required'}"
+
+
+def _attach_table_descriptions(
+    items: list[dict[str, Any]],
+    metadata_payload: Mapping[str, Any],
+    *,
+    target_db: str,
+) -> None:
+    descriptions = _table_description_map(metadata_payload)
+    for item in items:
+        kind = str(item.get("object_kind") or "").lower()
+        if "table" not in kind and "view" not in kind:
+            continue
+        object_ref = str(item.get("object_ref") or "")
+        if not _same_profile_table_ref(object_ref, target_db=target_db):
+            item["description"] = "REVIEW_REQUIRED"
+            item["description_status"] = "REVIEW_REQUIRED"
+            continue
+        schema_key = _normalized_schema_table_key(object_ref)
+        metadata = descriptions.get(schema_key, {}) if schema_key else {}
+        description = str(metadata.get("description") or "").strip()
+        status = str(metadata.get("description_status") or "").strip()
+        if description and status.upper() == "CONFIRMED":
+            item["description"] = description
+            item["description_status"] = status
+        else:
+            item["description"] = "REVIEW_REQUIRED"
+            item["description_status"] = status or "REVIEW_REQUIRED"
+
+
+def _same_profile_table_ref(object_ref: str, *, target_db: str) -> bool:
+    parts = _identifier_parts(object_ref)
+    if len(parts) < 3:
+        return True
+    return parts[-3].casefold() == target_db.casefold()
+
+
+def _table_description_map(metadata_payload: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    descriptions: dict[str, dict[str, str]] = {}
+    for table in _sequence(metadata_payload.get("tableSchemas")):
+        if not isinstance(table, Mapping):
+            continue
+        schema = str(table.get("schema") or "").strip()
+        table_name = str(table.get("tableName") or table.get("name") or "").strip()
+        if not schema or not table_name:
+            continue
+        description = str(table.get("description") or "").strip()
+        status = str(table.get("descriptionStatus") or table.get("description_status") or "").strip()
+        key = _normalized_schema_table_key(f"{schema}.{table_name}")
+        if key:
+            descriptions[key] = {
+                "description": description,
+                "description_status": status or "REVIEW_REQUIRED",
+            }
+    return descriptions
+
+
+def _normalized_schema_table_key(value: str) -> str:
+    parts = _identifier_parts(value)
+    if len(parts) < 2:
+        return ""
+    return ".".join(part.casefold() for part in parts[-2:])
+
+
+def _normalized_identifier(value: str) -> str:
+    return ".".join(part.casefold() for part in _identifier_parts(value))
+
+
+def _identifier_parts(value: str) -> list[str]:
+    return [
+        _strip_identifier_quotes(part)
+        for part in str(value).strip().split(".")
+        if _strip_identifier_quotes(part)
+    ]
+
+
+def _strip_identifier_quotes(value: str) -> str:
+    stripped = value.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        return stripped[1:-1].strip()
+    return stripped
+
+
+def _ordered_unique_operations(values: Sequence[Any]) -> list[str]:
+    return sorted(
+        _ordered_unique(values),
+        key=lambda value: _DML_ORDER.index(value) if value in _DML_ORDER else 99,
+    )
+
+
+def _ordered_unique(values: Sequence[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _join_unique_text(left: object, right: object) -> str:
+    return " / ".join(_ordered_unique([left, right]))
 
 
 def _dml_matrices(

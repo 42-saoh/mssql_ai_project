@@ -61,7 +61,11 @@ class SPAnalysisDocumentRenderer:
             "",
             "### 2.1 테이블 의존성",
             "",
-            *_dependency_inventory_table(guide, kind_filter=("table", "view")),
+            *_dependency_inventory_table(
+                guide,
+                kind_filter=("table", "view"),
+                include_description=True,
+            ),
             "",
             "### 2.2 UDF/함수 의존성",
             "",
@@ -414,11 +418,30 @@ def _dependency_inventory_table(
     *,
     kind_filter: tuple[str, ...] | None = None,
     status_filter: tuple[str, ...] | None = None,
+    include_description: bool = False,
     fallback: str = "- REVIEW_REQUIRED: 해당 범주의 의존성 근거가 없습니다.",
 ) -> list[str]:
     items = _dependency_items(guide, kind_filter=kind_filter, status_filter=status_filter)
     if not items:
         return [fallback]
+    if include_description:
+        lines = [
+            "| 종류 | 객체 | description | operation | 참조 방식 | 상태 | 근거 | 다음 수집 |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for item in items:
+            lines.append(
+                "| "
+                f"{_table_text(item.get('object_kind'))} | "
+                f"`{_table_text(item.get('object_ref'))}` | "
+                f"{_table_text(_dependency_description(item))} | "
+                f"{_table_text(', '.join(str(op) for op in _sequence(item.get('operations'))))} | "
+                f"{_table_text(item.get('how_referenced') or item.get('join_or_where_summary'))} | "
+                f"{_table_text(item.get('status') or 'REVIEW_REQUIRED')} | "
+                f"{_refs(item.get('evidence_refs'))} | "
+                f"{_table_text(_dependency_next_step(item))} |"
+            )
+        return lines
     lines = [
         "| 종류 | 객체 | operation | 참조 방식 | 상태 | 근거 | 다음 수집 |",
         "|---|---|---|---|---|---|---|",
@@ -435,6 +458,21 @@ def _dependency_inventory_table(
             f"{_table_text(_dependency_next_step(item))} |"
         )
     return lines
+
+
+def _dependency_description(item: Mapping[str, Any]) -> str:
+    description = str(
+        item.get("description")
+        or item.get("table_description")
+        or item.get("tableDescription")
+        or ""
+    ).strip()
+    if description:
+        return description
+    kind = str(item.get("object_kind") or "").lower()
+    if "table" in kind or "view" in kind:
+        return "REVIEW_REQUIRED"
+    return ""
 
 
 def _dependency_next_step(item: Mapping[str, Any]) -> str:
