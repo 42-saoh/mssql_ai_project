@@ -2536,23 +2536,34 @@ def _inventory_item_from_dto_blueprint(
         "REVIEW_REQUIRED": "REVIEW_REQUIRED",
     }
     fields = item.get("fields") if isinstance(item.get("fields"), list) else []
-    required_fields = [
+    blueprint_required_fields = [
         _safe_java_field_name(str(field.get("name") or ""), index=index)
         for index, field in enumerate(fields, start=1)
         if isinstance(field, Mapping)
         and _safe_java_field_name(str(field.get("name") or ""), index=index)
     ]
-    required_fields = list(dict.fromkeys(required_fields))
-    if not required_fields:
-        required_fields = [
+    blueprint_required_fields = list(dict.fromkeys(blueprint_required_fields))
+    if not blueprint_required_fields:
+        blueprint_required_fields = [
             _safe_java_field_name(str(field.get("source") or ""), index=index)
             for index, field in enumerate(fields, start=1)
             if isinstance(field, Mapping)
             and _safe_java_field_name(str(field.get("source") or ""), index=index)
         ]
+    raw_operation_ids = [
+        str(ref) for ref in item.get("operationIds", []) if str(ref).strip()
+    ]
+    statement_required_fields = (
+        _call_request_statement_fields(
+            operation_model=operation_model,
+            operation_ids=raw_operation_ids,
+        )
+        if role == "CALL_REQUEST"
+        else []
+    )
     required_fields = [
         field
-        for field in dict.fromkeys(required_fields)
+        for field in dict.fromkeys([*statement_required_fields, *blueprint_required_fields])
         if field and field != "field"
     ] or [
         "reviewRequiredField"
@@ -2560,9 +2571,6 @@ def _inventory_item_from_dto_blueprint(
     evidence_refs = [
         str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip()
     ] or ["metadata.ai_draft_pack.review_required"]
-    raw_operation_ids = [
-        str(ref) for ref in item.get("operationIds", []) if str(ref).strip()
-    ]
     return {
         "artifactType": ArtifactType.DTO_DRAFT.value,
         "path": f"dto/{dto_name}.java",
@@ -2581,6 +2589,44 @@ def _inventory_item_from_dto_blueprint(
             str(marker) for marker in item.get("reviewMarkers", []) if str(marker).strip()
         ],
     }
+
+
+def _call_request_statement_fields(
+    *,
+    operation_model: Mapping[str, Any],
+    operation_ids: Sequence[str],
+) -> list[str]:
+    statement_refs: set[str] = set()
+    operation_id_set = {str(item) for item in operation_ids if str(item).strip()}
+    for operation in operation_model.get("operations", []):
+        if not isinstance(operation, Mapping):
+            continue
+        operation_id = str(operation.get("operationId") or "")
+        if operation_id_set and operation_id not in operation_id_set:
+            continue
+        statement_refs.update(
+            str(ref)
+            for ref in operation.get("statementRefs", [])
+            if str(ref).strip()
+        )
+    fields: list[str] = []
+    for statement in operation_model.get("statementEvidence", []):
+        if not isinstance(statement, Mapping):
+            continue
+        statement_id = str(statement.get("statementId") or "")
+        if statement_refs and statement_id not in statement_refs:
+            continue
+        operation = str(statement.get("operation") or "").upper()
+        if operation not in {"EXECUTE", "CALL"}:
+            continue
+        inputs = statement.get("inputs")
+        if not isinstance(inputs, Sequence) or isinstance(inputs, str | bytes):
+            continue
+        for index, value in enumerate(inputs, start=1):
+            field = _safe_java_field_name(str(value), index=index)
+            if field and field != "field":
+                fields.append(field)
+    return list(dict.fromkeys(fields))
 
 
 def _draft_operation_ids_for_dto(

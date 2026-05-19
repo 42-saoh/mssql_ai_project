@@ -148,7 +148,9 @@ def test_sp_analysis_doc_follows_p36_migration_guide_flow() -> None:
     ]:
         assert heading in artifact.content
     assert "PPM.dbo.USP_BOND_REQUEST_LIST" in artifact.content
-    assert "full SP definition은 저장하지 않았고" in artifact.content
+    assert "Evidence Map" not in artifact.content
+    assert "evidenceRefs=" not in artifact.content
+    assert "static.dml." not in artifact.content
 
 
 def test_dependency_report_is_evidence_dossier() -> None:

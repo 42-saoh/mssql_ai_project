@@ -63,6 +63,11 @@ _COUNT_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         re.compile(r"\bBEGIN\b", re.IGNORECASE),
         "Minimum of BEGIN and END tokens.",
     ),
+    (
+        "DECLARE_VARIABLE",
+        re.compile(r"\bDECLARE\s+@[A-Za-z_][A-Za-z0-9_]*\b", re.IGNORECASE),
+        "DECLARE @variable token count.",
+    ),
     ("IF", re.compile(r"\bIF\b", re.IGNORECASE), "IF keyword count."),
     ("ELSE", re.compile(r"\bELSE\b", re.IGNORECASE), "ELSE keyword count."),
     ("WHILE", re.compile(r"\bWHILE\b", re.IGNORECASE), "WHILE keyword count."),
@@ -109,6 +114,17 @@ _KEYWORDS = {
     "TRAN",
     "SET",
 }
+_BRANCH_PARAM_PATTERN = r"@[A-Za-z_][A-Za-z0-9_]*(?:Flag|Code)"
+_BRANCH_EQ_RE = re.compile(
+    rf"(?P<param>{_BRANCH_PARAM_PATTERN})\s*(?P<operator>=|<>|!=)\s*N?'(?P<value>[^']{{1,80}})'",
+    re.IGNORECASE,
+)
+_BRANCH_IN_RE = re.compile(
+    rf"(?P<param>{_BRANCH_PARAM_PATTERN})\s+IN\s*\((?P<values>[^)]{{1,500}})\)",
+    re.IGNORECASE,
+)
+_SQL_LITERAL_RE = re.compile(r"N?'(?P<value>[^']{1,80})'", re.IGNORECASE)
+_SAFE_BRANCH_VALUE_RE = re.compile(r"^[0-9A-Za-z_:-]{1,80}$")
 
 
 def migration_guide_static_metrics(
@@ -121,9 +137,61 @@ def migration_guide_static_metrics(
     return {
         "sourceName": source_name,
         "dmlOperations": extract_dml_operations(sql_text, source_name=source_name),
+        "branchPredicates": extract_branch_predicates(sql_text, source_name=source_name),
         "complexityMetrics": complexity_metrics(sql_text),
         "crossDatabaseReferences": _cross_database_references(sanitized),
     }
+
+
+def extract_branch_predicates(
+    sql_text: str,
+    *,
+    source_name: str = "<memory>",
+) -> list[dict[str, Any]]:
+    """Return sanitized @*Flag/@*Code branch predicates observed in SQL text."""
+    branch_sql = _strip_sql_comments_preserve_literals(sql_text)
+    predicates: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
+    for pattern, operator in ((_BRANCH_EQ_RE, ""), (_BRANCH_IN_RE, "IN")):
+        for match in pattern.finditer(branch_sql):
+            parameter = _normalize_parameter(match.group("param"))
+            values = (
+                [_sanitize_branch_value(match.group("value"))]
+                if "value" in match.groupdict()
+                else [
+                    _sanitize_branch_value(value.group("value"))
+                    for value in _SQL_LITERAL_RE.finditer(match.group("values"))
+                ][:8]
+            )
+            values = [value for value in values if value]
+            if not parameter or not values:
+                continue
+            effective_operator = operator or match.groupdict().get("operator") or "="
+            line = sql_text.count("\n", 0, max(match.start("param"), 0)) + 1
+            key = (parameter.upper(), str(effective_operator).upper(), tuple(values))
+            predicates.setdefault(
+                key,
+                {
+                    "parameter": parameter,
+                    "operator": str(effective_operator).upper(),
+                    "values": values,
+                    "line": line,
+                    "sourceName": source_name,
+                    "evidenceRef": (
+                        "static.branch."
+                        f"{_safe_ref_token(parameter.lstrip('@'))}."
+                        f"{_safe_ref_token('_'.join(values))}"
+                    ),
+                    "status": "OBSERVED",
+                },
+            )
+    return sorted(
+        predicates.values(),
+        key=lambda item: (
+            str(item["parameter"]).upper(),
+            int(item["line"]),
+            ",".join(str(value) for value in item["values"]),
+        ),
+    )
 
 
 def extract_dml_operations(
@@ -225,6 +293,24 @@ def _target_is_keyword(target: str) -> bool:
 
 def _safe_ref_token(value: str) -> str:
     return re.sub(r"[^0-9A-Za-z_]+", "_", value).strip("_").lower() or "target"
+
+
+def _normalize_parameter(value: str) -> str:
+    normalized = value.strip()
+    return normalized if normalized.startswith("@") else f"@{normalized}"
+
+
+def _sanitize_branch_value(value: str) -> str:
+    text = value.strip()
+    return text if _SAFE_BRANCH_VALUE_RE.match(text) else ""
+
+
+def _strip_sql_comments_preserve_literals(sql_text: str) -> str:
+    def _blank(match: re.Match[str]) -> str:
+        return "".join("\n" if char == "\n" else " " for char in match.group(0))
+
+    without_block_comments = re.sub(r"/\*.*?\*/", _blank, sql_text, flags=re.DOTALL)
+    return re.sub(r"--[^\n\r]*", _blank, without_block_comments)
 
 
 def _identifier_for_scan(target: str):

@@ -320,8 +320,9 @@ def test_p24c_renderer_and_quality_evaluator_score_rendered_artifacts() -> None:
         assert "<!-- section:sp_overview -->" in serialized_artifacts
         assert "## 1. SP 개요 (Overview)" in serialized_artifacts
         assert "## sp_overview" not in serialized_artifacts
-        assert "| 항목 | 값 | 상태 | 근거 |" in serialized_artifacts
-        assert "| Phase | 주요 읽기 | 주요 쓰기 | 위험/검토점 | 상태 | 근거 |" in serialized_artifacts
+        assert "| 항목 | 값 |" in serialized_artifacts
+        assert "| Table | SELECT | INSERT | UPDATE | DELETE | Keys/Join/Where 요약 | 중요 컬럼/값 패턴 |" in serialized_artifacts
+        assert "| Phase | 주요 읽기 | 주요 쓰기 | 전환 리스크 / 확인 필요 |" in serialized_artifacts
         assert "CREATE PROCEDURE" not in serialized_artifacts
         assert "raw_prompt" not in serialized_artifacts
         assert "raw_sp_definition" not in serialized_artifacts

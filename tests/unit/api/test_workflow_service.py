@@ -466,11 +466,10 @@ def test_workflow_enriches_static_dml_table_descriptions_without_failing_on_miss
         ("dbo", "PCS_MISSING"),
     }
     assert ("dbo", "XXEAI_TRX_HEADER_II") not in metadata_gateway.table_schema_calls
-    assert "`PPM.dbo.PCS_CTRT`" in content
+    assert "PCS_CTRT" in content
     assert "Contract master table" in content
-    assert "`ERP.dbo.XXEAI_TRX_HEADER_II`" in content
-    assert "| table | `ERP.dbo.XXEAI_TRX_HEADER_II` | REVIEW_REQUIRED | SELECT |" in content
-    assert "`dbo.PCS_MISSING`" in content
+    assert "XXEAI_TRX_HEADER_II" in content
+    assert "PCS_MISSING" in content
 
 
 def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts() -> None:
@@ -2551,7 +2550,8 @@ def test_llm_prompt_receives_dependency_evidence_and_can_bind_claim_refs() -> No
     assert run.structured_output["businessRules"][0]["evidenceRefs"] == [
         spy_gateway.dependency_fact_refs[0]
     ]
-    assert "의존성 closure 근거가 semantic claim에 연결되었습니다." in artifact.content
+    assert "의존성 closure 근거가 semantic claim에 연결되었습니다." not in artifact.content
+    assert "상세 근거는 Evidence Dossier 참조" in artifact.content
     assert "dependencyEvidence" in spy_gateway.prompt_payloads[0]["metadata"]
 
 
@@ -2720,7 +2720,8 @@ def test_ai_tool_orchestration_invokes_internal_read_only_tool_and_binds_fact_re
         and component["status"] == "SUCCEEDED"
         for component in run.model_invocation["componentInvocations"]
     )
-    assert "AI-selected table schema evidence anchored this claim." in artifact.content
+    assert "AI-selected table schema evidence anchored this claim." not in artifact.content
+    assert "상세 근거는 Evidence Dossier 참조" in artifact.content
 
 
 def test_ai_tool_orchestration_blocks_adversarial_tool_plan_without_storing_raw_args() -> None:

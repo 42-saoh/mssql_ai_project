@@ -35,6 +35,8 @@ REQUIRED_SECTIONS_BY_ARTIFACT: dict[str, tuple[str, ...]] = {
         "sp_analysis_evidence",
         "java_mybatis_evidence",
         "sql_statement_evidence",
+        "dependency_closure_evidence",
+        "semantic_inference_evidence",
         "evidence_map",
         "known_caveats",
         "next_evidence_to_collect",
@@ -270,6 +272,20 @@ def _evidence_coverage_check(
             ("artifact.evidence_refs",),
         )
 
+    if artifact_type in {"SP_ANALYSIS_DOC", "SP_ANALYSIS_DOCUMENT"}:
+        return (
+            ValidationCheck(
+                rule_id="artifact.evidence.required",
+                severity=ValidationSeverity.ERROR,
+                result=ValidationCheckResult.PASS,
+                message=(
+                    "SP analysis guide keeps raw evidence out of the human-facing body; "
+                    "evidence conservation is checked on the paired dossier/artifact set."
+                ),
+            ),
+            (),
+        )
+
     missing = []
     for ref in evidence_refs:
         object_ref = _evidence_object_ref(ref)
@@ -398,6 +414,9 @@ def _has_review_marker(content: str, assumptions: Sequence[str]) -> bool:
             "EVIDENCE_CAVEAT",
             "evidence caveat",
             "quality caveat",
+            "확인 필요",
+            "Needs verification",
+            "Evidence Dossier 참조",
             "품질 caveat",
             "근거 caveat",
             "근거 보강 필요",

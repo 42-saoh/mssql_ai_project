@@ -75,6 +75,7 @@ def build_migration_guide_payload(
             llm_analysis=llm_analysis or {},
             static_ref=static_ref,
         ),
+        "branch_predicates": _branch_predicates(static_payload, static_ref=static_ref),
         "section_expectations": _section_expectations(primary_ref, static_ref),
         "dependency_inventory": dependency_inventory,
         "confirmed_dependency_inventory": [
@@ -295,6 +296,35 @@ def _feature_branch_rows(
             "evidence_refs": [static_ref],
         }
     ]
+
+
+def _branch_predicates(
+    static_analysis: Mapping[str, Any],
+    *,
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    predicates = _sequence(
+        _mapping(static_analysis.get("migrationGuideStaticMetrics")).get("branchPredicates")
+    )
+    for item in predicates:
+        if not isinstance(item, Mapping):
+            continue
+        parameter = str(item.get("parameter") or "").strip()
+        values = [str(value) for value in _sequence(item.get("values")) if str(value)]
+        if not parameter or not values:
+            continue
+        rows.append(
+            {
+                "parameter": parameter,
+                "operator": str(item.get("operator") or "="),
+                "values": values,
+                "line": item.get("line"),
+                "status": str(item.get("status") or "OBSERVED"),
+                "evidence_refs": [str(item.get("evidenceRef") or static_ref)],
+            }
+        )
+    return rows
 
 
 def _dependency_inventory(

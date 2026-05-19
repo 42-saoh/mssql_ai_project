@@ -26,8 +26,12 @@ def test_p24_analysis_doc_keeps_hidden_anchors_inside_p36_flow() -> None:
     for section_id in P24_REQUIRED_SECTION_IDS:
         assert f"<!-- section:{section_id} -->" in artifact.content
     assert "## 1. SP 개요 (Overview)" in artifact.content
+    assert "## 2. 의존성 인벤토리 (Dependency Inventory)" in artifact.content
+    assert "## 3. DML 영향도 매트릭스 (Data Change Impact Matrix)" in artifact.content
     assert "## 6. Appendix" in artifact.content
-    assert "ev_p24_complex_dynamic_sql" in artifact.content
+    assert "ev_p24_complex_dynamic_sql" not in artifact.content
+    assert "Evidence Map" not in artifact.content
+    assert "evidenceRefs=" not in artifact.content
     assert "CREATE PROCEDURE" not in artifact.content
 
 
@@ -37,8 +41,10 @@ def test_p24_dependency_report_is_p36_evidence_dossier() -> None:
 
     assert "## generation_evidence_summary" in artifact.content
     assert "## sql_statement_evidence" in artifact.content
+    assert "## evidence_map" in artifact.content
     assert "PPM.dbo.P24_ShipmentDecisionAudit" in artifact.content
-    assert "full SP definition" in artifact.content
+    assert "ev_p24_medium_proc" in artifact.content
+    assert "sanitized skeleton" in artifact.content
 
 
 def test_p24_quality_report_contract_is_exact_and_sanitized() -> None:
@@ -156,13 +162,14 @@ def test_dependency_inventory_renders_full_table_names_and_descriptions() -> Non
 
     artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, context)
 
-    assert "| 종류 | 객체 | description | operation |" in artifact.content
-    assert "`PPM.dbo.PCS_CTRT`" in artifact.content
+    assert "#### 2.1.1 Confirmed - PPM Database" in artifact.content
+    assert "#### 2.1.2 Confirmed - Cross-DB References (ERP)" in artifact.content
+    assert "| Type | Schema | Table Name | DML Operations | Key Columns | Notes |" in artifact.content
+    assert "| 종류 | 객체 | description | operation |" not in artifact.content
+    assert "PCS_CTRT" in artifact.content
     assert "Contract master table" in artifact.content
     assert "SELECT, UPDATE" in artifact.content
-    assert "`ERP.dbo.XXEAI_TRX_HEADER_II`" in artifact.content
-    assert "| table | `ERP.dbo.XXEAI_TRX_HEADER_II` | REVIEW_REQUIRED | SELECT |" in artifact.content
-    assert "| table | `ERP.dbo.PCS_CTRT` | REVIEW_REQUIRED | SELECT |" in artifact.content
+    assert "XXEAI_TRX_HEADER_II" in artifact.content
 
 
 def _fixture() -> dict[str, Any]:
