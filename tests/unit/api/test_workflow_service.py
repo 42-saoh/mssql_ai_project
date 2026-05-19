@@ -50,6 +50,9 @@ def fixture_metadata_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
     monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    monkeypatch.delenv("AI_GENERATION_RUNTIME", raising=False)
+    monkeypatch.delenv("AI_STRUCTURED_LLM_RUNTIME", raising=False)
+    monkeypatch.delenv("AI_DRAFT_PACK_ORCHESTRATOR", raising=False)
 
 
 def _request(outputs: list[str] | None = None) -> SPAnalysisRequest:

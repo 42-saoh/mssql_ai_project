@@ -217,9 +217,10 @@ planning through `OpenAIAgentsStructuredAdapter` under
 `AiStructuredFrameworkAdapter.v0.1`. AI Draft Pack remains on the existing P44
 `OpenAIAgentsFrameworkAdapter` plus LangGraph path in `WorkflowService`.
 
-OpenAI remote structured calls now default to `openai_agents`; P-GPT remains on
-`responses_httpx` by default unless explicitly set to `openai_agents`. The
-rollback path is still `responses_httpx`. P48 preserves evidence-ref repair,
+OpenAI remote structured calls now default to `openai_agents` for both official
+OpenAI and P-GPT-compatible endpoints. `AI_STRUCTURED_LLM_RUNTIME=responses_httpx`
+is retained only as an explicit emergency rollback path for structured calls.
+P48 preserves evidence-ref repair,
 planner fallback, tool allowlists, SP source text gates, metadata/design
 sanitization, knowledge persistence sanitization, and `REVIEW_REQUIRED`
 behavior. It also fixes the metadata design planner prompt metadata so
@@ -239,12 +240,13 @@ Pack OpenAI Agents plus LangGraph runtime, and P43 is historical readiness
 evidence only. The cleanup is contract-backed and removes only scaffolding proven
 unused by active runtime paths.
 
-`responses_httpx` remains retained for P-GPT default compatibility and explicit
-emergency rollback. The production-exported P43 baseline/fake framework adapter
-symbols are removed from the runtime package and kept only as test helpers for
-historical fixture coverage. P49 adds no public API, DB schema, UI, public MCP
-route, public artifact type, source apply, deploy, row-data query, procedure
-execution, automatic conversion approval, or production readiness claim.
+`responses_httpx` remains retained for P-GPT AI Draft Pack compatibility and
+explicit emergency rollback, but is not the default structured LLM runtime. The
+production-exported P43 baseline/fake framework adapter symbols are removed from
+the runtime package and kept only as test helpers for historical fixture coverage.
+P49 adds no public API, DB schema, UI, public MCP route, public artifact type,
+source apply, deploy, row-data query, procedure execution, automatic conversion
+approval, or production readiness claim.
 
 ## 한 줄 정의
 

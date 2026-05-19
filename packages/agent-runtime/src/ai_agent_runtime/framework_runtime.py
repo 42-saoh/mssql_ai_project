@@ -92,11 +92,14 @@ def framework_runtime_config_from_env() -> FrameworkRuntimeConfig:
     else:
         orchestrator = AI_DRAFT_PACK_ORCHESTRATOR_INLINE
 
-    structured_llm_runtime = (
-        _normalized_generation_runtime(requested_structured_runtime)
-        if requested_structured_runtime
-        else generation_runtime
-    )
+    if requested_structured_runtime:
+        structured_llm_runtime = _normalized_generation_runtime(
+            requested_structured_runtime
+        )
+    elif remote_enabled:
+        structured_llm_runtime = AI_GENERATION_RUNTIME_OPENAI_AGENTS
+    else:
+        structured_llm_runtime = generation_runtime
 
     return FrameworkRuntimeConfig(
         ai_generation_runtime=generation_runtime,

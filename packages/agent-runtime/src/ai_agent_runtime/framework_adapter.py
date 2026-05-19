@@ -354,6 +354,12 @@ class OpenAIAgentsStructuredAdapter:
         except ModelGatewayError:
             raise
         except Exception as exc:  # noqa: BLE001 - diagnostics must stay sanitized
+            endpoint_class = openai_agents_endpoint_class_from_env()
+            sdk_transport = (
+                openai_agents_compatible_api_from_env()
+                if endpoint_class != OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI
+                else OPENAI_AGENTS_COMPATIBLE_API_RESPONSES
+            )
             raise ModelGatewayError(
                 "OpenAI Agents SDK structured adapter failed before valid output.",
                 code=P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED,
@@ -362,6 +368,10 @@ class OpenAIAgentsStructuredAdapter:
                     "code": P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED,
                     "stage": _safe_stage(request.stage),
                     "schemaName": _safe_schema_name(request.schema_name),
+                    "endpointClass": endpoint_class,
+                    "sdkTransport": sdk_transport,
+                    "modelProfileId": request.profile.profile_id,
+                    "model": request.profile.model,
                     "errorClass": exc.__class__.__name__,
                 },
             ) from None

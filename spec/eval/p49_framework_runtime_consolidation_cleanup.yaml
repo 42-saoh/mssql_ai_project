@@ -18,7 +18,7 @@ active_runtime_matrix:
     gateway_wrapper: FrameworkModelGateway
     adapter: OpenAIAgentsStructuredAdapter
     openai_remote_default: openai_agents
-    pgpt_default: responses_httpx
+    pgpt_default: openai_agents
     emergency_rollback_runtime: responses_httpx
     stages:
       - llm_semantic_analysis
@@ -48,7 +48,8 @@ retained_rollback:
   responses_httpx:
     retained: true
     active_openai_default: false
-    pgpt_default: true
+    pgpt_structured_default: false
+    pgpt_generation_default: true
     explicit_emergency_rollback: true
     allowed_env:
       - AI_STRUCTURED_LLM_RUNTIME=responses_httpx

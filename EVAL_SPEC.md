@@ -317,9 +317,9 @@ Acceptance checks:
 - The runtime matrix covers `invoke_semantic_analysis`, `plan_metadata_tools`,
   `analyze_metadata`, `plan_platform_tools`, `plan_sp_operation_model`, and the
   existing AI Draft Pack path.
-- OpenAI remote structured calls default to `openai_agents`; P-GPT defaults to
-  `responses_httpx` unless explicitly set to `openai_agents`; `responses_httpx`
-  remains the rollback path.
+- Remote structured calls default to `openai_agents` for both official OpenAI
+  and P-GPT-compatible endpoints; `AI_STRUCTURED_LLM_RUNTIME=responses_httpx`
+  remains the explicit emergency rollback path.
 - Unit tests prove the structured adapter validates semantic analysis, metadata
   tool planning, metadata analysis, platform tool planning, and SP operation
   model outputs through existing strict parsers and sanitized trace summaries.
@@ -347,7 +347,8 @@ Pack OpenAI Agents plus LangGraph runtime, and P43 is historical evidence only.
 
 Acceptance checks:
 - P49 declares retained rollback semantics: `responses_httpx` stays for P-GPT
-  default compatibility and explicit emergency rollback.
+  AI Draft Pack compatibility and explicit emergency rollback, but not as the
+  default structured LLM runtime.
 - Production runtime exports no longer include P43 baseline/fake framework
   adapter symbols; test-only equivalents live under `tests.helpers`.
 - Broad P43 replay gates are replaced by a small historical asset contract check

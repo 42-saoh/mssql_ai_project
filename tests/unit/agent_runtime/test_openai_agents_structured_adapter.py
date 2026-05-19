@@ -15,6 +15,7 @@ from ai_agent_runtime import (
     ModelGatewayError,
     ModelProfile,
     OpenAIAgentsStructuredAdapter,
+    P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED,
 )
 from ai_agent_runtime.models import RenderedPrompt, stable_json_hash
 from ai_agent_runtime.operation_model import (
@@ -182,6 +183,65 @@ def test_openai_agents_structured_adapter_schema_failure_is_sanitized() -> None:
     assert "metadata analysis" not in diagnostics
     assert "outputHash" in diagnostics
     assert "metadata_analysis" in diagnostics
+
+
+def test_openai_agents_structured_adapter_hard_fails_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class InternalServerError(Exception):
+        pass
+
+    class FallbackSpy(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__()
+            self.semantic_calls = 0
+
+        def invoke_semantic_analysis(self, *, prompt: Any, profile: Any) -> Any:
+            self.semantic_calls += 1
+            return super().invoke_semantic_analysis(prompt=prompt, profile=profile)
+
+    fallback = FallbackSpy()
+    monkeypatch.setenv("LLM_REMOTE_PROVIDER", "pgpt")
+    monkeypatch.setenv("OPENAI_AGENTS_COMPATIBLE_API", "responses")
+    gateway = FrameworkModelGateway(
+        fallback_gateway=fallback,
+        structured_adapter=OpenAIAgentsStructuredAdapter(
+            runner=lambda _agent, _prompt, _config: (_ for _ in ()).throw(
+                InternalServerError(
+                    "raw provider response: CREATE PROCEDURE secret-token"
+                )
+            ),
+            agent_factory=lambda request: SimpleNamespace(stage=request.stage),
+        ),
+    )
+
+    with pytest.raises(ModelGatewayError) as exc:
+        gateway.invoke_semantic_analysis(
+            prompt=_prompt(
+                schema="schema:llm_semantic_analysis@0.4.1",
+                metadata={"targetRef": "dbo.usp_Demo"},
+            ),
+            profile=_profile(),
+        )
+
+    assert exc.value.code == P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED
+    assert fallback.semantic_calls == 0
+    provider_error = exc.value.provider_error
+    assert provider_error == {
+        "type": "openai_agents_structured_adapter",
+        "code": P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED,
+        "stage": "llm_semantic_analysis",
+        "schemaName": "llm_semantic_analysis",
+        "endpointClass": "pgpt_compatible",
+        "sdkTransport": "responses",
+        "modelProfileId": "openai_fast_test",
+        "model": "gpt-5-nano",
+        "errorClass": "InternalServerError",
+    }
+    diagnostics = json.dumps(provider_error, ensure_ascii=False)
+    assert "CREATE PROCEDURE" not in diagnostics
+    assert "secret-token" not in diagnostics
+    assert "raw provider response" not in diagnostics
 
 
 def test_framework_model_gateway_keeps_sp_text_gate(monkeypatch: pytest.MonkeyPatch) -> None:

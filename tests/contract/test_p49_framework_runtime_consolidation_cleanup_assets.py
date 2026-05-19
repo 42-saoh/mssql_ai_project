@@ -96,7 +96,8 @@ def test_p49_retains_pgpt_and_emergency_responses_httpx_rollback() -> None:
 
     assert rollback["responses_httpx"]["retained"] is True
     assert rollback["responses_httpx"]["active_openai_default"] is False
-    assert rollback["responses_httpx"]["pgpt_default"] is True
+    assert rollback["responses_httpx"]["pgpt_structured_default"] is False
+    assert rollback["responses_httpx"]["pgpt_generation_default"] is True
     assert rollback["responses_httpx"]["explicit_emergency_rollback"] is True
     assert rollback["openai_model_gateway"]["retained"] is True
     assert "responses_httpx" in _yaml(CONTRACT)["not_deleted"]

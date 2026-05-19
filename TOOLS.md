@@ -143,9 +143,9 @@ P44 is the active real framework runtime adoption track. It installs
 `openai-agents==0.17.2` and `langgraph==1.2.0`, adds
 `FrameworkRuntimeConfig.v0.1`, routes OpenAI remote AI Draft Pack generation
 through OpenAI Agents SDK, and runs the draft-pack stages through LangGraph.
-P-GPT defaults to `responses_httpx`, but explicit internal compatible-endpoint
-live evidence may use OpenAI Agents SDK plus LangGraph. Emergency rollback
-remains `responses_httpx`.
+P-GPT AI Draft Pack generation defaults to `responses_httpx`, but explicit
+internal compatible-endpoint live evidence may use OpenAI Agents SDK plus
+LangGraph. Emergency rollback remains `responses_httpx`.
 
 The default P44 static gate is:
 
@@ -221,9 +221,9 @@ SP operation-model planning to `OpenAIAgentsStructuredAdapter` under
 `AiStructuredFrameworkAdapter.v0.1`. AI Draft Pack stays on the existing P44
 OpenAI Agents plus LangGraph workflow path.
 
-OpenAI remote structured calls default to `openai_agents`; P-GPT remains on
-`responses_httpx` unless an internal runtime override explicitly selects
-`openai_agents`. The rollback check is:
+Remote structured calls default to `openai_agents` for both official OpenAI and
+P-GPT-compatible endpoints. `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` is the
+explicit emergency rollback check:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py"

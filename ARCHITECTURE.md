@@ -235,10 +235,11 @@ gateway remains retained only for P-GPT compatibility and emergency rollback.
 
 P44 supersedes P43 as the active framework direction. The internal
 `FrameworkRuntimeConfig.v0.1` factory selects OpenAI Agents SDK for OpenAI remote
-AI Draft Pack generation. P-GPT defaults to `responses_httpx` for compatibility,
-but an explicit internal `AI_GENERATION_RUNTIME=openai_agents` selection may use
-the OpenAI Agents SDK with an approved P-GPT-compatible endpoint. This is an
-internal dependency construction decision, not a public request flag.
+AI Draft Pack generation. P-GPT AI Draft Pack generation defaults to
+`responses_httpx` for compatibility, but an explicit internal
+`AI_GENERATION_RUNTIME=openai_agents` selection may use the OpenAI Agents SDK
+with an approved P-GPT-compatible endpoint. This is an internal dependency
+construction decision, not a public request flag.
 
 `OpenAIAgentsFrameworkAdapter` implements the existing
 `AiGenerationFrameworkAdapter.v0.1` stage methods with real OpenAI Agents SDK
@@ -313,11 +314,10 @@ reuses the existing prompt renderers, strict schema parsers, P-GPT normalizers,
 and post-validation logic instead of creating a parallel schema stack.
 
 `FrameworkRuntimeConfig.v0.1` now records both `ai_generation_runtime` and
-`structured_llm_runtime`. OpenAI remote defaults to `openai_agents` for
-structured LLM paths; P-GPT defaults to `responses_httpx` unless
-`AI_GENERATION_RUNTIME=openai_agents` or `AI_STRUCTURED_LLM_RUNTIME=openai_agents`
-is explicitly set. Setting the structured runtime to `responses_httpx` keeps the
-existing `OpenAIModelGateway` rollback path. AI Draft Pack remains routed by
+`structured_llm_runtime`. Remote structured LLM paths default to
+`openai_agents` for both official OpenAI and P-GPT-compatible endpoints. Setting
+`AI_STRUCTURED_LLM_RUNTIME=responses_httpx` keeps the existing
+`OpenAIModelGateway` emergency rollback path explicit. AI Draft Pack remains routed by
 `WorkflowService` through the P44 `OpenAIAgentsFrameworkAdapter` and
 `LangGraphAiDraftPackOrchestrator`.
 
@@ -344,8 +344,9 @@ evidence.
 The production runtime no longer exports P43 baseline/fake framework adapter
 scaffolding. Equivalent fake adapters live under test helpers for historical
 fixtures and orchestrator unit coverage. `OpenAIModelGateway` and
-`responses_httpx` remain in the architecture for P-GPT default compatibility and
-explicit emergency rollback only.
+`responses_httpx` remain in the architecture for P-GPT AI Draft Pack
+compatibility and explicit emergency rollback only, not as the default structured
+LLM runtime.
 
 P49 does not introduce a public API, DB schema, UI surface, public MCP route,
 public artifact type, row-data query, procedure execution, source apply, deploy,

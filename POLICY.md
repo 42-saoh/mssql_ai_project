@@ -132,9 +132,9 @@
 - P46 does not delete rollback code. It records that `responses_httpx` is not the active OpenAI
   default and is retained for P-GPT default compatibility plus emergency rollback until a separate
   cleanup gate approves removal.
-- P-GPT remains on `responses_httpx` by default; compatible SDK evidence is allowed only through
-  explicit internal runtime selection and immediate P42/P44 validation. `responses_httpx` is
-  retained for emergency rollback until a later removal decision.
+- P-GPT AI Draft Pack generation remains on `responses_httpx` by default; compatible SDK evidence is
+  allowed only through explicit internal generation runtime selection and immediate P42/P44
+  validation. `responses_httpx` is retained for emergency rollback until a later removal decision.
 - Procedure execution, row-data access, business DB DDL/DML apply, source apply, deploy, automatic
   conversion approval, production readiness claims, and ManageBond-specific production hardcoding
   remain forbidden.
@@ -164,9 +164,9 @@
 - `AiStructuredFrameworkAdapter.v0.1` is an internal runtime contract for structured LLM
   calls. It does not add a public request flag, public API, DB schema, UI, public MCP route,
   or public artifact type.
-- OpenAI remote structured LLM calls may use `OpenAIAgentsStructuredAdapter` behind
-  `FrameworkModelGateway`. P-GPT remains on `responses_httpx` by default unless the internal
-  runtime is explicitly set to `openai_agents`; `responses_httpx` remains the rollback path.
+- OpenAI remote structured LLM calls use `OpenAIAgentsStructuredAdapter` behind
+  `FrameworkModelGateway` by default for official OpenAI and P-GPT-compatible endpoints.
+  `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` remains an explicit emergency rollback path only.
 - AI Draft Pack routing remains on the existing P44 `OpenAIAgentsFrameworkAdapter` and
   LangGraph orchestrator in `WorkflowService`.
 - P48 must preserve deterministic safeguards: evidence-ref repair, planner fallback, tool
@@ -189,9 +189,9 @@
   must not drive active runtime or quality gates after P49.
 - Production runtime exports must not expose P43 baseline/fake framework adapter symbols. Test
   fakes may exist only under test helper modules.
-- `responses_httpx`, `OpenAIModelGateway`, and the P-GPT default compatibility path remain
+- `responses_httpx`, `OpenAIModelGateway`, and the P-GPT AI Draft Pack compatibility path remain
   retained. Emergency rollback through `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` or the
-  existing rollback selection remains allowed.
+  existing generation rollback selection remains allowed.
 - P49 does not authorize public API, DB schema, UI, public MCP route, public artifact type,
   source apply, deploy, row-data query, procedure execution, automatic conversion approval, or
   production readiness changes.

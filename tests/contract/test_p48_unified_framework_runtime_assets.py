@@ -35,7 +35,7 @@ def test_p48_contract_declares_unified_structured_runtime_matrix() -> None:
     assert contract["extends"] == ["p44_framework_runtime_adoption@0.1.0"]
     assert contract["adapter_contract"] == AI_STRUCTURED_FRAMEWORK_ADAPTER_VERSION
     assert contract["structured_runtime"]["openai_remote_default"] == "openai_agents"
-    assert contract["structured_runtime"]["pgpt_default"] == "responses_httpx"
+    assert contract["structured_runtime"]["pgpt_default"] == "openai_agents"
     assert contract["ai_draft_pack_runtime"] == "p44_existing_adapter_and_langgraph"
     assert contract["production_ready"] is False
 
@@ -72,11 +72,7 @@ def test_p48_runtime_env_defaults_and_rollback_selection(
     monkeypatch.delenv("AI_GENERATION_RUNTIME", raising=False)
     monkeypatch.delenv("AI_STRUCTURED_LLM_RUNTIME", raising=False)
     config = framework_runtime_config_from_env()
-    assert config.structured_llm_runtime == AI_GENERATION_RUNTIME_RESPONSES_HTTPX
-    assert isinstance(build_model_gateway_from_env(), OpenAIModelGateway)
-
-    monkeypatch.setenv("AI_GENERATION_RUNTIME", "openai_agents")
-    config = framework_runtime_config_from_env()
+    assert config.ai_generation_runtime == AI_GENERATION_RUNTIME_RESPONSES_HTTPX
     assert config.structured_llm_runtime == AI_GENERATION_RUNTIME_OPENAI_AGENTS
     assert isinstance(build_model_gateway_from_env(), FrameworkModelGateway)
 

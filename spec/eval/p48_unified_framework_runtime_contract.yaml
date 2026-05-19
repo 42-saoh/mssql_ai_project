@@ -18,20 +18,21 @@ structured_runtime:
   gateway_wrapper: FrameworkModelGateway
   adapter: OpenAIAgentsStructuredAdapter
   openai_remote_default: openai_agents
-  pgpt_default: responses_httpx
-  pgpt_explicit_openai_agents_allowed: true
+  pgpt_default: openai_agents
+  pgpt_explicit_responses_httpx_rollback_allowed: true
   emergency_rollback_runtime: responses_httpx
   env:
     AI_GENERATION_RUNTIME:
       default_when_openai_remote: openai_agents
       pgpt_default_behavior: responses_httpx
+      pgpt_structured_default_when_remote: openai_agents
       pgpt_explicit_openai_agents_allowed: true
     AI_STRUCTURED_LLM_RUNTIME:
       optional_override: true
       allowed_values:
         - openai_agents
         - responses_httpx
-      purpose: force structured LLM calls to the framework runtime or rollback path
+      purpose: force structured LLM calls to the framework runtime or explicit emergency rollback path
 
 runtime_matrix:
   - stage_id: llm_semantic_analysis
