@@ -172,7 +172,10 @@ def model_profile_from_env(profile_id: str | None) -> ModelProfile:
 
 def build_model_gateway_from_env() -> ModelGateway:
     if os.getenv("LLM_ENABLE_REMOTE", "0").strip() == "1":
-        return OpenAIModelGateway()
+        gateway = OpenAIModelGateway()
+        from ai_agent_runtime.framework_runtime import build_model_gateway_runtime_from_env
+
+        return build_model_gateway_runtime_from_env(model_gateway=gateway)
     return FakeModelGateway()
 
 
@@ -416,8 +419,8 @@ def _default_fake_semantic_output() -> dict[str, Any]:
             {
                 "category": "LLM_SEMANTIC_SUMMARY",
                 "summary": (
-                    "Fake model gateway媛 硫뷀??곗씠?곗? ?뺤쟻 遺꾩꽍留??ъ슜???앹꽦??"
-                    "珥덉븞 ?섎? ?붿빟?낅땲??"
+                    "Fake model gateway 초안 의미 요약: metadata and static analysis "
+                    "were used to create a draft semantic summary."
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": ["metadata.snapshot", "static.analysis"],
@@ -488,8 +491,8 @@ def _default_fake_metadata_analysis_output(
     evidence_refs = refs[:1] or ["metadata.analysis.no_fact"]
     return {
         "summary": (
-            "Fake model gateway媛 sanitized 寃곗젙濡좎쟻 MCP evidence濡??앹꽦??"
-            "珥덉븞 硫뷀??곗씠??遺꾩꽍?낅땲??"
+            "Fake model gateway 초안 메타데이터 분석: sanitized MCP evidence was "
+            "used for a review-required draft metadata analysis."
         ),
         "objectInsights": [
             {

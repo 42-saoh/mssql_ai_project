@@ -1,0 +1,157 @@
+contract_id: p48_unified_framework_runtime@0.1.0
+phase: P48
+title: Unified Structured Framework Runtime
+extends:
+  - p44_framework_runtime_adoption@0.1.0
+adapter_contract: AiStructuredFrameworkAdapter.v0.1
+production_ready: false
+ai_draft_pack_runtime: p44_existing_adapter_and_langgraph
+
+purpose:
+  summary: >
+    Route every internal structured LLM call through the adopted OpenAI Agents
+    framework runtime for OpenAI remote execution, while preserving the existing
+    P44 AI Draft Pack adapter and LangGraph orchestrator.
+  internal_only: true
+
+structured_runtime:
+  gateway_wrapper: FrameworkModelGateway
+  adapter: OpenAIAgentsStructuredAdapter
+  openai_remote_default: openai_agents
+  pgpt_default: responses_httpx
+  pgpt_explicit_openai_agents_allowed: true
+  emergency_rollback_runtime: responses_httpx
+  env:
+    AI_GENERATION_RUNTIME:
+      default_when_openai_remote: openai_agents
+      pgpt_default_behavior: responses_httpx
+      pgpt_explicit_openai_agents_allowed: true
+    AI_STRUCTURED_LLM_RUNTIME:
+      optional_override: true
+      allowed_values:
+        - openai_agents
+        - responses_httpx
+      purpose: force structured LLM calls to the framework runtime or rollback path
+
+runtime_matrix:
+  - stage_id: llm_semantic_analysis
+    gateway_method: invoke_semantic_analysis
+    schema_name: llm_semantic_analysis
+    output_schema: schema:llm_semantic_analysis@0.4.1
+    runtime: openai_agents_structured
+    deterministic_safeguards:
+      - LLM_ALLOW_SP_TEXT gate for procedure definition or source context
+      - evidence ref validation and repair at semantic runtime boundary
+      - storage sanitization before persistence
+  - stage_id: metadata_tool_planning
+    gateway_method: plan_metadata_tools
+    schema_name: metadata_tool_plan
+    output_schema: schema:mssql_metadata_tool_plan@0.1.0
+    runtime: openai_agents_structured
+    deterministic_safeguards:
+      - tool allowlist from prompt metadata toolNames
+      - active read-only MCP execution boundary
+      - planner fallback when LLM planning is unavailable
+  - stage_id: metadata_analysis
+    gateway_method: analyze_metadata
+    schema_name: metadata_analysis
+    output_schema: schema:mssql_metadata_analysis@0.1.1
+    runtime: openai_agents_structured
+    deterministic_safeguards:
+      - allowed deterministic evidence refs only
+      - metadata/design sanitization
+      - knowledge persistence sanitization
+  - stage_id: platform_tool_planning
+    gateway_method: plan_platform_tools
+    schema_name: platform_tool_plan
+    output_schema: schema:platform_tool_plan@0.1.0
+    runtime: openai_agents_structured
+    deterministic_safeguards:
+      - platform tool allowlist
+      - current-job and db-profile scoping
+      - sanitized platform evidence summaries only
+  - stage_id: sp_operation_model
+    gateway_method: plan_sp_operation_model
+    schema_name: sp_operation_model
+    output_schema: schema:sp_operation_model@0.1.0
+    runtime: openai_agents_structured
+    deterministic_safeguards:
+      - sanitized statement evidence defaults
+      - evidence-ref repair
+      - REVIEW_REQUIRED fallback behavior
+  - stage_id: ai_java_mybatis_draft_pack
+    gateway_method: draft_ai_java_mybatis_pack
+    schema_name: ai_java_mybatis_draft_pack
+    output_schema: schema:ai_java_mybatis_draft_pack@0.1.0
+    runtime: p44_openai_agents_langgraph
+    deterministic_safeguards:
+      - AiJavaMyBatisDraftPack.v0.1 validation
+      - P42 static Java/MyBatis quality gate
+      - LangGraph without persistent checkpointer
+
+trace_policy:
+  adapter_contract: AiStructuredFrameworkAdapter.v0.1
+  tracing_disabled_by_default: true
+  run_config_tracing_disabled: true
+  run_config_trace_include_sensitive_data: false
+  stored_summary_allowed:
+    - adapter_id
+    - candidate_framework
+    - stage
+    - status
+    - component_ids
+    - counts
+    - hashes
+    - failure_codes
+    - numeric_policy_safe_metrics
+  store_raw_prompt: false
+  store_raw_provider_response: false
+  store_raw_sp_definition: false
+  store_raw_guide_body: false
+  store_row_data: false
+  store_secrets: false
+  store_failed_java_or_xml_payload: false
+
+public_surface:
+  public_api_changed: false
+  db_schema_changed: false
+  ui_changed: false
+  public_mcp_route_changed: false
+  public_artifact_type_changed: false
+  public_request_flag_added: false
+
+forbidden_behavior:
+  public_api_change: true
+  db_schema_change: true
+  ui_change: true
+  public_mcp_route_change: true
+  public_artifact_type_change: true
+  source_apply: true
+  deploy: true
+  row_data_query: true
+  procedure_execution: true
+  business_db_ddl_or_dml_apply: true
+  automatic_conversion_approval: true
+  production_ready_true: true
+  raw_prompt_storage: true
+  raw_provider_response_storage: true
+  raw_sp_definition_storage: true
+  raw_guide_body_storage: true
+  secret_storage: true
+
+metadata_design_planner:
+  prompt_metadata_required:
+    - targetRef
+    - toolNames
+  allowed_tools:
+    - search_columns
+    - search_tables
+    - find_similar_tables
+    - get_table_schema
+
+verification:
+  contract_gate:
+    - make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py"
+  targeted_gate:
+    - make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py tests/unit/agent_runtime/test_semantic_runtime.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_metadata_design_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_platform_tool_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/eval/test_p38_metadata_design_chat.py tests/eval/test_p40_metadata_design_natural_language_chat.py tests/eval/test_p44_framework_runtime_replay.py"
+    - git diff --check

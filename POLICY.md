@@ -159,6 +159,28 @@
   official endpoint pass the OpenAI Agents SDK live gate with sanitized diagnostics.
 - Generated Java/MyBatis artifacts remain draft-only with `production_ready: false`.
 
+## P48 Unified Structured Framework Runtime Policy
+
+- `AiStructuredFrameworkAdapter.v0.1` is an internal runtime contract for structured LLM
+  calls. It does not add a public request flag, public API, DB schema, UI, public MCP route,
+  or public artifact type.
+- OpenAI remote structured LLM calls may use `OpenAIAgentsStructuredAdapter` behind
+  `FrameworkModelGateway`. P-GPT remains on `responses_httpx` by default unless the internal
+  runtime is explicitly set to `openai_agents`; `responses_httpx` remains the rollback path.
+- AI Draft Pack routing remains on the existing P44 `OpenAIAgentsFrameworkAdapter` and
+  LangGraph orchestrator in `WorkflowService`.
+- P48 must preserve deterministic safeguards: evidence-ref repair, planner fallback, tool
+  allowlists, SP source text gates, metadata/design sanitization, knowledge persistence
+  sanitization, and `REVIEW_REQUIRED` behavior.
+- Metadata design planner prompts must include the bounded allowed tool names in prompt metadata
+  as `toolNames`; model-generated tools outside the allowlist remain invalid.
+- Framework traces may store only sanitized stage names, adapter ids, framework ids, counts,
+  hashes, model/profile ids, token counts, component ids, and failure codes. Raw prompts, raw
+  provider responses, raw SP definitions, raw guide bodies, row data, secrets, failed Java/XML
+  payloads, source apply, deploy, and procedure execution remain forbidden.
+- P48 keeps `production_ready: false`; automatic conversion approval, row-data query,
+  procedure execution, source apply, deploy, and business DB DDL/DML apply remain forbidden.
+
 ## P35 Source Context Policy
 
 - Full stored procedure definitions must not be sent to the model by default. The semantic runtime

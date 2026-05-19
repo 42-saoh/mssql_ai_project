@@ -27,6 +27,10 @@ OpenAI LLM agent runtime slice for P22.
 - `openai_ai_draft_pack` is the high-quality live profile for AI Draft Pack generation. `OPENAI_MODEL_AI_DRAFT_PACK` falls back to `OPENAI_MODEL_ANALYSIS`, and `OPENAI_REASONING_EFFORT_AI_DRAFT_PACK` controls reasoning effort for the adopted OpenAI Agents path.
 - P47 applies the deterministic DTO reference guard to every successful AI Draft Pack output, not only repair retries, so Service/Mapper/XML drafts keep generic DTO responsibility references required by the P42 validator.
 - P45 live evidence accepts an official OpenAI Agents endpoint (`OPENAI_BASE_URL` empty or `https://api.openai.com/v1`) or an approved P-GPT-compatible endpoint configured with `OPENAI_BASE_URL` or `OPENAI_RESPONSES_URL`. Compatible endpoints use `OPENAI_AGENTS_COMPATIBLE_API=responses` by default, keep native SDK `output_type` disabled, and rely on immediate `AiJavaMyBatisDraftPack.v0.1` plus P42 quality validation.
+- P48 adds `AiStructuredFrameworkAdapter.v0.1` and `FrameworkModelGateway` so OpenAI remote structured LLM calls for semantic analysis, metadata tool planning, metadata analysis, platform tool planning, and SP operation-model planning run through `OpenAIAgentsStructuredAdapter`. AI Draft Pack remains on the P44 `OpenAIAgentsFrameworkAdapter` plus LangGraph workflow path.
+- P48 defaults OpenAI remote structured calls to `openai_agents`; P-GPT remains on `responses_httpx` by default unless `AI_GENERATION_RUNTIME=openai_agents` or `AI_STRUCTURED_LLM_RUNTIME=openai_agents` is explicitly set. Setting `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` keeps the rollback path.
+- P48 preserves evidence-ref repair, planner fallback, tool allowlists, SP source text gates, metadata/design sanitization, knowledge persistence sanitization, and `REVIEW_REQUIRED` behavior. The metadata design planner prompt metadata includes `toolNames` for remote structured validation.
+- P48 adds no public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row data access, procedure execution, or production readiness claim.
 - Semantic analysis now runs through per-SP tasks. Multiple SP tasks can fan out with `LLM_SP_CONCURRENCY` (default `2`), while the public single-SP API stays unchanged.
 - P26 high-quality mode is the API/Web default. Each SP task uses staged calls for deterministic evidence digest, business rule extraction, Java/MyBatis conversion readiness, migration guide insights, evidence criticism, plus at most one repair call when evidence refs or required markers are missing.
 - The runtime constrains live structured-output schemas with the task's deterministic fact ids, repairs stored output so claim `evidenceRefs` do not use prompt/input/output hashes, and injects a `LLM_OUTPUT_STORAGE_SANITIZED` evidence caveat when unsafe model text is removed.
@@ -47,3 +51,5 @@ OpenAI LLM agent runtime slice for P22.
 - `schema:mssql_metadata_analysis@0.1.1`
 - `prompt:ai_java_mybatis_draft_pack@0.2.0`
 - `schema:ai_java_mybatis_draft_pack@0.1.0`
+- `adapter:AiStructuredFrameworkAdapter.v0.1`
+- `runtime:FrameworkModelGateway@0.1.0`

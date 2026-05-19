@@ -207,6 +207,30 @@ route, public artifact type, source apply, deploy, row-data access, procedure
 execution, or production readiness claim. Generated artifacts remain
 `production_ready: false`.
 
+## P48 Unified Structured Framework Runtime
+
+P48 extends the adopted P44 OpenAI Agents SDK runtime from AI Draft Pack into all
+internal structured LLM paths. `FrameworkModelGateway` wraps the existing
+`ModelGateway` interface and routes SP semantic analysis, metadata tool
+planning, metadata analysis, platform tool planning, and SP operation-model
+planning through `OpenAIAgentsStructuredAdapter` under
+`AiStructuredFrameworkAdapter.v0.1`. AI Draft Pack remains on the existing P44
+`OpenAIAgentsFrameworkAdapter` plus LangGraph path in `WorkflowService`.
+
+OpenAI remote structured calls now default to `openai_agents`; P-GPT remains on
+`responses_httpx` by default unless explicitly set to `openai_agents`. The
+rollback path is still `responses_httpx`. P48 preserves evidence-ref repair,
+planner fallback, tool allowlists, SP source text gates, metadata/design
+sanitization, knowledge persistence sanitization, and `REVIEW_REQUIRED`
+behavior. It also fixes the metadata design planner prompt metadata so
+`toolNames` is present for remote structured validation.
+
+P48 is internal only and keeps `production_ready: false`: no public API, DB
+schema, UI, public MCP route, public artifact type, source apply, deploy, row
+data query, procedure execution, automatic conversion approval, raw prompt or
+provider response storage, raw SP storage, raw guide body storage, or secret
+storage is authorized.
+
 ## 한 줄 정의
 
 MSSQL Stored Procedure 및 관련 DB 오브젝트를 분석·문서화하고, 메타데이터와 고품질 LLM 보강을 결합해 Java/MyBatis 전환 코드 초안을 생성하며, 검증 결과를 조직 지식으로 축적하는 중앙 통합형 Agent 플랫폼을 구축한다.

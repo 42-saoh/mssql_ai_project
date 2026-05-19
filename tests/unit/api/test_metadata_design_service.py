@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from ai_agent_runtime import FakeModelGateway
-from api_app.metadata_design_runs import execute_metadata_design_run
+from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.metadata_design_runs import execute_metadata_design_run
 from api_app.metadata_design_service import MetadataDesignChatService
 from api_app.recovery_worker import run_recovery_once
 from api_app.schemas import MetadataDesignRunRequest
@@ -234,6 +236,70 @@ def test_metadata_design_no_candidates_uses_policy_with_review_required(
     assert "REVIEW_REQUIRED" in response["tableProposal"]["createTableScriptPreview"]
     assert response["dtoDraft"]["reviewRequired"] is True
     assert "METADATA_DESIGN_NO_SIMILAR_METADATA" in response["caveats"]
+
+
+def test_metadata_design_planner_prompt_metadata_includes_allowed_tool_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapturingPlannerGateway:
+        def __init__(self) -> None:
+            self.captured_prompt = None
+
+        def plan_metadata_tools(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.captured_prompt = prompt
+            structured_output = {
+                "toolRequests": [],
+                "assumptions": [],
+                "reviewMarkers": [],
+            }
+            return ModelInvocationRecord(
+                provider="capture",
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+            )
+
+    registry = DesignSpyRegistry(empty=True)
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    gateway = CapturingPlannerGateway()
+    service = MetadataDesignChatService(model_gateway=gateway)
+
+    service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "Create a customer order table.",
+                "designInputs": {"tableNameHint": "PPM_CUSTOMER_ORDER"},
+                "options": {
+                    "useLlmAnalysis": True,
+                    "useAiToolOrchestration": True,
+                    "llmProfileId": "openai_fast_test",
+                },
+            }
+        )
+    )
+
+    expected_tools = [
+        "search_columns",
+        "search_tables",
+        "find_similar_tables",
+        "get_table_schema",
+    ]
+    assert gateway.captured_prompt is not None
+    assert gateway.captured_prompt.metadata["toolNames"] == expected_tools
+    payload = json.loads(gateway.captured_prompt.user_prompt)
+    assert payload["allowedTools"] == expected_tools
 
 
 def test_metadata_design_extracts_korean_natural_language_fields(

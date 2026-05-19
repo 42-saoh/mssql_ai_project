@@ -208,9 +208,39 @@ The safer P42 live replay mode is `P42_LIVE_REPLAY_MODE=sanitized_fixture`;
 `live_ppm` remains confidence evidence only and requires explicit raw-SP-to-remote
 model approval. Fixture-first P47 checks use:
 
+The P47 fixture command remains:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
 ```
+
+## P48 Unified Structured Framework Runtime Verification Notes
+
+P48 routes all internal structured LLM paths through the adopted OpenAI Agents
+runtime for OpenAI remote execution. `FrameworkModelGateway` delegates semantic
+analysis, metadata tool planning, metadata analysis, platform tool planning, and
+SP operation-model planning to `OpenAIAgentsStructuredAdapter` under
+`AiStructuredFrameworkAdapter.v0.1`. AI Draft Pack stays on the existing P44
+OpenAI Agents plus LangGraph workflow path.
+
+OpenAI remote structured calls default to `openai_agents`; P-GPT remains on
+`responses_httpx` unless an internal runtime override explicitly selects
+`openai_agents`. The rollback check is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py"
+```
+
+The targeted P48 gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py tests/unit/agent_runtime/test_semantic_runtime.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_metadata_design_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_platform_tool_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/eval/test_p38_metadata_design_chat.py tests/eval/test_p40_metadata_design_natural_language_chat.py tests/eval/test_p44_framework_runtime_replay.py"
+```
+
+Follow with `git diff --check`. P48 tests must not execute stored procedures,
+query row data, apply source, deploy, store raw prompts/provider responses, store
+raw SP definitions, add a public API, change DB schema, add UI, add a public MCP
+route, or claim production readiness.
 
 ## 목적
 

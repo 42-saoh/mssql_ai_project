@@ -302,6 +302,36 @@ model family rather than `openai_fast_test`; P-GPT remains on `responses_httpx`
 by default, with compatible SDK evidence allowed only through explicit internal
 runtime selection.
 
+## P48 Unified Structured Framework Runtime Architecture
+
+P48 adds `AiStructuredFrameworkAdapter.v0.1` for non-draft-pack structured LLM
+tasks. `FrameworkModelGateway` still implements the existing `ModelGateway`
+methods, but for OpenAI remote structured calls it delegates SP semantic
+analysis, metadata tool planning, metadata analysis, platform tool planning, and
+SP operation-model planning to `OpenAIAgentsStructuredAdapter`. The adapter
+reuses the existing prompt renderers, strict schema parsers, P-GPT normalizers,
+and post-validation logic instead of creating a parallel schema stack.
+
+`FrameworkRuntimeConfig.v0.1` now records both `ai_generation_runtime` and
+`structured_llm_runtime`. OpenAI remote defaults to `openai_agents` for
+structured LLM paths; P-GPT defaults to `responses_httpx` unless
+`AI_GENERATION_RUNTIME=openai_agents` or `AI_STRUCTURED_LLM_RUNTIME=openai_agents`
+is explicitly set. Setting the structured runtime to `responses_httpx` keeps the
+existing `OpenAIModelGateway` rollback path. AI Draft Pack remains routed by
+`WorkflowService` through the P44 `OpenAIAgentsFrameworkAdapter` and
+`LangGraphAiDraftPackOrchestrator`.
+
+Trace summaries for P48 use the same sanitized framework summary shape with the
+`AiStructuredFrameworkAdapter.v0.1` adapter contract. Stored summaries may carry
+only stage, adapter id, framework id, counts, hashes, token metrics, component
+ids, and sanitized failure codes. Raw prompts, raw provider responses, raw SP
+definitions, raw guide bodies, row data, secrets, failed Java/XML payloads,
+source apply, deploy, and procedure execution remain forbidden.
+
+No public surface changes are introduced: no public API, DB schema, UI, public
+MCP route, public artifact type, request flag, row-data query, procedure
+execution, source apply, deploy, or production readiness change.
+
 ## P35 Source Context Architecture
 
 Semantic SP analysis now uses a Copilot-style context assembly path: metadata collection creates

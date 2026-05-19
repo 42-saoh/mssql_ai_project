@@ -9,13 +9,14 @@ from ai_agent_runtime.ai_draft_pack_orchestrator import (
     LangGraphAiDraftPackOrchestrator,
 )
 from ai_agent_runtime.framework_adapter import (
-    AiGenerationFrameworkAdapter,
     OPENAI_AGENTS_ENDPOINT_CUSTOM_COMPATIBLE,
     OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI,
     OPENAI_AGENTS_ENDPOINT_PGPT_COMPATIBLE,
+    AiGenerationFrameworkAdapter,
     OpenAIAgentsFrameworkAdapter,
     openai_agents_endpoint_class_from_env,
 )
+from ai_agent_runtime.framework_model_gateway import openai_agents_framework_model_gateway
 from ai_agent_runtime.gateway import (
     REMOTE_PROVIDER_OPENAI,
     REMOTE_PROVIDER_PGPT,
@@ -51,6 +52,7 @@ OPENAI_AGENTS_PGPT_RUNTIME_REQUIREMENT = (
 class FrameworkRuntimeConfig:
     config_version: str = FRAMEWORK_RUNTIME_CONFIG_VERSION
     ai_generation_runtime: str = AI_GENERATION_RUNTIME_RESPONSES_HTTPX
+    structured_llm_runtime: str = AI_GENERATION_RUNTIME_RESPONSES_HTTPX
     ai_draft_pack_orchestrator: str = AI_DRAFT_PACK_ORCHESTRATOR_INLINE
     remote_provider: str = REMOTE_PROVIDER_OPENAI
     remote_enabled: bool = False
@@ -69,6 +71,7 @@ def framework_runtime_config_from_env() -> FrameworkRuntimeConfig:
     remote_enabled = os.getenv("LLM_ENABLE_REMOTE", "0").strip() == "1"
     provider = remote_provider_from_env()
     requested_generation_runtime = os.getenv("AI_GENERATION_RUNTIME", "").strip().lower()
+    requested_structured_runtime = os.getenv("AI_STRUCTURED_LLM_RUNTIME", "").strip().lower()
     requested_orchestrator = os.getenv("AI_DRAFT_PACK_ORCHESTRATOR", "").strip().lower()
 
     if provider == REMOTE_PROVIDER_PGPT and not requested_generation_runtime:
@@ -89,8 +92,15 @@ def framework_runtime_config_from_env() -> FrameworkRuntimeConfig:
     else:
         orchestrator = AI_DRAFT_PACK_ORCHESTRATOR_INLINE
 
+    structured_llm_runtime = (
+        _normalized_generation_runtime(requested_structured_runtime)
+        if requested_structured_runtime
+        else generation_runtime
+    )
+
     return FrameworkRuntimeConfig(
         ai_generation_runtime=generation_runtime,
+        structured_llm_runtime=structured_llm_runtime,
         ai_draft_pack_orchestrator=orchestrator,
         remote_provider=provider,
         remote_enabled=remote_enabled,
@@ -114,6 +124,16 @@ def build_framework_runtime_from_env(
         framework_adapter=adapter,
         ai_draft_pack_orchestrator=orchestrator,
     )
+
+
+def build_model_gateway_runtime_from_env(
+    *,
+    model_gateway: ModelGateway,
+) -> ModelGateway:
+    config = framework_runtime_config_from_env()
+    if config.structured_llm_runtime != AI_GENERATION_RUNTIME_OPENAI_AGENTS:
+        return model_gateway
+    return openai_agents_framework_model_gateway(fallback_gateway=model_gateway)
 
 
 def openai_agents_live_gate_enabled(env: Mapping[str, str] | None = None) -> bool:

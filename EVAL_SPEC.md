@@ -303,6 +303,39 @@ Passing criteria:
 - Optional live failures are reported with sanitized stage/blocker diagnostics
   only and do not imply production readiness.
 
+## P48 Unified Structured Framework Runtime Eval Contract
+
+P48 extends the adopted P44 framework runtime to every internal structured LLM
+path without expanding public product surfaces.
+
+Acceptance checks:
+- `spec/eval/p48_unified_framework_runtime_contract.yaml` exists and declares
+  `AiStructuredFrameworkAdapter.v0.1`, `FrameworkModelGateway`, and
+  `OpenAIAgentsStructuredAdapter`.
+- The runtime matrix covers `invoke_semantic_analysis`, `plan_metadata_tools`,
+  `analyze_metadata`, `plan_platform_tools`, `plan_sp_operation_model`, and the
+  existing AI Draft Pack path.
+- OpenAI remote structured calls default to `openai_agents`; P-GPT defaults to
+  `responses_httpx` unless explicitly set to `openai_agents`; `responses_httpx`
+  remains the rollback path.
+- Unit tests prove the structured adapter validates semantic analysis, metadata
+  tool planning, metadata analysis, platform tool planning, and SP operation
+  model outputs through existing strict parsers and sanitized trace summaries.
+- Regression tests prove metadata analyze, durable analysis runs, metadata
+  design chat, SP workflow semantic analysis, SP operation planning, platform
+  planners, MCP tool planners, and P44 AI Draft Pack replay still pass.
+- The metadata design planner prompt metadata includes `toolNames`, matching the
+  bounded allowed tool list used in the payload.
+- P48 stores no raw prompts, raw provider responses, raw SP definitions, raw
+  guide bodies, row data, secrets, or failed Java/XML payloads.
+- P48 adds no public API, DB schema, UI, public MCP route, public artifact type,
+  source apply, deploy, row-data query, procedure execution, automatic
+  conversion approval, or production readiness claim.
+
+Passing criteria:
+- `make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py tests/unit/agent_runtime/test_semantic_runtime.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_metadata_design_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_platform_tool_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/eval/test_p38_metadata_design_chat.py tests/eval/test_p40_metadata_design_natural_language_chat.py tests/eval/test_p44_framework_runtime_replay.py"` passes.
+- `git diff --check` passes.
+
 ## P35 Source Context Eval Gate
 
 Required checks for Copilot-style SP analysis:

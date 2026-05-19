@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -14,10 +15,12 @@ from ai_agent_runtime.ai_draft_pack import (
     parse_ai_java_mybatis_draft_pack_json,
     validate_ai_java_mybatis_draft_pack_output,
 )
-from ai_agent_runtime.gateway import ModelGateway, ModelGatewayError
 from ai_agent_runtime.gateway import (
     REMOTE_PROVIDER_OPENAI,
     REMOTE_PROVIDER_PGPT,
+    ModelGateway,
+    ModelGatewayError,
+    _parse_structured_output,
     remote_provider_from_env,
 )
 from ai_agent_runtime.models import (
@@ -36,6 +39,13 @@ P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED = "P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED"
 P44_OPENAI_AGENTS_ADAPTER_FAILED = "P44_OPENAI_AGENTS_ADAPTER_FAILED"
 P44_OPENAI_AGENTS_SDK_UNAVAILABLE = "P44_OPENAI_AGENTS_SDK_UNAVAILABLE"
 P44_OPENAI_AGENTS_TRACE_POLICY = "P44_OPENAI_AGENTS_TRACE_POLICY"
+AI_STRUCTURED_FRAMEWORK_ADAPTER_VERSION = "AiStructuredFrameworkAdapter.v0.1"
+P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED = (
+    "P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED"
+)
+P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID = (
+    "P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID"
+)
 OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI = "official_openai"
 OPENAI_AGENTS_ENDPOINT_PGPT_COMPATIBLE = "pgpt_compatible"
 OPENAI_AGENTS_ENDPOINT_CUSTOM_COMPATIBLE = "custom_compatible"
@@ -43,7 +53,24 @@ OPENAI_AGENTS_COMPATIBLE_API_RESPONSES = "responses"
 OPENAI_AGENTS_COMPATIBLE_API_CHAT_COMPLETIONS = "chat_completions"
 
 _ADAPTER_COMPONENT = "ai_generation_framework_adapter"
-_FRAMEWORK_STAGES = frozenset({"file_inventory", "file_content", "repair"})
+_FRAMEWORK_TRACE_CONTRACTS = frozenset(
+    {
+        AI_GENERATION_FRAMEWORK_ADAPTER_VERSION,
+        AI_STRUCTURED_FRAMEWORK_ADAPTER_VERSION,
+    }
+)
+_STRUCTURED_FRAMEWORK_STAGES = frozenset(
+    {
+        "llm_semantic_analysis",
+        "metadata_tool_planning",
+        "metadata_analysis",
+        "platform_tool_planning",
+        "sp_operation_model",
+    }
+)
+_FRAMEWORK_STAGES = frozenset(
+    {"file_inventory", "file_content", "repair", *_STRUCTURED_FRAMEWORK_STAGES}
+)
 _TRACE_SUMMARY_FIELDS = frozenset(
     {
         "component",
@@ -129,6 +156,31 @@ class AiGenerationFrameworkAdapter(Protocol):
         status: str,
         events: Sequence[Mapping[str, Any]],
     ) -> dict[str, Any]:
+        ...
+
+
+@dataclass(frozen=True)
+class AiStructuredFrameworkAdapterRequest:
+    target_ref: str
+    prompt: RenderedPrompt
+    profile: ModelProfile
+    schema_name: str
+    stage: str
+    parser: Callable[[str], Any]
+    invalid_code: str
+    allowed_tool_names: Sequence[str] = ()
+    output_type: Any | None = None
+
+
+class AiStructuredFrameworkAdapter(Protocol):
+    adapter_id: str
+    candidate_framework: str
+
+    def invoke_structured(
+        self,
+        *,
+        request: AiStructuredFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
         ...
 
 
@@ -463,10 +515,124 @@ class OpenAIAgentsFrameworkAdapter:
         agent_kwargs = {
             "name": f"AI Draft Pack {request.stage}",
             "instructions": request.prompt.system_prompt,
-            "model": _openai_agents_model_for_request(request=request),
+            "model": _openai_agents_model_for_profile(profile=request.profile),
         }
         if _openai_agents_native_structured_output_enabled():
             agent_kwargs["output_type"] = AiJavaMyBatisDraftPackOutput
+        return agents.Agent(**agent_kwargs)
+
+
+@dataclass(frozen=True)
+class OpenAIAgentsStructuredAdapter:
+    adapter_id: str = "openai_agents_sdk_structured"
+    candidate_framework: str = "openai_agents_sdk"
+    runner: Callable[[Any, str, Any], Any] | None = None
+    agent_factory: Callable[[AiStructuredFrameworkAdapterRequest], Any] | None = None
+
+    def invoke_structured(
+        self,
+        *,
+        request: AiStructuredFrameworkAdapterRequest,
+    ) -> ModelInvocationRecord:
+        _enforce_openai_agents_trace_policy()
+        started = time.monotonic()
+        try:
+            result = self._run_agents_sdk(request=request)
+            structured_output, normalizer_components = _coerce_openai_agents_structured_output(
+                result,
+                request=request,
+            )
+        except ModelGatewayError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - diagnostics must stay sanitized
+            raise ModelGatewayError(
+                "OpenAI Agents SDK structured adapter failed before valid output.",
+                code=P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED,
+                provider_error={
+                    "type": "openai_agents_structured_adapter",
+                    "code": P48_OPENAI_AGENTS_STRUCTURED_ADAPTER_FAILED,
+                    "stage": _safe_stage(request.stage),
+                    "schemaName": _safe_schema_name(request.schema_name),
+                    "errorClass": exc.__class__.__name__,
+                },
+            ) from None
+        latency_ms = int((time.monotonic() - started) * 1000)
+        token_usage = _openai_agents_token_usage(result)
+        endpoint_class = openai_agents_endpoint_class_from_env()
+        sdk_transport = (
+            openai_agents_compatible_api_from_env()
+            if endpoint_class != OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI
+            else OPENAI_AGENTS_COMPATIBLE_API_RESPONSES
+        )
+        component = summarize_framework_trace(
+            adapter_contract=AI_STRUCTURED_FRAMEWORK_ADAPTER_VERSION,
+            adapter_id=self.adapter_id,
+            candidate_framework=self.candidate_framework,
+            target_ref=request.target_ref,
+            stage=request.stage,
+            status=AgentRunStatus.SUCCEEDED.value,
+            events=(
+                {
+                    "eventType": "openai_agents_sdk_structured_run",
+                    "componentId": (
+                        f"openai_agents_{request.schema_name}_{endpoint_class}_{sdk_transport}"
+                    ),
+                    "outputHash": stable_json_hash(structured_output),
+                    "latencyMs": latency_ms,
+                    "inputTokens": token_usage.get("inputTokens", 0),
+                    "outputTokens": token_usage.get("outputTokens", 0),
+                    "totalTokens": token_usage.get("totalTokens", 0),
+                    "outputKeyCount": len(structured_output),
+                },
+            ),
+        )
+        return ModelInvocationRecord(
+            provider="openai-agents-sdk",
+            model=request.profile.model,
+            model_profile_id=request.profile.profile_id,
+            model_registry_ref=request.profile.registry_ref,
+            reasoning_effort=request.profile.reasoning_effort,
+            prompt_version=request.prompt.prompt_version,
+            output_schema_version=request.prompt.output_schema_version,
+            input_hash=request.prompt.input_hash,
+            prompt_hash=request.prompt.prompt_hash,
+            output_hash=stable_json_hash(structured_output),
+            status=AgentRunStatus.SUCCEEDED,
+            structured_output=structured_output,
+            token_usage=token_usage,
+            latency_ms=latency_ms,
+            provider_request_id=_openai_agents_provider_request_id(result),
+            component_invocations=(*normalizer_components, component),
+        )
+
+    def _run_agents_sdk(self, *, request: AiStructuredFrameworkAdapterRequest) -> Any:
+        if self.runner is not None:
+            return self.runner(
+                self._build_agent(request=request),
+                request.prompt.user_prompt,
+                _openai_agents_run_config(),
+            )
+        agents = _agents_sdk()
+        return agents.Runner.run_sync(
+            self._build_agent(request=request),
+            request.prompt.user_prompt,
+            run_config=_openai_agents_run_config(),
+        )
+
+    def _build_agent(self, *, request: AiStructuredFrameworkAdapterRequest) -> Any:
+        if self.agent_factory is not None:
+            return self.agent_factory(request)
+        agents = _agents_sdk()
+        agent_kwargs = {
+            "name": f"Structured {request.stage}",
+            "instructions": request.prompt.system_prompt,
+            "model": _openai_agents_model_for_profile(profile=request.profile),
+        }
+        if (
+            request.output_type is not None
+            and _openai_agents_native_structured_output_enabled()
+        ):
+            agent_kwargs["output_type"] = request.output_type
         return agents.Agent(**agent_kwargs)
 
 
@@ -525,9 +691,16 @@ def _openai_agents_model_for_request(
     *,
     request: AiGenerationFrameworkAdapterRequest,
 ) -> Any:
+    return _openai_agents_model_for_profile(profile=request.profile)
+
+
+def _openai_agents_model_for_profile(
+    *,
+    profile: ModelProfile,
+) -> Any:
     endpoint_class = openai_agents_endpoint_class_from_env()
     if endpoint_class == OPENAI_AGENTS_ENDPOINT_OFFICIAL_OPENAI:
-        return request.profile.model
+        return profile.model
     agents = _agents_sdk()
     client = _openai_agents_compatible_client(agents=agents)
     compatible_api = openai_agents_compatible_api_from_env()
@@ -549,7 +722,7 @@ def _openai_agents_model_for_request(
                 "sdkTransport": compatible_api,
             },
         )
-    return model_class(model=request.profile.model, openai_client=client)
+    return model_class(model=profile.model, openai_client=client)
 
 
 def _openai_agents_compatible_client(*, agents: Any) -> Any:
@@ -704,6 +877,77 @@ def _coerce_openai_agents_output(
     return model.to_storage_dict()
 
 
+def _coerce_openai_agents_structured_output(
+    result: Any,
+    *,
+    request: AiStructuredFrameworkAdapterRequest,
+) -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
+    output = getattr(result, "final_output", result)
+    output_text = _structured_output_text(output)
+    try:
+        model, normalizer_components = _parse_structured_output(
+            output_text=output_text,
+            parser=request.parser,
+            schema_name=request.schema_name,
+            allowed_tool_names=request.allowed_tool_names,
+            provider=remote_provider_from_env(),
+        )
+    except Exception as exc:  # noqa: BLE001 - raw adapter output must not be stored
+        raise ModelGatewayError(
+            "OpenAI Agents SDK structured output failed validation.",
+            code=request.invalid_code or P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID,
+            provider_error={
+                "type": "openai_agents_structured_adapter",
+                "code": request.invalid_code
+                or P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID,
+                "stage": _safe_stage(request.stage),
+                "schemaName": _safe_schema_name(request.schema_name),
+                "outputHash": _safe_output_hash(output),
+                "errorClass": exc.__class__.__name__,
+            },
+        ) from exc
+    if hasattr(model, "to_storage_dict") and callable(model.to_storage_dict):
+        return model.to_storage_dict(), tuple(normalizer_components)
+    if hasattr(model, "model_dump") and callable(model.model_dump):
+        return (
+            model.model_dump(by_alias=True, mode="json"),
+            tuple(normalizer_components),
+        )
+    if isinstance(model, Mapping):
+        return dict(model), tuple(normalizer_components)
+    raise ModelGatewayError(
+        "OpenAI Agents SDK structured output parser returned an unsupported model.",
+        code=request.invalid_code or P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID,
+        provider_error={
+            "type": "openai_agents_structured_adapter",
+            "code": request.invalid_code or P48_OPENAI_AGENTS_STRUCTURED_OUTPUT_INVALID,
+            "stage": _safe_stage(request.stage),
+            "schemaName": _safe_schema_name(request.schema_name),
+            "outputClass": model.__class__.__name__,
+        },
+    )
+
+
+def _structured_output_text(output: Any) -> str:
+    if isinstance(output, str):
+        return output
+    if isinstance(output, Mapping):
+        return json.dumps(output, ensure_ascii=False, separators=(",", ":"))
+    if hasattr(output, "to_storage_dict") and callable(output.to_storage_dict):
+        return json.dumps(
+            output.to_storage_dict(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    if hasattr(output, "model_dump") and callable(output.model_dump):
+        return json.dumps(
+            output.model_dump(by_alias=True, mode="json"),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    raise TypeError(output.__class__.__name__)
+
+
 def _safe_output_hash(output: Any) -> str:
     if isinstance(output, Mapping):
         return stable_json_hash(output)
@@ -777,6 +1021,7 @@ def _openai_agents_provider_request_id(result: Any) -> str | None:
 
 def summarize_framework_trace(
     *,
+    adapter_contract: str = AI_GENERATION_FRAMEWORK_ADAPTER_VERSION,
     adapter_id: str,
     candidate_framework: str,
     target_ref: str,
@@ -799,7 +1044,7 @@ def summarize_framework_trace(
         )
     summary = {
         "component": _ADAPTER_COMPONENT,
-        "adapterContract": AI_GENERATION_FRAMEWORK_ADAPTER_VERSION,
+        "adapterContract": adapter_contract,
         "adapterId": adapter_id,
         "candidateFramework": candidate_framework,
         "targetRefHash": stable_json_hash({"targetRef": target_ref}),
@@ -908,7 +1153,7 @@ def validate_framework_trace_summary(summary: Mapping[str, Any]) -> dict[str, An
         findings.append("P43_FRAMEWORK_TRACE_SUMMARY_FIELD_NOT_ALLOWED")
     if summary.get("component") != _ADAPTER_COMPONENT:
         findings.append("P43_FRAMEWORK_TRACE_SUMMARY_COMPONENT_INVALID")
-    if summary.get("adapterContract") != AI_GENERATION_FRAMEWORK_ADAPTER_VERSION:
+    if summary.get("adapterContract") not in _FRAMEWORK_TRACE_CONTRACTS:
         findings.append("P43_FRAMEWORK_TRACE_SUMMARY_CONTRACT_INVALID")
     if str(summary.get("stage") or "") not in _FRAMEWORK_STAGES:
         findings.append("P43_FRAMEWORK_TRACE_SUMMARY_STAGE_INVALID")
@@ -1023,6 +1268,11 @@ def _dedupe_strings(items: Any) -> list[str]:
 def _safe_stage(value: Any) -> str:
     stage = str(value or "")
     return stage if stage in _FRAMEWORK_STAGES else "unknown"
+
+
+def _safe_schema_name(value: Any) -> str:
+    schema_name = str(value or "")
+    return schema_name if re.fullmatch(r"[a-z0-9_]{1,80}", schema_name) else "unknown"
 
 
 def _iter_trace_text(value: Any) -> list[str]:

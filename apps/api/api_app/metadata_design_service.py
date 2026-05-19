@@ -865,24 +865,25 @@ def _run_design_planner(
     planner = getattr(model_gateway, "plan_metadata_tools", None)
     if not callable(planner):
         return None, None, ["METADATA_DESIGN_LLM_PLANNER_SKIPPED"]
+    tool_names = [
+        "search_columns",
+        "search_tables",
+        "find_similar_tables",
+        "get_table_schema",
+    ]
     payload = {
         "message": _safe_text(request.message),
         "tableNameHint": _safe_text(request.design_inputs.table_name_hint),
         "tableDescription": _safe_text(request.design_inputs.table_description),
         "fields": [
             {
-                    "name": _safe_text(field.name),
-                    "description": _safe_text(field.description),
-                    "dbType": _safe_text(field.db_type),
+                "name": _safe_text(field.name),
+                "description": _safe_text(field.description),
+                "dbType": _safe_text(field.db_type),
             }
             for field in fields
         ],
-        "allowedTools": [
-            "search_columns",
-            "search_tables",
-            "find_similar_tables",
-            "get_table_schema",
-        ],
+        "allowedTools": tool_names,
     }
     prompt = RenderedPrompt(
         prompt_version=DESIGN_PROMPT_VERSION,
@@ -894,7 +895,10 @@ def _run_design_planner(
         user_prompt=json.dumps(payload, ensure_ascii=False, sort_keys=True),
         input_hash=stable_json_hash(payload),
         prompt_hash=stable_json_hash({"prompt": DESIGN_PROMPT_VERSION, "payload": payload}),
-        metadata={"targetRef": f"metadata-design:{request.db_profile_id}"},
+        metadata={
+            "targetRef": f"metadata-design:{request.db_profile_id}",
+            "toolNames": tool_names,
+        },
     )
     try:
         invocation = planner(
