@@ -11,8 +11,15 @@ from ai_agent_runtime import (
     LangGraphAiDraftPackOrchestrator,
     ModelGatewayError,
 )
+from ai_agent_runtime.ai_draft_pack_orchestrator import _repair_stages_from_quality_report
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
-from ai_agent_validation.models import ValidationStatus
+from ai_agent_validation.models import (
+    ValidationCheck,
+    ValidationCheckResult,
+    ValidationReport,
+    ValidationSeverity,
+    ValidationStatus,
+)
 from tests.helpers.framework_adapters import FakeAiGenerationFrameworkAdapter
 
 from tests.unit.agent_runtime.test_framework_adapter import (
@@ -106,6 +113,30 @@ def test_langgraph_orchestrator_routes_quality_failure_to_repair() -> None:
     assert validate_ai_java_mybatis_draft_pack_quality(
         run.structured_output
     ).status == ValidationStatus.PASSED
+
+
+def test_quality_report_mapper_wiring_failure_repairs_service_mapper_and_xml() -> None:
+    report = ValidationReport(
+        artifact_id="AiJavaMyBatisDraftPack",
+        status=ValidationStatus.FAILED,
+        checks=(
+            ValidationCheck(
+                rule_id="p50.ai_draft_pack.mapper.interface_xml_consistency",
+                severity=ValidationSeverity.BLOCKER,
+                result=ValidationCheckResult.FAIL,
+                message=(
+                    "Service calls mapper methods missing from the Mapper interface: "
+                    "['reviewOnlyStatement']."
+                ),
+            ),
+        ),
+    )
+
+    assert _repair_stages_from_quality_report(report) == [
+        "service_content",
+        "mapper_interface_content",
+        "mapper_xml_content",
+    ]
 
 
 def test_langgraph_orchestrator_routes_schema_failure_to_repair() -> None:

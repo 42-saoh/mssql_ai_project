@@ -361,6 +361,7 @@ def _route_after_quality_gate(state: _DraftPackGraphState) -> str:
 
 
 def _quality_repair_context(report: ValidationReport) -> dict[str, Any]:
+    target_stages = _repair_stages_from_quality_report(report)
     failed = [
         {
             "ruleId": check.rule_id,
@@ -376,27 +377,95 @@ def _quality_repair_context(report: ValidationReport) -> dict[str, Any]:
         "reason": "Deterministic P42 quality gate failed.",
         "failedCheckCount": len(report.failed_checks),
         "failedChecks": failed,
+        "targetStages": target_stages,
+        "stageInstructions": _quality_repair_stage_instructions(target_stages),
         "instruction": (
-            "Repair the draft pack so all expected files, DTO references, mapper methods, "
-            "and required REVIEW_REQUIRED markers pass deterministic validation."
+            "Repair the draft pack so deterministic validation passes without inventing "
+            "raw SQL or collapsing operation-role DTOs. DTO files must declare package, "
+            "class, evidence-backed fields, and constructor/accessor or Lombok policy. "
+            "Service methods must be business operation methods that call only declared "
+            "Mapper methods and never generic execute/raw SQL methods. Mapper interface "
+            "method names must match Mapper XML statement ids exactly. Mapper XML must "
+            "use the Mapper interface FQCN namespace, DTO FQCN parameterType/resultMap "
+            "types, static #{...} bindings, resultMap for SELECT rows, no ${...}, no "
+            "procedureName-driven EXEC/CALL, no generic execute statement, and no "
+            "wrapper-only call of the original target procedure."
         ),
     }
 
 
 def _repair_stages_from_quality_report(report: ValidationReport) -> list[str]:
-    rule_ids = {str(check.rule_id) for check in report.failed_checks}
     stages: list[str] = []
-    if any("service" in rule_id for rule_id in rule_ids):
-        stages.append("service_content")
-    if any("mapper_xml" in rule_id for rule_id in rule_ids):
-        stages.append("mapper_xml_content")
-    if any("mapper." in rule_id or "mapper.method" in rule_id for rule_id in rule_ids):
-        stages.append("mapper_interface_content")
-    if any(".dto" in rule_id or "identifier" in rule_id for rule_id in rule_ids):
-        stages.extend(["dto_inventory", "dto_content"])
+    for check in report.failed_checks:
+        rule_id = str(check.rule_id)
+        text = f"{rule_id} {check.message}".lower()
+        if ".dto" in rule_id or " dto" in text or "dtos" in text or "identifier" in rule_id:
+            stages.extend(["dto_inventory", "dto_content"])
+        if "service" in rule_id or " service" in text or "pass-through" in text:
+            stages.append("service_content")
+        if (
+            "mapper.interface_xml_consistency" in rule_id
+            or "calls mapper methods missing" in text
+            or "generic execute/raw sql mapper" in text
+        ):
+            stages.extend(
+                ["service_content", "mapper_interface_content", "mapper_xml_content"]
+            )
+        if (
+            "mapper_xml" in rule_id
+            or " mapper xml" in text
+            or "xml statement" in text
+            or "namespace" in text
+            or "resultmap" in text
+            or "parametertype" in text
+            or "wrapper-only" in text
+        ):
+            stages.append("mapper_xml_content")
+        if (
+            "mapper.method" in rule_id
+            or "mapper." in rule_id
+            or " mapper interface" in text
+        ):
+            stages.append("mapper_interface_content")
     if not stages:
         return list(ROLE_DRAFT_STAGES)
-    return [stage for stage in ROLE_DRAFT_STAGES if stage in set(stages)]
+    return _ordered_role_stages(stages)
+
+
+def _ordered_role_stages(stages: Sequence[str]) -> list[str]:
+    selected = {str(stage) for stage in stages}
+    return [stage for stage in ROLE_DRAFT_STAGES if stage in selected]
+
+
+def _quality_repair_stage_instructions(stages: Sequence[str]) -> dict[str, str]:
+    instructions = {
+        "dto_inventory": (
+            "Keep operation-role DTO separation; merge duplicate same-role field sets and "
+            "do not add statement-fragment DTOs."
+        ),
+        "dto_content": (
+            "Every DTO must use javaPackageContext.modelPackage, declare the class, "
+            "declare each requiredFields field, and include getters/setters, an explicit "
+            "constructor/accessor policy, or a Lombok DTO annotation."
+        ),
+        "service_content": (
+            "Use business operation methods from qualityGates.requiredServiceMethods; "
+            "call only Mapper methods that are declared in the Mapper interface/XML, "
+            "show sequencing for multi-step operations, and remove generic execute/raw "
+            "SQL calls."
+        ),
+        "mapper_interface_content": (
+            "Declare Mapper methods that match XML statement ids exactly; use DTO types "
+            "from the expected inventory and do not declare execute/raw SQL methods."
+        ),
+        "mapper_xml_content": (
+            "Use namespace equal to the Mapper interface FQCN, statement ids equal to "
+            "Mapper interface methods, DTO FQCN parameterType/resultMap types, resultMap "
+            "for SELECT rows, static #{...} bindings, and no placeholder SELECT, ${...}, "
+            "procedureName, generic execute, or wrapper-only original procedure EXEC/CALL."
+        ),
+    }
+    return {stage: instructions[stage] for stage in stages if stage in instructions}
 
 
 def _repair_stages_from_findings(findings: Sequence[str]) -> list[str]:

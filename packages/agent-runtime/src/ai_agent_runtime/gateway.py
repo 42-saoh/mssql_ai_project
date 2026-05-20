@@ -2317,6 +2317,10 @@ def _operation_model_without_schema_drift(output_text: str) -> tuple[dict[str, A
         removed_paths=removed_paths,
     )
     _repair_operation_model_reference_aliases(repaired, removed_paths=removed_paths)
+    _repair_operation_model_missing_dto_blueprints(
+        repaired,
+        removed_paths=removed_paths,
+    )
     repaired["reviewMarkers"] = _operation_model_string_list(
         repaired.get("reviewMarkers"),
         path="$.reviewMarkers",
@@ -2651,6 +2655,329 @@ def _repair_operation_model_reference_aliases(
             path=f"$.dtoBlueprints[{index}].operationIds",
             removed_paths=removed_paths,
         )
+
+
+def _repair_operation_model_missing_dto_blueprints(
+    payload: dict[str, Any],
+    *,
+    removed_paths: list[str],
+) -> None:
+    operations = [
+        item for item in payload.get("operations", []) if isinstance(item, Mapping)
+    ]
+    statements_by_id = {
+        str(statement.get("statementId") or ""): statement
+        for statement in payload.get("statementEvidence", [])
+        if isinstance(statement, Mapping) and str(statement.get("statementId") or "").strip()
+    }
+    dto_blueprints = [
+        dict(item) for item in payload.get("dtoBlueprints", []) if isinstance(item, Mapping)
+    ]
+    dto_by_name: dict[str, dict[str, Any]] = {
+        str(dto.get("name") or ""): dto
+        for dto in dto_blueprints
+        if str(dto.get("name") or "").strip()
+    }
+    root_refs = _operation_model_string_list(
+        payload.get("evidenceRefs"),
+        path="$.evidenceRefs",
+        removed_paths=[],
+        candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+    )
+    for operation_index, operation in enumerate(operations):
+        operation_id = str(operation.get("operationId") or "").strip()
+        if not operation_id:
+            continue
+        for dto_name in _operation_model_string_list(
+            operation.get("dtoBlueprintRefs"),
+            path=f"$.operations[{operation_index}].dtoBlueprintRefs",
+            removed_paths=[],
+            candidate_keys=("name", "className", "class_name", "ref"),
+        ):
+            existing = dto_by_name.get(dto_name)
+            if existing is not None:
+                _merge_generated_operation_model_dto(
+                    existing,
+                    operation=operation,
+                    statements_by_id=statements_by_id,
+                    root_refs=root_refs,
+                )
+                continue
+            generated = _generated_operation_model_dto_blueprint(
+                dto_name=dto_name,
+                operation=operation,
+                statements_by_id=statements_by_id,
+                root_refs=root_refs,
+            )
+            dto_blueprints.append(generated)
+            dto_by_name[dto_name] = generated
+            removed_paths.append(f"$.dtoBlueprints[{len(dto_blueprints) - 1}]")
+    payload["dtoBlueprints"] = dto_blueprints
+
+
+def _merge_generated_operation_model_dto(
+    dto: dict[str, Any],
+    *,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+    root_refs: Sequence[str],
+) -> None:
+    operation_id = str(operation.get("operationId") or "").strip()
+    if operation_id:
+        operation_ids = _operation_model_string_list(
+            dto.get("operationIds"),
+            path="$.dtoBlueprints[].operationIds",
+            removed_paths=[],
+            candidate_keys=("operationId", "operation_id", "id", "ref"),
+        )
+        if operation_id not in operation_ids:
+            operation_ids.append(operation_id)
+        dto["operationIds"] = operation_ids
+    role = str(dto.get("role") or "").strip() or _generated_operation_model_dto_role(
+        str(dto.get("name") or ""),
+        operation=operation,
+        statements_by_id=statements_by_id,
+    )
+    dto["role"] = role
+    evidence_refs = _merged_evidence_refs(
+        dto.get("evidenceRefs"),
+        _operation_model_dto_evidence_refs(
+            operation=operation,
+            statements_by_id=statements_by_id,
+            root_refs=root_refs,
+        ),
+    )
+    dto["evidenceRefs"] = evidence_refs
+    existing_fields = _dto_field_items_without_schema_drift(
+        dto.get("fields"),
+        path="$.dtoBlueprints[].fields",
+        removed_paths=[],
+    )
+    if existing_fields:
+        dto["fields"] = existing_fields
+        return
+    dto["fields"] = _generated_operation_model_dto_fields(
+        role=role,
+        operation=operation,
+        statements_by_id=statements_by_id,
+        fallback_refs=evidence_refs,
+    )
+
+
+def _generated_operation_model_dto_blueprint(
+    *,
+    dto_name: str,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+    root_refs: Sequence[str],
+) -> dict[str, Any]:
+    operation_id = str(operation.get("operationId") or "").strip()
+    role = _generated_operation_model_dto_role(
+        dto_name,
+        operation=operation,
+        statements_by_id=statements_by_id,
+    )
+    evidence_refs = _operation_model_dto_evidence_refs(
+        operation=operation,
+        statements_by_id=statements_by_id,
+        root_refs=root_refs,
+    )
+    return {
+        "name": dto_name,
+        "role": role,
+        "operationIds": [operation_id] if operation_id else [],
+        "fields": _generated_operation_model_dto_fields(
+            role=role,
+            operation=operation,
+            statements_by_id=statements_by_id,
+            fallback_refs=evidence_refs,
+        ),
+        "evidenceRefs": evidence_refs,
+        "reviewMarkers": ["DTO_BLUEPRINT_RECONCILIATION_REVIEW_REQUIRED"],
+    }
+
+
+def _generated_operation_model_dto_role(
+    dto_name: str,
+    *,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+) -> str:
+    lowered = str(dto_name or "").lower()
+    if lowered.endswith(("query", "criteria")):
+        return "QUERY"
+    if lowered.endswith(("callrequest", "procedurerequest")):
+        return "CALL_REQUEST"
+    if lowered.endswith(("callresult", "procedureresult")):
+        return "CALL_RESULT"
+    if lowered.endswith(("row", "result")):
+        return "RESULT"
+    if lowered.endswith(("batchitem", "batch")):
+        return "BATCH_ITEM"
+    if lowered.endswith("command"):
+        return "COMMAND"
+    statement_ops = {
+        str(statement.get("operation") or "").upper()
+        for statement in _operation_model_statements_for_operation(
+            operation=operation,
+            statements_by_id=statements_by_id,
+        )
+    }
+    if statement_ops and statement_ops <= {"SELECT"}:
+        return "QUERY"
+    if statement_ops & {"EXECUTE", "CALL"}:
+        return "CALL_REQUEST"
+    if statement_ops & {"INSERT", "UPDATE", "DELETE", "MERGE"}:
+        return "COMMAND"
+    return "REVIEW_REQUIRED"
+
+
+def _generated_operation_model_dto_fields(
+    *,
+    role: str,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+    fallback_refs: Sequence[str],
+) -> list[dict[str, Any]]:
+    candidate_keys = _generated_operation_model_field_keys_for_role(role)
+    candidates: list[tuple[str, str, Sequence[str]]] = []
+    branch = operation.get("branchCondition")
+    if isinstance(branch, Mapping) and role in {"QUERY", "COMMAND", "BATCH_ITEM"}:
+        branch_refs = _merged_evidence_refs(branch.get("evidenceRefs"), fallback_refs)
+        for variable in _operation_model_string_list(
+            branch.get("variables"),
+            path="$.operations[].branchCondition.variables",
+            removed_paths=[],
+            candidate_keys=("name", "variable", "param", "parameter"),
+        ):
+            candidates.append((variable, f"branch.{_operation_model_field_name(variable)}", branch_refs))
+    for statement in _operation_model_statements_for_operation(
+        operation=operation,
+        statements_by_id=statements_by_id,
+    ):
+        statement_id = str(statement.get("statementId") or "").strip()
+        statement_refs = _merged_evidence_refs(statement.get("evidenceRefs"), fallback_refs)
+        for key in candidate_keys:
+            for token in _operation_model_string_list(
+                statement.get(key),
+                path=f"$.statementEvidence[{statement_id}].{key}",
+                removed_paths=[],
+                candidate_keys=("name", "column", "param", "parameter", "field"),
+            ):
+                candidates.append(
+                    (
+                        token,
+                        f"statement.{statement_id}.{key}.{_operation_model_field_name(token)}",
+                        statement_refs,
+                    )
+                )
+    fields: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for token, source, evidence_refs in candidates:
+        name = _operation_model_field_name(token)
+        if not name or name in seen:
+            continue
+        fields.append(
+            {
+                "name": name,
+                "dbType": "REVIEW_REQUIRED",
+                "source": source[:160] or "operation_model_reconciliation",
+                "required": False,
+                "evidenceRefs": list(evidence_refs) or list(fallback_refs),
+            }
+        )
+        seen.add(name)
+        if len(fields) >= 30:
+            break
+    if fields:
+        return fields
+    return [
+        {
+            "name": "reviewRequiredField",
+            "dbType": "REVIEW_REQUIRED",
+            "source": "operation_model_reconciliation",
+            "required": False,
+            "evidenceRefs": list(fallback_refs),
+        }
+    ]
+
+
+def _generated_operation_model_field_keys_for_role(role: str) -> tuple[str, ...]:
+    normalized = str(role or "").upper()
+    if normalized == "QUERY":
+        return ("inputs",)
+    if normalized in {"RESULT", "CALL_RESULT"}:
+        return ("outputs",)
+    if normalized == "CALL_REQUEST":
+        return ("inputs",)
+    if normalized == "BATCH_ITEM":
+        return ("inputs", "writes")
+    if normalized == "COMMAND":
+        return ("inputs", "writes")
+    return ("inputs", "outputs", "writes")
+
+
+def _operation_model_statements_for_operation(
+    *,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    statements: list[Mapping[str, Any]] = []
+    for statement_id in _operation_model_string_list(
+        operation.get("statementRefs"),
+        path="$.operations[].statementRefs",
+        removed_paths=[],
+        candidate_keys=("statementId", "statement_id", "id", "ref"),
+    ):
+        statement = statements_by_id.get(statement_id)
+        if isinstance(statement, Mapping):
+            statements.append(statement)
+    return statements
+
+
+def _operation_model_dto_evidence_refs(
+    *,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+    root_refs: Sequence[str],
+) -> list[str]:
+    values: list[Any] = [operation.get("evidenceRefs")]
+    branch = operation.get("branchCondition")
+    if isinstance(branch, Mapping):
+        values.append(branch.get("evidenceRefs"))
+    for statement in _operation_model_statements_for_operation(
+        operation=operation,
+        statements_by_id=statements_by_id,
+    ):
+        values.append(statement.get("evidenceRefs"))
+    return _merged_evidence_refs(*values, root_refs)
+
+
+def _merged_evidence_refs(*values: Any) -> list[str]:
+    refs: list[str] = []
+    for value in values:
+        for ref in _operation_model_string_list(
+            value,
+            path="$.evidenceRefs",
+            removed_paths=[],
+            candidate_keys=("id", "ref", "evidenceRef", "evidence_ref", "code"),
+        ):
+            if ref not in refs:
+                refs.append(ref)
+    return refs
+
+
+def _operation_model_field_name(value: str) -> str:
+    parts = [part for part in re.split(r"[^0-9A-Za-z]+", str(value or "")) if part]
+    if not parts:
+        return ""
+    head = parts[0]
+    field = head[:1].lower() + head[1:] + "".join(
+        part[:1].upper() + part[1:] for part in parts[1:]
+    )
+    if field and field[0].isdigit():
+        field = f"field{field[:1].upper()}{field[1:]}"
+    return field[:80]
 
 
 def _dto_blueprint_ref_aliases(dtos: Sequence[Mapping[str, Any]]) -> dict[str, str]:

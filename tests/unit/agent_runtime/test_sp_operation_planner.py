@@ -220,6 +220,45 @@ def test_operation_model_run_records_branch_sidecar_for_complex_sp() -> None:
     assert result.sidecar_runs[0].structured_output["targetRef"] == payload["targetRef"]
 
 
+def test_operation_model_reconciles_sparse_valid_output_to_statement_coverage() -> None:
+    payload = _fixture_operation_model()
+    sparse = deepcopy(payload)
+    retained_operation = deepcopy(payload["operations"][0])
+    retained_statement_ids = set(retained_operation["statementRefs"])
+    retained_dto_names = set(retained_operation["dtoBlueprintRefs"])
+    sparse["operations"] = [retained_operation]
+    sparse["statementEvidence"] = [
+        statement
+        for statement in payload["statementEvidence"]
+        if statement["statementId"] in retained_statement_ids
+    ]
+    sparse["dtoBlueprints"] = [
+        dto for dto in payload["dtoBlueprints"] if dto["name"] in retained_dto_names
+    ]
+
+    result = build_sp_operation_model_run_result(
+        target_ref=payload["targetRef"],
+        statement_evidence=_statement_evidence(payload),
+        allowed_evidence_refs=_allowed_refs(payload),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={payload["targetRef"]: sparse}
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    final_model = result.final_run.structured_output
+    components = result.final_run.model_invocation.component_invocations
+
+    assert len(final_model["statementEvidence"]) == len(payload["statementEvidence"])
+    assert len(final_model["operations"]) > len(sparse["operations"])
+    assert len(final_model["dtoBlueprints"]) > len(sparse["dtoBlueprints"])
+    assert "SP_OPERATION_MODEL_STATEMENT_COVERAGE_RECONCILED" in final_model["reviewMarkers"]
+    assert any(
+        component.get("component") == "sp_operation_model_statement_coverage_reconciler"
+        for component in components
+    )
+
+
 def test_operation_model_reconciles_branch_plan_dto_inventory_floor() -> None:
     branch_plan = _fixture_operation_model()
     expected_dtos = {
@@ -319,6 +358,54 @@ def test_operation_model_reconciles_generic_missing_dto_from_ref_suffix() -> Non
     assert synthetic["fields"]
     assert reconciler["generatedDtoCount"] == 1
     assert "ManageBondDTO" not in json.dumps(result.final_run.to_storage_dict())
+
+
+def test_operation_model_reconciles_empty_operation_dto_refs_from_statement_role() -> None:
+    branch_plan = _fixture_operation_model()
+    final_model = deepcopy(branch_plan)
+    operation = final_model["operations"][0]
+    operation_id = operation["operationId"]
+    operation["dtoBlueprintRefs"] = []
+    for statement_id in operation["statementRefs"]:
+        statement = next(
+            statement
+            for statement in final_model["statementEvidence"]
+            if statement["statementId"] == statement_id
+        )
+        statement["operation"] = "DELETE"
+    gateway = _SequencedOperationGateway([branch_plan, final_model])
+
+    result = build_sp_operation_model_run_result(
+        target_ref=branch_plan["targetRef"],
+        statement_evidence=_statement_evidence(branch_plan),
+        allowed_evidence_refs=_allowed_refs(branch_plan),
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    final_operation = next(
+        operation
+        for operation in result.final_run.structured_output["operations"]
+        if operation["operationId"] == operation_id
+    )
+    generated_name = final_operation["dtoBlueprintRefs"][0]
+    generated = next(
+        dto
+        for dto in result.final_run.structured_output["dtoBlueprints"]
+        if dto["name"] == generated_name
+    )
+    reconciler = next(
+        component
+        for component in result.final_run.model_invocation.component_invocations
+        if component["component"] == "sp_operation_model_dto_blueprint_reconciler"
+    )
+
+    assert generated_name.endswith("Command")
+    assert generated["role"] == "COMMAND"
+    assert generated["operationIds"] == [operation_id]
+    assert generated["fields"]
+    assert reconciler["generatedDtoCount"] == 1
+    assert DTO_RECONCILED_MARKER in result.final_run.structured_output["reviewMarkers"]
 
 
 def test_operation_model_enriches_shallow_existing_dto_blueprints_from_statements() -> None:
@@ -684,6 +771,42 @@ def test_openai_gateway_normalizes_operation_model_schema_drift(monkeypatch: Any
     assert result.structured_output["statementEvidence"][0]["targetRef"]
     assert result.structured_output["dtoBlueprints"][0]["operationIds"]
     assert result.structured_output["dtoBlueprints"][0]["fields"][0]["dbType"]
+    assert result.component_invocations[-1]["action"] == "normalized_sp_operation_model"
+
+
+def test_openai_gateway_restores_operation_model_missing_dto_blueprint_refs(
+    monkeypatch: Any,
+) -> None:
+    payload = _fixture_operation_model()
+    dirty = deepcopy(payload)
+    generated_name = "ManageBondProviderOnlyRow"
+    dirty["operations"][0]["dtoBlueprintRefs"].append(generated_name)
+    captured = _capture_post(monkeypatch, _json_response(dirty))
+    monkeypatch.delenv("LLM_REMOTE_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.test/v1")
+
+    prompt = render_sp_operation_model_prompt(
+        target_ref=payload["targetRef"],
+        statement_evidence=_statement_evidence(payload),
+        allowed_evidence_refs=_allowed_refs(payload),
+    )
+    result = OpenAIModelGateway(timeout_seconds=1).plan_sp_operation_model(
+        prompt=prompt,
+        profile=model_profile_from_env("openai_fast_test"),
+    )
+
+    dto_by_name = {
+        dto["name"]: dto for dto in result.structured_output["dtoBlueprints"]
+    }
+    restored = dto_by_name[generated_name]
+
+    assert captured["json"]["text"]["format"]["name"] == "sp_operation_model"
+    assert restored["role"] == "RESULT"
+    assert dirty["operations"][0]["operationId"] in restored["operationIds"]
+    assert restored["fields"]
+    assert restored["fields"][0]["evidenceRefs"]
+    assert "DTO_BLUEPRINT_RECONCILIATION_REVIEW_REQUIRED" in restored["reviewMarkers"]
     assert result.component_invocations[-1]["action"] == "normalized_sp_operation_model"
 
 

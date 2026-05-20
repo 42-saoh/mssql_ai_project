@@ -54,6 +54,7 @@ from tests.helpers.p42_manage_bond import (
     P42_MAPPER_PACKAGE,
     P42_MODEL_PACKAGE,
     P42_SERVICE_PACKAGE,
+    REQUIRED_P42_REVIEW_MARKERS,
     manage_bond_request,
     p41_operation_model_fixture,
     p42_ai_draft_pack_fixture,
@@ -353,7 +354,7 @@ def test_p42_inventory_derives_java_method_ids_from_operation_refs() -> None:
     )
 
 
-def test_p50_branchy_fragment_dto_inventory_is_rejected_before_draft() -> None:
+def test_p50_branchy_fragment_dto_inventory_compresses_then_rejects_over_collapse() -> None:
     operations = []
     statements = []
     dto_blueprints = []
@@ -409,10 +410,346 @@ def test_p50_branchy_fragment_dto_inventory_is_rejected_before_draft() -> None:
     inventory = ai_draft_pack_expected_inventory(context)
     findings = ai_draft_pack_inventory_findings(context, inventory)
     serialized = "\n".join(findings)
+    dto_items = [item for item in inventory if item["artifactType"] == "DTO_DRAFT"]
+    dto_names = {item["className"] for item in dto_items}
 
-    assert len([item for item in inventory if item["artifactType"] == "DTO_DRAFT"]) == 22
+    assert dto_names == {"CreateManageBondCommand", "UpdateManageBondCommand"}
+    assert all("Process" not in name for name in dto_names)
     assert P42_INVENTORY_CONTRACT_INCOMPLETE in serialized
-    assert "statement/phase fragment-like class names" in serialized
+    assert "statement/phase fragment-like class names" not in serialized
+    assert "complex SP inventory collapsed to 2 DTO files" in serialized
+
+
+def test_p50_branchy_fragment_dto_inventory_compresses_operation_roles() -> None:
+    operations = []
+    statements = []
+    dto_blueprints = []
+
+    def add_operation(
+        *,
+        index: int,
+        crud: str,
+        statement_operation: str,
+        dto_name: str,
+        role: str,
+        fields: list[str],
+    ) -> None:
+        statement_id = f"stmt.{statement_operation.lower()}.s{index:03d}"
+        operation_id = f"op.{crud.lower()}.process{index:03d}"
+        operations.append(
+            {
+                "operationId": operation_id,
+                "branchCondition": {
+                    "expression": f"CRUDFlag = '{crud}'",
+                    "variables": ["CRUDFlag"],
+                },
+                "statementRefs": [statement_id],
+                "dtoBlueprintRefs": [dto_name],
+            }
+        )
+        statement_payload = {"statementId": statement_id, "operation": statement_operation}
+        if role == "RESULT":
+            statement_payload["outputs"] = fields
+        else:
+            statement_payload["inputs"] = fields
+        statements.append(statement_payload)
+        dto_blueprints.append(
+            {
+                "name": dto_name,
+                "role": role,
+                "operationIds": [operation_id],
+                "fields": [{"name": field} for field in fields],
+                "evidenceRefs": [statement_id],
+                "reviewMarkers": [],
+            }
+        )
+
+    add_operation(
+        index=1,
+        crud="R",
+        statement_operation="SELECT",
+        dto_name="ManageBondCrudReadQuery",
+        role="QUERY",
+        fields=["CRUDFlag", "ContractNum"],
+    )
+    add_operation(
+        index=2,
+        crud="R",
+        statement_operation="SELECT",
+        dto_name="ManageBondCrudReadRow",
+        role="RESULT",
+        fields=["ContractNum", "BondKindCode", "ApprovalYN"],
+    )
+    for index in range(3, 13):
+        add_operation(
+            index=index,
+            crud="C",
+            statement_operation="INSERT",
+            dto_name=f"ManageBondProcess{index:03d}Command",
+            role="COMMAND",
+            fields=["ContractNum", "BondKindCode", f"CreateValue{index}"],
+        )
+    for index in range(13, 20):
+        add_operation(
+            index=index,
+            crud="A",
+            statement_operation="UPDATE",
+            dto_name=f"ManageBondKind{index:03d}Command",
+            role="COMMAND",
+            fields=["ContractNum", "ApprovalYN", f"ApproveValue{index}"],
+        )
+    add_operation(
+        index=20,
+        crud="A",
+        statement_operation="EXECUTE",
+        dto_name="ManageBondInvoicePrepaidCallRequest",
+        role="CALL_REQUEST",
+        fields=["ContractNum", "OrdNum", "UserID"],
+    )
+    add_operation(
+        index=21,
+        crud="A",
+        statement_operation="EXECUTE",
+        dto_name="ManageBondErpFailReasonCallRequest",
+        role="CALL_REQUEST",
+        fields=["ContractNum", "OrdNum", "UserID"],
+    )
+    for index in range(22, 28):
+        add_operation(
+            index=index,
+            crud="U",
+            statement_operation="UPDATE",
+            dto_name=f"ManageBondSubsystem{index:03d}Command",
+            role="COMMAND",
+            fields=["ContractNum", "Sequence", f"UpdateValue{index}"],
+        )
+    for index in range(28, 31):
+        add_operation(
+            index=index,
+            crud="D",
+            statement_operation="DELETE",
+            dto_name=f"ManageBondDeleteResult{index:03d}Command",
+            role="COMMAND",
+            fields=["ContractNum", "Sequence"],
+        )
+
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "sample",
+            "request": {
+                "entityName": "ManageBond",
+                "spName": "dbo.PCO_GU_ManageBond_PRC",
+                "inputParams": [
+                    {"name": "CRUDFlag", "dbType": "varchar(20)"},
+                    {"name": "GUBUNFlag", "dbType": "varchar(1)"},
+                    {"name": "BondKindCode", "dbType": "varchar(3)"},
+                    {"name": "SubSystem", "dbType": "varchar(20)"},
+                    {"name": "SValue", "dbType": "varchar(max)"},
+                ],
+                "operationModel": {
+                    "targetRef": "dbo.PCO_GU_ManageBond_PRC",
+                    "operations": operations,
+                    "statementEvidence": statements,
+                    "dtoBlueprints": dto_blueprints,
+                    "reviewMarkers": ["TRANSACTION_BOUNDARY_REVIEW_REQUIRED"],
+                },
+            },
+        }
+    )
+
+    inventory = ai_draft_pack_expected_inventory(context)
+    findings = ai_draft_pack_inventory_findings(context, inventory)
+    dto_items = [item for item in inventory if item["artifactType"] == "DTO_DRAFT"]
+    dto_names = {item["className"] for item in dto_items}
+    covered_blueprints = {
+        source
+        for item in dto_items
+        for source in item.get("sourceBlueprintNames", [])
+    }
+
+    assert dto_names == {
+        "ManageBondSearchCriteria",
+        "ManageBondSearchRow",
+        "CreateManageBondCommand",
+        "ApproveManageBondCommand",
+        "UpdateManageBondCommand",
+        "DeleteManageBondCommand",
+        "ManageBondCalledProcedureRequest",
+    }
+    assert len(dto_items) == 7
+    assert covered_blueprints == {dto["name"] for dto in dto_blueprints}
+    assert findings == []
+
+
+def test_p50_call_request_inventory_recovers_fields_from_operation_blueprint_ref() -> None:
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "sample",
+            "request": {
+                "entityName": "InvoiceStatus",
+                "spName": "dbo.usp_UpdateInvoiceStatus",
+                "inputParams": [
+                    {"name": "ContractNum", "dbType": "varchar(30)"},
+                    {"name": "OrdNum", "dbType": "varchar(30)"},
+                    {"name": "UserID", "dbType": "varchar(30)"},
+                ],
+                "operationModel": {
+                    "targetRef": "dbo.usp_UpdateInvoiceStatus",
+                    "operations": [
+                        {
+                            "operationId": "op.invoice.status.call",
+                            "branchCondition": {
+                                "expression": "StatusFlag = 'A'",
+                                "variables": ["StatusFlag"],
+                            },
+                            "statementRefs": ["stmt.exec.s001"],
+                            "dtoBlueprintRefs": ["InvoiceStatusCallRequest"],
+                        }
+                    ],
+                    "statementEvidence": [
+                        {
+                            "statementId": "stmt.exec.s001",
+                            "operation": "EXECUTE",
+                            "inputs": ["ContractNum", "OrdNum", "UserID"],
+                        }
+                    ],
+                    "dtoBlueprints": [
+                        {
+                            "name": "InvoiceStatusCallRequest",
+                            "role": "CALL_REQUEST",
+                            "operationIds": ["op.provider.mismatched.ref"],
+                            "fields": [],
+                            "evidenceRefs": ["stmt.exec.s001"],
+                            "reviewMarkers": [],
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    inventory = ai_draft_pack_expected_inventory(context)
+    findings = ai_draft_pack_inventory_findings(context, inventory)
+    dto_items = [item for item in inventory if item["artifactType"] == "DTO_DRAFT"]
+
+    assert [item["className"] for item in dto_items] == ["InvoiceStatusCallRequest"]
+    assert dto_items[0]["requiredFields"] == ["contractNum", "ordNum", "userID"]
+    assert findings == []
+
+
+def test_p50_call_request_inventory_recovers_fields_when_call_ref_is_ambiguous() -> None:
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "sample",
+            "request": {
+                "entityName": "InvoiceStatus",
+                "spName": "dbo.usp_UpdateInvoiceStatus",
+                "inputParams": [
+                    {"name": "ContractNum", "dbType": "varchar(30)"},
+                    {"name": "OrdNum", "dbType": "varchar(30)"},
+                    {"name": "UserID", "dbType": "varchar(30)"},
+                ],
+                "operationModel": {
+                    "targetRef": "dbo.usp_UpdateInvoiceStatus",
+                    "operations": [
+                        {
+                            "operationId": "op.invoice.status.call",
+                            "branchCondition": {
+                                "expression": "StatusFlag = 'A'",
+                                "variables": ["StatusFlag"],
+                            },
+                            "statementRefs": ["stmt.exec.s001"],
+                            "dtoBlueprintRefs": ["InvoiceStatusCommand"],
+                        }
+                    ],
+                    "statementEvidence": [
+                        {
+                            "statementId": "stmt.exec.s001",
+                            "operation": "EXECUTE",
+                            "inputs": ["ContractNum", "OrdNum", "UserID"],
+                        }
+                    ],
+                    "dtoBlueprints": [
+                        {
+                            "name": "InvoiceStatusCallRequest",
+                            "role": "CALL_REQUEST",
+                            "operationIds": ["op.provider.mismatched.ref"],
+                            "fields": [],
+                            "evidenceRefs": ["stmt.exec.s001"],
+                            "reviewMarkers": [],
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    inventory = ai_draft_pack_expected_inventory(context)
+    findings = ai_draft_pack_inventory_findings(context, inventory)
+    dto_items = [item for item in inventory if item["artifactType"] == "DTO_DRAFT"]
+
+    assert [item["className"] for item in dto_items] == ["InvoiceStatusCallRequest"]
+    assert dto_items[0]["requiredFields"] == ["contractNum", "ordNum", "userID"]
+    assert "CALL_REQUEST_FIELDS_GLOBAL_REVIEW_REQUIRED" in dto_items[0]["reviewMarkers"]
+    assert findings == []
+
+
+def test_p50_call_request_phase_execute_does_not_become_required_mapper_method() -> None:
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "sample",
+            "request": {
+                "entityName": "InvoiceStatus",
+                "spName": "dbo.usp_UpdateInvoiceStatus",
+                "inputParams": [
+                    {"name": "ModeFlag", "dbType": "varchar(20)"},
+                    {"name": "ContractNum", "dbType": "varchar(40)"},
+                    {"name": "OrdNum", "dbType": "varchar(40)"},
+                    {"name": "UserID", "dbType": "varchar(40)"},
+                ],
+                "operationModel": {
+                    "targetRef": "dbo.usp_UpdateInvoiceStatus",
+                    "operations": [
+                        {
+                            "operationId": "op.approve.invoice-status",
+                            "branchCondition": {
+                                "expression": "ModeFlag = 'A'",
+                                "variables": ["ModeFlag"],
+                            },
+                            "statementRefs": ["stmt.exec.s001"],
+                            "dtoBlueprintRefs": ["InvoiceStatusCallRequest"],
+                        }
+                    ],
+                    "statementEvidence": [
+                        {
+                            "statementId": "stmt.exec.s001",
+                            "operation": "EXECUTE",
+                            "phase": "execute",
+                            "inputs": ["ContractNum", "OrdNum", "UserID"],
+                        }
+                    ],
+                    "dtoBlueprints": [
+                        {
+                            "name": "InvoiceStatusCallRequest",
+                            "role": "CALL_REQUEST",
+                            "operationIds": ["op.approve.invoice-status"],
+                            "fields": [],
+                            "evidenceRefs": ["stmt.exec.s001"],
+                            "reviewMarkers": [],
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    inventory = ai_draft_pack_expected_inventory(context)
+    gates = ai_draft_pack_quality_gates(context, inventory)
+    dto_items = [item for item in inventory if item["artifactType"] == "DTO_DRAFT"]
+
+    assert dto_items[0]["operationIds"] == ["approveInvoiceStatus"]
+    assert "execute" not in gates["requiredMapperMethods"]
+    assert gates["requiredMapperMethods"] == ["approveInvoiceStatus"]
 
 
 def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
@@ -1213,7 +1550,6 @@ def test_p43c_workflow_ab_routes_ai_draft_pack_through_framework_adapter(
     assert [component["stage"] for component in adapter_components] == [
         "file_inventory",
         *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
-        "repair",
     ]
     assert {component["candidateFramework"] for component in adapter_components} == {
         candidate_framework
@@ -1414,7 +1750,7 @@ def test_p42_complex_sp_inventory_contract_rejects_collapsed_operation_model() -
     )
 
 
-def test_p50_branchy_shallow_operation_evidence_rejects_draft_generation() -> None:
+def test_p50_branchy_shallow_operation_evidence_is_reconciled_before_draft_quality_gate() -> None:
     operation_model = p41_operation_model_fixture()
     operations = operation_model["operations"][:2]
     statements = operation_model["statementEvidence"][:2]
@@ -1457,22 +1793,28 @@ def test_p50_branchy_shallow_operation_evidence_rejects_draft_generation() -> No
     _request_record, job = service.submit_sp_analysis(manage_bond_request())
 
     artifacts = repository.list_job_artifacts(job.job_id) or []
+    runs = repository.list_agent_runs(job.job_id) or []
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
     ai_draft_run = next(
-        run
-        for run in repository.list_agent_runs(job.job_id) or []
-        if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+        run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
     )
     diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
     findings = " ".join(diagnostics["validationFindings"])
 
     assert job.status == JobStatus.FAILED
-    assert job.error_code == P42_INVENTORY_CONTRACT_INCOMPLETE
-    assert gateway.draft_calls == 0
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    assert gateway.draft_calls > 0
+    assert len(operation_run.structured_output["operations"]) >= 4
+    assert len(operation_run.structured_output["statementEvidence"]) >= 4
+    assert any(
+        component.get("component") == "sp_operation_model_statement_coverage_reconciler"
+        for component in operation_run.model_invocation["componentInvocations"]
+    )
     assert ai_draft_run.status == AgentRunStatus.FAILED.value
-    assert diagnostics["failureStage"] == "inventory_contract"
-    assert "has only 2 operations" in findings
-    assert "has only 2 statement evidence items" in findings
-    assert "has only 3 DTO blueprints" in findings
+    assert diagnostics["failureStage"] == "quality_validation"
+    assert "has only 2 operations" not in findings
+    assert "has only 2 statement evidence items" not in findings
+    assert "has only 3 DTO blueprints" not in findings
     assert not any(
         artifact.type
         in {
@@ -1657,7 +1999,7 @@ def test_p43c_candidate_two_dto_collapse_is_repaired_by_dto_floor() -> None:
     assert "OperationModelReviewRequired" not in str(artifacts)
 
 
-def test_p43c_candidate_missing_review_markers_fails_quality_gate() -> None:
+def test_p43c_candidate_missing_review_markers_are_restored_from_expected_inventory() -> None:
     operation_model = p41_operation_model_fixture()
     missing_markers_pack = p42_ai_draft_pack_fixture()
     missing_markers_pack["reviewMarkers"] = []
@@ -1685,14 +2027,22 @@ def test_p43c_candidate_missing_review_markers_fails_quality_gate() -> None:
         for run in repository.list_agent_runs(job.job_id) or []
         if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
     )
-    diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
+    stored_markers = set(ai_draft_run.structured_output["reviewMarkers"])
+    artifact_markers = {
+        marker
+        for artifact in artifacts
+        for marker in artifact.extra.get("reviewMarkers", [])
+    }
 
-    assert job.status == JobStatus.FAILED
-    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
-    assert diagnostics["failureStage"] == "quality_validation"
-    assert "p42.ai_draft_pack.schema" in str(diagnostics)
-    assert "required REVIEW_REQUIRED markers missing" in str(diagnostics)
-    assert not any(
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert REQUIRED_P42_REVIEW_MARKERS <= stored_markers
+    assert {
+        "CALLED_PROCEDURE_IO_REVIEW_REQUIRED",
+        "CROSS_DB_WRITE_REVIEW_REQUIRED",
+        "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
+    } <= artifact_markers
+    assert any(
         artifact.type
         in {
             ArtifactType.DTO_DRAFT,

@@ -790,6 +790,31 @@ def render_ai_java_mybatis_draft_pack_prompt(
                     "MAPPER_INTERFACE content and the MAPPER_XML statement ids."
                 ),
             },
+            "qualityRepairPolicy": {
+                "active": repair_context is not None,
+                "targetStages": list((repair_context or {}).get("targetStages") or []),
+                "stageInstructions": dict(
+                    (repair_context or {}).get("stageInstructions") or {}
+                ),
+                "blockers": [
+                    (
+                        "DTO_DRAFT content without package/class/requiredFields/"
+                        "accessor-or-Lombok policy"
+                    ),
+                    "Service calling mapper methods absent from Mapper interface/XML",
+                    "Service or Mapper declaring/calling generic execute/raw SQL methods",
+                    "Mapper XML namespace not equal to Mapper interface FQCN",
+                    "Mapper XML statement ids not equal to Mapper interface methods",
+                    (
+                        "Mapper XML parameterType/resultType/resultMap type not "
+                        "matching DTO FQCNs"
+                    ),
+                    (
+                        "Mapper XML placeholder SELECT, ${...}, procedureName EXEC/CALL, "
+                        "or original procedure wrapper"
+                    ),
+                ],
+            },
         },
         "evidenceRefContract": {
             "allowedFactIds": allowed_refs,
@@ -1044,23 +1069,27 @@ def _ai_draft_pack_stage_task(stage: str) -> str:
     if stage == "dto_content":
         return (
             "Draft DTO fields, package, constructor/accessor or Lombok policy from the DTO "
-            "responsibility matrix without placeholder reviewRequiredField DTOs."
+            "responsibility matrix without placeholder reviewRequiredField DTOs; a DTO with "
+            "fields but no accessor/constructor/Lombok policy fails quality."
         )
     if stage == "service_content":
         return (
             "Draft Service business orchestration methods with transaction/review markers for "
-            "writes; avoid mapper pass-through wrappers and SQL text."
+            "writes; avoid mapper pass-through wrappers, mapper methods absent from the "
+            "Mapper/XML contract, generic execute calls, and SQL text."
         )
     if stage == "mapper_interface_content":
         return (
             "Draft Mapper interface signatures whose method names exactly match Service calls "
-            "and Mapper XML statement ids."
+            "and Mapper XML statement ids; do not declare generic execute/raw SQL methods."
         )
     if stage == "mapper_xml_content":
         return (
             "Draft Mapper XML with namespace equal to Mapper interface FQCN, DTO FQCN "
             "parameterType/resultMap types, no raw collection/generic parameterType values, "
-            "static #{...} bindings, and no placeholder SQL."
+            "static #{...} bindings, resultMap for SELECT rows, and no placeholder SQL, "
+            "${...}, procedureName EXEC/CALL, generic execute id, or wrapper-only original "
+            "procedure EXEC/CALL."
         )
     if stage == "integration_quality_gate":
         return "Check DTO, Service, Mapper interface, and Mapper XML consistency before repair."

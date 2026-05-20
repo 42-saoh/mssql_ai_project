@@ -2271,6 +2271,13 @@ def ai_draft_pack_inventory_findings(
         for item in expected_inventory
         if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
     }
+    inventory_source_blueprints = {
+        str(source)
+        for item in expected_inventory
+        if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
+        for source in item.get("sourceBlueprintNames", [])
+        if str(source).strip()
+    }
     missing_dtos = sorted(
         _safe_java_class_name(
             str(item.get("name") or ""),
@@ -2279,6 +2286,7 @@ def ai_draft_pack_inventory_findings(
         )
         for item in dto_blueprints
         if str(item.get("name") or "")
+        and str(item.get("name") or "") not in inventory_source_blueprints
         and _safe_java_class_name(
             str(item.get("name") or ""),
             role=str(item.get("role") or ""),
@@ -2492,6 +2500,7 @@ def ai_draft_pack_quality_gates(
 
 
 def ai_draft_pack_quality_repair_context(report: ValidationReport) -> dict[str, Any]:
+    target_stages = _ai_draft_pack_quality_repair_stages(report)
     failed = [
         {
             "ruleId": check.rule_id,
@@ -2507,11 +2516,99 @@ def ai_draft_pack_quality_repair_context(report: ValidationReport) -> dict[str, 
         "reason": "Deterministic P42 quality gate failed.",
         "failedCheckCount": len(report.failed_checks),
         "failedChecks": failed,
+        "targetStages": target_stages,
+        "stageInstructions": _ai_draft_pack_quality_repair_stage_instructions(
+            target_stages
+        ),
         "instruction": (
-            "Repair the draft pack so all expected files, DTO references, mapper methods, "
-            "and required REVIEW_REQUIRED markers pass deterministic validation."
+            "Repair the draft pack so deterministic validation passes without inventing "
+            "raw SQL or collapsing operation-role DTOs. DTO files must declare package, "
+            "class, evidence-backed fields, and constructor/accessor or Lombok policy. "
+            "Service methods must be business operation methods that call only declared "
+            "Mapper methods and never generic execute/raw SQL methods. Mapper interface "
+            "method names must match Mapper XML statement ids exactly. Mapper XML must "
+            "use the Mapper interface FQCN namespace, DTO FQCN parameterType/resultMap "
+            "types, static #{...} bindings, resultMap for SELECT rows, no ${...}, no "
+            "procedureName-driven EXEC/CALL, no generic execute statement, and no "
+            "wrapper-only call of the original target procedure."
         ),
     }
+
+
+def _ai_draft_pack_quality_repair_stages(report: ValidationReport) -> list[str]:
+    stages: list[str] = []
+    for check in report.failed_checks:
+        rule_id = str(check.rule_id)
+        text = f"{rule_id} {check.message}".lower()
+        if ".dto" in rule_id or " dto" in text or "dtos" in text or "identifier" in rule_id:
+            stages.extend(["dto_inventory", "dto_content"])
+        if "service" in rule_id or " service" in text or "pass-through" in text:
+            stages.append("service_content")
+        if (
+            "mapper.interface_xml_consistency" in rule_id
+            or "calls mapper methods missing" in text
+            or "generic execute/raw sql mapper" in text
+        ):
+            stages.extend(
+                ["service_content", "mapper_interface_content", "mapper_xml_content"]
+            )
+        if (
+            "mapper_xml" in rule_id
+            or " mapper xml" in text
+            or "xml statement" in text
+            or "namespace" in text
+            or "resultmap" in text
+            or "parametertype" in text
+            or "wrapper-only" in text
+        ):
+            stages.append("mapper_xml_content")
+        if (
+            "mapper.method" in rule_id
+            or "mapper." in rule_id
+            or " mapper interface" in text
+        ):
+            stages.append("mapper_interface_content")
+    selected = {str(stage) for stage in stages}
+    if not selected:
+        return list(AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES)
+    return [
+        stage
+        for stage in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES
+        if stage in selected
+    ]
+
+
+def _ai_draft_pack_quality_repair_stage_instructions(
+    stages: Sequence[str],
+) -> dict[str, str]:
+    instructions = {
+        "dto_inventory": (
+            "Keep operation-role DTO separation; merge duplicate same-role field sets and "
+            "do not add statement-fragment DTOs."
+        ),
+        "dto_content": (
+            "Every DTO must use javaPackageContext.modelPackage, declare the class, "
+            "declare each requiredFields field, and include getters/setters, an explicit "
+            "constructor/accessor policy, or a Lombok DTO annotation."
+        ),
+        "service_content": (
+            "Use business operation methods from qualityGates.requiredServiceMethods; "
+            "call only Mapper methods that are declared in the Mapper interface/XML, "
+            "show sequencing for multi-step operations, and remove generic execute/raw "
+            "SQL calls."
+        ),
+        "mapper_interface_content": (
+            "Declare Mapper methods that match XML statement ids exactly; use DTO types "
+            "from the expected inventory and do not declare execute/raw SQL methods."
+        ),
+        "mapper_xml_content": (
+            "Use namespace equal to the Mapper interface FQCN, statement ids equal to "
+            "Mapper interface methods, DTO FQCN parameterType/resultMap types, resultMap "
+            "for SELECT rows, static #{...} bindings, and no placeholder SELECT, ${...}, "
+            "procedureName, generic execute, or wrapper-only original procedure EXEC/CALL."
+        ),
+    }
+    return {stage: instructions[stage] for stage in stages if stage in instructions}
 
 
 def merge_ai_draft_pack_repair_components(
@@ -2736,9 +2833,10 @@ def _inventory_item_from_dto_blueprint(
     item: Mapping[str, Any],
     operation_model: Mapping[str, Any],
 ) -> dict[str, Any]:
+    source_name = str(item.get("name") or "").strip()
     role = str(item.get("role") or "REVIEW_REQUIRED").upper()
     dto_name = _safe_java_class_name(
-        str(item.get("name") or ""),
+        source_name,
         role=role,
         fallback_stem=operation_model_entity_name(operation_model) or "Draft",
     )
@@ -2776,6 +2874,11 @@ def _inventory_item_from_dto_blueprint(
         if role == "CALL_REQUEST"
         else []
     )
+    if role == "CALL_REQUEST" and not statement_required_fields and source_name:
+        statement_required_fields = _call_request_statement_fields_for_blueprint(
+            operation_model=operation_model,
+            blueprint_name=source_name,
+        )
     required_fields = [
         field
         for field in dict.fromkeys([*statement_required_fields, *blueprint_required_fields])
@@ -2798,6 +2901,7 @@ def _inventory_item_from_dto_blueprint(
         "dtoRole": role,
         "requiredFields": required_fields,
         "evidenceRefs": evidence_refs,
+        "sourceBlueprintNames": [source_name] if source_name else [],
         "reviewMarkers": [
             str(marker) for marker in item.get("reviewMarkers", []) if str(marker).strip()
         ]
@@ -2872,7 +2976,385 @@ def _operation_first_dto_inventory(
         item = _inventory_item_from_dto_blueprint(blueprint, operation_model)
         _merge_inventory_item(inventory_by_class, item)
 
-    return list(inventory_by_class.values())
+    return _compress_operation_role_dto_inventory(
+        list(inventory_by_class.values()),
+        operation_model=operation_model,
+        context=context,
+    )
+
+
+def _compress_operation_role_dto_inventory(
+    inventory: Sequence[Mapping[str, Any]],
+    *,
+    operation_model: Mapping[str, Any],
+    context: GenerationContext,
+) -> list[dict[str, Any]]:
+    items = _merge_duplicate_inventory_dtos(inventory)
+    if not items:
+        return []
+    items = _ensure_call_request_inventory_fields(items, operation_model=operation_model)
+    branch_heavy = ai_draft_pack_requires_branch_evidence(context)
+    statement_ids = {
+        str(statement.get("statementId") or "")
+        for statement in operation_model.get("statementEvidence", [])
+        if isinstance(statement, Mapping) and str(statement.get("statementId") or "").strip()
+    }
+    fragment_like = [
+        item
+        for item in items
+        if _fragment_like_inventory_class_name(str(item.get("className") or ""))
+    ]
+    needs_compression = branch_heavy and (
+        len(items) > 20
+        or len(fragment_like) >= 5
+        or (statement_ids and len(items) >= max(20, int(len(statement_ids) * 0.8)))
+    )
+    if not needs_compression:
+        return items
+
+    entity_name = operation_model_entity_name(operation_model) or context.entity_name or "Draft"
+    operations_by_method = _operations_by_draft_method_id(operation_model)
+    statements_by_id = _statements_by_id(operation_model)
+    grouped: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
+    class_names_by_key: dict[tuple[str, str, tuple[str, ...]], str] = {}
+    used_class_names: set[str] = set()
+    for item in items:
+        role = str(item.get("dtoRole") or item.get("role") or "").upper()
+        key = _dto_inventory_compression_key(
+            item,
+            operation_model=operation_model,
+            operations_by_method=operations_by_method,
+            statements_by_id=statements_by_id,
+        )
+        existing = grouped.get(key)
+        if existing is None:
+            compressed = dict(item)
+            class_name = _compressed_dto_class_name(
+                entity_name=entity_name,
+                role=role,
+                intent=key[1],
+                used_class_names=used_class_names,
+            )
+            class_names_by_key[key] = class_name
+            compressed["className"] = class_name
+            compressed["path"] = f"dto/{class_name}.java"
+            compressed["reviewMarkers"] = list(
+                dict.fromkeys(
+                    [
+                        *[str(marker) for marker in item.get("reviewMarkers", []) if str(marker).strip()],
+                        "DTO_INVENTORY_ROLE_COMPRESSION_REVIEW_REQUIRED",
+                    ]
+                )
+            )
+            grouped[key] = compressed
+            continue
+        _merge_inventory_item_by_reference(existing, item)
+
+    return _ensure_call_request_inventory_fields(
+        list(grouped.values()),
+        operation_model=operation_model,
+    )
+
+
+def _ensure_call_request_inventory_fields(
+    inventory: Sequence[Mapping[str, Any]],
+    *,
+    operation_model: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for item in inventory:
+        copied = dict(item)
+        role = str(copied.get("dtoRole") or copied.get("role") or "").upper()
+        fields = [
+            str(field)
+            for field in copied.get("requiredFields", [])
+            if str(field).strip()
+            and not _is_review_placeholder_field_name(str(field))
+        ]
+        if role != "CALL_REQUEST" or fields:
+            result.append(copied)
+            continue
+        recovered: list[str] = []
+        operation_ids = [
+            str(operation_id)
+            for operation_id in copied.get("operationIds", [])
+            if str(operation_id).strip()
+        ]
+        if operation_ids:
+            recovered = _call_request_statement_fields(
+                operation_model=operation_model,
+                operation_ids=operation_ids,
+            )
+        for blueprint_name in copied.get("sourceBlueprintNames", []):
+            if recovered:
+                break
+            recovered = _call_request_statement_fields_for_blueprint(
+                operation_model=operation_model,
+                blueprint_name=str(blueprint_name),
+            )
+        if not recovered:
+            recovered = _call_request_statement_fields(
+                operation_model=operation_model,
+                operation_ids=[],
+            )
+            if recovered:
+                copied["reviewMarkers"] = list(
+                    dict.fromkeys(
+                        [
+                            *[
+                                str(marker)
+                                for marker in copied.get("reviewMarkers", [])
+                                if str(marker).strip()
+                            ],
+                            "CALL_REQUEST_FIELDS_GLOBAL_REVIEW_REQUIRED",
+                        ]
+                    )
+                )
+        copied["requiredFields"] = [
+            field
+            for field in dict.fromkeys(recovered)
+            if field and field != "field" and not _is_review_placeholder_field_name(field)
+        ]
+        if copied["requiredFields"]:
+            copied["reviewMarkers"] = [
+                str(marker)
+                for marker in copied.get("reviewMarkers", [])
+                if str(marker).strip()
+                and marker != "DTO_REQUIRED_FIELDS_REVIEW_REQUIRED"
+            ]
+        result.append(copied)
+    return result
+
+
+def _merge_duplicate_inventory_dtos(
+    inventory: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[tuple[tuple[str, ...], str, tuple[str, ...]], dict[str, Any]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for item in inventory:
+        copied = dict(item)
+        role = str(copied.get("dtoRole") or copied.get("role") or "").upper()
+        fields = tuple(
+            sorted(
+                str(field)
+                for field in copied.get("requiredFields", [])
+                if str(field).strip()
+                and not _is_review_placeholder_field_name(str(field))
+            )
+        )
+        operations = tuple(
+            sorted(str(ref) for ref in copied.get("operationIds", []) if str(ref).strip())
+        )
+        if not role or not fields or not operations:
+            passthrough.append(copied)
+            continue
+        key = (operations, role, fields)
+        existing = grouped.get(key)
+        if existing is None:
+            grouped[key] = copied
+        else:
+            _merge_inventory_item_by_reference(existing, copied)
+            existing["reviewMarkers"] = list(
+                dict.fromkeys(
+                    [
+                        *[str(marker) for marker in existing.get("reviewMarkers", []) if str(marker).strip()],
+                        "DTO_INVENTORY_DUPLICATE_ROLE_MERGED_REVIEW_REQUIRED",
+                    ]
+                )
+            )
+    return [*grouped.values(), *passthrough]
+
+
+def _merge_inventory_item_by_reference(
+    existing: dict[str, Any],
+    item: Mapping[str, Any],
+) -> None:
+    for key in (
+        "operationIds",
+        "evidenceRefs",
+        "reviewMarkers",
+        "requiredFields",
+        "references",
+        "sourceBlueprintNames",
+    ):
+        existing[key] = list(
+            dict.fromkeys(
+                [
+                    *[str(value) for value in existing.get(key, []) if str(value).strip()],
+                    *[str(value) for value in item.get(key, []) if str(value).strip()],
+                ]
+            )
+        )
+
+
+def _dto_inventory_compression_key(
+    item: Mapping[str, Any],
+    *,
+    operation_model: Mapping[str, Any],
+    operations_by_method: Mapping[str, Mapping[str, Any]],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, str, tuple[str, ...]]:
+    role = str(item.get("dtoRole") or item.get("role") or "").upper()
+    if role == "QUERY":
+        return (role, "search", ())
+    if role in {"RESULT", "CALL_RESULT"}:
+        return ("RESULT", "row", ())
+    if role == "BATCH_ITEM":
+        return (role, "batch", ())
+    if role == "CALL_REQUEST":
+        return (role, "calledProcedure", _field_signature(item))
+    if role == "COMMAND":
+        return (
+            role,
+            _command_intent_for_inventory_item(
+                item,
+                operation_model=operation_model,
+                operations_by_method=operations_by_method,
+                statements_by_id=statements_by_id,
+            ),
+            (),
+        )
+    return (role or "REVIEW_REQUIRED", _class_stem(str(item.get("className") or "")), ())
+
+
+def _field_signature(item: Mapping[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            str(field)
+            for field in item.get("requiredFields", [])
+            if str(field).strip()
+            and not _is_review_placeholder_field_name(str(field))
+        )
+    )
+
+
+def _command_intent_for_inventory_item(
+    item: Mapping[str, Any],
+    *,
+    operation_model: Mapping[str, Any],
+    operations_by_method: Mapping[str, Mapping[str, Any]],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+) -> str:
+    operations = [
+        operation
+        for operation_id in item.get("operationIds", [])
+        if (operation := operations_by_method.get(str(operation_id) or ""))
+    ]
+    statement_ops: set[str] = set()
+    intent_tokens: list[str] = [
+        str(item.get("className") or ""),
+        *[str(ref) for ref in item.get("sourceBlueprintNames", []) if str(ref).strip()],
+        *[str(ref) for ref in item.get("operationIds", []) if str(ref).strip()],
+    ]
+    for operation in operations:
+        branch = operation.get("branchCondition")
+        if isinstance(branch, Mapping):
+            intent_tokens.append(str(branch.get("expression") or ""))
+            intent_tokens.extend(str(value) for value in branch.get("variables", []) if str(value).strip())
+        for statement_id in operation.get("statementRefs", []):
+            statement = statements_by_id.get(str(statement_id) or "")
+            if not isinstance(statement, Mapping):
+                continue
+            statement_ops.add(str(statement.get("operation") or "").upper())
+            intent_tokens.append(str(statement.get("phase") or ""))
+    branch_intent = _branch_expression_intent(intent_tokens)
+    if branch_intent:
+        return branch_intent
+    lowered = " ".join(intent_tokens).lower()
+    if any(token in lowered for token in ("approve", "approval", "aprv", "confirm", "authorize")):
+        return "approve"
+    if any(token in lowered for token in ("status", "state")):
+        return "updateStatus"
+    if any(token in lowered for token in ("sequence", "seq", "number", "no")):
+        return "updateSequence"
+    if "DELETE" in statement_ops:
+        return "delete"
+    if statement_ops & {"INSERT", "MERGE"} and "UPDATE" not in statement_ops:
+        return "create"
+    if "UPDATE" in statement_ops:
+        return "update"
+    if statement_ops & {"EXECUTE", "CALL"}:
+        return "call"
+    return "command"
+
+
+def _branch_expression_intent(values: Sequence[str]) -> str:
+    text = " ".join(str(value or "") for value in values).lower()
+    flag_values = re.findall(
+        r"(?:crud|flag|mode|action|status|type|kind)[a-z0-9_]*\s*=\s*['\"]?([a-z0-9_]+)",
+        text,
+    )
+    for value in flag_values:
+        normalized = value.lower()
+        if normalized in {"r", "read", "search", "select", "query", "list"}:
+            return "search"
+        if normalized in {"c", "create", "insert", "add", "new"}:
+            return "create"
+        if normalized in {"a", "approve", "approval", "confirm"}:
+            return "approve"
+        if normalized in {"u", "update", "modify", "edit", "vendor_u", "online_u"}:
+            return "update"
+        if normalized in {"d", "delete", "remove"}:
+            return "delete"
+    return ""
+
+
+def _compressed_dto_class_name(
+    *,
+    entity_name: str,
+    role: str,
+    intent: str,
+    used_class_names: set[str],
+) -> str:
+    entity = _pascal_from_ascii_tokens(entity_name) or "Draft"
+    intent_pascal = _pascal_from_ascii_tokens(intent)
+    if role == "QUERY":
+        candidate = f"{entity}SearchCriteria"
+    elif role in {"RESULT", "CALL_RESULT"}:
+        candidate = f"{entity}SearchRow"
+    elif role == "BATCH_ITEM":
+        candidate = f"{intent_pascal}{entity}BatchItem" if intent_pascal and intent_pascal != "Batch" else f"{entity}BatchItem"
+    elif role == "CALL_REQUEST":
+        candidate = f"{entity}CalledProcedureRequest"
+    elif role == "COMMAND":
+        candidate = f"{intent_pascal}{entity}Command" if intent_pascal and intent_pascal != "Command" else f"{entity}Command"
+    else:
+        candidate = f"{entity}{_pascal_from_ascii_tokens(role) or 'Dto'}"
+    if candidate not in used_class_names:
+        used_class_names.add(candidate)
+        return candidate
+    index = 2
+    while f"{candidate}{index}" in used_class_names:
+        index += 1
+    unique = f"{candidate}{index}"
+    used_class_names.add(unique)
+    return unique
+
+
+def _operations_by_draft_method_id(
+    operation_model: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    result: dict[str, Mapping[str, Any]] = {}
+    for operation in operation_model.get("operations", []):
+        if not isinstance(operation, Mapping):
+            continue
+        operation_id = str(operation.get("operationId") or "")
+        method_id = _draft_method_id_from_operation_ref(operation_id)
+        if method_id:
+            result[method_id] = operation
+        if operation_id:
+            result[operation_id] = operation
+    return result
+
+
+def _statements_by_id(
+    operation_model: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    return {
+        str(statement.get("statementId") or ""): statement
+        for statement in operation_model.get("statementEvidence", [])
+        if isinstance(statement, Mapping) and str(statement.get("statementId") or "").strip()
+    }
 
 
 def _operation_dto_blueprint_refs(operation: Mapping[str, Any]) -> list[str]:
@@ -2898,7 +3380,14 @@ def _merge_inventory_item(
     if existing is None:
         inventory_by_class[class_name] = item
         return
-    for key in ("operationIds", "evidenceRefs", "reviewMarkers", "requiredFields", "references"):
+    for key in (
+        "operationIds",
+        "evidenceRefs",
+        "reviewMarkers",
+        "requiredFields",
+        "references",
+        "sourceBlueprintNames",
+    ):
         merged = [
             str(value)
             for value in [
@@ -2928,6 +3417,8 @@ def _call_request_statement_fields(
             for ref in operation.get("statementRefs", [])
             if str(ref).strip()
         )
+    if operation_id_set and not statement_refs:
+        return []
     fields: list[str] = []
     for statement in operation_model.get("statementEvidence", []):
         if not isinstance(statement, Mapping):
@@ -2948,6 +3439,34 @@ def _call_request_statement_fields(
     return list(dict.fromkeys(fields))
 
 
+def _call_request_statement_fields_for_blueprint(
+    *,
+    operation_model: Mapping[str, Any],
+    blueprint_name: str,
+) -> list[str]:
+    name = str(blueprint_name or "").strip()
+    if not name:
+        return []
+    operation_ids: list[str] = []
+    for operation in operation_model.get("operations", []):
+        if not isinstance(operation, Mapping):
+            continue
+        refs = operation.get("dtoBlueprintRefs")
+        if not isinstance(refs, Sequence) or isinstance(refs, str | bytes):
+            continue
+        if name not in {str(ref) for ref in refs if str(ref).strip()}:
+            continue
+        operation_id = str(operation.get("operationId") or "").strip()
+        if operation_id:
+            operation_ids.append(operation_id)
+    if not operation_ids:
+        return []
+    return _call_request_statement_fields(
+        operation_model=operation_model,
+        operation_ids=operation_ids,
+    )
+
+
 def _draft_operation_ids_for_dto(
     *,
     dto_name: str,
@@ -2956,24 +3475,23 @@ def _draft_operation_ids_for_dto(
     operation_model: Mapping[str, Any],
 ) -> list[str]:
     raw_refs = list(dict.fromkeys(str(item) for item in raw_operation_ids if str(item).strip()))
-    method_ids = [
-        method_id
-        for method_id in (
-            _draft_method_id_from_operation_ref(operation_id) for operation_id in raw_refs
-        )
-        if method_id
-    ]
+    method_ids = _business_draft_method_ids(
+        _draft_method_id_from_operation_ref(operation_id) for operation_id in raw_refs
+    )
     if role in {"QUERY", "RESULT"}:
         return method_ids or ["reviewDraft"]
     if role == "CALL_REQUEST":
-        statement_methods = _statement_phase_method_ids(
-            operation_model=operation_model,
-            operation_ids=raw_refs,
-            statement_operations={"EXECUTE", "CALL"},
+        statement_methods = _business_draft_method_ids(
+            _statement_phase_method_ids(
+                operation_model=operation_model,
+                operation_ids=raw_refs,
+                statement_operations={"EXECUTE", "CALL"},
+            )
         )
         return (
             statement_methods
-            or [_lower_camel_class_stem(dto_name)]
+            or method_ids
+            or _business_draft_method_ids([_lower_camel_class_stem(dto_name)])
             or method_ids
             or ["reviewDraft"]
         )
@@ -2989,6 +3507,30 @@ def _draft_operation_ids_for_dto(
             return method_ids or ["reviewDraft"]
         return [_lower_camel_class_stem(dto_name)] or method_ids or ["reviewDraft"]
     return method_ids or [_lower_camel_class_stem(dto_name)] or ["reviewDraft"]
+
+
+def _business_draft_method_ids(values: Iterable[str]) -> list[str]:
+    return list(
+        dict.fromkeys(
+            method
+            for value in values
+            for method in [str(value or "").strip()]
+            if method and not _is_generic_draft_method_id(method)
+        )
+    )
+
+
+def _is_generic_draft_method_id(method: str) -> bool:
+    return str(method or "").strip() in {
+        "execute",
+        "exec",
+        "call",
+        "run",
+        "invoke",
+        "executeSql",
+        "executeRawSql",
+        "rawSql",
+    }
 
 
 def _draft_method_id_from_operation_ref(operation_id: str) -> str:
@@ -3029,12 +3571,15 @@ def _statement_phase_method_ids(
     operation_ids: Sequence[str],
     statement_operations: set[str],
 ) -> list[str]:
+    operation_id_set = {str(item) for item in operation_ids if str(item).strip()}
     operations = [
         item
         for item in operation_model.get("operations", [])
         if isinstance(item, Mapping)
-        and (not operation_ids or str(item.get("operationId") or "") in operation_ids)
+        and (not operation_id_set or str(item.get("operationId") or "") in operation_id_set)
     ]
+    if operation_id_set and not operations:
+        return []
     statement_refs: set[str] = set()
     for operation in operations:
         statement_refs.update(
@@ -3042,6 +3587,8 @@ def _statement_phase_method_ids(
             for ref in operation.get("statementRefs", [])
             if str(ref).strip()
         )
+    if operation_id_set and not statement_refs:
+        return []
     methods: list[str] = []
     for statement in operation_model.get("statementEvidence", []):
         if not isinstance(statement, Mapping):
@@ -3207,12 +3754,16 @@ def operation_model_entity_name(operation_model: Mapping[str, Any] | None) -> st
     dto_blueprints = operation_model.get("dtoBlueprints")
     if not isinstance(dto_blueprints, list):
         return None
+    dto_items = [item for item in dto_blueprints if isinstance(item, Mapping)]
+    shared_stem = _shared_business_stem_from_dtos(dto_items)
+    if shared_stem:
+        return shared_stem
     preferred_roles = {"QUERY", "RESULT"}
     candidates = [
         item
-        for item in dto_blueprints
-        if isinstance(item, Mapping) and str(item.get("role") or "") in preferred_roles
-    ] or [item for item in dto_blueprints if isinstance(item, Mapping)]
+        for item in dto_items
+        if str(item.get("role") or "") in preferred_roles
+    ] or dto_items
     for dto in candidates:
         dto_name = str(dto.get("name") or "")
         if dto_name == "OperationModelReviewRequired":
@@ -3225,6 +3776,7 @@ def operation_model_entity_name(operation_model: Mapping[str, Any] | None) -> st
 
 def operation_model_entity_stem(dto_name: str) -> str | None:
     for suffix in (
+        "SearchQuery",
         "SearchCriteria",
         "SearchRow",
         "Criteria",
@@ -3233,11 +3785,87 @@ def operation_model_entity_stem(dto_name: str) -> str | None:
         "CallRequest",
         "CallResult",
         "Request",
+        "Query",
+        "Result",
         "Row",
     ):
         if dto_name.endswith(suffix) and len(dto_name) > len(suffix):
-            return dto_name[: -len(suffix)]
+            stem = dto_name[: -len(suffix)]
+            return _trim_operation_suffix_from_stem(stem)
     return dto_name or None
+
+
+def _shared_business_stem_from_dtos(dto_items: Sequence[Mapping[str, Any]]) -> str:
+    token_lists: list[list[str]] = []
+    for dto in dto_items:
+        dto_name = str(dto.get("name") or "")
+        if not dto_name or dto_name == "OperationModelReviewRequired":
+            continue
+        stem = operation_model_entity_stem(dto_name) or dto_name
+        tokens = _pascal_token_list(stem)
+        if tokens:
+            token_lists.append(tokens)
+    if len(token_lists) < 3:
+        return ""
+    best: tuple[str, ...] = ()
+    min_support = max(3, len(token_lists) // 2)
+    for tokens in token_lists:
+        for length in range(2, min(len(tokens), 5) + 1):
+            prefix = tuple(tokens[:length])
+            if _is_operation_suffix_token(prefix[-1]):
+                continue
+            support = sum(1 for other in token_lists if tuple(other[:length]) == prefix)
+            if support >= min_support and length > len(best):
+                best = prefix
+    return "".join(best)
+
+
+def _trim_operation_suffix_from_stem(value: str) -> str:
+    tokens = _pascal_token_list(value)
+    while len(tokens) > 1 and _is_operation_suffix_token(tokens[-1]):
+        tokens.pop()
+    return "".join(tokens) or value
+
+
+def _pascal_token_list(value: str) -> list[str]:
+    return [
+        part
+        for part in re.findall(
+            r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+",
+            _pascal_from_ascii_tokens(value) or str(value or ""),
+        )
+        if part
+    ]
+
+
+def _is_operation_suffix_token(value: str) -> bool:
+    token = str(value or "").lower()
+    return token.isdigit() or token in {
+        "crud",
+        "read",
+        "query",
+        "search",
+        "select",
+        "result",
+        "row",
+        "create",
+        "insert",
+        "update",
+        "delete",
+        "approve",
+        "approval",
+        "process",
+        "init",
+        "kind",
+        "subsystem",
+        "status",
+        "sequence",
+        "batch",
+        "item",
+        "command",
+        "request",
+        "call",
+    }
 
 
 def _safe_java_class_name(raw_name: str, *, role: str, fallback_stem: str) -> str:

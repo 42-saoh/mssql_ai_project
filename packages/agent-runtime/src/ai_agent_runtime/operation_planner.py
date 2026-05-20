@@ -31,6 +31,7 @@ VALIDATOR_REPAIRED_MARKER = "SP_OPERATION_MODEL_VALIDATOR_REPAIRED"
 DTO_RECONCILED_MARKER = "SP_OPERATION_MODEL_DTO_BLUEPRINT_RECONCILED"
 DTO_ENRICHED_MARKER = "SP_OPERATION_MODEL_DTO_BLUEPRINT_ENRICHED"
 DTO_RECONCILIATION_REVIEW_MARKER = "DTO_BLUEPRINT_RECONCILIATION_REVIEW_REQUIRED"
+STATEMENT_COVERAGE_RECONCILED_MARKER = "SP_OPERATION_MODEL_STATEMENT_COVERAGE_RECONCILED"
 OPENAI_SP_OPERATION_MODEL_INVALID = "OPENAI_SP_OPERATION_MODEL_INVALID"
 MAX_REPAIR_FINDINGS = 12
 DTO_BLUEPRINT_ROLES = {
@@ -315,6 +316,21 @@ def _invoke_operation_model_once(
                 "reviewMarker": EVIDENCE_REPAIRED_MARKER,
             }
         )
+    if repair_summary.get("statementCoverageRepaired"):
+        component_invocations.append(
+            {
+                "component": "sp_operation_model_statement_coverage_reconciler",
+                "status": "SUCCEEDED",
+                "action": "restored_statement_evidence_and_generated_coverage_operations",
+                "reviewMarker": STATEMENT_COVERAGE_RECONCILED_MARKER,
+                "restoredStatementCount": int(
+                    repair_summary.get("restoredStatementCount") or 0
+                ),
+                "generatedOperationCount": int(
+                    repair_summary.get("generatedOperationCount") or 0
+                ),
+            }
+        )
     if component_invocations != list(invocation.component_invocations):
         invocation = dataclass_replace(
             invocation,
@@ -408,10 +424,20 @@ def _validated_or_repaired(
         "restoredDtoCount": 0,
         "generatedDtoCount": 0,
         "enrichedDtoCount": 0,
+        "statementCoverageRepaired": False,
+        "restoredStatementCount": 0,
+        "generatedOperationCount": 0,
         "dtoBlueprintNames": [],
         "enrichedDtoNames": [],
     }
     if reconcile_dto_refs:
+        repair_summary.update(
+            _repair_statement_coverage(
+                repaired_payload,
+                allowed_refs=allowed_refs,
+                statement_evidence=statement_evidence,
+            )
+        )
         repair_summary.update(
             _reconcile_dto_blueprint_refs(
                 repaired_payload,
@@ -555,6 +581,294 @@ def _branch_plan_context(output: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _repair_statement_coverage(
+    payload: dict[str, Any],
+    *,
+    allowed_refs: Sequence[str],
+    statement_evidence: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    source_statements = [item for item in statement_evidence if isinstance(item, Mapping)]
+    if not _requires_task_split(source_statements):
+        return {
+            "statementCoverageRepaired": False,
+            "restoredStatementCount": 0,
+            "generatedOperationCount": 0,
+        }
+    source_by_id = {
+        str(statement.get("statementId") or ""): dict(statement)
+        for statement in source_statements
+        if str(statement.get("statementId") or "").strip()
+    }
+    if len(source_by_id) < 4:
+        return {
+            "statementCoverageRepaired": False,
+            "restoredStatementCount": 0,
+            "generatedOperationCount": 0,
+        }
+    payload_statements = [
+        dict(item) for item in _mapping_items(payload.get("statementEvidence"))
+    ]
+    payload_statement_ids = {
+        str(statement.get("statementId") or "")
+        for statement in payload_statements
+        if str(statement.get("statementId") or "").strip()
+    }
+    operations = [dict(item) for item in _mapping_items(payload.get("operations"))]
+    dto_count = len(_mapping_items(payload.get("dtoBlueprints")))
+    referenced_statement_ids = {
+        str(ref)
+        for operation in operations
+        for ref in _string_list(operation.get("statementRefs"), limit=120)
+        if str(ref).strip()
+    }
+    severe_sparse_output = (
+        len(operations) < 4
+        or len(payload_statement_ids) < 4
+        or dto_count < 4
+        or len(referenced_statement_ids) < 4
+    )
+    if not severe_sparse_output:
+        return {
+            "statementCoverageRepaired": False,
+            "restoredStatementCount": 0,
+            "generatedOperationCount": 0,
+        }
+    restored_statements = [
+        statement
+        for statement_id, statement in source_by_id.items()
+        if statement_id not in payload_statement_ids
+    ]
+    if restored_statements:
+        payload_statements.extend(restored_statements)
+        payload["statementEvidence"] = payload_statements
+
+    operation_ids = {
+        str(operation.get("operationId") or "")
+        for operation in operations
+        if str(operation.get("operationId") or "").strip()
+    }
+    uncovered = [
+        source_by_id[statement_id]
+        for statement_id in source_by_id
+        if statement_id not in referenced_statement_ids
+    ]
+    generated_operations: list[dict[str, Any]] = []
+    generated_dtos: list[dict[str, Any]] = []
+    if uncovered:
+        grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+        for statement in uncovered:
+            grouped.setdefault(_coverage_operation_group_key(statement), []).append(statement)
+        existing_dtos = {
+            str(dto.get("name") or "")
+            for dto in _mapping_items(payload.get("dtoBlueprints"))
+            if str(dto.get("name") or "").strip()
+        }
+        for key, statements in grouped.items():
+            operation = _coverage_operation_from_statements(
+                key=key,
+                statements=statements,
+                existing_operation_ids=operation_ids,
+            )
+            operation_ids.add(str(operation["operationId"]))
+            generated_operations.append(operation)
+            statement_map = {
+                str(statement.get("statementId") or ""): statement
+                for statement in statements
+                if str(statement.get("statementId") or "").strip()
+            }
+            for dto in _coverage_dtos_for_operation(
+                operation=operation,
+                statements_by_id=statement_map,
+                allowed_refs=allowed_refs,
+            ):
+                name = str(dto.get("name") or "")
+                if name in existing_dtos:
+                    continue
+                generated_dtos.append(dto)
+                existing_dtos.add(name)
+
+    if generated_operations:
+        payload["operations"] = [*operations, *generated_operations]
+    if generated_dtos:
+        payload["dtoBlueprints"] = [
+            *[dict(item) for item in _mapping_items(payload.get("dtoBlueprints"))],
+            *generated_dtos,
+        ]
+    if restored_statements or generated_operations:
+        markers = _string_list(payload.get("reviewMarkers"), limit=80)
+        if STATEMENT_COVERAGE_RECONCILED_MARKER not in markers:
+            markers.append(STATEMENT_COVERAGE_RECONCILED_MARKER)
+        if DTO_RECONCILIATION_REVIEW_MARKER not in markers:
+            markers.append(DTO_RECONCILIATION_REVIEW_MARKER)
+        payload["reviewMarkers"] = markers
+    return {
+        "statementCoverageRepaired": bool(restored_statements or generated_operations),
+        "restoredStatementCount": len(restored_statements),
+        "generatedOperationCount": len(generated_operations),
+    }
+
+
+def _coverage_operation_group_key(statement: Mapping[str, Any]) -> tuple[str, str]:
+    operation = str(statement.get("operation") or "REVIEW_REQUIRED").upper()
+    tokens = " ".join(
+        [
+            str(statement.get("phase") or ""),
+            str(statement.get("targetRef") or ""),
+            *[str(value) for value in statement.get("inputs", []) if str(value).strip()],
+            *[str(value) for value in statement.get("writes", []) if str(value).strip()],
+        ]
+    ).lower()
+    intent_terms = (
+        ("approve", ("approve", "approval", "aprv", "confirm")),
+        ("delete", ("delete", "remove", "attachment")),
+        ("create", ("insert", "create", "register", "svalue", "batch")),
+        ("status", ("status", "state")),
+        ("sequence", ("sequence", "seq", "number")),
+        ("vendor", ("vendor", "online", "external")),
+        ("search", ("select", "search", "read", "lookup")),
+    )
+    for intent, aliases in intent_terms:
+        if any(alias in tokens for alias in aliases):
+            return (operation, intent)
+    return (operation, operation.lower() or "operation")
+
+
+def _coverage_operation_from_statements(
+    *,
+    key: tuple[str, str],
+    statements: Sequence[Mapping[str, Any]],
+    existing_operation_ids: set[str],
+) -> dict[str, Any]:
+    operation, intent = key
+    statement_refs = [
+        str(statement.get("statementId") or "")
+        for statement in statements
+        if str(statement.get("statementId") or "").strip()
+    ]
+    stem = _operation_ref_stem(f"{intent}.{operation.lower()}") or "CoverageOperation"
+    operation_id = _unique_operation_id(f"op.coverage.{intent}.{operation.lower()}", existing_operation_ids)
+    evidence_refs = _coverage_evidence_refs(statements)
+    branch_variables = list(
+        dict.fromkeys(
+            variable
+            for statement in statements
+            for variable in _branch_variables_from_statement(statement)
+        )
+    )[:20]
+    dto_refs = _coverage_dto_refs(stem=stem, statement_operation=operation)
+    return {
+        "operationId": operation_id,
+        "crudFlag": intent.upper()[:20],
+        "title": f"{stem} operation",
+        "summary": "Deterministically restored operation coverage from statement evidence.",
+        "branchCondition": {
+            "expression": f"{intent} {operation} statement evidence coverage",
+            "variables": branch_variables,
+            "evidenceRefs": evidence_refs,
+            "status": "REVIEW_REQUIRED",
+        },
+        "statementRefs": list(dict.fromkeys(statement_refs)),
+        "dtoBlueprintRefs": dto_refs,
+        "stateTransitions": [],
+        "riskMarkers": [STATEMENT_COVERAGE_RECONCILED_MARKER],
+        "evidenceRefs": evidence_refs,
+        "status": "REVIEW_REQUIRED",
+    }
+
+
+def _unique_operation_id(base: str, existing_operation_ids: set[str]) -> str:
+    candidate = base
+    index = 2
+    while candidate in existing_operation_ids:
+        candidate = f"{base}.{index}"
+        index += 1
+    return candidate
+
+
+def _coverage_evidence_refs(statements: Sequence[Mapping[str, Any]]) -> list[str]:
+    refs: list[str] = []
+    for statement in statements:
+        refs.extend(_string_list(statement.get("evidenceRefs"), limit=40))
+    return list(dict.fromkeys(refs))
+
+
+def _branch_variables_from_statement(statement: Mapping[str, Any]) -> list[str]:
+    branch_keywords = (
+        "crud",
+        "flag",
+        "kind",
+        "type",
+        "status",
+        "gubun",
+        "mode",
+        "svalue",
+        "approval",
+        "vendor",
+        "online",
+        "batch",
+    )
+    values = [
+        *[str(value) for value in statement.get("inputs", []) if str(value).strip()],
+        *[str(value) for value in statement.get("writes", []) if str(value).strip()],
+    ]
+    return [
+        value
+        for value in values
+        if any(keyword in value.lower() for keyword in branch_keywords)
+    ][:20]
+
+
+def _coverage_dto_refs(*, stem: str, statement_operation: str) -> list[str]:
+    operation = statement_operation.upper()
+    if operation == "SELECT":
+        return [f"{stem}Query", f"{stem}Row"]
+    if operation in {"EXECUTE", "CALL"}:
+        return [f"{stem}CallRequest"]
+    if operation in {"INSERT", "UPDATE", "DELETE", "MERGE"}:
+        return [f"{stem}Command"]
+    return [f"{stem}Command"]
+
+
+def _coverage_dtos_for_operation(
+    *,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+    allowed_refs: Sequence[str],
+) -> list[dict[str, Any]]:
+    dtos: list[dict[str, Any]] = []
+    for dto_name in _string_list(operation.get("dtoBlueprintRefs"), limit=20):
+        role = _normalized_dto_role(
+            None,
+            dto_name=dto_name,
+            operation_refs=[str(operation.get("operationId") or "")],
+            operations=[operation],
+            statements_by_id=statements_by_id,
+        )
+        evidence_refs = _safe_evidence_refs(
+            operation.get("evidenceRefs"),
+            allowed_refs=allowed_refs,
+            fallback_refs=allowed_refs[:1],
+        )
+        dtos.append(
+            {
+                "name": dto_name,
+                "role": role,
+                "operationIds": [str(operation.get("operationId") or "")],
+                "fields": _field_blueprints_for_dto(
+                    dto_name=dto_name,
+                    role=role,
+                    operation_ids=[str(operation.get("operationId") or "")],
+                    operations=[operation],
+                    statements_by_id=statements_by_id,
+                    allowed_refs=allowed_refs,
+                ),
+                "evidenceRefs": evidence_refs,
+                "reviewMarkers": [DTO_RECONCILIATION_REVIEW_MARKER],
+            }
+        )
+    return dtos
+
+
 def _reconcile_dto_blueprint_refs(
     payload: dict[str, Any],
     *,
@@ -580,12 +894,21 @@ def _reconcile_dto_blueprint_refs(
     }
     refs_to_operations: dict[str, list[str]] = {}
     refs_to_statements: dict[str, list[str]] = {}
+    generated_empty_ref_names: list[str] = []
     for operation in operations:
         operation_id = str(operation.get("operationId") or "").strip()
         if not operation_id:
             continue
         statement_refs = _string_list(operation.get("statementRefs"), limit=80)
-        for dto_ref in _string_list(operation.get("dtoBlueprintRefs"), limit=80):
+        dto_refs = _string_list(operation.get("dtoBlueprintRefs"), limit=80)
+        if not dto_refs:
+            dto_refs = _generated_dto_refs_for_operation(
+                operation=operation,
+                statements_by_id=statements_by_id,
+            )
+            operation["dtoBlueprintRefs"] = dto_refs
+            generated_empty_ref_names.extend(dto_refs)
+        for dto_ref in dto_refs:
             refs_to_operations.setdefault(dto_ref, [])
             if operation_id not in refs_to_operations[dto_ref]:
                 refs_to_operations[dto_ref].append(operation_id)
@@ -696,13 +1019,20 @@ def _reconcile_dto_blueprint_refs(
         dto_blueprints.append(dto)
         current_by_name[dto_name] = dto
 
-    if restored_names or generated_names or enriched_names:
+    if restored_names or generated_names or enriched_names or generated_empty_ref_names:
         markers = _string_list(payload.get("reviewMarkers"), limit=80)
-        if (restored_names or generated_names) and DTO_RECONCILED_MARKER not in markers:
+        if (
+            restored_names
+            or generated_names
+            or generated_empty_ref_names
+        ) and DTO_RECONCILED_MARKER not in markers:
             markers.append(DTO_RECONCILED_MARKER)
         if enriched_names and DTO_ENRICHED_MARKER not in markers:
             markers.append(DTO_ENRICHED_MARKER)
-        if generated_names and DTO_RECONCILIATION_REVIEW_MARKER not in markers:
+        if (
+            generated_names
+            or generated_empty_ref_names
+        ) and DTO_RECONCILIATION_REVIEW_MARKER not in markers:
             markers.append(DTO_RECONCILIATION_REVIEW_MARKER)
         payload["reviewMarkers"] = markers
     payload["dtoBlueprints"] = dto_blueprints
@@ -715,6 +1045,58 @@ def _reconcile_dto_blueprint_refs(
         "dtoBlueprintNames": [*restored_names, *generated_names],
         "enrichedDtoNames": enriched_names,
     }
+
+
+def _generated_dto_refs_for_operation(
+    *,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    stem = _operation_ref_stem(str(operation.get("operationId") or "")) or "DraftOperation"
+    statement_ops = _statement_operations_for_operation(
+        operation=operation,
+        statements_by_id=statements_by_id,
+    )
+    refs: list[str] = []
+    if statement_ops and statement_ops <= {"SELECT"}:
+        refs.extend([f"{stem}Query", f"{stem}Row"])
+    elif statement_ops & {"EXECUTE", "CALL"} and not (
+        statement_ops & {"INSERT", "UPDATE", "DELETE", "MERGE"}
+    ):
+        refs.append(f"{stem}CallRequest")
+    elif statement_ops & {"INSERT", "UPDATE", "DELETE", "MERGE"}:
+        refs.append(f"{stem}Command")
+    else:
+        refs.append(f"{stem}Command")
+    return list(dict.fromkeys(refs))
+
+
+def _statement_operations_for_operation(
+    *,
+    operation: Mapping[str, Any],
+    statements_by_id: Mapping[str, Mapping[str, Any]],
+) -> set[str]:
+    values: set[str] = set()
+    for statement_id in _string_list(operation.get("statementRefs"), limit=80):
+        statement = statements_by_id.get(statement_id)
+        if isinstance(statement, Mapping):
+            operation_name = str(statement.get("operation") or "").upper()
+            if operation_name:
+                values.add(operation_name)
+    return values
+
+
+def _operation_ref_stem(operation_id: str) -> str:
+    text = str(operation_id or "").strip()
+    parts = [part for part in re.split(r"[^0-9A-Za-z]+", text) if part]
+    if len(parts) > 1 and parts[0].lower() in {"op", "operation", "operations"}:
+        parts = parts[1:]
+    if not parts and text:
+        parts = [text]
+    candidate = "".join(part[:1].upper() + part[1:] for part in parts)
+    if candidate and not re.match(r"[A-Za-z_]", candidate):
+        candidate = f"Draft{candidate}"
+    return candidate[:80]
 
 
 def _reconciled_operation_ids(

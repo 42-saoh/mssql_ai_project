@@ -370,6 +370,7 @@ def _compose_ai_java_mybatis_draft_pack_output(
     allowed_refs: Sequence[str],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     stage_files: dict[tuple[str, str], Mapping[str, Any]] = {}
+    stage_files_by_type: dict[str, list[Mapping[str, Any]]] = {}
     dto_inventory_files: dict[tuple[str, str], Mapping[str, Any]] = {}
     dto_content_files: dict[tuple[str, str], Mapping[str, Any]] = {}
     stage_root_refs: list[str] = []
@@ -385,6 +386,7 @@ def _compose_ai_java_mybatis_draft_pack_output(
                 continue
             key = (str(file.get("artifactType") or ""), str(file.get("path") or ""))
             stage_files[key] = file
+            stage_files_by_type.setdefault(str(file.get("artifactType") or ""), []).append(file)
             if stage == "dto_inventory":
                 dto_inventory_files[key] = file
             elif stage == "dto_content":
@@ -393,6 +395,7 @@ def _compose_ai_java_mybatis_draft_pack_output(
     composed_files: list[dict[str, Any]] = []
     missing: list[dict[str, str]] = []
     floor_files: list[dict[str, Any]] = []
+    dto_guard_files: list[dict[str, str]] = []
     allowed_set = {str(ref) for ref in allowed_refs if str(ref).strip()}
     package_context, package_context_review_required = _java_package_context(
         sanitized_draft_context
@@ -402,6 +405,11 @@ def _compose_ai_java_mybatis_draft_pack_output(
         path = str(expected.get("path") or "")
         key = (artifact_type, path)
         actual = stage_files.get(key)
+        if actual is None:
+            actual = _aggregate_stage_file_for_expected(
+                expected,
+                stage_files_by_type=stage_files_by_type,
+            )
         if actual is None:
             if artifact_type == "DTO_DRAFT":
                 actual = _dto_floor_file(
@@ -449,6 +457,26 @@ def _compose_ai_java_mybatis_draft_pack_output(
                 composed[optional_key] = values
         if actual.get("qualityScore") is not None:
             composed["qualityScore"] = actual.get("qualityScore")
+        if artifact_type == "DTO_DRAFT":
+            guarded_content, guarded = _dto_content_policy_guard(
+                composed,
+                package_context=package_context,
+                package_context_review_required=package_context_review_required,
+            )
+            if guarded:
+                composed["content"] = guarded_content
+                composed["reviewMarkers"] = _dedupe(
+                    [
+                        *_strings(composed.get("reviewMarkers")),
+                        DTO_FLOOR_REVIEW_MARKER,
+                        *(
+                            [PACKAGE_CONTEXT_REVIEW_MARKER]
+                            if package_context_review_required
+                            else []
+                        ),
+                    ]
+                )
+                dto_guard_files.append(_missing_expected_stage_file(expected))
         composed_files.append(composed)
     if missing:
         raise AiDraftPackValidationError(
@@ -474,7 +502,7 @@ def _compose_ai_java_mybatis_draft_pack_output(
         ]
     )
     dto_floor_summary = {
-        "applied": bool(floor_files),
+        "applied": bool(floor_files or dto_guard_files),
         "fileCount": len(floor_files),
         "files": [
             {
@@ -485,6 +513,8 @@ def _compose_ai_java_mybatis_draft_pack_output(
             }
             for file in floor_files[:40]
         ],
+        "augmentedFileCount": len(dto_guard_files),
+        "augmentedFiles": dto_guard_files[:40],
     }
     return {
         "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
@@ -500,6 +530,170 @@ def _compose_ai_java_mybatis_draft_pack_output(
             [*assumptions, "P50 role-stage outputs were merged by deterministic composer."]
         ),
     }, dto_floor_summary
+
+
+def _aggregate_stage_file_for_expected(
+    expected: Mapping[str, Any],
+    *,
+    stage_files_by_type: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> Mapping[str, Any] | None:
+    artifact_type = str(expected.get("artifactType") or "")
+    if artifact_type not in {
+        "SERVICE_DRAFT",
+        "MAPPER_INTERFACE",
+        "MAPPER_XML",
+    }:
+        return None
+    candidates = [
+        file
+        for file in stage_files_by_type.get(artifact_type, [])
+        if isinstance(file, Mapping)
+    ]
+    if not candidates:
+        return None
+    expected_class = str(expected.get("className") or "")
+    for file in candidates:
+        if str(file.get("className") or "") == expected_class:
+            return file
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _dto_content_policy_guard(
+    file: Mapping[str, Any],
+    *,
+    package_context: Mapping[str, str],
+    package_context_review_required: bool,
+) -> tuple[str, bool]:
+    class_name = str(file.get("className") or "").strip()
+    package_name = str(package_context.get("modelPackage") or "").strip()
+    field_names = [
+        field
+        for field in _dedupe(_strings(file.get("requiredFields")))
+        if _java_identifier(field) and not _is_placeholder_field(field)
+    ]
+    content = str(file.get("content") or "").strip()
+    if not class_name or not field_names:
+        return str(file.get("content") or ""), False
+    if not content or not _java_type_pattern("class", class_name).search(content):
+        return (
+            _dto_floor_content(
+                class_name=class_name,
+                fields=field_names,
+                package_name=package_name,
+            ),
+            True,
+        )
+
+    changed = False
+    guarded = _ensure_java_package(
+        content,
+        package_name,
+        force=not package_context_review_required,
+    )
+    changed = changed or guarded != content
+    for field in field_names:
+        if not _declares_java_field(guarded, field):
+            guarded = _insert_before_final_brace(guarded, f"    private String {field};")
+            changed = True
+    if not _has_lombok_dto_policy(guarded):
+        for field in field_names:
+            missing_accessors = []
+            if not _declares_java_getter(guarded, field):
+                missing_accessors.append(_java_string_getter(field))
+            if not _declares_java_setter(guarded, field):
+                missing_accessors.append(_java_string_setter(field))
+            if missing_accessors:
+                guarded = _insert_before_final_brace(
+                    guarded,
+                    "\n\n".join(missing_accessors),
+                )
+                changed = True
+    return guarded, changed
+
+
+def _ensure_java_package(content: str, package_name: str, *, force: bool) -> str:
+    if not package_name:
+        return content
+    package_pattern = _java_package_pattern()
+    existing_package = _java_package_name(content)
+    if existing_package and not force and not _placeholder_java_package(existing_package):
+        return content
+    replacement = f"package {package_name};\n\n"
+    if package_pattern.search(content):
+        return package_pattern.sub(replacement, content, count=1).lstrip()
+    return f"{replacement}{content.lstrip()}"
+
+
+def _java_package_pattern() -> re.Pattern[str]:
+    return re.compile(
+        r"^\s*package\s+([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*);\s*",
+        flags=re.MULTILINE,
+    )
+
+
+def _java_package_name(content: str) -> str:
+    match = _java_package_pattern().search(content)
+    return match.group(1) if match else ""
+
+
+def _placeholder_java_package(package_name: str) -> bool:
+    lowered = str(package_name or "").lower()
+    return lowered.startswith(("com.example", "org.example", "example."))
+
+
+def _java_type_pattern(kind: str, name: str) -> re.Pattern[str]:
+    return re.compile(rf"\b{re.escape(kind)}\s+{re.escape(name)}\b")
+
+
+def _declares_java_field(content: str, field: str) -> bool:
+    return bool(
+        re.search(
+            rf"\b(?:private|protected|public)\s+[\w.$<>, ?\[\]]+\s+{re.escape(field)}\s*(?:=[^;]+)?;",
+            content,
+        )
+    )
+
+
+def _declares_java_getter(content: str, field: str) -> bool:
+    suffix = field[:1].upper() + field[1:]
+    return bool(re.search(rf"\b(?:get|is){re.escape(suffix)}\s*\(", content))
+
+
+def _declares_java_setter(content: str, field: str) -> bool:
+    suffix = field[:1].upper() + field[1:]
+    return bool(re.search(rf"\bset{re.escape(suffix)}\s*\(", content))
+
+
+def _has_lombok_dto_policy(content: str) -> bool:
+    return bool(re.search(r"@(Data|Getter|Setter|Value)\b", content))
+
+
+def _insert_before_final_brace(content: str, insertion: str) -> str:
+    text = content.rstrip()
+    index = text.rfind("}")
+    if index < 0:
+        return f"{text}\n\n{insertion}\n"
+    return f"{text[:index].rstrip()}\n\n{insertion}\n{text[index:]}"
+
+
+def _java_string_getter(field: str) -> str:
+    suffix = field[:1].upper() + field[1:]
+    return (
+        f"    public String get{suffix}() {{\n"
+        f"        return {field};\n"
+        "    }"
+    )
+
+
+def _java_string_setter(field: str) -> str:
+    suffix = field[:1].upper() + field[1:]
+    return (
+        f"    public void set{suffix}(String {field}) {{\n"
+        f"        this.{field} = {field};\n"
+        "    }"
+    )
 
 
 def _dto_floor_file(
@@ -669,10 +863,12 @@ def _dto_floor_component(summary: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "component": DTO_FLOOR_COMPONENT,
         "status": "SUCCEEDED",
-        "action": "materialized_missing_dto_stage_files_from_expected_inventory",
+        "action": "materialized_or_normalized_dto_stage_files_from_expected_inventory",
         "reviewMarker": DTO_FLOOR_REVIEW_MARKER,
         "fileCount": int(summary.get("fileCount") or 0),
         "files": list(summary.get("files") or [])[:40],
+        "augmentedFileCount": int(summary.get("augmentedFileCount") or 0),
+        "augmentedFiles": list(summary.get("augmentedFiles") or [])[:40],
     }
 
 

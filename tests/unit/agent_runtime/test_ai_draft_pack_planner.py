@@ -245,6 +245,11 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
     assert prompt_payload["filePolicy"]["placeholderSqlAndDtoBlocked"] is True
     assert prompt_payload["filePolicy"]["javaPackageContextRequired"] is True
     assert prompt_payload["filePolicy"]["placeholderPackagesBlocked"] is True
+    assert prompt_payload["filePolicy"]["qualityRepairPolicy"]["active"] is False
+    assert any(
+        "generic execute" in blocker
+        for blocker in prompt_payload["filePolicy"]["qualityRepairPolicy"]["blockers"]
+    )
     assert prompt_payload["sanitizedDraftContext"]["javaPackageContext"]["modelPackage"] == (
         P42_MODEL_PACKAGE
     )
@@ -508,6 +513,94 @@ def test_ai_draft_pack_framework_adapter_materializes_missing_dto_files_from_flo
         "dto/ManageBondSearchCriteria.java"
     ]["reviewMarkers"]
     assert floor_component["fileCount"] == len(dto_paths_to_drop)
+    assert validate_ai_java_mybatis_draft_pack_quality(
+        run.structured_output
+    ).status == ValidationStatus.PASSED
+
+
+def test_ai_draft_pack_framework_adapter_normalizes_existing_dto_content_policy() -> None:
+    payload = _valid_pack()
+    weak_payload = deepcopy(payload)
+    for file in weak_payload["files"]:
+        if file["artifactType"] != "DTO_DRAFT":
+            continue
+        fields = "\n".join(
+            f"    private String {field};" for field in file.get("requiredFields", [])
+        )
+        file["content"] = f"public class {file['className']} {{\n{fields}\n}}"
+    adapter = FakeAiGenerationFrameworkAdapter(
+        output=weak_payload,
+        candidate_framework="openai_agents_sdk_weak_dto_fixture",
+    )
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={
+            "targetRef": payload["targetRef"],
+            "javaPackageContext": _p42_java_package_context(),
+        },
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        model_gateway=FakeModelGateway(),
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=_allowed_refs(payload),
+        framework_adapter=adapter,
+    )
+
+    floor_component = next(
+        component
+        for component in run.model_invocation.component_invocations
+        if component["component"] == "ai_draft_pack_dto_content_floor"
+    )
+    dto_files = [
+        file for file in run.structured_output["files"] if file["artifactType"] == "DTO_DRAFT"
+    ]
+
+    assert floor_component["fileCount"] == 0
+    assert floor_component["augmentedFileCount"] == len(dto_files)
+    assert all(f"package {P42_MODEL_PACKAGE};" in file["content"] for file in dto_files)
+    assert all("public String get" in file["content"] for file in dto_files)
+    assert all("public void set" in file["content"] for file in dto_files)
+    assert validate_ai_java_mybatis_draft_pack_quality(
+        run.structured_output
+    ).status == ValidationStatus.PASSED
+
+
+def test_ai_draft_pack_composer_reconciles_aggregate_non_dto_stage_paths() -> None:
+    payload = _valid_pack()
+    shifted_payload = deepcopy(payload)
+    for file in shifted_payload["files"]:
+        if file["artifactType"] in {
+            "SERVICE_DRAFT",
+            "MAPPER_INTERFACE",
+            "MAPPER_XML",
+        }:
+            file["path"] = f"src/main/generated/{file['path']}"
+    adapter = FakeAiGenerationFrameworkAdapter(
+        output=shifted_payload,
+        candidate_framework="openai_agents_sdk_shifted_non_dto_paths",
+    )
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={
+            "targetRef": payload["targetRef"],
+            "javaPackageContext": _p42_java_package_context(),
+        },
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        model_gateway=FakeModelGateway(),
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=_allowed_refs(payload),
+        framework_adapter=adapter,
+    )
+
+    paths = {file["path"] for file in run.structured_output["files"]}
+
+    assert "service/ManageBondService.java" in paths
+    assert "mapper/ManageBondMapper.java" in paths
+    assert "mapper/ManageBondMapperSQL.xml" in paths
+    assert not any(path.startswith("src/main/generated/") for path in paths)
     assert validate_ai_java_mybatis_draft_pack_quality(
         run.structured_output
     ).status == ValidationStatus.PASSED
