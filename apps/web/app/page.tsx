@@ -8,7 +8,7 @@ import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
-import type { Job, MetadataSearchResponse, RegistryVersion } from "@/lib/api/types";
+import type { Job, RegistryVersion } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
@@ -61,25 +61,17 @@ export default async function HomePage() {
     );
   }
 
-  const [jobsResult, registryResult, metadataResult] = await Promise.allSettled([
+  const [jobsResult, registryResult] = await Promise.allSettled([
     api.listJobs(5),
     api.listRegistryVersions(),
-    api.searchMetadataObjects({
-      dbProfileId: "ppm",
-      query: "P",
-      objectTypes: ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
-      limit: 6,
-    }),
   ]);
   const jobs = fulfilledValue<{ jobs: Job[] }>(jobsResult)?.jobs ?? [];
   const artifactsByJob = await artifactsForJobs(api, jobs);
   const registryVersions =
     fulfilledValue<{ versions: RegistryVersion[] }>(registryResult)?.versions ?? [];
-  const metadataSearch = fulfilledValue<MetadataSearchResponse>(metadataResult);
   const apiWarnings = [
     rejectedMessage(jobsResult),
     rejectedMessage(registryResult),
-    rejectedMessage(metadataResult),
     ...Object.values(artifactsByJob)
       .map((item) => item.error)
       .filter((message): message is string => Boolean(message)),
@@ -96,7 +88,7 @@ export default async function HomePage() {
           <span className="quiet-label">HTTP API boundary</span>
         </div>
         <p className="lede">
-          Portal pages call the configured API/BFF for request intake, read-only metadata search,
+          Portal pages call the configured API/BFF for request intake, metadata design chat,
           draft artifacts, validation evidence, blockers, and previous analysis history.
         </p>
         <div className="form-actions">
@@ -106,8 +98,8 @@ export default async function HomePage() {
           <Link className="secondary-action" href="/jobs">
             View all analysis history
           </Link>
-          <Link className="secondary-action" href="/metadata/search">
-            Search metadata
+          <Link className="secondary-action" href="/metadata/design?intent=search">
+            Search in design chat
           </Link>
         </div>
       </section>
@@ -160,47 +152,16 @@ export default async function HomePage() {
         <div className="panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Metadata search</p>
-              <h2>PPM identities</h2>
+              <p className="eyebrow">Metadata design</p>
+              <h2>Search and table previews</h2>
             </div>
-            {metadataSearch ? (
-              <StatusPill
-                value={metadataSearch.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-                label={metadataSearch.reviewRequired ? "근거 보강 필요" : "Evidence only"}
-              />
-            ) : null}
+            <StatusPill value="CHAT" label="design-run" />
           </div>
-          {metadataSearch ? (
-            <>
-              <dl className="metric-grid">
-                <div>
-                  <dt>Profile</dt>
-                  <dd>{metadataSearch.sourceProfile}</dd>
-                </div>
-                <div>
-                  <dt>Database</dt>
-                  <dd>{metadataSearch.sourceDatabase}</dd>
-                </div>
-                <div>
-                  <dt>Results</dt>
-                  <dd>{metadataSearch.results.length}</dd>
-                </div>
-              </dl>
-              {metadataSearch.blockers.length > 0 ? (
-                <div className="blocker-list">
-                  {metadataSearch.blockers.map((blocker) => (
-                    <article className="blocker-row" key={blocker.code}>
-                      <strong>{blocker.code}</strong>
-                      <span>{blocker.message}</span>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <p className="lede">Metadata search is unavailable from the connected API.</p>
-          )}
-          <Link href="/metadata/search">Open metadata search</Link>
+          <p className="lede">
+            Ask for object search, table schema evidence, or a new table design in one durable
+            metadata design conversation.
+          </p>
+          <Link href="/metadata/design?intent=search">Open metadata design chat</Link>
         </div>
       </section>
 

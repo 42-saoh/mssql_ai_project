@@ -381,8 +381,7 @@ deploy, raw prompt/provider/SP/guide storage, or production readiness.
   - AI tool orchestration 은 public invocation route 를 넓히지 않는다. Workflow 내부 bounded
     planner 만 active/read-only catalog 전체를 후보로 보고, deterministic policy gate 통과 후
     내부 registry 로 실행한다.
-  - `POST /api/v1/metadata/analyze` 도 같은 bounded planner 경계를 사용한다. 기존
-    `GET /api/v1/metadata/search` 는 deterministic search 로 유지하고, analyze API 응답에만
+  - `POST /api/v1/metadata/analyze` 같은 bounded planner 경계는 유지한다. Metadata search는 공개 `GET` route 없이 `POST /api/v1/metadata/design-runs` search-mode 결과로 통합하며,
     sanitized `aiToolEvidence`, `deterministicFacts`, object profiles, category insight groups,
     dependency graph, DTO readiness, metadata insights, review markers 를 반환한다.
 

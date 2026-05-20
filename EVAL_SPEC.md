@@ -720,7 +720,7 @@ make test PYTEST_ARGS="tests/eval/test_p24_sp_migration_guide_quality.py tests/c
 - `tests/eval/test_p30_metadata_ai_mcp_analysis.py`
 
 필수 체크:
-- 기존 `GET /api/v1/metadata/search` 는 deterministic search 로 유지하고 LLM 호출을 기본 포함하지 않는다
+- Metadata search는 제거된 public search route 대신 `POST /api/v1/metadata/design-runs`의 `SEARCH_RESULT` run으로 검증한다.
 - analyze API 는 `query` 또는 단일 `target` 중 하나만 받아 metadata analysis 응답을 생성한다.
   P34 이후 기본 실행은 sanitized knowledge asset 도 함께 저장한다
 - `useLlmAnalysis=true`, `useAiToolOrchestration=true`, `maxTargets=3` 이 analyze API 기본값이다

@@ -28,7 +28,6 @@
 - `GET /api/v1/metadata/db-profiles`
 - `GET /api/v1/metadata/tools`
 - `POST /api/v1/metadata/tools/{toolName}/invoke`
-- `GET /api/v1/metadata/search`
 - `POST /api/v1/metadata/analyze`
 - `POST /api/v1/metadata/analysis-runs`
 - `GET /api/v1/metadata/analysis-runs/{runId}`
@@ -278,10 +277,9 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
   in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation
   mapping, audit payload shape 를 유지하되 production persistence 로 사용하지 않는다.
 
-## Metadata search
+## Metadata design search
 
-- `GET /api/v1/metadata/search` 는 승인된 OpenAPI contract 에 맞춘 read-only metadata search
-  endpoint 다. MCP tool catalog 와 Web UI 는 이 P09 slice 에서 수정하지 않았다.
+- Public metadata search now runs through `POST /api/v1/metadata/design-runs` as `resultKind=SEARCH_RESULT`; the removed `GET` search route returns 404.
 - API 는 MSSQL MCP registry boundary 를 통해 metadata inventory tool 을 호출한다. 기본 테스트
   모드는 fixture-backed repository 를 사용하고, `MSSQL_ENABLE_LIVE_METADATA=1` 일 때는
   env-gated live metadata repository 를 사용한다.
@@ -298,7 +296,7 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
 - `POST /api/v1/metadata/analyze` 는 bounded AI-MCP metadata analysis endpoint 다.
   요청은 `dbProfileId` 와 `query` 또는 단일 `target` 중 하나를 받으며, `options.useLlmAnalysis=true`,
   `options.useAiToolOrchestration=true`, `options.maxTargets=3` 을 기본값으로 사용한다.
-- 기존 `GET /api/v1/metadata/search` 는 LLM 호출 없이 deterministic search 로 유지한다. Analyze API 는
+- Deterministic search helpers remain internal service code and are reused by analysis/design. Analyze API는
   baseline identity/evidence 를 만든 뒤 LLM planner 가 필요한 active/read-only MCP tool 을 strict JSON
   plan 으로 제안하게 하고, 실제 실행은 내부 registry/policy gate 로만 수행한다.
 - public `/metadata/tools/{toolName}/invoke` allowlist 는 확장하지 않는다. `get_table_schema` 같은 tool 은

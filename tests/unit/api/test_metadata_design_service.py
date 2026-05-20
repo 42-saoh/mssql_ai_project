@@ -11,7 +11,7 @@ from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.metadata_design_runs import execute_metadata_design_run
 from api_app.metadata_design_service import MetadataDesignChatService
 from api_app.recovery_worker import run_recovery_once
-from api_app.schemas import MetadataDesignRunRequest
+from api_app.schemas import MetadataDesignRunRequest, MetadataSearchResponse
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
@@ -360,6 +360,93 @@ def test_metadata_design_builds_table_script_and_dto_from_metadata(
     )
     serialized = str(response).lower()
     for forbidden in ("rowdata", "row_data", "create procedure", "do-not-return"):
+        assert forbidden not in serialized
+
+
+def test_metadata_design_search_only_returns_search_result_and_schema_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = DesignSpyRegistry()
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+    monkeypatch.setattr(
+        "api_app.metadata_design_service.search_metadata_objects",
+        lambda **_kwargs: MetadataSearchResponse.model_validate(
+            {
+                "dbProfileId": "master",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "limit": 2,
+                "sourceProfile": "master",
+                "sourceDatabase": "master",
+                "snapshotId": "search-snapshot-1",
+                "results": [
+                    {
+                        "objectIdentity": {
+                            "schema": "dbo",
+                            "name": "PPM_CUSTOMER_ORDER",
+                            "type": "TABLE",
+                        },
+                        "targetKey": "mssql://master/dbo/PPM_CUSTOMER_ORDER?type=TABLE",
+                        "sourceProfile": "master",
+                        "sourceDatabase": "master",
+                        "snapshotId": "search-snapshot-1",
+                        "evidenceRefs": [
+                            {
+                                "type": "MSSQL_METADATA",
+                                "objectRef": "dbo.PPM_CUSTOMER_ORDER",
+                                "locator": "fixture://metadata/search#PPM_CUSTOMER_ORDER",
+                                "snapshotId": "search-snapshot-1",
+                            }
+                        ],
+                        "caveats": [],
+                        "reviewRequired": False,
+                        "blockers": [],
+                    }
+                ],
+                "caveats": [],
+                "reviewRequired": False,
+                "blockers": [],
+            }
+        ),
+    )
+    service = MetadataDesignChatService(model_gateway=FakeModelGateway())
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "search order",
+                "searchInputs": {
+                    "query": "order",
+                    "objectTypes": ["TABLE"],
+                    "limit": 2,
+                    "includeTableSchema": True,
+                },
+                "options": {
+                    "useLlmAnalysis": False,
+                    "useAiToolOrchestration": True,
+                    "intentMode": "SEARCH_ONLY",
+                    "maxCandidates": 2,
+                },
+            }
+        )
+    ).to_response()
+
+    assert response["resultKind"] == "SEARCH_RESULT"
+    assert response["interpretedIntent"]["intent"] == "SEARCH_METADATA"
+    assert response["searchResult"]["results"][0]["objectIdentity"]["type"] == "TABLE"
+    assert response.get("tableProposal") is None
+    assert response.get("dtoDraft") is None
+    assert [call[0] for call in registry.calls] == ["get_table_schema"]
+    assert {item["kind"] for item in response["relatedMetadata"]} >= {
+        "TABLE_SCHEMA",
+        "COLUMN",
+    }
+    serialized = str(response).lower()
+    for forbidden in ("rowdata", "row_data", "create procedure", "rawprompt"):
         assert forbidden not in serialized
 
 

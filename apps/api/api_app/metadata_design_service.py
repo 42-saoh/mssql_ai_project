@@ -31,7 +31,13 @@ from api_app.ai_tool_orchestrator import (
     _review_marker,
     _safe_dict,
 )
-from api_app.metadata_service import MetadataSearchDependencyError, repo_root
+from api_app.metadata_service import (
+    DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
+    MetadataSearchDependencyError,
+    metadata_search_blocker,
+    repo_root,
+    search_metadata_objects,
+)
 from api_app.repositories import WorkflowRepository
 from api_app.schemas import (
     MetadataAnalysisReviewMarker,
@@ -43,6 +49,8 @@ from api_app.schemas import (
     MetadataDesignRunRequest,
     MetadataGeneratedDraft,
     MetadataRelatedMetadata,
+    MetadataSearchBlocker,
+    MetadataSearchResponse,
     MetadataStandardizationMapping,
     MetadataTableProposal,
     MetadataTableProposalColumn,
@@ -207,6 +215,33 @@ REMOVE_HINTS = ("빼", "삭제", "제거", "remove", "exclude", "drop")
 CHANGE_HINTS = ("변경", "바꿔", "수정", "change", "convert")
 
 
+SEARCH_INTENT_HINTS = (
+    "search",
+    "find",
+    "lookup",
+    "show",
+    "\uac80\uc0c9",
+    "\ucc3e\uc544",
+    "\ucc3e\uc544\uc918",
+)
+DESIGN_INTENT_HINTS = (
+    "create table",
+    "make table",
+    "design",
+    "draft",
+    "field",
+    "column",
+    "add",
+    "remove",
+    "refine",
+    "\ub9cc\ub4e4",
+    "\uc0dd\uc131",
+    "\ucd94\uac00",
+    "\uc81c\uac70",
+    "\ubcc0\uacbd",
+)
+
+
 @dataclass(frozen=True)
 class ToolEnvelope:
     tool_name: str
@@ -238,6 +273,9 @@ class MetadataDesignChatService:
 
     def design(self, request: MetadataDesignRunRequest) -> MetadataDesignResult:
         intent = _interpret_design_intent(request)
+        if intent.intent == "SEARCH_METADATA":
+            return _metadata_search_design_result(request, intent=intent)
+
         effective_request, fields, applied_changes, intent_caveats = _effective_request_for_intent(
             request,
             intent=intent,
@@ -362,6 +400,18 @@ class MetadataDesignChatService:
 
 def _interpret_design_intent(request: MetadataDesignRunRequest) -> MetadataDesignInterpretedIntent:
     message = _safe_text(request.message)
+    if _should_handle_as_metadata_search(request, message):
+        return MetadataDesignInterpretedIntent(
+            intent="SEARCH_METADATA",
+            tableNameCandidate=None,
+            tableDescription=None,
+            fields=[],
+            modifications=[],
+            confidence=0.86,
+            reviewRequired=False,
+            reviewReasons=[],
+        )
+
     fields = _fields_from_request_or_message(request)
     modifications = _modifications_from_message(message, fields=fields)
     message_table_name = _table_name_from_message(message)
@@ -394,6 +444,370 @@ def _interpret_design_intent(request: MetadataDesignRunRequest) -> MetadataDesig
         reviewRequired=bool(review_reasons),
         reviewReasons=review_reasons,
     )
+
+
+def _should_handle_as_metadata_search(
+    request: MetadataDesignRunRequest,
+    message: str,
+) -> bool:
+    if request.options.intent_mode == "SEARCH_ONLY":
+        return True
+    if request.options.intent_mode == "DESIGN_TABLE":
+        return False
+    if request.options.conversation_mode == "REFINE_CURRENT":
+        return False
+    if any(
+        (field.name or field.description or field.db_type)
+        for field in request.design_inputs.fields
+    ):
+        return False
+
+    normalized = _normalize_match_text(message)
+    if not normalized:
+        return False
+    if any(hint in normalized for hint in DESIGN_INTENT_HINTS):
+        return False
+    if any(hint in normalized for hint in SEARCH_INTENT_HINTS):
+        return True
+    return _looks_like_object_identity_query(message)
+
+
+def _looks_like_object_identity_query(value: str) -> bool:
+    normalized = value.strip()
+    if not normalized or len(normalized) > 160:
+        return False
+    if re.search(r"\s", normalized):
+        return False
+    return bool(
+        re.fullmatch(
+            r"(?:[A-Za-z_][A-Za-z0-9_#$@]*\.){0,2}[A-Za-z_][A-Za-z0-9_#$@]*",
+            normalized,
+        )
+    )
+
+
+def _metadata_search_design_result(
+    request: MetadataDesignRunRequest,
+    *,
+    intent: MetadataDesignInterpretedIntent,
+) -> MetadataDesignResult:
+    query = _metadata_search_query_for_request(request)
+    object_types = tuple(
+        request.search_inputs.object_types or list(DEFAULT_METADATA_SEARCH_OBJECT_TYPES)
+    )
+    limit = request.search_inputs.limit
+    caveats: list[str] = []
+    search_tool_status = "SUCCEEDED"
+    search_error_code: str | None = None
+    try:
+        search_result = search_metadata_objects(
+            db_profile_id=request.db_profile_id,
+            query=query,
+            object_types=object_types,
+            limit=limit,
+        )
+    except (MetadataSearchDependencyError, MetadataToolError, ValueError) as exc:
+        search_tool_status = REVIEW_REQUIRED
+        search_error_code = getattr(exc, "code", exc.__class__.__name__)
+        search_result = _empty_search_result_for_error(
+            request,
+            query=query,
+            object_types=object_types,
+            limit=limit,
+            error=exc,
+        )
+        caveats.append(search_error_code)
+
+    schema_context = (
+        _collect_search_table_schema_context(request, search_result=search_result)
+        if request.search_inputs.include_table_schema
+        else CandidateContext((), (), (), ("METADATA_DESIGN_SEARCH_SCHEMA_SKIPPED",))
+    )
+    caveats = _dedupe_strings(
+        [
+            *caveats,
+            *search_result.caveats,
+            *schema_context.caveats,
+        ]
+    )
+    evidence_refs = _search_result_evidence_ids(search_result)
+    review_markers = _review_markers_for_search_result(
+        search_result=search_result,
+        caveats=caveats,
+        fallback_evidence_refs=evidence_refs,
+    )
+    tool_results = [
+        {
+            "toolName": "search_metadata_objects",
+            "status": search_tool_status,
+            "evidenceRefs": evidence_refs,
+            "resultCount": len(search_result.results),
+            "contentHash": stable_json_hash(search_result.to_response()),
+            **({"errorCode": search_error_code} if search_error_code else {}),
+        },
+        *[
+            {
+                "toolName": result.tool_name,
+                "status": result.status,
+                "evidenceRefs": list(result.evidence_refs),
+                "resultCount": result.result_count,
+                "contentHash": stable_json_hash(result.response.get("data", {})),
+                **({"errorCode": result.error_code} if result.error_code else {}),
+            }
+            for result in schema_context.tool_results
+        ],
+    ]
+    return MetadataDesignResult(
+        resultKind="SEARCH_RESULT",
+        assistantMessage=_search_assistant_message(search_result),
+        interpretedIntent=intent,
+        appliedChanges=[],
+        relatedMetadata=list(schema_context.related_metadata),
+        standardizationMappings=[],
+        tableProposal=None,
+        searchResult=search_result,
+        dtoDraft=None,
+        aiToolEvidence={
+            "status": (
+                REVIEW_REQUIRED
+                if search_result.review_required
+                or caveats
+                or any(item["status"] != "SUCCEEDED" for item in tool_results)
+                else "SUCCEEDED"
+            ),
+            "toolResults": tool_results,
+            "plannerMetrics": {
+                "status": "SKIPPED",
+                "executedToolCallCount": sum(
+                    1 for item in tool_results if item["status"] == "SUCCEEDED"
+                ),
+                "blockedRequestCount": sum(
+                    1 for item in tool_results if item["status"] != "SUCCEEDED"
+                ),
+                "cacheHitCount": 0,
+                "cacheMissCount": 0,
+            },
+        },
+        deterministicFacts=list(schema_context.deterministic_facts),
+        reviewMarkers=[
+            MetadataAnalysisReviewMarker.model_validate(marker)
+            for marker in review_markers
+        ],
+        caveats=caveats,
+        reviewRequired=bool(search_result.review_required or caveats or review_markers),
+        modelInvocation=None,
+        componentInvocations=[
+            {
+                "stage": "metadata_design_search",
+                "toolName": "search_metadata_objects",
+                "status": search_tool_status,
+                "evidenceCount": len(evidence_refs),
+                "resultCount": len(search_result.results),
+                **({"errorCode": search_error_code} if search_error_code else {}),
+            },
+            *[
+                {
+                    "stage": "metadata_design_search_schema",
+                    "toolName": result.tool_name,
+                    "status": result.status,
+                    "evidenceCount": len(result.evidence_refs),
+                    "resultCount": result.result_count,
+                    **({"errorCode": result.error_code} if result.error_code else {}),
+                }
+                for result in schema_context.tool_results
+            ],
+        ],
+    )
+
+
+def _metadata_search_query_for_request(request: MetadataDesignRunRequest) -> str:
+    raw = _safe_text(request.search_inputs.query or request.message)
+    normalized = raw.strip()
+    lowered = normalized.lower()
+    for prefix in (
+        "search for ",
+        "search ",
+        "find ",
+        "lookup ",
+        "show ",
+        "\uac80\uc0c9 ",
+        "\ucc3e\uc544 ",
+        "\ucc3e\uc544\uc918 ",
+    ):
+        if lowered.startswith(prefix):
+            return normalized[len(prefix) :].strip() or normalized
+    return normalized
+
+
+def _empty_search_result_for_error(
+    request: MetadataDesignRunRequest,
+    *,
+    query: str,
+    object_types: tuple[str, ...],
+    limit: int,
+    error: Exception,
+) -> MetadataSearchResponse:
+    code = getattr(error, "code", error.__class__.__name__)
+    message = str(getattr(error, "detail", None) or getattr(error, "message", None) or error)
+    blocker = (
+        metadata_search_blocker(code)
+        if message == code
+        else MetadataSearchBlocker(code=code, message=message)
+    )
+    return MetadataSearchResponse(
+        dbProfileId=request.db_profile_id,
+        query=query,
+        objectTypes=list(object_types),
+        limit=limit,
+        sourceProfile=request.db_profile_id,
+        sourceDatabase=request.db_profile_id,
+        results=[],
+        caveats=[code],
+        reviewRequired=True,
+        blockers=[blocker],
+    )
+
+
+def _collect_search_table_schema_context(
+    request: MetadataDesignRunRequest,
+    *,
+    search_result: MetadataSearchResponse,
+) -> CandidateContext:
+    tool_results: list[ToolEnvelope] = []
+    related: list[MetadataRelatedMetadata] = []
+    facts: list[dict[str, Any]] = []
+    caveats: list[str] = []
+    table_results = [
+        result
+        for result in search_result.results
+        if result.object_identity.type == "TABLE"
+    ][: request.options.max_candidates]
+    if not table_results:
+        return CandidateContext((), (), (), ())
+    try:
+        registry = _build_internal_registry(request.db_profile_id)
+    except Exception as exc:  # noqa: BLE001 - keep search result while surfacing caveat
+        return CandidateContext(
+            tool_results=(),
+            related_metadata=(),
+            deterministic_facts=(
+                {
+                    "id": "metadata_design.search_schema_registry_unavailable",
+                    "kind": "METADATA_TOOL",
+                    "status": REVIEW_REQUIRED,
+                    "summary": f"Metadata registry unavailable: {exc.__class__.__name__}",
+                    "evidenceRefs": [],
+                },
+            ),
+            caveats=("METADATA_DESIGN_METADATA_UNAVAILABLE",),
+        )
+    for index, result in enumerate(table_results):
+        identity = result.object_identity
+        try:
+            response = registry.invoke_payload(
+                "get_table_schema",
+                {
+                    "arguments": {
+                        "dbProfileId": request.db_profile_id,
+                        "schema": identity.schema_name,
+                        "tableName": identity.name,
+                    }
+                },
+            )
+        except (MetadataToolError, MetadataSearchDependencyError, ValueError) as exc:
+            tool_results.append(
+                ToolEnvelope(
+                    tool_name="get_table_schema",
+                    status=REVIEW_REQUIRED,
+                    response={},
+                    evidence_refs=(),
+                    result_count=0,
+                    error_code=getattr(exc, "code", exc.__class__.__name__),
+                )
+            )
+            caveats.append("METADATA_DESIGN_TOOL_REVIEW_REQUIRED")
+            continue
+        evidence_refs = tuple(_evidence_ids(response))
+        data = dict(response.get("data") or {})
+        data["__responseEvidenceRefs"] = list(evidence_refs)
+        tool_results.append(
+            ToolEnvelope(
+                tool_name="get_table_schema",
+                status="SUCCEEDED",
+                response=response,
+                evidence_refs=evidence_refs,
+                result_count=len(data.get("columns") or []),
+            )
+        )
+        _append_schema_metadata(
+            related,
+            facts,
+            data,
+            _search_result_item_evidence_ids(result),
+        )
+        facts.append(
+            _fact(
+                f"metadata_design.search_result.{index}",
+                f"{identity.schema_name}.{identity.name}",
+                _search_result_item_evidence_ids(result),
+            )
+        )
+    return CandidateContext(
+        tool_results=tuple(tool_results),
+        related_metadata=tuple(_dedupe_related(related)),
+        deterministic_facts=tuple(facts),
+        caveats=tuple(_dedupe_strings(caveats)),
+    )
+
+
+def _review_markers_for_search_result(
+    *,
+    search_result: MetadataSearchResponse,
+    caveats: list[str],
+    fallback_evidence_refs: list[str],
+) -> list[dict[str, Any]]:
+    markers: list[dict[str, Any]] = []
+    for blocker in search_result.blockers:
+        markers.append(
+            _review_marker(
+                blocker.code,
+                blocker.message,
+                evidence_refs=fallback_evidence_refs,
+            )
+        )
+    for caveat in caveats:
+        if any(marker.get("code") == caveat for marker in markers):
+            continue
+        markers.append(
+            _review_marker(
+                caveat,
+                f"Metadata search caveat: {caveat}",
+                evidence_refs=fallback_evidence_refs,
+            )
+        )
+    return markers
+
+
+def _search_assistant_message(search_result: MetadataSearchResponse) -> str:
+    return (
+        f"Found {len(search_result.results)} metadata candidate(s) for "
+        f"'{search_result.query}'. Results are read-only evidence context; caveats remain "
+        "marked as REVIEW_REQUIRED."
+    )
+
+
+def _search_result_evidence_ids(search_result: MetadataSearchResponse) -> list[str]:
+    refs: list[str] = []
+    for result in search_result.results:
+        refs.extend(_search_result_item_evidence_ids(result))
+    return _dedupe_strings(refs)
+
+
+def _search_result_item_evidence_ids(result: Any) -> list[str]:
+    refs: list[str] = []
+    for ref in getattr(result, "evidence_refs", []) or []:
+        refs.append(str(getattr(ref, "locator", None) or getattr(ref, "object_ref", None) or ref))
+    return _dedupe_strings(refs)
 
 
 def _effective_request_for_intent(

@@ -14,6 +14,10 @@ storage:
   table: dbo.METADATA_DESIGN_RUNS
   no_new_ddl: true
 input_contract:
+  intent_modes:
+    - AUTO
+    - SEARCH_ONLY
+    - DESIGN_TABLE
   conversation_modes:
     - NEW_DESIGN
     - REFINE_CURRENT
@@ -21,15 +25,26 @@ input_contract:
   web_field_rows_removed: true
 result_contract:
   required_fields:
+    - resultKind
     - interpretedIntent
     - appliedChanges
     - relatedMetadata
     - standardizationMappings
+    - searchResult
+  table_script_field: createTableScriptPreview
+  design_proposal_fields:
     - tableProposal
     - dtoDraft
-  table_script_field: createTableScriptPreview
+  search_result_fields:
+    - searchResult
+    - relatedMetadata
   dto_preview_artifact_type: DTO_DRAFT
   not_workflow_artifacts: true
+search_intent:
+  interpreted_intent: SEARCH_METADATA
+  result_kind: SEARCH_RESULT
+  table_schema_evidence_kind: TABLE_SCHEMA
+  public_search_route_removed: true
 natural_language_examples:
   new_design:
     - 고객명, 주소, 주문일이 있는 주문 요청 테이블

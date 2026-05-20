@@ -27,7 +27,7 @@ def test_openapi_skeleton_routes_are_registered() -> None:
     assert "/api/v1/metadata/db-profiles" in routes
     assert "/api/v1/metadata/tools" in routes
     assert "/api/v1/metadata/tools/{toolName}/invoke" in routes
-    assert "/api/v1/metadata/search" in routes
+    assert "/api/v1/metadata/search" not in routes
     assert "/api/v1/metadata/analyze" in routes
     assert "/api/v1/metadata/analysis-runs" in routes
     assert "/api/v1/metadata/analysis-runs/{runId}" in routes

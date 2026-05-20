@@ -94,7 +94,8 @@ p18b_web_http_auth_rbac:
       - GET /api/v1/artifacts/{artifactId}
       - POST /api/v1/artifacts/{artifactId}/validation
       - GET /api/v1/metadata/db-profiles
-      - GET /api/v1/metadata/search
+      - POST /api/v1/metadata/design-runs
+      - GET /api/v1/metadata/design-runs/{runId}
       - GET /api/v1/registry/versions
     blocker_if:
       - HTTP_ADAPTER_DIVERGES_FROM_PORTAL_API_INTERFACE

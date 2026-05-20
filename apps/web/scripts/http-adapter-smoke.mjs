@@ -147,12 +147,24 @@ const dependencyResolution = await api.invokeMetadataTool("resolve_dependency_re
     referencedName: "TB_ORDER",
   },
 });
-const metadataSearch = await api.searchMetadataObjects({
+const metadataDesignSearchRun = await api.submitMetadataDesignRun({
   dbProfileId: "master",
-  query: "order",
-  objectTypes: ["PROCEDURE", "TABLE"],
-  limit: 5,
+  message: "search order",
+  searchInputs: {
+    query: "order",
+    objectTypes: ["PROCEDURE", "TABLE"],
+    limit: 5,
+    includeTableSchema: true,
+  },
+  options: {
+    useLlmAnalysis: false,
+    useAiToolOrchestration: true,
+    llmProfileId: "openai_fast_test",
+    maxCandidates: 3,
+    intentMode: "SEARCH_ONLY",
+  },
 });
+const metadataDesignSearch = await api.getMetadataDesignRun(metadataDesignSearchRun.runId);
 const metadataAnalysis = await api.analyzeMetadata({
   dbProfileId: "master",
   query: "order",
@@ -199,8 +211,10 @@ assert(dependencyClosure.data.unresolved?.length > 0, "Dependency closure must p
 assert(dependencyClosure.data.edges.every((edge) => edge.resolutionStatus === "CONFIRMED"), "Closure graph must hide evidence-caveated edges when requested");
 assert(dependencyResolution.toolName === "resolve_dependency_reference", "Dependency resolver invocation returned the wrong tool");
 assert(dependencyResolution.data.selectedResolution?.name === "TB_ORDER", "Dependency resolver did not select the confirmed table");
-assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
-assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
+assert(metadataDesignSearch.status === "SUCCEEDED", `Unexpected metadata design search status: ${metadataDesignSearch.status}`);
+assert(metadataDesignSearch.result?.resultKind === "SEARCH_RESULT", "Metadata design search did not return a search result");
+assert(metadataDesignSearch.result.searchResult?.sourceProfile === "master", `Unexpected metadata source profile: ${metadataDesignSearch.result?.searchResult?.sourceProfile}`);
+assert(metadataDesignSearch.result.searchResult?.sourceDatabase === "master", `Unexpected metadata source database: ${metadataDesignSearch.result?.searchResult?.sourceDatabase}`);
 assert(metadataAnalysis.sourceProfile === "master", `Unexpected analysis source profile: ${metadataAnalysis.sourceProfile}`);
 assert(metadataAnalysis.deterministicFacts.length > 0, "Metadata analysis must include deterministic facts");
 assert(Array.isArray(metadataAnalysis.objectProfiles), "Metadata analysis must include objectProfiles");
@@ -232,7 +246,8 @@ for (const [label, payload] of Object.entries({
   metadataTools,
   dependencyClosure,
   dependencyResolution,
-  metadataSearch,
+  metadataDesignSearchRun,
+  metadataDesignSearch,
   metadataAnalysis,
   metadataAnalysisRun,
   metadataAnalysisRunStatus,
@@ -278,9 +293,6 @@ assertObserved("POST /api/v1/metadata/tools/get_dependency_closure/invoke", ({ m
 assertObserved("POST /api/v1/metadata/tools/resolve_dependency_reference/invoke", ({ method, path }) =>
   method === "POST" && path === "/api/v1/metadata/tools/resolve_dependency_reference/invoke",
 );
-assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
-  method === "GET" && path.startsWith("/api/v1/metadata/search?"),
-);
 assertObserved("POST /api/v1/metadata/analyze", ({ method, path }) =>
   method === "POST" && path === "/api/v1/metadata/analyze",
 );
@@ -289,6 +301,12 @@ assertObserved("POST /api/v1/metadata/analysis-runs", ({ method, path }) =>
 );
 assertObserved("GET /api/v1/metadata/analysis-runs/{runId}", ({ method, path }) =>
   method === "GET" && /^\/api\/v1\/metadata\/analysis-runs\/[^/]+$/.test(path),
+);
+assertObserved("POST /api/v1/metadata/design-runs", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/design-runs",
+);
+assertObserved("GET /api/v1/metadata/design-runs/{runId}", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/metadata\/design-runs\/[^/]+$/.test(path),
 );
 assertObserved("POST /api/v1/knowledge/exports", ({ method, path }) =>
   method === "POST" && path === "/api/v1/knowledge/exports",

@@ -47,7 +47,7 @@
 
 - `PORTAL_API_MODE=http` 와 `PORTAL_API_BASE_URL` 을 app 사용의 필수 조건으로 둔다.
 - `apps/web/lib/api/mock-adapter.ts` 는 runtime/default path 에 연결하지 않는다.
-- P25 기준 functional Web pages 는 `/`, `/requests/new`, `/metadata/search`, `/jobs/[jobId]`, `/artifacts/[artifactId]` 로 유지하고 `/review/decision` 은 기본 UI 에서 제거한다.
+- P25 이후 functional Web pages 는 `/`, `/requests/new`, `/metadata/design`, `/jobs/[jobId]`, `/artifacts/[artifactId]` 로 유지하고 `/review/decision` 은 기본 UI 에서 제거한다.
 - `job_demo_*`, `art_demo_*`, `approval_preview_*` 링크와 fallback 을 제거한다.
 - `/requests/new` 는 API submit 후 실제 반환된 job id 로 redirect 한다.
 - `/artifacts/[artifactId]` 는 page-load validation write 를 만들지 않고 latest validation 을 표시하며, run-validation 은 명시적 action 으로 둔다.

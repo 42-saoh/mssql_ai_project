@@ -103,7 +103,7 @@ def test_p21_fixture_declares_no_mock_live_portal_contract() -> None:
     assert fixture["web_contract"]["required_functional_pages"] == [
         "/",
         "/requests/new",
-        "/metadata/search",
+        "/metadata/design",
         "/jobs/[jobId]",
         "/artifacts/[artifactId]",
     ]

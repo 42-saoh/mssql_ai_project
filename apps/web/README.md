@@ -4,14 +4,14 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 
 ## Routes
 
-- `/` - dashboard with recent analysis jobs, metadata search summary, and draft artifact links.
+- `/` - dashboard with recent analysis jobs, metadata design chat entry, and draft artifact links.
 - `/requests/new` - submits single and batch SP analysis requests to the portal API, then links to accepted jobs.
 - `/jobs` - recent analysis history with targetKey/target/profile/status/output filters and artifact preview links.
 - `/jobs/[jobId]` - workflow status, sanitized LLM trace summary, knowledge assets, and draft artifacts.
 - `/knowledge/assets/[assetId]` and `/knowledge/assets/[assetId]/versions/[versionId]/facts` - sanitized knowledge asset version and fact graph views.
 - `/artifacts/[artifactId]` - artifact preview, copy/download controls, evidence refs, caveats, sanitized trace, and explicit validation trigger.
-- `/metadata/search` - read-only metadata identity/evidence search plus client-side async metadata analysis.
-- `/metadata/design` - natural-language metadata design chat UI for durable table script previews and DTO_DRAFT previews.
+- `/metadata/search` - compatibility redirect to `/metadata/design?intent=search`.
+- `/metadata/design` - natural-language metadata design chat UI for metadata search results, table schema evidence, durable table script previews, and DTO_DRAFT previews.
 - `/metadata/dependencies` - read-only dependency closure and reference resolver diagnostics.
 
 ## SP Request Progress
@@ -43,9 +43,12 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `/jobs?targetKey=...` uses the public exact-match filter so users can paste a canonical key and find prior runs for the same root target.
 - Job and artifact views include same-target history links. `targetRef` remains display text; `targetKey` is the stable lookup key.
 
-## Metadata Search And Analysis
+## Metadata Design Search And Analysis
 
-- Search stays server-rendered and calls `GET /api/v1/metadata/search`.
+- Search now runs through the metadata design chat. The public Web proxy posts to
+  `POST /api/metadata/design-runs`, which calls public
+  `POST /api/v1/metadata/design-runs` with `intentMode=SEARCH_ONLY` or AUTO-detected
+  search intent and then polls `GET /api/metadata/design-runs/{runId}`.
 - `Analyze metadata` is a client-side async action. It calls the internal Web route `POST /api/metadata/analysis-runs`, which proxies public `POST /api/v1/metadata/analysis-runs`; the client then polls `GET /api/metadata/analysis-runs/{runId}` until the public run reaches `SUCCEEDED` or `FAILED`.
 - The public analysis-run API uses durable platform storage when
   `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql` has been manually applied.
@@ -61,9 +64,12 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 ## Metadata Design Chat
 
 - `/metadata/design` submits natural-language table design and refinement messages to the Web proxy `POST /api/metadata/design-runs`, which calls public `POST /api/v1/metadata/design-runs`.
-- The visible form is chat-focused: metadata profile, `NEW_DESIGN`/`REFINE_CURRENT` mode, optional table name hint, and message. The legacy field row UI is not rendered.
+- The visible form is chat-focused: metadata profile, `NEW_DESIGN`/`REFINE_CURRENT` mode, optional table name hint, search object type/limit controls, and message. The legacy field row UI is not rendered.
 - The client polls `GET /api/metadata/design-runs/{runId}` and can reopen a durable thread with `GET /api/metadata/design-conversations/{conversationId}`.
-- Results render interpreted intent, applied changes, related metadata candidates, standardization mappings, a `createTableScriptPreview`, and a non-persisted `DTO_DRAFT` preview stored only in the design run result JSON.
+- Search results render object identity cards plus TABLE schema evidence in `relatedMetadata`.
+  Design proposal results render interpreted intent, applied changes, related metadata candidates,
+  standardization mappings, a `createTableScriptPreview`, and a non-persisted `DTO_DRAFT`
+  preview stored only in the design run result JSON.
 - SQL and Java downloads are client Blob previews. They do not use workflow artifact storage, artifact download helpers, source repository writes, deploy, publish, execute, or apply flows.
 - The page invokes no row-data tools and never renders raw prompts, raw provider responses, full SQL/SP definitions, procedure execution output, secrets, or apply controls.
 
@@ -87,6 +93,7 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 ## Knowledge Asset Behavior
 
 - `/jobs/[jobId]` reads `GET /api/v1/jobs/{jobId}/knowledge-assets` and renders safe summaries plus Web asset/fact graph links.
-- `/metadata/search` renders metadata analysis `knowledgeAssets[]` summaries in the reusable analysis panel.
+- Metadata analysis `knowledgeAssets[]` summaries remain in the reusable analysis panel; the old
+  `/metadata/search` page is only a redirect to the design chat.
 - The Web client includes sanitized knowledge export support, but does not render raw fact payloads, raw metadata payloads, provider traces, row data, or raw SQL.
 - Draft artifact downloads are Web-internal convenience routes backed by existing sanitized artifact preview APIs. Single artifact files and job-level ZIP bundles are draft-only and do not add publish/deploy/execute/apply behavior.

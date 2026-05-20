@@ -1132,69 +1132,79 @@ def test_metadata_tool_invocation_route_blocks_ppm_template_only_without_plf_fal
     assert "PLF" not in response.text
 
 
-def test_metadata_search_returns_read_only_identity_response(client: TestClient) -> None:
+def test_metadata_search_route_is_removed(client: TestClient) -> None:
     response = client.get(
         "/api/v1/metadata/search",
-        params=[
-            ("dbProfileId", "master"),
-            ("query", "order"),
-            ("objectTypes", "PROCEDURE"),
-            ("objectTypes", "TABLE"),
-            ("limit", "5"),
-        ],
+        params={"dbProfileId": "master", "query": "order"},
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["dbProfileId"] == "master"
-    assert payload["sourceProfile"] == "master"
-    assert payload["sourceDatabase"] == "master"
-    assert payload["snapshotId"] == "mcp-fixture-snapshot-0001"
-    assert payload["results"]
-    result = payload["results"][0]
+    assert response.status_code == 404
+
+
+def test_metadata_design_search_run_returns_read_only_identity_response(
+    client: TestClient,
+) -> None:
+    submit_response = client.post(
+        "/api/v1/metadata/design-runs",
+        json={
+            "dbProfileId": "master",
+            "message": "search order",
+            "searchInputs": {
+                "query": "order",
+                "objectTypes": ["PROCEDURE", "TABLE"],
+                "limit": 5,
+                "includeTableSchema": True,
+            },
+            "options": {
+                "useLlmAnalysis": False,
+                "useAiToolOrchestration": True,
+                "llmProfileId": "openai_fast_test",
+                "maxCandidates": 3,
+                "intentMode": "SEARCH_ONLY",
+            },
+        },
+    )
+
+    assert submit_response.status_code == 202
+    submitted = submit_response.json()
+    poll_response = client.get(f"/api/v1/metadata/design-runs/{submitted['runId']}")
+
+    assert poll_response.status_code == 200
+    payload = poll_response.json()
+    result_payload = payload["result"]
+    search_result = result_payload["searchResult"]
+    assert result_payload["resultKind"] == "SEARCH_RESULT"
+    assert result_payload["interpretedIntent"]["intent"] == "SEARCH_METADATA"
+    assert result_payload["tableProposal"] is None
+    assert search_result["dbProfileId"] == "master"
+    assert search_result["sourceProfile"] == "master"
+    assert search_result["sourceDatabase"] == "master"
+    assert search_result["snapshotId"] == "mcp-fixture-snapshot-0001"
+    assert search_result["results"]
+    assert any(item["kind"] in {"TABLE_SCHEMA", "COLUMN"} for item in result_payload["relatedMetadata"])
+    result = search_result["results"][0]
     assert set(result["objectIdentity"]) == {"schema", "name", "type"}
     assert result["objectIdentity"]["type"] in {"PROCEDURE", "TABLE"}
     assert result["evidenceRefs"]
     assert "blockers" in result
 
+    forbidden_keys = {
+        "rowdata",
+        "row_data",
+        "rawprompt",
+        "rawproviderresponse",
+        "definition",
+        "sqltext",
+        "ddl",
+        "dml",
+        "apply",
+        "deploy",
+        "procedureexecution",
+    }
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(payload))
     serialized = str(payload).lower()
-    forbidden_fields = ("rowdata", "row_data", "definition", "sqltext", "ddl", "dml")
-    assert not any(field in serialized for field in forbidden_fields)
-
-
-def test_metadata_search_validation_and_dependency_error_shapes(client: TestClient) -> None:
-    invalid_type = client.get(
-        "/api/v1/metadata/search",
-        params={
-            "dbProfileId": "master",
-            "query": "order",
-            "objectTypes": "TRIGGER",
-        },
-    )
-    blank_query = client.get(
-        "/api/v1/metadata/search",
-        params={
-            "dbProfileId": "master",
-            "query": "   ",
-            "objectTypes": "TABLE",
-        },
-    )
-    missing_profile = client.get(
-        "/api/v1/metadata/search",
-        params={
-            "dbProfileId": "missing",
-            "query": "order",
-            "objectTypes": "TABLE",
-        },
-    )
-
-    assert invalid_type.status_code == 422
-    assert invalid_type.json()["code"] == "VALIDATION_ERROR"
-    assert blank_query.status_code == 422
-    assert blank_query.json()["code"] == "VALIDATION_ERROR"
-    assert missing_profile.status_code == 404
-    assert missing_profile.json()["code"] == "PROFILE_NOT_FOUND"
-    assert set(missing_profile.json()) == {"detail", "code"}
+    assert "select *" not in serialized
+    assert "create procedure" not in serialized
 
 
 def test_metadata_analysis_route_supports_query_and_target_modes(

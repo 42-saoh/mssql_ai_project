@@ -46,7 +46,7 @@ web_contract:
   required_functional_pages:
     - /
     - /requests/new
-    - /metadata/search
+    - /metadata/design
     - /jobs/[jobId]
     - /artifacts/[artifactId]
   page_requirements:
@@ -66,7 +66,8 @@ api_contract:
     - GET /api/v1/artifacts/{artifactId}/validation/latest
     - POST /api/v1/artifacts/{artifactId}/validation
     - GET /api/v1/metadata/db-profiles
-    - GET /api/v1/metadata/search
+    - POST /api/v1/metadata/design-runs
+    - GET /api/v1/metadata/design-runs/{runId}
 live_gate:
   env: P21_LIVE_PORTAL_GATE=1
   gate_mode: explicit_controlled_live

@@ -79,7 +79,7 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "ValidationReport" in data["components"]["schemas"]
     assert "RequestedOutputType" in data["components"]["schemas"]
     assert "WorkflowStepType" in data["components"]["schemas"]
-    assert "/api/v1/metadata/search" in data["paths"]
+    assert "/api/v1/metadata/search" not in data["paths"]
     assert "/api/v1/metadata/analyze" in data["paths"]
     assert "/api/v1/metadata/analysis-runs" in data["paths"]
     assert "/api/v1/metadata/analysis-runs/{runId}" in data["paths"]
@@ -118,46 +118,54 @@ def test_openapi_exposes_canonical_target_keys_on_public_history_surface() -> No
     assert schemas["MetadataDependencyGraphNode"]["properties"]["targetKey"]["type"] == "string"
 
 
-def test_openapi_metadata_search_contract_matches_p09_surface() -> None:
+def test_openapi_metadata_search_is_integrated_into_design_run_contract() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
             encoding="utf-8"
         )
     )
-    operation = openapi["paths"]["/api/v1/metadata/search"]["get"]
     schemas = openapi["components"]["schemas"]
 
-    assert operation["operationId"] == "searchMetadataObjects"
-    assert operation["tags"] == ["metadata"]
-    assert {parameter["name"] for parameter in operation["parameters"]} == {
-        "dbProfileId",
-        "query",
-        "objectTypes",
-        "limit",
-    }
-    object_types = next(
-        parameter for parameter in operation["parameters"] if parameter["name"] == "objectTypes"
-    )
-    assert object_types["style"] == "form"
-    assert object_types["explode"] is True
-    assert object_types["schema"]["items"] == {
-        "$ref": "#/components/schemas/MetadataSearchObjectType"
-    }
+    assert "/api/v1/metadata/search" not in openapi["paths"]
     assert schemas["MetadataSearchObjectType"]["enum"] == [
         "PROCEDURE",
         "TABLE",
         "VIEW",
         "FUNCTION",
     ]
+    request_schema = schemas["MetadataDesignRunRequest"]
+    search_inputs = schemas["MetadataDesignSearchInputs"]
+    design_options = schemas["MetadataDesignOptions"]
+    design_result = schemas["MetadataDesignResult"]
+    interpreted_intent = schemas["MetadataDesignInterpretedIntent"]
 
-    responses = operation["responses"]
-    assert responses["200"]["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/MetadataSearchResponse"
+    assert request_schema["properties"]["searchInputs"] == {
+        "$ref": "#/components/schemas/MetadataDesignSearchInputs"
     }
-    assert responses["403"] == {"$ref": "#/components/responses/Forbidden"}
-    assert responses["424"] == {"$ref": "#/components/responses/DependencyBlocked"}
-    assert responses["429"] == {"$ref": "#/components/responses/Backpressure"}
-    assert responses["503"] == {"$ref": "#/components/responses/DependencyBlocked"}
+    assert search_inputs["properties"]["objectTypes"]["items"] == {
+        "$ref": "#/components/schemas/MetadataSearchObjectType"
+    }
+    assert search_inputs["properties"]["includeTableSchema"]["default"] is True
+    assert search_inputs["properties"]["limit"]["maximum"] == 100
+    assert design_options["properties"]["intentMode"]["default"] == "AUTO"
+    assert design_options["properties"]["intentMode"]["enum"] == [
+        "AUTO",
+        "SEARCH_ONLY",
+        "DESIGN_TABLE",
+    ]
+    assert "SEARCH_METADATA" in interpreted_intent["properties"]["intent"]["enum"]
+    assert design_result["properties"]["resultKind"]["enum"] == [
+        "SEARCH_RESULT",
+        "DESIGN_PROPOSAL",
+    ]
+    assert design_result["properties"]["searchResult"]["oneOf"] == [
+        {"$ref": "#/components/schemas/MetadataSearchResponse"},
+        {"type": "null"},
+    ]
+    assert design_result["properties"]["tableProposal"]["oneOf"] == [
+        {"$ref": "#/components/schemas/MetadataTableProposal"},
+        {"type": "null"},
+    ]
 
     result_schema = schemas["MetadataSearchResult"]
     assert result_schema["properties"]["objectIdentity"] == {

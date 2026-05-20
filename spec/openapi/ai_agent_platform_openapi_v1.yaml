@@ -408,74 +408,6 @@ paths:
           $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
-  /api/v1/metadata/search:
-    get:
-      tags: [metadata]
-      summary: Search read-only MSSQL metadata objects.
-      operationId: searchMetadataObjects
-      description: |
-        Searches metadata object identities through the MSSQL Metadata MCP read-only boundary.
-        The response is limited to object identity, profile/database context, snapshot/evidence
-        references, evidence caveats, machine caveat markers, and blocker codes. It never returns row
-        data, executes stored procedures, exposes SQL definition text, or performs DDL/DML.
-        PPM search must not fall back to PLF when PPM is unavailable.
-      parameters:
-        - name: dbProfileId
-          in: query
-          required: true
-          schema:
-            type: string
-          examples:
-            master:
-              value: master
-            ppm:
-              value: ppm
-        - name: query
-          in: query
-          required: true
-          schema:
-            type: string
-            minLength: 1
-          example: order
-        - name: objectTypes
-          in: query
-          required: false
-          style: form
-          explode: true
-          schema:
-            type: array
-            items:
-              $ref: "#/components/schemas/MetadataSearchObjectType"
-            default: [PROCEDURE, TABLE, VIEW, FUNCTION]
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        "200":
-          description: Metadata object search results and blocker/caveat context.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MetadataSearchResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/ValidationError"
-        "424":
-          $ref: "#/components/responses/DependencyBlocked"
-        "429":
-          $ref: "#/components/responses/Backpressure"
-        "503":
-          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/metadata/analyze:
     post:
       tags: [metadata]
@@ -589,10 +521,11 @@ paths:
       operationId: submitMetadataDesignRun
       description: |
         Starts a durable metadata design chat run. The run accepts a natural-language
-        message, optional conversation mode, API-compatible field inputs, and table
-        hints, searches related metadata through read-only MCP tools, and returns
-        sanitized interpreted intent, applied changes, evidence-bound table script,
-        and DTO previews.
+        message, optional conversation mode, intentMode, API-compatible field inputs,
+        searchInputs, and table hints. AUTO or SEARCH_ONLY search intent returns
+        read-only metadata search results and optional TABLE schema candidates; table
+        design intent returns sanitized interpreted intent, applied changes,
+        evidence-bound table script, and DTO previews.
         The v10 `METADATA_DESIGN_RUNS` schema is manual-apply only. Results never
         include row data, raw SQL/SP definitions, procedure execution output,
         secrets, raw prompts, raw provider traces, apply controls, or workflow
@@ -1715,6 +1648,24 @@ components:
           items:
             $ref: "#/components/schemas/MetadataDesignFieldInput"
           default: []
+    MetadataDesignSearchInputs:
+      type: object
+      properties:
+        query:
+          type: string
+        objectTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchObjectType"
+          default: [PROCEDURE, TABLE, VIEW, FUNCTION]
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        includeTableSchema:
+          type: boolean
+          default: true
     MetadataDesignOptions:
       type: object
       properties:
@@ -1744,6 +1695,13 @@ components:
             - NEW_DESIGN
             - REFINE_CURRENT
           default: NEW_DESIGN
+        intentMode:
+          type: string
+          enum:
+            - AUTO
+            - SEARCH_ONLY
+            - DESIGN_TABLE
+          default: AUTO
     MetadataDesignRunRequest:
       type: object
       required: [dbProfileId, message]
@@ -1758,6 +1716,8 @@ components:
           type: string
         designInputs:
           $ref: "#/components/schemas/MetadataDesignInputs"
+        searchInputs:
+          $ref: "#/components/schemas/MetadataDesignSearchInputs"
         options:
           $ref: "#/components/schemas/MetadataDesignOptions"
     MetadataRelatedMetadata:
@@ -1924,6 +1884,7 @@ components:
           enum:
             - CREATE_TABLE
             - REFINE_TABLE
+            - SEARCH_METADATA
             - UNKNOWN
         tableNameCandidate:
           type: string
@@ -1970,12 +1931,12 @@ components:
     MetadataDesignResult:
       type: object
       required:
+        - resultKind
         - assistantMessage
         - interpretedIntent
         - appliedChanges
         - relatedMetadata
         - standardizationMappings
-        - tableProposal
         - aiToolEvidence
         - deterministicFacts
         - reviewMarkers
@@ -1983,6 +1944,12 @@ components:
         - reviewRequired
         - componentInvocations
       properties:
+        resultKind:
+          type: string
+          enum:
+            - SEARCH_RESULT
+            - DESIGN_PROPOSAL
+          default: DESIGN_PROPOSAL
         assistantMessage:
           type: string
         interpretedIntent:
@@ -2000,7 +1967,13 @@ components:
           items:
             $ref: "#/components/schemas/MetadataStandardizationMapping"
         tableProposal:
-          $ref: "#/components/schemas/MetadataTableProposal"
+          oneOf:
+            - $ref: "#/components/schemas/MetadataTableProposal"
+            - type: "null"
+        searchResult:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataSearchResponse"
+            - type: "null"
         dtoDraft:
           oneOf:
             - $ref: "#/components/schemas/MetadataGeneratedDraft"

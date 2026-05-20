@@ -90,7 +90,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
         blocker_code=None,
         summary=(
             "P21 live portal gate passed with PLF workflow access, live PPM metadata "
-            "search, and explicit validation."
+            "design-chat search, and explicit validation."
         ),
         checks=[
             _check("ppm_metadata_search", "pass", summary=metadata_result["summary"]),
@@ -101,23 +101,37 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
 
 
 def _search_ppm_metadata(client: TestClient) -> dict[str, Any]:
-    response = client.get(
-        "/api/v1/metadata/search",
-        params={
+    response = client.post(
+        "/api/v1/metadata/design-runs",
+        json={
             "dbProfileId": "ppm",
-            "query": os.getenv("P21_METADATA_SEARCH_QUERY", "proc"),
-            "objectTypes": "PROCEDURE",
-            "limit": "1",
+            "message": f"search {os.getenv('P21_METADATA_SEARCH_QUERY', 'proc')}",
+            "searchInputs": {
+                "query": os.getenv("P21_METADATA_SEARCH_QUERY", "proc"),
+                "objectTypes": ["PROCEDURE"],
+                "limit": 1,
+                "includeTableSchema": False,
+            },
+            "options": {"useLlmAnalysis": False, "intentMode": "SEARCH_ONLY"},
         },
     )
-    if response.status_code != 200:
+    if response.status_code != 202:
         raise ProbeFailure.from_response(
             response,
             fallback_blocker="P21_LIVE_PPM_UNAVAILABLE",
             check_name="ppm_metadata_search",
         )
-    payload = response.json()
-    results = payload.get("results") or []
+    submitted = response.json()
+    poll_response = client.get(f"/api/v1/metadata/design-runs/{submitted.get('runId')}")
+    if poll_response.status_code != 200:
+        raise ProbeFailure.from_response(
+            poll_response,
+            fallback_blocker="P21_LIVE_PPM_UNAVAILABLE",
+            check_name="ppm_metadata_search",
+        )
+    payload = poll_response.json()
+    search_result = (payload.get("result") or {}).get("searchResult") or {}
+    results = search_result.get("results") or []
     if not results:
         raise ProbeFailure(
             blocker_code="P21_LIVE_PPM_UNAVAILABLE",
@@ -138,7 +152,7 @@ def _search_ppm_metadata(client: TestClient) -> dict[str, Any]:
             "schema": str(identity.get("schema") or ""),
             "name": str(identity.get("name") or ""),
         },
-        "summary": "Read-only PPM metadata search returned a procedure identity.",
+        "summary": "Read-only PPM metadata design search returned a procedure identity.",
     }
 
 

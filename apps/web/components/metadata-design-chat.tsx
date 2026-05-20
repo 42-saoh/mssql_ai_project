@@ -6,6 +6,7 @@ import type {
   MetadataDesignRunRequest,
   MetadataDesignRunStatus,
   MetadataProfile,
+  MetadataSearchObjectType,
 } from "@/lib/api/types";
 
 const DESIGN_TIMEOUT_MS = 120_000;
@@ -22,6 +23,13 @@ interface DesignError {
 
 type ConversationMode = "NEW_DESIGN" | "REFINE_CURRENT";
 
+const objectTypeOptions: MetadataSearchObjectType[] = [
+  "PROCEDURE",
+  "TABLE",
+  "VIEW",
+  "FUNCTION",
+];
+
 export function MetadataDesignChat({
   defaultDbProfileId,
   profiles,
@@ -32,6 +40,9 @@ export function MetadataDesignChat({
   const [dbProfileId, setDbProfileId] = useState(defaultDbProfileId);
   const [message, setMessage] = useState("");
   const [tableNameHint, setTableNameHint] = useState("PPM_ORDER_REQ");
+  const [searchLimit, setSearchLimit] = useState(20);
+  const [searchObjectTypes, setSearchObjectTypes] =
+    useState<MetadataSearchObjectType[]>(objectTypeOptions);
   const [conversationMode, setConversationMode] =
     useState<ConversationMode>("NEW_DESIGN");
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -56,6 +67,12 @@ export function MetadataDesignChat({
       designInputs: {
         tableNameHint: tableNameHint || undefined,
       },
+      searchInputs: {
+        query: message,
+        objectTypes: searchObjectTypes,
+        limit: searchLimit,
+        includeTableSchema: true,
+      },
       options: {
         useLlmAnalysis: true,
         useAiToolOrchestration: true,
@@ -63,9 +80,18 @@ export function MetadataDesignChat({
         maxCandidates: 5,
         generateDtoDraft: true,
         conversationMode,
+        intentMode: "AUTO",
       },
     }),
-    [conversationId, conversationMode, dbProfileId, message, tableNameHint],
+    [
+      conversationId,
+      conversationMode,
+      dbProfileId,
+      message,
+      searchLimit,
+      searchObjectTypes,
+      tableNameHint,
+    ],
   );
 
   useEffect(() => {
@@ -168,7 +194,11 @@ export function MetadataDesignChat({
                   <div className="chat-message chat-message--assistant">
                     <strong>Assistant</strong>
                     <p>{item.result.assistantMessage}</p>
-                    <small>{item.result.tableProposal.tableName}</small>
+                    <small>
+                      {item.result.tableProposal?.tableName ??
+                        item.result.searchResult?.query ??
+                        item.result.resultKind}
+                    </small>
                   </div>
                 ) : null}
               </div>
@@ -213,7 +243,34 @@ export function MetadataDesignChat({
                   onChange={(event) => setTableNameHint(event.target.value)}
                 />
               </label>
+              <label>
+                <span>Search limit</span>
+                <input
+                  min="1"
+                  max="100"
+                  type="number"
+                  value={searchLimit}
+                  onChange={(event) => setSearchLimit(clampSearchLimit(event.target.value))}
+                />
+              </label>
             </div>
+            <fieldset>
+              <legend>Search object types</legend>
+              <div className="toggle-row">
+                {objectTypeOptions.map((objectType) => (
+                  <label key={objectType}>
+                    <input
+                      type="checkbox"
+                      checked={searchObjectTypes.includes(objectType)}
+                      onChange={() =>
+                        setSearchObjectTypes((current) => toggleObjectType(current, objectType))
+                      }
+                    />
+                    {objectType}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <label className="metadata-chat-message-field">
               <span>Message</span>
               <textarea
@@ -243,26 +300,136 @@ export function MetadataDesignChat({
 
       {run?.result ? (
         <div className="metadata-design-output-stack">
-          <MetadataDesignResultView run={run} />
+          <MetadataDesignResultView
+            run={run}
+            onUseTableHint={(tableName) => {
+              setTableNameHint(tableName);
+              setConversationMode("NEW_DESIGN");
+              setMessage(`Create a table design using ${tableName} as metadata reference.`);
+            }}
+          />
         </div>
       ) : null}
     </div>
   );
 }
 
-function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStatus }>) {
+function MetadataDesignResultView({
+  run,
+  onUseTableHint,
+}: Readonly<{
+  run: MetadataDesignRunStatus;
+  onUseTableHint: (tableName: string) => void;
+}>) {
   const result = run.result;
   if (!result) {
     return null;
   }
   const dtoDraft = result.dtoDraft;
+  const tableProposal = result.tableProposal;
+  if (result.resultKind === "SEARCH_RESULT") {
+    return (
+      <>
+        <section className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Metadata search</p>
+              <h2>{result.searchResult?.query ?? "Search result"}</h2>
+            </div>
+            <StatusPill
+              value={result.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+              label={result.reviewRequired ? "REVIEW_REQUIRED" : "Evidence bound"}
+            />
+          </div>
+          <p className="lede">{result.assistantMessage}</p>
+          <dl className="metric-grid">
+            <div>
+              <dt>Run</dt>
+              <dd>{run.runId}</dd>
+            </div>
+            <div>
+              <dt>Intent</dt>
+              <dd>{result.interpretedIntent.intent}</dd>
+            </div>
+            <div>
+              <dt>Results</dt>
+              <dd>{result.searchResult?.results.length ?? 0}</dd>
+            </div>
+          </dl>
+        </section>
+
+        {result.searchResult ? (
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Search results</p>
+                <h2>{result.searchResult.sourceDatabase}</h2>
+              </div>
+            </div>
+            {result.searchResult.blockers.length > 0 ? (
+              <div className="blocker-list">
+                {result.searchResult.blockers.map((blocker) => (
+                  <article className="blocker-row" key={blocker.code}>
+                    <strong>{blocker.code}</strong>
+                    <span>{blocker.message}</span>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            <div className="metadata-result-list">
+              {result.searchResult.results.map((item) => {
+                const identity = item.objectIdentity;
+                const fullName = `${identity.schema}.${identity.name}`;
+                return (
+                  <article className="metadata-result-row" key={`${identity.type}-${fullName}`}>
+                    <div>
+                      <p className="eyebrow">{identity.type}</p>
+                      <h3>{fullName}</h3>
+                      <p>
+                        {item.sourceProfile} - {item.sourceDatabase}
+                      </p>
+                      {item.targetKey ? <code>{item.targetKey}</code> : null}
+                    </div>
+                    <div className="metadata-result-detail">
+                      <StatusPill
+                        value={item.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+                        label={item.reviewRequired ? "review" : "evidence"}
+                      />
+                      {identity.type === "TABLE" ? (
+                        <button
+                          type="button"
+                          className="secondary-action"
+                          onClick={() => onUseTableHint(fullName)}
+                        >
+                          Use as table hint
+                        </button>
+                      ) : null}
+                      {item.evidenceRefs.slice(0, 4).map((evidence) => (
+                        <code key={`${fullName}-${evidence.locator}`}>{evidence.locator}</code>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        <MetadataEvidenceCandidates result={result} />
+      </>
+    );
+  }
+
+  if (!tableProposal) {
+    return null;
+  }
   return (
     <>
       <section className="panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Design result</p>
-            <h2>{result.tableProposal.tableName}</h2>
+            <h2>{tableProposal.tableName}</h2>
           </div>
           <StatusPill
             value={result.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
@@ -281,7 +448,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
           </div>
           <div>
             <dt>Columns</dt>
-            <dd>{result.tableProposal.columns.length}</dd>
+            <dd>{tableProposal.columns.length}</dd>
           </div>
         </dl>
       </section>
@@ -290,7 +457,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
         <div className="section-heading">
           <div>
             <p className="eyebrow">Interpreted intent</p>
-            <h2>{result.interpretedIntent.tableNameCandidate ?? result.tableProposal.tableName}</h2>
+            <h2>{result.interpretedIntent.tableNameCandidate ?? tableProposal.tableName}</h2>
           </div>
           <StatusPill
             value={String(Math.round(result.interpretedIntent.confidence * 100))}
@@ -354,15 +521,15 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
         <div className="section-heading">
           <div>
             <p className="eyebrow">Table script preview</p>
-            <h2>{`${result.tableProposal.schema}.${result.tableProposal.tableName}`}</h2>
+            <h2>{`${tableProposal.schema}.${tableProposal.tableName}`}</h2>
           </div>
           <button
             type="button"
             className="secondary-action"
             onClick={() =>
               downloadText(
-                `${result.tableProposal.tableName}.sql`,
-                result.tableProposal.createTableScriptPreview,
+                `${tableProposal.tableName}.sql`,
+                tableProposal.createTableScriptPreview,
                 "text/plain;charset=utf-8",
               )
             }
@@ -371,7 +538,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
           </button>
         </div>
         <div className="content-preview">
-          <pre>{result.tableProposal.createTableScriptPreview}</pre>
+          <pre>{tableProposal.createTableScriptPreview}</pre>
         </div>
       </section>
 
@@ -398,32 +565,40 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
         </section>
       ) : null}
 
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Metadata evidence</p>
-            <h2>Related candidates</h2>
-          </div>
-        </div>
-        <div className="metadata-result-list">
-          {result.relatedMetadata.map((item) => (
-            <article className="metadata-result-row" key={`${item.kind}-${item.objectRef}`}>
-              <div>
-                <p className="eyebrow">{item.kind}</p>
-                <h3>{item.objectRef}</h3>
-                <p>{item.summary}</p>
-              </div>
-              <div className="metadata-result-detail">
-                <StatusPill value={String(item.score)} label={`score ${item.score}`} />
-                {item.evidenceRefs.slice(0, 4).map((ref) => (
-                  <code key={`${item.objectRef}-${ref}`}>{ref}</code>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <MetadataEvidenceCandidates result={result} />
     </>
+  );
+}
+
+function MetadataEvidenceCandidates({
+  result,
+}: Readonly<{ result: NonNullable<MetadataDesignRunStatus["result"]> }>) {
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Metadata evidence</p>
+          <h2>Related candidates</h2>
+        </div>
+      </div>
+      <div className="metadata-result-list">
+        {result.relatedMetadata.map((item) => (
+          <article className="metadata-result-row" key={`${item.kind}-${item.objectRef}`}>
+            <div>
+              <p className="eyebrow">{item.kind}</p>
+              <h3>{item.objectRef}</h3>
+              <p>{item.summary}</p>
+            </div>
+            <div className="metadata-result-detail">
+              <StatusPill value={String(item.score)} label={`score ${item.score}`} />
+              {item.evidenceRefs.slice(0, 4).map((ref) => (
+                <code key={`${item.objectRef}-${ref}`}>{ref}</code>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -494,4 +669,23 @@ function normalizeError(error: unknown): DesignError {
     return { code: "METADATA_DESIGN_BLOCKED", message: error.message };
   }
   return { code: "METADATA_DESIGN_BLOCKED", message: "Metadata design could not run." };
+}
+
+function clampSearchLimit(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 20;
+  }
+  return Math.min(Math.max(Math.trunc(parsed), 1), 100);
+}
+
+function toggleObjectType(
+  current: MetadataSearchObjectType[],
+  objectType: MetadataSearchObjectType,
+): MetadataSearchObjectType[] {
+  if (current.includes(objectType)) {
+    const next = current.filter((item) => item !== objectType);
+    return next.length > 0 ? next : current;
+  }
+  return [...current, objectType];
 }
