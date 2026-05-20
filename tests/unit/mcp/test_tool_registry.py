@@ -183,8 +183,8 @@ def test_fixture_metadata_object_search_returns_identity_only_results() -> None:
             "arguments": {
                 "dbProfileId": "master",
                 "query": "order",
-                "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
-                "limit": 10,
+                "objectTypes": ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"],
+                "limit": 20,
             }
         },
     )
@@ -192,7 +192,7 @@ def test_fixture_metadata_object_search_returns_identity_only_results() -> None:
     assert payload["ok"] is True
     data = payload["data"]
     result_types = {result["objectIdentity"]["type"] for result in data["results"]}
-    assert {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"} <= result_types
+    assert {"PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"} <= result_types
     assert data["blockers"][0]["code"] == "DEPENDENCY_METADATA_INCOMPLETE"
     assert all(result["evidenceRefs"] for result in data["results"])
 

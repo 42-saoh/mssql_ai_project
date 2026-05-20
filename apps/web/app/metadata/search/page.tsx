@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { DependencyBlocker } from "@/components/dependency-blocker";
-import { MetadataAnalyzeAction } from "@/components/metadata-analyze-action";
 import { StatusPill } from "@/components/status-pill";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
@@ -13,6 +12,7 @@ export const dynamic = "force-dynamic";
 const objectTypeOptions: MetadataSearchObjectType[] = [
   "PROCEDURE",
   "TABLE",
+  "COLUMN",
   "VIEW",
   "FUNCTION",
 ];
@@ -108,9 +108,9 @@ export default async function MetadataSearchPage({
           <span className="quiet-label">MCP boundary</span>
         </div>
         <p className="lede">
-          Search object identities, evidence refs, caveats, and blockers through the portal API
-          adapter. Results never include row data, SQL definition text, procedure execution, or
-          DDL/DML controls.
+          Search object and column identities, evidence refs, caveats, and blockers through the
+          portal API adapter. Results never include row data, SQL definition text, procedure
+          execution, or DDL/DML controls.
         </p>
       </section>
 
@@ -130,7 +130,7 @@ export default async function MetadataSearchPage({
 
             <label>
               <span>Search query</span>
-              <input name="query" defaultValue={query} placeholder="procedure, table, view" />
+              <input name="query" defaultValue={query} placeholder="procedure, table, column" />
             </label>
 
             <label>
@@ -251,12 +251,6 @@ export default async function MetadataSearchPage({
         </div>
       </section>
 
-      <MetadataAnalyzeAction
-        dbProfileId={dbProfileId}
-        query={query}
-        objectTypes={objectTypes}
-        defaultMaxTargets={1}
-      />
     </div>
   );
 }

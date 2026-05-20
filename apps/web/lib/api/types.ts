@@ -59,7 +59,7 @@ export type RegistryType =
   | "MODEL"
   | "SCHEMA";
 
-export type MetadataSearchObjectType = TargetObjectType;
+export type MetadataSearchObjectType = TargetObjectType | "COLUMN";
 
 export interface TargetObject {
   type: TargetObjectType;
@@ -254,11 +254,17 @@ export interface MetadataSearchBlocker {
 export interface MetadataObjectIdentity {
   schema: string;
   name: string;
+  type: TargetObjectType;
+}
+
+export interface MetadataSearchObjectIdentity {
+  schema: string;
+  name: string;
   type: MetadataSearchObjectType;
 }
 
 export interface MetadataSearchResult {
-  objectIdentity: MetadataObjectIdentity;
+  objectIdentity: MetadataSearchObjectIdentity;
   targetKey?: string | null;
   sourceProfile: string;
   sourceDatabase: string;
@@ -304,7 +310,7 @@ export interface MetadataAnalysisRequest {
   dbProfileId: string;
   query?: string;
   target?: MetadataObjectIdentity;
-  objectTypes?: MetadataSearchObjectType[];
+  objectTypes?: TargetObjectType[];
   options?: MetadataAnalysisOptions;
 }
 
@@ -524,7 +530,7 @@ export interface MetadataAnalysisResponse {
   mode: "QUERY" | "TARGET";
   query?: string;
   target?: MetadataObjectIdentity;
-  objectTypes: MetadataSearchObjectType[];
+  objectTypes: TargetObjectType[];
   sourceProfile: string;
   sourceDatabase: string;
   snapshotId?: string;

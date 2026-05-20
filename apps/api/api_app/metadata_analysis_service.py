@@ -51,7 +51,6 @@ from api_app.ai_tool_orchestrator import (
 )
 from api_app.knowledge_service import persist_metadata_analysis_knowledge
 from api_app.metadata_service import (
-    DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
     MetadataSearchDependencyError,
     list_safe_metadata_profiles,
     search_metadata_objects,
@@ -79,6 +78,7 @@ from api_app.repositories import WorkflowRepository
 AI_METADATA_ANALYSIS_SKIPPED = "AI_METADATA_ANALYSIS_SKIPPED"
 AI_METADATA_ANALYSIS_REVIEW_REQUIRED = "AI_METADATA_ANALYSIS_REVIEW_REQUIRED"
 METADATA_DTO_DRAFT_REVIEW_REQUIRED = "METADATA_DTO_DRAFT_REVIEW_REQUIRED"
+DEFAULT_METADATA_ANALYSIS_OBJECT_TYPES = ("PROCEDURE", "TABLE", "VIEW", "FUNCTION")
 _JAVA_IDENTIFIER_CLEANUP = re.compile(r"[^0-9A-Za-z_]+")
 _JAVA_RESERVED_WORDS = frozenset(
     {
@@ -357,7 +357,7 @@ class MetadataAnalysisService:
             query=request.query,
             target=request.target,
             objectTypes=list(
-                request.object_types or DEFAULT_METADATA_SEARCH_OBJECT_TYPES
+                request.object_types or DEFAULT_METADATA_ANALYSIS_OBJECT_TYPES
             ),
             sourceProfile=source_profile,
             sourceDatabase=source_database,
@@ -725,7 +725,7 @@ def _baseline_targets(
         search = search_metadata_objects(
             db_profile_id=request.db_profile_id,
             query=request.query,
-            object_types=tuple(request.object_types or DEFAULT_METADATA_SEARCH_OBJECT_TYPES),
+            object_types=tuple(request.object_types or DEFAULT_METADATA_ANALYSIS_OBJECT_TYPES),
             limit=request.options.max_targets,
         )
         return (

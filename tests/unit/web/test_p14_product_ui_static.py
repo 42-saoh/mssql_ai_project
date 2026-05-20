@@ -110,7 +110,9 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert 'cleanParam(params, "referencedName", "PEX_INSP_ITEMS")' in page
     assert "Metadata search" in search_page
     assert "api.searchMetadataObjects" in search_page
-    assert "MetadataAnalyzeAction" in search_page
+    assert "MetadataAnalyzeAction" not in search_page
+    assert '"COLUMN"' in search_page
+    assert "Evidence-bound draft insight" not in search_page
     assert 'fetch("/api/metadata/analysis-runs"' in analyze_action
     assert "/api/metadata/analysis-runs/${encodeURIComponent(run.runId)}" in analyze_action
     assert "AI_METADATA_ANALYSIS_TIMEOUT" in analyze_action

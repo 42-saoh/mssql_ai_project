@@ -1178,6 +1178,38 @@ def test_metadata_search_route_returns_read_only_identity_response(
     assert "create procedure" not in serialized
 
 
+def test_metadata_search_route_returns_column_identities(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/api/v1/metadata/search",
+        params={
+            "dbProfileId": "master",
+            "query": "ORDER_DATE",
+            "objectTypes": ["COLUMN"],
+            "limit": "5",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["objectTypes"] == ["COLUMN"]
+    identities = [result["objectIdentity"] for result in payload["results"]]
+    assert {
+        "schema": "dbo",
+        "name": "TB_ORDER.ORDER_DATE",
+        "type": "COLUMN",
+    } in identities
+    assert all(result["objectIdentity"]["type"] == "COLUMN" for result in payload["results"])
+    assert all(result["targetKey"] for result in payload["results"])
+    assert all(result["evidenceRefs"] for result in payload["results"])
+
+    serialized = str(payload).lower()
+    assert "row_data" not in serialized
+    assert "sqltext" not in serialized
+    assert "create procedure" not in serialized
+
+
 def test_metadata_analysis_route_supports_query_and_target_modes(
     client: TestClient,
 ) -> None:

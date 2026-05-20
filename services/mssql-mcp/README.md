@@ -119,7 +119,7 @@ caller-dependent, dynamic SQL, cross-server, ambiguous, and unresolved reference
 remain `REVIEW_REQUIRED` until catalog metadata uniquely confirms them.
 
 `search_metadata_objects` is the query-aware metadata search capability for API
-and UI consumers. It searches procedure/table/view/function identities through
+and UI consumers. It searches procedure/table/column/view/function identities through
 the same read-only MCP boundary and returns only object identity, source
 profile/database, snapshot/evidence refs, caveats, review-required state, and
 blocker codes. It does not return row data, execute procedures, perform DDL/DML,

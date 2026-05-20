@@ -279,7 +279,7 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
 
 ## Metadata search and design
 
-- General metadata search uses the public read-only `GET /api/v1/metadata/search` route and returns sanitized `MetadataSearchResponse` object identity evidence.
+- General metadata search uses the public read-only `GET /api/v1/metadata/search` route and returns sanitized `MetadataSearchResponse` object/column identity evidence.
 - SP Analysis procedure-name autocomplete is implemented by the Web `/api/metadata/search` proxy with `objectTypes=["PROCEDURE"]`; there is no separate public `GET /api/v1/metadata/procedure-search` route.
 - Metadata design uses `POST /api/v1/metadata/design-runs` for table design/refinement only and returns table proposal/DTO preview results rather than search-only runs.
 - API 는 MSSQL MCP registry boundary 를 통해 metadata inventory tool 을 호출한다. 기본 테스트

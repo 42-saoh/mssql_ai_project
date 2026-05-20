@@ -51,7 +51,7 @@ from mssql_mcp_app.errors import MetadataToolError
 
 router = APIRouter(prefix="/api/v1/metadata", tags=["metadata"])
 
-SearchObjectType = Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+SearchObjectType = Literal["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
 
 
 @router.get("/db-profiles")

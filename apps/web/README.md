@@ -10,7 +10,7 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `/jobs/[jobId]` - workflow status, sanitized LLM trace summary, knowledge assets, and draft artifacts.
 - `/knowledge/assets/[assetId]` and `/knowledge/assets/[assetId]/versions/[versionId]/facts` - sanitized knowledge asset version and fact graph views.
 - `/artifacts/[artifactId]` - artifact preview, copy/download controls, evidence refs, caveats, sanitized trace, and explicit validation trigger.
-- `/metadata/search` - read-only metadata search UI for object identities, evidence refs, caveats, and analysis handoff.
+- `/metadata/search` - read-only metadata search UI for object and column identities, evidence refs, and caveats.
 - `/metadata/design` - natural-language metadata design chat UI for durable table script previews and DTO_DRAFT previews.
 - `/metadata/dependencies` - read-only dependency closure and reference resolver diagnostics.
 
@@ -49,9 +49,10 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 ## Metadata Search, Design, And Analysis
 
 - `/metadata/search` calls the Portal API `GET /api/v1/metadata/search` through
-  the Web HTTP client and renders read-only object identity evidence. The SP Analysis
+  the Web HTTP client and renders read-only object and column identity evidence. The SP Analysis
   autocomplete reuses the Web `/api/metadata/search` proxy for PROCEDURE-only suggestions.
-- `Analyze metadata` is a client-side async action. It calls the internal Web route `POST /api/metadata/analysis-runs`, which proxies public `POST /api/v1/metadata/analysis-runs`; the client then polls `GET /api/metadata/analysis-runs/{runId}` until the public run reaches `SUCCEEDED` or `FAILED`.
+- The reusable metadata analysis action remains available to call `POST /api/metadata/analysis-runs`,
+  but `/metadata/search` no longer renders the draft insight action by default.
 - The public analysis-run API uses durable platform storage when
   `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql` has been manually applied.
   If that schema is missing, the page renders the API blocker instead of falling back to a mock or

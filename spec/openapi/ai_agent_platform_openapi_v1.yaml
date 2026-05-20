@@ -446,7 +446,7 @@ paths:
             type: array
             items:
               $ref: "#/components/schemas/MetadataSearchObjectType"
-            default: [PROCEDURE, TABLE, VIEW, FUNCTION]
+            default: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION]
         - name: limit
           in: query
           required: false
@@ -1485,7 +1485,7 @@ components:
           additionalProperties: true
     MetadataSearchObjectType:
       type: string
-      enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+      enum: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION]
     MetadataObjectIdentity:
       type: object
       required: [schema, name, type]
@@ -1494,6 +1494,18 @@ components:
           type: string
         name:
           type: string
+        type:
+          type: string
+          enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+    MetadataSearchObjectIdentity:
+      type: object
+      required: [schema, name, type]
+      properties:
+        schema:
+          type: string
+        name:
+          type: string
+          description: For COLUMN results, this is the owning object and column as table.column.
         type:
           $ref: "#/components/schemas/MetadataSearchObjectType"
     MetadataSearchBlocker:
@@ -1524,7 +1536,7 @@ components:
         - blockers
       properties:
         objectIdentity:
-          $ref: "#/components/schemas/MetadataObjectIdentity"
+          $ref: "#/components/schemas/MetadataSearchObjectIdentity"
         targetKey:
           type: string
           description: Canonical target key for this metadata object identity.
@@ -1569,7 +1581,8 @@ components:
         objectTypes:
           type: array
           items:
-            $ref: "#/components/schemas/MetadataSearchObjectType"
+            type: string
+            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
         limit:
           type: integer
           minimum: 1
@@ -1638,7 +1651,8 @@ components:
         objectTypes:
           type: array
           items:
-            $ref: "#/components/schemas/MetadataSearchObjectType"
+            type: string
+            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
           default: [PROCEDURE, TABLE, VIEW, FUNCTION]
         options:
           $ref: "#/components/schemas/MetadataAnalysisOptions"
@@ -2695,7 +2709,8 @@ components:
         objectTypes:
           type: array
           items:
-            $ref: "#/components/schemas/MetadataSearchObjectType"
+            type: string
+            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
         sourceProfile:
           type: string
         sourceDatabase:

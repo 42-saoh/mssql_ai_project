@@ -247,7 +247,7 @@ tools:
   - name: search_metadata_objects
     active: true
     readOnly: true
-    description: Search procedure/table/view/function metadata identities without row data, procedure execution, DDL/DML, or SQL definition text.
+    description: Search procedure/table/column/view/function metadata identities without row data, procedure execution, DDL/DML, or SQL definition text.
     input:
       type: object
       required: [dbProfileId, query]
@@ -256,10 +256,10 @@ tools:
         query: { type: string }
         objectTypes:
           type: array
-          default: [PROCEDURE, TABLE, VIEW, FUNCTION]
+          default: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION]
           items:
             type: string
-            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+            enum: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION]
         limit: { type: integer, default: 20 }
 
   - name: get_procedure_definition

@@ -138,6 +138,13 @@ def test_openapi_metadata_search_and_design_contracts_are_separate() -> None:
     assert schemas["MetadataSearchObjectType"]["enum"] == [
         "PROCEDURE",
         "TABLE",
+        "COLUMN",
+        "VIEW",
+        "FUNCTION",
+    ]
+    assert schemas["MetadataObjectIdentity"]["properties"]["type"]["enum"] == [
+        "PROCEDURE",
+        "TABLE",
         "VIEW",
         "FUNCTION",
     ]
@@ -158,7 +165,7 @@ def test_openapi_metadata_search_and_design_contracts_are_separate() -> None:
 
     result_schema = schemas["MetadataSearchResult"]
     assert result_schema["properties"]["objectIdentity"] == {
-        "$ref": "#/components/schemas/MetadataObjectIdentity"
+        "$ref": "#/components/schemas/MetadataSearchObjectIdentity"
     }
     assert result_schema["properties"]["evidenceRefs"]["items"] == {
         "$ref": "#/components/schemas/EvidenceRef"
@@ -174,7 +181,9 @@ def test_openapi_metadata_search_and_design_contracts_are_separate() -> None:
     }
     response_properties = set(schemas["MetadataSearchResponse"]["properties"])
     result_properties = set(result_schema["properties"])
-    identity_properties = set(schemas["MetadataObjectIdentity"]["properties"])
+    identity_properties = set(schemas["MetadataObjectIdentity"]["properties"]) | set(
+        schemas["MetadataSearchObjectIdentity"]["properties"]
+    )
     assert forbidden_response_fields.isdisjoint(
         response_properties
         | result_properties

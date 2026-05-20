@@ -143,6 +143,32 @@ def test_metadata_search_returns_read_only_fixture_identities() -> None:
         assert forbidden not in serialized
 
 
+def test_metadata_search_can_return_column_identities() -> None:
+    response = search_metadata_objects(
+        db_profile_id="master",
+        query="ORDER_DATE",
+        object_types=("COLUMN",),
+        limit=5,
+    )
+    payload = response.to_response()
+
+    assert payload["objectTypes"] == ["COLUMN"]
+    assert payload["results"]
+    identities = [item["objectIdentity"] for item in payload["results"]]
+    assert {
+        "schema": "dbo",
+        "name": "TB_ORDER.ORDER_DATE",
+        "type": "COLUMN",
+    } in identities
+    assert all(item["objectIdentity"]["type"] == "COLUMN" for item in payload["results"])
+    assert all(item["targetKey"] for item in payload["results"])
+    assert all(item["evidenceRefs"] for item in payload["results"])
+
+    serialized = str(payload).lower()
+    for forbidden in ("rowdata", "row_data", "definition", "sqltext", "execute", "deploy"):
+        assert forbidden not in serialized
+
+
 def test_metadata_search_repository_boundary_selects_live_adapter_when_enabled() -> None:
     profiles = _metadata_profiles()
 
@@ -215,6 +241,7 @@ def test_metadata_search_rejects_invalid_object_type_and_normalizes_limit() -> N
     assert normalize_metadata_search_object_types(()) == (
         "PROCEDURE",
         "TABLE",
+        "COLUMN",
         "VIEW",
         "FUNCTION",
     )

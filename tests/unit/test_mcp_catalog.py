@@ -134,6 +134,7 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     assert search_tool["input"]["properties"]["objectTypes"]["items"]["enum"] == [
         "PROCEDURE",
         "TABLE",
+        "COLUMN",
         "VIEW",
         "FUNCTION",
     ]

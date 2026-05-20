@@ -79,7 +79,7 @@ TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
     "search_metadata_objects": {
         "dbProfileId": "master",
         "query": "order",
-        "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+        "objectTypes": ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"],
         "limit": 4,
     },
     "get_procedure_definition": {
@@ -482,7 +482,7 @@ def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch
             "arguments": {
                 "dbProfileId": "master",
                 "query": "order",
-                "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+                "objectTypes": ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"],
                 "limit": 4,
             }
         },
@@ -496,7 +496,13 @@ def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch
     assert payload["data"]["blockers"]
     for result in payload["data"]["results"]:
         assert set(result["objectIdentity"]) == {"schema", "name", "type"}
-        assert result["objectIdentity"]["type"] in {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"}
+        assert result["objectIdentity"]["type"] in {
+            "PROCEDURE",
+            "TABLE",
+            "COLUMN",
+            "VIEW",
+            "FUNCTION",
+        }
         assert result["sourceProfile"] == "master"
         assert result["sourceDatabase"] == "master"
         assert result["snapshotId"] == "mcp-fixture-snapshot-0001"
@@ -504,6 +510,41 @@ def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch
         assert isinstance(result["caveats"], list)
         assert isinstance(result["reviewRequired"], bool)
         assert isinstance(result["blockers"], list)
+
+    serialized = str(payload).lower()
+    forbidden = ("rowdata", "row_data", "create procedure", "create view", "create function")
+    assert not any(value in serialized for value in forbidden)
+
+
+def test_fixture_metadata_object_search_contract_supports_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/search_metadata_objects/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "query": "ORDER_DATE",
+                "objectTypes": ["COLUMN"],
+                "limit": 5,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    identities = [result["objectIdentity"] for result in payload["data"]["results"]]
+    assert {
+        "schema": "dbo",
+        "name": "TB_ORDER.ORDER_DATE",
+        "type": "COLUMN",
+    } in identities
+    assert all(identity["type"] == "COLUMN" for identity in identities)
+    assert all(result["evidenceRefs"] for result in payload["data"]["results"])
 
     serialized = str(payload).lower()
     forbidden = ("rowdata", "row_data", "create procedure", "create view", "create function")

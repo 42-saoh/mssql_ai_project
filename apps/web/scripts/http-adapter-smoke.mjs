@@ -150,7 +150,13 @@ const dependencyResolution = await api.invokeMetadataTool("resolve_dependency_re
 const metadataSearch = await api.searchMetadataObjects({
   dbProfileId: "master",
   query: "order",
-  objectTypes: ["PROCEDURE", "TABLE"],
+  objectTypes: ["PROCEDURE", "TABLE", "COLUMN"],
+  limit: 5,
+});
+const metadataColumnSearch = await api.searchMetadataObjects({
+  dbProfileId: "master",
+  query: "ORDER_DATE",
+  objectTypes: ["COLUMN"],
   limit: 5,
 });
 const metadataAnalysis = await api.analyzeMetadata({
@@ -202,6 +208,7 @@ assert(dependencyResolution.data.selectedResolution?.name === "TB_ORDER", "Depen
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
 assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
 assert(Array.isArray(metadataSearch.results), "Metadata search must return results");
+assert(metadataColumnSearch.results.some((result) => result.objectIdentity.type === "COLUMN"), "Metadata search must return column results");
 assert(metadataAnalysis.sourceProfile === "master", `Unexpected analysis source profile: ${metadataAnalysis.sourceProfile}`);
 assert(metadataAnalysis.deterministicFacts.length > 0, "Metadata analysis must include deterministic facts");
 assert(Array.isArray(metadataAnalysis.objectProfiles), "Metadata analysis must include objectProfiles");
@@ -231,6 +238,7 @@ for (const [label, payload] of Object.entries({
   latestValidation,
   profiles,
   metadataTools,
+  metadataColumnSearch,
   dependencyClosure,
   dependencyResolution,
   metadataSearch,

@@ -6,7 +6,7 @@ import type {
   MetadataAnalysisRequest,
   MetadataAnalysisResponse,
   MetadataAnalysisRunStatus,
-  MetadataSearchObjectType,
+  TargetObjectType,
 } from "@/lib/api/types";
 
 const ANALYSIS_TIMEOUT_MS = 120_000;
@@ -25,7 +25,7 @@ export function MetadataAnalyzeAction({
 }: Readonly<{
   dbProfileId: string;
   query: string;
-  objectTypes: MetadataSearchObjectType[];
+  objectTypes: TargetObjectType[];
   defaultMaxTargets?: number;
 }>) {
   const [analysis, setAnalysis] = useState<MetadataAnalysisResponse | null>(null);

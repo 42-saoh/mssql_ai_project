@@ -256,8 +256,14 @@ class MetadataObjectIdentity(ApiModel):
     type: Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
 
 
+class MetadataSearchObjectIdentity(ApiModel):
+    schema_name: str = Field(alias="schema")
+    name: str
+    type: Literal["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
+
+
 class MetadataSearchResult(ApiModel):
-    object_identity: MetadataObjectIdentity = Field(alias="objectIdentity")
+    object_identity: MetadataSearchObjectIdentity = Field(alias="objectIdentity")
     target_key: str | None = Field(default=None, alias="targetKey")
     source_profile: str = Field(alias="sourceProfile")
     source_database: str = Field(alias="sourceDatabase")
@@ -271,7 +277,7 @@ class MetadataSearchResult(ApiModel):
 class MetadataSearchResponse(ApiModel):
     db_profile_id: str = Field(alias="dbProfileId")
     query: str
-    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
+    object_types: list[Literal["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]] = Field(
         alias="objectTypes"
     )
     limit: int

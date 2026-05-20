@@ -13,9 +13,9 @@ from mssql_mcp_app.settings import load_live_metadata_settings
 from api_app.live_gate import P21_LIVE_PPM_REQUIRED, p21_live_portal_enabled
 from api_app.schemas import (
     EvidenceRef,
-    MetadataObjectIdentity,
     MetadataProfile,
     MetadataSearchBlocker,
+    MetadataSearchObjectIdentity,
     MetadataSearchResponse,
     MetadataSearchResult,
     MetadataToolInvokeResponse,
@@ -28,7 +28,7 @@ METADATA_TOOL_INVOCATION_NOT_ALLOWED = "METADATA_TOOL_INVOCATION_NOT_ALLOWED"
 PPM_MANIFEST_TEMPLATE_ONLY = "PPM_MANIFEST_TEMPLATE_ONLY"
 DEPENDENCY_METADATA_INCOMPLETE = "DEPENDENCY_METADATA_INCOMPLETE"
 
-DEFAULT_METADATA_SEARCH_OBJECT_TYPES = ("PROCEDURE", "TABLE", "VIEW", "FUNCTION")
+DEFAULT_METADATA_SEARCH_OBJECT_TYPES = ("PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION")
 METADATA_SEARCH_TOOL_NAME = "search_metadata_objects"
 PUBLIC_METADATA_TOOL_INVOCATION_ALLOWLIST = frozenset(
     {
@@ -376,7 +376,7 @@ def _metadata_search_result(
         default_object_ref=f"{result_source_database}.{schema}.{name}",
     )
     return MetadataSearchResult(
-        objectIdentity=MetadataObjectIdentity(
+        objectIdentity=MetadataSearchObjectIdentity(
             schema=schema,
             name=name,
             type=object_type,

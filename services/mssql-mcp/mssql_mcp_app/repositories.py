@@ -296,6 +296,26 @@ class FixtureMetadataRepository:
                     item["score"] = score
                     results.append(_metadata_search_result_item(item, context=context))
 
+        if "COLUMN" in object_types:
+            for table_index, table in enumerate(self.payload.get("tables", [])):
+                for column_index, column in enumerate(table.get("columns", [])):
+                    evidence = self._evidence(
+                        "column-search",
+                        "COLUMN",
+                        table["schema"],
+                        f"{table['name']}.{column['name']}",
+                        f"/tables/{table_index}/columns/{column_index}",
+                    )
+                    item = _metadata_search_column_item(
+                        table,
+                        column,
+                        evidence_refs=[evidence],
+                    )
+                    score = _metadata_search_score(item, query)
+                    if score > 0:
+                        item["score"] = score
+                        results.append(_metadata_search_result_item(item, context=context))
+
         if "VIEW" in object_types:
             for index, view in enumerate(self.payload.get("views", [])):
                 evidence = self._evidence(
@@ -1305,55 +1325,83 @@ class LiveMetadataRepository:
         profile = self._profile(arguments["dbProfileId"])
         object_types = _search_object_types(arguments)
         limit = _search_limit(arguments)
-        type_codes = _search_sql_type_codes(object_types)
-        type_placeholders = ", ".join(["%s"] * len(type_codes))
         pattern = f"%{arguments['query']}%"
-        rows = self._query(
-            profile.database,
-            f"""
-            SELECT
-                o.object_id,
-                o.type AS object_type,
-                s.name AS schema_name,
-                o.name AS object_name,
-                CONVERT(nvarchar(4000), ep.value) AS description,
-                COALESCE(rs.name, dep_rs.name, dep.referenced_schema_name) AS dep_schema_name,
-                COALESCE(ro.name, dep_ro.name, dep.referenced_entity_name) AS dep_object_name,
-                COALESCE(ro.type, dep_ro.type) AS dep_referenced_type,
-                dep.referenced_class_desc,
-                dep.is_ambiguous
-            FROM sys.objects AS o
-            INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
-            LEFT JOIN sys.extended_properties AS ep
-                ON ep.major_id = o.object_id
-                AND ep.minor_id = 0
-                AND ep.name = 'MS_Description'
-            LEFT JOIN sys.sql_expression_dependencies AS dep
-                ON o.object_id = dep.referencing_id
-            LEFT JOIN sys.objects AS ro ON dep.referenced_id = ro.object_id
-            LEFT JOIN sys.schemas AS rs ON ro.schema_id = rs.schema_id
-            LEFT JOIN sys.schemas AS dep_rs ON dep.referenced_schema_name = dep_rs.name
-            LEFT JOIN sys.objects AS dep_ro
-                ON dep_rs.schema_id = dep_ro.schema_id
-                AND dep.referenced_entity_name = dep_ro.name
-            WHERE o.is_ms_shipped = 0
-                AND o.type IN ({type_placeholders})
-                AND (
-                    s.name LIKE %s
-                    OR o.name LIKE %s
-                    OR CONVERT(nvarchar(4000), ep.value) LIKE %s
-                )
-            ORDER BY s.name, o.name
-            """,
-            [*type_codes, pattern, pattern, pattern],
-            tool_name="search_metadata_objects",
-            profile=profile,
-        )
         context = {"sourceProfile": profile.id, "sourceDatabase": profile.database}
-        results = [
-            _metadata_search_result_item(item, context=context)
-            for item in _metadata_search_items_from_live_rows(self, rows)
+        results: list[dict[str, Any]] = []
+        catalog_object_types = [
+            object_type for object_type in object_types if object_type != "COLUMN"
         ]
+        type_codes = _search_sql_type_codes(catalog_object_types)
+        if type_codes:
+            type_placeholders = ", ".join(["%s"] * len(type_codes))
+            rows = self._query(
+                profile.database,
+                f"""
+                SELECT
+                    o.object_id,
+                    o.type AS object_type,
+                    s.name AS schema_name,
+                    o.name AS object_name,
+                    CONVERT(nvarchar(4000), ep.value) AS description,
+                    COALESCE(rs.name, dep_rs.name, dep.referenced_schema_name) AS dep_schema_name,
+                    COALESCE(ro.name, dep_ro.name, dep.referenced_entity_name) AS dep_object_name,
+                    COALESCE(ro.type, dep_ro.type) AS dep_referenced_type,
+                    dep.referenced_class_desc,
+                    dep.is_ambiguous
+                FROM sys.objects AS o
+                INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
+                LEFT JOIN sys.extended_properties AS ep
+                    ON ep.major_id = o.object_id
+                    AND ep.minor_id = 0
+                    AND ep.name = 'MS_Description'
+                LEFT JOIN sys.sql_expression_dependencies AS dep
+                    ON o.object_id = dep.referencing_id
+                LEFT JOIN sys.objects AS ro ON dep.referenced_id = ro.object_id
+                LEFT JOIN sys.schemas AS rs ON ro.schema_id = rs.schema_id
+                LEFT JOIN sys.schemas AS dep_rs ON dep.referenced_schema_name = dep_rs.name
+                LEFT JOIN sys.objects AS dep_ro
+                    ON dep_rs.schema_id = dep_ro.schema_id
+                    AND dep.referenced_entity_name = dep_ro.name
+                WHERE o.is_ms_shipped = 0
+                    AND o.type IN ({type_placeholders})
+                    AND (
+                        s.name LIKE %s
+                        OR o.name LIKE %s
+                        OR CONVERT(nvarchar(4000), ep.value) LIKE %s
+                    )
+                ORDER BY s.name, o.name
+                """,
+                [*type_codes, pattern, pattern, pattern],
+                tool_name="search_metadata_objects",
+                profile=profile,
+            )
+            results.extend(
+                _metadata_search_result_item(item, context=context)
+                for item in _metadata_search_items_from_live_rows(self, rows)
+            )
+        if "COLUMN" in object_types:
+            for table in self._searchable_live_tables(
+                profile,
+                tool_name="search_metadata_objects",
+            ):
+                for column in table.get("columns", []):
+                    item = _metadata_search_column_item(
+                        table,
+                        column,
+                        evidence_refs=[
+                            self._live_evidence(
+                                "metadata-column-search",
+                                "COLUMN",
+                                table["schema"],
+                                f"{table['name']}.{column['name']}",
+                                "sys.columns",
+                            )
+                        ],
+                    )
+                    score = _metadata_search_score(item, arguments["query"])
+                    if score > 0:
+                        item["score"] = score
+                        results.append(_metadata_search_result_item(item, context=context))
         results.sort(
             key=lambda item: (
                 item["objectIdentity"]["type"],
@@ -4269,9 +4317,9 @@ def _criteria(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def _search_object_types(arguments: dict[str, Any]) -> list[str]:
-    values = arguments.get("objectTypes") or ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+    values = arguments.get("objectTypes") or ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
     object_types = list(dict.fromkeys(str(value).upper() for value in values))
-    return object_types or ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+    return object_types or ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
 
 
 def _search_limit(arguments: dict[str, Any]) -> int:
@@ -4288,7 +4336,7 @@ def _search_sql_type_codes(object_types: list[str]) -> list[str]:
     }
     for object_type in object_types:
         codes.extend(mapping.get(object_type, []))
-    return codes or ["P", "PC", "U", "V", "FN", "IF", "TF", "FS", "FT"]
+    return codes
 
 
 def _metadata_search_score(item: dict[str, Any], query: str) -> int:
@@ -4318,6 +4366,24 @@ def _metadata_search_score(item: dict[str, Any], query: str) -> int:
         elif needle in text:
             score += 20
     return score
+
+
+def _metadata_search_column_item(
+    table: dict[str, Any],
+    column: dict[str, Any],
+    *,
+    evidence_refs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "schema": table["schema"],
+        "name": f"{table['name']}.{column['name']}",
+        "objectType": "COLUMN",
+        "logicalName": column.get("logicalName"),
+        "description": column.get("description"),
+        "descriptionStatus": column.get("descriptionStatus", "CONFIRMED"),
+        "dataType": column.get("dataType"),
+        "evidenceRefs": evidence_refs,
+    }
 
 
 def _metadata_search_result_item(
