@@ -121,6 +121,19 @@ def _fixture_request(outputs: list[str] | None = None) -> SPAnalysisRequest:
     )
 
 
+def _ai_draft_pack_without_paths(
+    payload: dict[str, object],
+    paths: set[str],
+) -> dict[str, object]:
+    dirty = deepcopy(payload)
+    dirty["files"] = [
+        file
+        for file in dirty.get("files", [])
+        if isinstance(file, dict) and str(file.get("path") or "") not in paths
+    ]
+    return dirty
+
+
 def test_workflow_service_defaults_openai_remote_to_agents_and_langgraph(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1130,6 +1143,76 @@ def test_p43c_workflow_ab_routes_ai_draft_pack_through_framework_adapter(
     assert "ManageBondDTO" not in str(artifacts)
 
 
+def test_p50_workflow_materializes_missing_dto_stage_files_from_expected_inventory() -> None:
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+    dropped_dto_paths = {
+        file["path"]
+        for file in ai_draft_pack["files"]
+        if file["artifactType"] == ArtifactType.DTO_DRAFT.value
+    }
+    dropped_dto_paths = set(sorted(dropped_dto_paths)[:2])
+    dto_missing_pack = _ai_draft_pack_without_paths(ai_draft_pack, dropped_dto_paths)
+    gateway = FakeModelGateway(
+        sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+        ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+    )
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=gateway,
+        ai_generation_framework_adapter=FakeAiGenerationFrameworkAdapter(
+            output=ai_draft_pack,
+            stage_outputs={
+                "dto_inventory": dto_missing_pack,
+                "dto_content": dto_missing_pack,
+            },
+            candidate_framework="openai_agents_sdk_missing_dto_fixture",
+        ),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    runs = repository.list_agent_runs(job.job_id) or []
+    ai_draft_run = next(
+        run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    floor_component = next(
+        component
+        for component in ai_draft_run.model_invocation["componentInvocations"]
+        if component.get("component") == "ai_draft_pack_dto_content_floor"
+    )
+    dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
+    dto_titles = {artifact.title for artifact in dto_artifacts}
+
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert floor_component["fileCount"] == len(dropped_dto_paths)
+    assert {path.rsplit("/", 1)[-1] for path in dropped_dto_paths} <= {
+        title.rsplit("/", 1)[-1] for title in dto_titles
+    }
+    floor_paths = {file["path"] for file in floor_component["files"]}
+    dropped_names = {path.rsplit("/", 1)[-1] for path in floor_paths}
+    floor_artifacts = [
+        artifact
+        for artifact in dto_artifacts
+        if artifact.title.rsplit("/", 1)[-1] in dropped_names
+    ]
+    run_floor_files = [
+        file for file in ai_draft_run.structured_output["files"] if file["path"] in floor_paths
+    ]
+    assert len(floor_artifacts) == len(floor_paths)
+    assert len(run_floor_files) == len(floor_paths)
+    assert floor_component["reviewMarker"] == "DTO_CONTENT_FLOOR_REVIEW_REQUIRED"
+    assert all(file.get("requiredFields") for file in run_floor_files)
+    assert any(artifact.type == ArtifactType.SERVICE_DRAFT for artifact in artifacts)
+    assert any(artifact.type == ArtifactType.MAPPER_INTERFACE for artifact in artifacts)
+    assert any(artifact.type == ArtifactType.MAPPER_XML for artifact in artifacts)
+    assert "OperationModelReviewRequired" not in str(artifacts)
+
+
 def test_p50_workflow_uses_dedicated_ai_draft_pack_profile() -> None:
     operation_model = p41_operation_model_fixture()
     ai_draft_pack = p42_ai_draft_pack_fixture()
@@ -1440,7 +1523,7 @@ def test_p42_workflow_rejects_invalid_pack_quality_without_fallback_artifacts() 
     assert "OperationModelReviewRequired" not in str(artifacts)
 
 
-def test_p43c_candidate_two_dto_collapse_fails_without_java_artifacts() -> None:
+def test_p43c_candidate_two_dto_collapse_is_repaired_by_dto_floor() -> None:
     operation_model = p41_operation_model_fixture()
     collapsed_pack = p42_ai_draft_pack_fixture()
     dto_files = [
@@ -1475,31 +1558,21 @@ def test_p43c_candidate_two_dto_collapse_fails_without_java_artifacts() -> None:
         for run in repository.list_agent_runs(job.job_id) or []
         if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
     )
+    floor_component = next(
+        component
+        for component in ai_draft_run.model_invocation["componentInvocations"]
+        if component.get("component") == "ai_draft_pack_dto_content_floor"
+    )
     stored_text = str(ai_draft_run.structured_output) + str(ai_draft_run.model_invocation)
 
-    assert job.status == JobStatus.FAILED
-    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
-    assert ai_draft_run.structured_output["failureDiagnostics"]["failureStage"] == (
-        "quality_validation"
+    assert job.status == JobStatus.VALIDATION_COMPLETE
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert floor_component["fileCount"] >= 1
+    assert len([artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]) == (
+        len(ai_draft_run.structured_output["qualityGates"]["requiredDtoClasses"])
     )
-    assert "missing expected stage files" in str(
-        ai_draft_run.structured_output["failureDiagnostics"]
-    )
-    assert "DTO_DRAFT dto/CreateBondCommand.java" in str(
-        ai_draft_run.structured_output["failureDiagnostics"]
-    )
-    assert "public class" not in stored_text
     assert "ManageBondDTO" not in stored_text
-    assert not any(
-        artifact.type
-        in {
-            ArtifactType.DTO_DRAFT,
-            ArtifactType.SERVICE_DRAFT,
-            ArtifactType.MAPPER_INTERFACE,
-            ArtifactType.MAPPER_XML,
-        }
-        for artifact in artifacts
-    )
+    assert "OperationModelReviewRequired" not in str(artifacts)
 
 
 def test_p43c_candidate_missing_review_markers_fails_quality_gate() -> None:

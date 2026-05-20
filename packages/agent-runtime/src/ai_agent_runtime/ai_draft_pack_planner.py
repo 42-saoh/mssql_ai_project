@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace as dataclass_replace
 from typing import Any
@@ -23,6 +25,8 @@ REPAIRABLE_AI_DRAFT_PACK_GATEWAY_CODES = frozenset({"OPENAI_AI_DRAFT_PACK_INVALI
 REPAIR_COMPONENT = "ai_draft_pack_repair_stage"
 REFERENCE_GUARD_COMPONENT = "ai_draft_pack_reference_guard"
 COMPOSER_COMPONENT = "ai_draft_pack_internal_composer"
+DTO_FLOOR_COMPONENT = "ai_draft_pack_dto_content_floor"
+DTO_FLOOR_REVIEW_MARKER = "DTO_CONTENT_FLOOR_REVIEW_REQUIRED"
 AI_DRAFT_PACK_COMPOSER_STAGES = (
     "dto_inventory",
     "dto_content",
@@ -298,7 +302,7 @@ def _build_run_from_stage_outputs(
 ) -> AgentRunPayload:
     if base_invocation is None:
         raise AiDraftPackValidationError(["role stage composer had no model invocation."])
-    structured_output = _compose_ai_java_mybatis_draft_pack_output(
+    structured_output, dto_floor_summary = _compose_ai_java_mybatis_draft_pack_output(
         target_ref=target_ref,
         stage_outputs=stage_outputs,
         expected_inventory=expected_inventory,
@@ -319,6 +323,8 @@ def _build_run_from_stage_outputs(
         *(dict(item) for item in component_invocations),
         composer_component,
     )
+    if dto_floor_summary.get("applied"):
+        components = (*components, _dto_floor_component(dto_floor_summary))
     if guard_component is not None:
         components = (*components, guard_component)
     if repair_context is not None:
@@ -349,8 +355,10 @@ def _compose_ai_java_mybatis_draft_pack_output(
     expected_inventory: Sequence[Mapping[str, Any]],
     quality_gates: Mapping[str, Any],
     allowed_refs: Sequence[str],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     stage_files: dict[tuple[str, str], Mapping[str, Any]] = {}
+    dto_inventory_files: dict[tuple[str, str], Mapping[str, Any]] = {}
+    dto_content_files: dict[tuple[str, str], Mapping[str, Any]] = {}
     stage_root_refs: list[str] = []
     stage_root_markers: list[str] = []
     assumptions: list[str] = []
@@ -364,17 +372,32 @@ def _compose_ai_java_mybatis_draft_pack_output(
                 continue
             key = (str(file.get("artifactType") or ""), str(file.get("path") or ""))
             stage_files[key] = file
+            if stage == "dto_inventory":
+                dto_inventory_files[key] = file
+            elif stage == "dto_content":
+                dto_content_files[key] = file
 
     composed_files: list[dict[str, Any]] = []
-    missing: list[str] = []
+    missing: list[dict[str, str]] = []
+    floor_files: list[dict[str, Any]] = []
     allowed_set = {str(ref) for ref in allowed_refs if str(ref).strip()}
     for expected in expected_inventory:
         artifact_type = str(expected.get("artifactType") or "")
         path = str(expected.get("path") or "")
-        actual = stage_files.get((artifact_type, path))
+        key = (artifact_type, path)
+        actual = stage_files.get(key)
         if actual is None:
-            missing.append(f"{artifact_type} {path}")
-            continue
+            if artifact_type == "DTO_DRAFT":
+                actual = _dto_floor_file(
+                    expected,
+                    allowed_refs=allowed_refs,
+                    allowed_set=allowed_set,
+                    source_file=dto_content_files.get(key) or dto_inventory_files.get(key),
+                )
+                floor_files.append(actual)
+            else:
+                missing.append(_missing_expected_stage_file(expected))
+                continue
         expected_refs = _strings(expected.get("evidenceRefs"))
         actual_refs = _strings(actual.get("evidenceRefs"))
         evidence_refs = _dedupe_refs([*expected_refs, *actual_refs], allowed_set)
@@ -411,7 +434,10 @@ def _compose_ai_java_mybatis_draft_pack_output(
         composed_files.append(composed)
     if missing:
         raise AiDraftPackValidationError(
-            [f"integration_quality_gate: missing expected stage files: {missing}."]
+            [
+                "integration_quality_gate: missing expected stage files: "
+                f"{json.dumps(missing, sort_keys=True)}."
+            ]
         )
 
     root_refs = _dedupe_refs(
@@ -429,6 +455,19 @@ def _compose_ai_java_mybatis_draft_pack_output(
             *(marker for file in composed_files for marker in _strings(file.get("reviewMarkers"))),
         ]
     )
+    dto_floor_summary = {
+        "applied": bool(floor_files),
+        "fileCount": len(floor_files),
+        "files": [
+            {
+                "artifactType": str(file.get("artifactType") or ""),
+                "path": str(file.get("path") or ""),
+                "className": str(file.get("className") or ""),
+                "owningStage": "dto_content",
+            }
+            for file in floor_files[:40]
+        ],
+    }
     return {
         "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
         "contractTarget": "AiJavaMyBatisDraftPack",
@@ -442,6 +481,95 @@ def _compose_ai_java_mybatis_draft_pack_output(
         "assumptions": _dedupe(
             [*assumptions, "P50 role-stage outputs were merged by deterministic composer."]
         ),
+    }, dto_floor_summary
+
+
+def _dto_floor_file(
+    expected: Mapping[str, Any],
+    *,
+    allowed_refs: Sequence[str],
+    allowed_set: set[str],
+    source_file: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    class_name = str(expected.get("className") or "").strip() or "DraftReviewRequiredDto"
+    required_fields = _strings(expected.get("requiredFields")) or ["reviewRequiredField"]
+    evidence_refs = _dedupe_refs(
+        [
+            *_strings(expected.get("evidenceRefs")),
+            *_strings((source_file or {}).get("evidenceRefs")),
+            *allowed_refs,
+        ],
+        allowed_set,
+    ) or list(allowed_refs[:1])
+    review_markers = _dedupe(
+        [
+            *_strings(expected.get("reviewMarkers")),
+            *_strings((source_file or {}).get("reviewMarkers")),
+            DTO_FLOOR_REVIEW_MARKER,
+        ]
+    )
+    return {
+        "artifactType": "DTO_DRAFT",
+        "path": str(expected.get("path") or f"dto/{class_name}.java"),
+        "role": str(expected.get("role") or "REVIEW_REQUIRED"),
+        "className": class_name,
+        "content": _dto_floor_content(class_name=class_name, fields=required_fields),
+        "operationIds": _strings(expected.get("operationIds")),
+        "evidenceRefs": evidence_refs,
+        "reviewMarkers": review_markers,
+        "dtoRole": expected.get("dtoRole") or (source_file or {}).get("dtoRole"),
+        "requiredFields": required_fields,
+        "references": _strings(expected.get("references")),
+        "qualityScore": (source_file or {}).get("qualityScore"),
+    }
+
+
+def _dto_floor_content(*, class_name: str, fields: Sequence[str]) -> str:
+    declarations = "\n".join(
+        f"    private String {field};"
+        for field in _dedupe(field for field in fields if _java_identifier(field))
+    )
+    if not declarations:
+        declarations = "    private String reviewRequiredField;"
+    return (
+        f"public class {class_name} {{\n"
+        "    // REVIEW_REQUIRED DTO content floor from sanitized P41 blueprint evidence.\n"
+        f"{declarations}\n"
+        "}"
+    )
+
+
+def _java_identifier(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", str(value or "")))
+
+
+def _missing_expected_stage_file(expected: Mapping[str, Any]) -> dict[str, str]:
+    artifact_type = str(expected.get("artifactType") or "")
+    return {
+        "artifactType": artifact_type,
+        "path": str(expected.get("path") or ""),
+        "className": str(expected.get("className") or ""),
+        "owningStage": _owning_stage_for_artifact(artifact_type),
+    }
+
+
+def _owning_stage_for_artifact(artifact_type: str) -> str:
+    return {
+        "DTO_DRAFT": "dto_content",
+        "SERVICE_DRAFT": "service_content",
+        "MAPPER_INTERFACE": "mapper_interface_content",
+        "MAPPER_XML": "mapper_xml_content",
+    }.get(str(artifact_type or ""), "integration_quality_gate")
+
+
+def _dto_floor_component(summary: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "component": DTO_FLOOR_COMPONENT,
+        "status": "SUCCEEDED",
+        "action": "materialized_missing_dto_stage_files_from_expected_inventory",
+        "reviewMarker": DTO_FLOOR_REVIEW_MARKER,
+        "fileCount": int(summary.get("fileCount") or 0),
+        "files": list(summary.get("files") or [])[:40],
     }
 
 
@@ -622,11 +750,15 @@ def _composer_component(*, stage: str) -> dict[str, Any]:
 
 def _repair_context_from_exception(exc: Exception) -> dict[str, Any]:
     if isinstance(exc, AiDraftPackValidationError):
+        missing_files = _missing_expected_stage_files_from_findings(exc.findings)
+        target_stages = _repair_stages_from_findings(exc.findings)
         return {
             "failureStage": _schema_failure_stage_from_findings(exc.findings),
             "errorClass": exc.__class__.__name__,
             "reason": "AiJavaMyBatisDraftPack schema validation failed.",
             "validationFindings": _safe_validation_findings(exc.findings),
+            "missingExpectedStageFiles": missing_files,
+            "targetStages": list(target_stages),
         }
     if isinstance(exc, ModelGatewayError):
         return {
@@ -651,6 +783,10 @@ def _repair_component(repair_context: Mapping[str, Any]) -> dict[str, Any]:
         "failureStage": str(repair_context.get("failureStage") or "unknown"),
         "errorCode": str(repair_context.get("errorCode") or ""),
         "errorClass": str(repair_context.get("errorClass") or ""),
+        "targetStages": list(repair_context.get("targetStages") or []),
+        "missingExpectedStageFileCount": len(
+            list(repair_context.get("missingExpectedStageFiles") or [])
+        ),
     }
 
 
@@ -694,6 +830,10 @@ def _schema_failure_stage_from_findings(findings: Sequence[str]) -> str:
 
 def _repair_stages_from_findings(findings: Sequence[str]) -> tuple[str, ...]:
     stages: list[str] = []
+    for item in _missing_expected_stage_files_from_findings(findings):
+        stage = str(item.get("owningStage") or "")
+        if stage:
+            stages.append(stage)
     text = "\n".join(str(finding) for finding in findings)
     for stage in ROLE_DRAFT_STAGES:
         if f"{stage}:" in text:
@@ -707,6 +847,55 @@ def _repair_stages_from_findings(findings: Sequence[str]) -> tuple[str, ...]:
     if "DTO_DRAFT" in text or "dto" in text.lower():
         stages.extend(["dto_inventory", "dto_content"])
     return tuple(stage for stage in ROLE_DRAFT_STAGES if stage in set(stages))
+
+
+def _missing_expected_stage_files_from_findings(
+    findings: Sequence[str],
+) -> list[dict[str, str]]:
+    parsed: list[dict[str, str]] = []
+    for finding in findings:
+        text = str(finding)
+        marker = "missing expected stage files:"
+        if marker not in text:
+            continue
+        payload = text.split(marker, 1)[1].strip()
+        if payload.endswith("."):
+            payload = payload[:-1]
+        try:
+            raw_items = json.loads(payload)
+        except json.JSONDecodeError:
+            raw_items = _legacy_missing_stage_files(payload)
+        if not isinstance(raw_items, Sequence) or isinstance(raw_items, str | bytes):
+            continue
+        for item in raw_items:
+            if isinstance(item, Mapping):
+                artifact_type = str(item.get("artifactType") or "")
+                path = str(item.get("path") or "")
+                class_name = str(item.get("className") or "")
+                owning_stage = str(item.get("owningStage") or "") or _owning_stage_for_artifact(
+                    artifact_type
+                )
+            else:
+                text_item = str(item)
+                parts = text_item.split(maxsplit=1)
+                artifact_type = parts[0] if parts else ""
+                path = parts[1] if len(parts) > 1 else ""
+                class_name = path.rsplit("/", 1)[-1].removesuffix(".java").removesuffix(".xml")
+                owning_stage = _owning_stage_for_artifact(artifact_type)
+            if artifact_type or path:
+                parsed.append(
+                    {
+                        "artifactType": artifact_type,
+                        "path": path,
+                        "className": class_name,
+                        "owningStage": owning_stage,
+                    }
+                )
+    return parsed[:80]
+
+
+def _legacy_missing_stage_files(payload: str) -> list[str]:
+    return re.findall(r"([A-Z_]+\s+[^'\\],]+)", payload)
 
 
 def _allowed_evidence_refs(

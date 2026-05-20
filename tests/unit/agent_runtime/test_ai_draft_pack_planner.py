@@ -12,6 +12,7 @@ from ai_agent_runtime import (
     AI_JAVA_MYBATIS_DRAFT_PACK_PROMPT_VERSION,
     AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
     AI_JAVA_MYBATIS_DRAFT_PACK_STAGE_OUTPUT_SCHEMA_VERSION,
+    AiDraftPackValidationError,
     FakeModelGateway,
     ModelProfile,
     build_ai_java_mybatis_draft_pack_run,
@@ -188,6 +189,14 @@ def _allowed_refs(payload: dict[str, Any]) -> list[str]:
     return sorted(set(refs))
 
 
+def _pack_without_paths(payload: dict[str, Any], paths: set[str]) -> dict[str, Any]:
+    dirty = deepcopy(payload)
+    dirty["files"] = [
+        file for file in dirty["files"] if str(file.get("path") or "") not in paths
+    ]
+    return dirty
+
+
 def _prompt(payload: dict[str, Any]):
     fixture = _fixture()
     return render_ai_java_mybatis_draft_pack_prompt(
@@ -267,6 +276,13 @@ def test_ai_draft_pack_role_stage_prompt_uses_stage_contract() -> None:
         "SERVICE_DRAFT"
     ]
     assert prompt_payload["outputContract"]["stage"] == "service_content"
+    assert prompt_payload["stageExpectedInventory"]
+    assert prompt_payload["filePolicy"]["stageExactInventoryRequired"] is True
+    assert prompt_payload["filePolicy"]["exactStageExpectedFileCount"] == 1
+    assert prompt_payload["outputContract"]["exactStageExpectedFiles"] == (
+        prompt_payload["stageExpectedInventory"]
+    )
+    assert prompt_payload["stageExpectedInventory"][0]["artifactType"] == "SERVICE_DRAFT"
 
 
 def test_ai_draft_pack_model_profile_uses_high_quality_override(monkeypatch: Any) -> None:
@@ -416,6 +432,90 @@ def test_ai_draft_pack_framework_adapter_runs_role_specific_stages() -> None:
         if component["component"] == "ai_draft_pack_internal_composer"
     )
     assert composer["stage"] == "integration_quality_gate"
+
+
+def test_ai_draft_pack_framework_adapter_materializes_missing_dto_files_from_floor() -> None:
+    payload = _valid_pack()
+    dto_paths_to_drop = {
+        "dto/ManageBondSearchCriteria.java",
+        "dto/ManageBondSearchRow.java",
+    }
+    dto_stage_payload = _pack_without_paths(payload, dto_paths_to_drop)
+    adapter = FakeAiGenerationFrameworkAdapter(
+        output=payload,
+        stage_outputs={
+            "dto_inventory": dto_stage_payload,
+            "dto_content": dto_stage_payload,
+        },
+        candidate_framework="openai_agents_sdk_missing_dto_fixture",
+    )
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        model_gateway=FakeModelGateway(),
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=_allowed_refs(payload),
+        framework_adapter=adapter,
+    )
+
+    files_by_path = {file["path"]: file for file in run.structured_output["files"]}
+    floor_component = next(
+        component
+        for component in run.model_invocation.component_invocations
+        if component["component"] == "ai_draft_pack_dto_content_floor"
+    )
+
+    assert set(files_by_path) >= dto_paths_to_drop
+    assert all(
+        "DTO content floor" in files_by_path[path]["content"]
+        for path in dto_paths_to_drop
+    )
+    assert "private String contractNum;" in files_by_path[
+        "dto/ManageBondSearchCriteria.java"
+    ]["content"]
+    assert floor_component["fileCount"] == len(dto_paths_to_drop)
+    assert validate_ai_java_mybatis_draft_pack_quality(
+        run.structured_output
+    ).status == ValidationStatus.PASSED
+
+
+def test_ai_draft_pack_framework_adapter_does_not_floor_missing_non_dto_stage_files() -> None:
+    payload = _valid_pack()
+    service_missing_payload = _pack_without_paths(
+        payload,
+        {"service/ManageBondService.java"},
+    )
+    adapter = FakeAiGenerationFrameworkAdapter(
+        output=payload,
+        stage_outputs={
+            "service_content": service_missing_payload,
+            "service_content:repair": service_missing_payload,
+        },
+        candidate_framework="openai_agents_sdk_missing_service_fixture",
+    )
+
+    try:
+        build_ai_java_mybatis_draft_pack_run(
+            target_ref=payload["targetRef"],
+            sanitized_draft_context={"targetRef": payload["targetRef"]},
+            expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+            quality_gates=payload["qualityGates"],
+            model_gateway=FakeModelGateway(),
+            profile_id="openai_fast_test",
+            allowed_evidence_refs=_allowed_refs(payload),
+            framework_adapter=adapter,
+        )
+    except AiDraftPackValidationError as exc:
+        serialized = json.dumps(exc.findings, ensure_ascii=False)
+        assert "SERVICE_DRAFT" in serialized
+        assert "service/ManageBondService.java" in serialized
+        assert "service_content" in serialized
+        assert "DTO content floor" not in serialized
+    else:
+        raise AssertionError("Expected missing service stage file to stay blocking.")
 
 
 def test_ai_draft_pack_run_preserves_generic_expected_dto_references() -> None:

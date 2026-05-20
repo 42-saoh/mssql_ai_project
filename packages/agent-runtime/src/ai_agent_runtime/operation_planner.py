@@ -29,6 +29,7 @@ REPAIR_AGENT_TYPE = "LLM_SP_OPERATION_MODEL_REPAIR"
 EVIDENCE_REPAIRED_MARKER = "SP_OPERATION_MODEL_EVIDENCE_REPAIRED"
 VALIDATOR_REPAIRED_MARKER = "SP_OPERATION_MODEL_VALIDATOR_REPAIRED"
 DTO_RECONCILED_MARKER = "SP_OPERATION_MODEL_DTO_BLUEPRINT_RECONCILED"
+DTO_ENRICHED_MARKER = "SP_OPERATION_MODEL_DTO_BLUEPRINT_ENRICHED"
 DTO_RECONCILIATION_REVIEW_MARKER = "DTO_BLUEPRINT_RECONCILIATION_REVIEW_REQUIRED"
 OPENAI_SP_OPERATION_MODEL_INVALID = "OPENAI_SP_OPERATION_MODEL_INVALID"
 MAX_REPAIR_FINDINGS = 12
@@ -291,16 +292,18 @@ def _invoke_operation_model_once(
     )
     structured_output = model.to_storage_dict()
     component_invocations = list(invocation.component_invocations)
-    if repair_summary.get("dtoReconciled"):
+    if repair_summary.get("dtoReconciled") or repair_summary.get("dtoEnriched"):
         component_invocations.append(
             {
                 "component": "sp_operation_model_dto_blueprint_reconciler",
                 "status": "SUCCEEDED",
-                "action": "restored_missing_dto_blueprints_from_refs",
+                "action": "restored_or_enriched_dto_blueprints_from_refs",
                 "reviewMarker": DTO_RECONCILED_MARKER,
                 "restoredDtoCount": int(repair_summary.get("restoredDtoCount") or 0),
                 "generatedDtoCount": int(repair_summary.get("generatedDtoCount") or 0),
+                "enrichedDtoCount": int(repair_summary.get("enrichedDtoCount") or 0),
                 "dtoBlueprintNames": list(repair_summary.get("dtoBlueprintNames") or [])[:30],
+                "enrichedDtoNames": list(repair_summary.get("enrichedDtoNames") or [])[:30],
             }
         )
     if repair_summary.get("evidenceRepaired"):
@@ -400,10 +403,13 @@ def _validated_or_repaired(
     repaired_payload = deepcopy(dict(payload))
     repair_summary: dict[str, Any] = {
         "dtoReconciled": False,
+        "dtoEnriched": False,
         "evidenceRepaired": False,
         "restoredDtoCount": 0,
         "generatedDtoCount": 0,
+        "enrichedDtoCount": 0,
         "dtoBlueprintNames": [],
+        "enrichedDtoNames": [],
     }
     if reconcile_dto_refs:
         repair_summary.update(
@@ -592,11 +598,20 @@ def _reconcile_dto_blueprint_refs(
         dict(item) for item in _mapping_items(payload.get("dtoBlueprints"))
     ]
     current_by_name: dict[str, dict[str, Any]] = {}
+    enriched_names: list[str] = []
     for dto in dto_blueprints:
         name = str(dto.get("name") or "").strip()
         if not name:
             continue
         current_by_name[name] = dto
+        role = _normalized_dto_role(
+            dto.get("role"),
+            dto_name=name,
+            operation_refs=refs_to_operations.get(name, []),
+            operations=operations,
+            statements_by_id=statements_by_id,
+        )
+        dto["role"] = role
         dto["operationIds"] = _reconciled_operation_ids(
             dto.get("operationIds"),
             referenced_by=refs_to_operations.get(name, []),
@@ -614,15 +629,39 @@ def _reconcile_dto_blueprint_refs(
                 allowed_refs=allowed_refs,
             ),
         )
-        if not dto.get("fields"):
-            dto["fields"] = _field_blueprints_for_dto(
-                dto_name=name,
-                role=str(dto.get("role") or ""),
-                operation_ids=refs_to_operations.get(name, []),
-                operations=operations,
-                statements_by_id=statements_by_id,
-                allowed_refs=allowed_refs,
+        existing_fields = [
+            field
+            for field in (
+                _normalized_field_blueprint(
+                    field,
+                    allowed_refs=allowed_refs,
+                    fallback_refs=dto["evidenceRefs"],
+                )
+                for field in _dto_field_context_items(dto.get("fields"))
             )
+            if field
+        ]
+        generated_fields = _field_blueprints_for_dto(
+            dto_name=name,
+            role=role,
+            operation_ids=refs_to_operations.get(name, []),
+            operations=operations,
+            statements_by_id=statements_by_id,
+            allowed_refs=allowed_refs,
+        )
+        if not existing_fields:
+            dto["fields"] = generated_fields
+        elif _dto_fields_need_enrichment(existing_fields):
+            merged_fields = _merge_dto_fields(existing_fields, generated_fields)
+            dto["fields"] = merged_fields
+            if len(merged_fields) > len(existing_fields):
+                enriched_names.append(name)
+                markers = _string_list(dto.get("reviewMarkers"), limit=40)
+                if DTO_ENRICHED_MARKER not in markers:
+                    markers.append(DTO_ENRICHED_MARKER)
+                dto["reviewMarkers"] = markers
+        else:
+            dto["fields"] = existing_fields
 
     branch_dtos = {
         str(dto.get("name") or "").strip(): dict(dto)
@@ -657,19 +696,24 @@ def _reconcile_dto_blueprint_refs(
         dto_blueprints.append(dto)
         current_by_name[dto_name] = dto
 
-    if restored_names or generated_names:
+    if restored_names or generated_names or enriched_names:
         markers = _string_list(payload.get("reviewMarkers"), limit=80)
-        if DTO_RECONCILED_MARKER not in markers:
+        if (restored_names or generated_names) and DTO_RECONCILED_MARKER not in markers:
             markers.append(DTO_RECONCILED_MARKER)
+        if enriched_names and DTO_ENRICHED_MARKER not in markers:
+            markers.append(DTO_ENRICHED_MARKER)
         if generated_names and DTO_RECONCILIATION_REVIEW_MARKER not in markers:
             markers.append(DTO_RECONCILIATION_REVIEW_MARKER)
         payload["reviewMarkers"] = markers
     payload["dtoBlueprints"] = dto_blueprints
     return {
         "dtoReconciled": bool(restored_names or generated_names),
+        "dtoEnriched": bool(enriched_names),
         "restoredDtoCount": len(restored_names),
         "generatedDtoCount": len(generated_names),
+        "enrichedDtoCount": len(enriched_names),
         "dtoBlueprintNames": [*restored_names, *generated_names],
+        "enrichedDtoNames": enriched_names,
     }
 
 
@@ -783,6 +827,67 @@ def _minimal_dto_blueprint(
     }
 
 
+def _dto_fields_need_enrichment(fields: Sequence[Mapping[str, Any]]) -> bool:
+    if len(fields) <= 1:
+        return True
+    normalized_names = {
+        str(field.get("name") or "").strip().lower()
+        for field in fields
+        if str(field.get("name") or "").strip()
+    }
+    if not normalized_names:
+        return True
+    branch_like = sum(1 for name in normalized_names if _is_branch_control_field(name))
+    return branch_like >= len(normalized_names)
+
+
+def _is_branch_control_field(name: str) -> bool:
+    lowered = str(name or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "crud",
+            "flag",
+            "code",
+            "kind",
+            "type",
+            "mode",
+            "status",
+            "svalue",
+        )
+    )
+
+
+def _merge_dto_fields(
+    existing_fields: Sequence[Mapping[str, Any]],
+    generated_fields: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for field in (*existing_fields, *generated_fields):
+        name = str(field.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        merged.append(dict(field))
+        seen.add(name)
+        if len(merged) >= 30:
+            break
+    return merged
+
+
+def _field_candidate_keys_for_role(role: str) -> tuple[str, ...]:
+    role = str(role or "").upper()
+    if role in {"RESULT", "CALL_RESULT"}:
+        return ("outputs",)
+    if role == "BATCH_ITEM":
+        return ("writes", "inputs")
+    return ("inputs",)
+
+
+def _role_uses_branch_fields(role: str) -> bool:
+    return str(role or "").upper() in {"QUERY", "COMMAND", "CALL_REQUEST"}
+
+
 def _field_blueprints_for_dto(
     *,
     dto_name: str,
@@ -814,7 +919,7 @@ def _field_blueprints_for_dto(
             allowed_refs=allowed_refs,
             fallback_refs=allowed_refs[:1],
         )
-        if isinstance(branch, Mapping):
+        if isinstance(branch, Mapping) and _role_uses_branch_fields(role):
             for variable in _string_list(branch.get("variables"), limit=30):
                 tokens.append((variable, f"branch.{_field_name_from_token(variable)}", operation_refs))
         for statement_id in _string_list(operation.get("statementRefs"), limit=80):
@@ -826,12 +931,7 @@ def _field_blueprints_for_dto(
                 allowed_refs=allowed_refs,
                 fallback_refs=operation_refs or allowed_refs[:1],
             )
-            candidate_keys = (
-                ("outputs",)
-                if role in {"RESULT", "CALL_RESULT"}
-                else ("inputs", "writes")
-            )
-            for key in candidate_keys:
+            for key in _field_candidate_keys_for_role(role):
                 for token in _string_list(statement.get(key), limit=40):
                     tokens.append(
                         (

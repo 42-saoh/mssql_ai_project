@@ -84,8 +84,12 @@ After the `job_bffb6a362a` audit, `operations[].dtoBlueprintRefs` are treated as
 an operation-model inventory contract. The final and repair stages reconcile any
 missing `dtoBlueprints[]` from the sanitized branch-plan DTO floor first, then
 from statement/branch evidence with `REVIEW_REQUIRED` markers when fields or
-roles are uncertain. This preserves DTO responsibilities for P50 without using
-ManageBond-specific runtime constants.
+roles are uncertain. After the `job_985851058a` audit, reconciliation also
+enriches shallow existing DTO blueprints when they only carry branch-control
+fields such as `CRUDFlag`; role-specific field candidates are merged from
+related statement inputs, outputs, writes, and branch variables. This preserves
+DTO responsibilities for P50 without using ManageBond-specific runtime
+constants.
 
 ## P42 AI Draft Pack Renewal
 
@@ -292,10 +296,15 @@ does not satisfy the deterministic quality gate, the workflow records
 `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and persists no fallback skeletons.
 
 P50 consumes the reconciled P41 DTO inventory for its DTO inventory stage. When
-Java/MyBatis drafting fails after SP analysis artifacts were requested, the
-workflow still renders the dependency report with sanitized P41/P50 stage trace,
-failure stage, validation findings, and repair caveats so evidence is conserved
-without leaking raw prompt, provider response, SP text, or failed Java/XML bodies.
+role-stage DTO content omits expected DTO files, the deterministic composer may
+materialize DTO-only floor files from expected inventory and sanitized P41
+blueprint evidence. This floor is not available for Service, Mapper interface,
+or Mapper XML files; those stages still require model output plus
+validator/repair. When Java/MyBatis drafting fails after SP analysis artifacts
+were requested, the workflow still renders the dependency report with sanitized
+P41/P50 stage trace, failure stage, structured `missingExpectedStageFiles`,
+validation findings, and repair caveats so evidence is conserved without leaking
+raw prompt, provider response, SP text, or failed Java/XML bodies.
 
 P50 remains draft-only and internal: no public API, DB schema, UI, public MCP
 route, public artifact type, source apply, deploy, row-data query, procedure

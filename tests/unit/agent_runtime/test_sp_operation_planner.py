@@ -22,6 +22,7 @@ from ai_agent_runtime.operation_model import (
     validate_sp_operation_model_output,
 )
 from ai_agent_runtime.operation_planner import (
+    DTO_ENRICHED_MARKER,
     DTO_RECONCILED_MARKER,
     EVIDENCE_REPAIRED_MARKER,
     VALIDATOR_REPAIRED_MARKER,
@@ -318,6 +319,66 @@ def test_operation_model_reconciles_generic_missing_dto_from_ref_suffix() -> Non
     assert synthetic["fields"]
     assert reconciler["generatedDtoCount"] == 1
     assert "ManageBondDTO" not in json.dumps(result.final_run.to_storage_dict())
+
+
+def test_operation_model_enriches_shallow_existing_dto_blueprints_from_statements() -> None:
+    branch_plan = _fixture_operation_model()
+    final_model = deepcopy(branch_plan)
+    for dto in final_model["dtoBlueprints"]:
+        if dto["name"] == "ManageBondSearchCriteria":
+            dto["fields"] = [
+                {
+                    "name": "crudFlag",
+                    "dbType": "varchar(20)",
+                    "source": "@CRUDFlag",
+                    "required": True,
+                    "evidenceRefs": ["ev_p41_manage_bond_call_flow"],
+                }
+            ]
+        if dto["name"] == "ManageBondSearchRow":
+            dto["fields"] = [
+                {
+                    "name": "bondStatusCode",
+                    "dbType": "REVIEW_REQUIRED",
+                    "source": "branch.status",
+                    "required": False,
+                    "evidenceRefs": ["ev_p41_manage_bond_call_flow"],
+                }
+            ]
+    gateway = _SequencedOperationGateway([branch_plan, final_model])
+
+    result = build_sp_operation_model_run_result(
+        target_ref=branch_plan["targetRef"],
+        statement_evidence=_statement_evidence(branch_plan),
+        allowed_evidence_refs=_allowed_refs(branch_plan),
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    by_name = {
+        dto["name"]: dto
+        for dto in result.final_run.structured_output["dtoBlueprints"]
+    }
+    criteria_fields = {
+        field["name"] for field in by_name["ManageBondSearchCriteria"]["fields"]
+    }
+    row_fields = {field["name"] for field in by_name["ManageBondSearchRow"]["fields"]}
+    reconciler = next(
+        component
+        for component in result.final_run.model_invocation.component_invocations
+        if component["component"] == "sp_operation_model_dto_blueprint_reconciler"
+    )
+
+    assert {"crudFlag", "contractNum", "ordNum"} <= criteria_fields
+    assert len(row_fields) > 1
+    assert any(field in row_fields for field in {"cTRTNO", "gUARSTCD", "approvalYn"})
+    assert DTO_ENRICHED_MARKER in result.final_run.structured_output["reviewMarkers"]
+    assert DTO_ENRICHED_MARKER in by_name["ManageBondSearchCriteria"]["reviewMarkers"]
+    assert reconciler["enrichedDtoCount"] >= 2
+    assert {
+        "ManageBondSearchCriteria",
+        "ManageBondSearchRow",
+    } <= set(reconciler["enrichedDtoNames"])
 
 
 def test_operation_model_run_repairs_branch_plan_validation_failure() -> None:

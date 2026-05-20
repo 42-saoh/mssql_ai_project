@@ -17,6 +17,7 @@ from ai_agent_runtime.ai_draft_pack_planner import (
     _build_ai_java_mybatis_draft_pack_run_stage,
     _invoke_ai_java_mybatis_draft_pack_stage,
     _is_repairable_planner_exception,
+    _missing_expected_stage_files_from_findings,
     _repair_context_from_exception,
     _validate_ai_draft_pack_invocation,
     _validate_ai_draft_pack_stage_invocation,
@@ -400,6 +401,10 @@ def _repair_stages_from_quality_report(report: ValidationReport) -> list[str]:
 def _repair_stages_from_findings(findings: Sequence[str]) -> list[str]:
     text = "\n".join(str(finding) for finding in findings).lower()
     stages: list[str] = []
+    for item in _missing_expected_stage_files_from_findings(findings):
+        stage = str(item.get("owningStage") or "")
+        if stage:
+            stages.append(stage)
     if "service" in text:
         stages.append("service_content")
     if "mapper_xml" in text or "xml" in text:

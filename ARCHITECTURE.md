@@ -111,7 +111,11 @@ reconciliation restores missing DTO blueprints from sanitized
 creates the smallest evidence-backed `REVIEW_REQUIRED` blueprint from statement
 inputs/outputs/writes, branch variables, SP parameters, and generic role suffix
 rules. This keeps operation refs and DTO `operationIds` aligned without
-target-specific DTO constants.
+target-specific DTO constants. The same reconciliation enriches existing but
+shallow DTO blueprints: if a DTO only contains one field or branch-control fields
+such as flags/codes/status, role-specific candidates are merged from related
+statement inputs, outputs, writes, and branch variables while uncertain types stay
+`REVIEW_REQUIRED`.
 
 In the workflow orchestrator, `JAVA_MYBATIS_DRAFT` now has an operation-model
 planning stage between semantic analysis and artifact generation. The stage calls the
@@ -398,6 +402,12 @@ component that creates the persisted `AiJavaMyBatisDraftPack.v0.1`; it enforces
 the exact expected inventory, merges normalized evidence refs, and limits repair
 routing to the failed owner stage where possible, such as `service_content` for
 Service flow failures and `mapper_xml_content` for SQL statement failures.
+DTO files have one additional inventory floor: if `dto_inventory`/`dto_content`
+omits an expected DTO path, the composer can materialize a minimal DTO class from
+expected inventory and sanitized P41 blueprint evidence with
+`DTO_CONTENT_FLOOR_REVIEW_REQUIRED`. This deterministic floor is intentionally
+not available for Service, Mapper interface, or Mapper XML files; missing non-DTO
+stage files remain repair blockers.
 
 `WorkflowService` now resolves Java/MyBatis draft generation through the
 dedicated `openai_ai_draft_pack` profile even when the public request's
@@ -420,7 +430,10 @@ the workflow records `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and stores no fallback
 skeletons. Generated artifacts remain draft-only with `productionReady=false`;
 when analysis documents are requested in the same job, the dependency report is
 rendered after the draft attempt so sanitized P41/P50 stage traces and failure
-caveats are preserved in the Evidence Dossier.
+caveats are preserved in the Evidence Dossier. P50 failure diagnostics preserve
+structured `missingExpectedStageFiles` entries, owner stages, validation failed
+rule ids, and repair target stages without raw prompt/provider output or failed
+Java/XML bodies.
 P50 adds no public API, DB schema, UI, public MCP route, public artifact type, or
 production readiness change.
 

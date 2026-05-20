@@ -128,6 +128,10 @@ def test_p51_evidence_dossier_preserves_removed_evidence_and_audit_sections() ->
     assert "stage=service_content" in dossier.content
     assert "p50.ai_draft_pack.service.business_flow" in dossier.content
     assert "repair_routing" in dossier.content
+    assert "missing_expected_stage_files" in dossier.content
+    assert "DTO_DRAFT dto/ManageBondSearchCriteria.java stage=dto_content" in dossier.content
+    assert "dto_content_floor" in dossier.content
+    assert "DTO_CONTENT_FLOOR_REVIEW_REQUIRED" in dossier.content
 
 
 def _render_pair():
@@ -232,7 +236,32 @@ def _context() -> GenerationContext:
                                 "p50.ai_draft_pack.mapper_xml.db_operation"
                             ],
                         },
+                        {
+                            "component": "ai_draft_pack_dto_content_floor",
+                            "status": "SUCCEEDED",
+                            "fileCount": 2,
+                            "reviewMarker": "DTO_CONTENT_FLOOR_REVIEW_REQUIRED",
+                            "files": [
+                                {
+                                    "artifactType": "DTO_DRAFT",
+                                    "path": "dto/ManageBondSearchCriteria.java",
+                                    "className": "ManageBondSearchCriteria",
+                                    "owningStage": "dto_content",
+                                }
+                            ],
+                        },
                     ],
+                    "failureDiagnostics": {
+                        "missingExpectedStageFiles": [
+                            {
+                                "artifactType": "DTO_DRAFT",
+                                "path": "dto/ManageBondSearchCriteria.java",
+                                "className": "ManageBondSearchCriteria",
+                                "owningStage": "dto_content",
+                            }
+                        ],
+                        "repairTargetStages": ["dto_content"],
+                    },
                     "validation": {
                         "failedRuleIds": [
                             "p50.ai_draft_pack.service.business_flow",

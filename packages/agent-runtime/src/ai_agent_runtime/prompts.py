@@ -686,6 +686,7 @@ def render_ai_java_mybatis_draft_pack_prompt(
         for item in inventory
         if item.get("artifactType") in {"SERVICE_DRAFT", "MAPPER_INTERFACE", "MAPPER_XML"}
     ]
+    stage_expected_inventory = _ai_draft_pack_stage_expected_inventory(stage, inventory)
     evidence_bundle = build_draft_pack_evidence_bundle(
         sanitized_draft_context=context,
         expected_inventory=inventory,
@@ -704,8 +705,12 @@ def render_ai_java_mybatis_draft_pack_prompt(
         "reviewMarkerContract": evidence_bundle["reviewMarkerContract"],
         "mapperCoverageContract": evidence_bundle["mapperCoverageContract"],
         "expectedInventory": inventory,
+        "stageExpectedInventory": stage_expected_inventory,
         "qualityGates": gates,
-        "outputContract": _ai_draft_pack_output_contract(stage),
+        "outputContract": _ai_draft_pack_output_contract(
+            stage,
+            stage_expected_inventory=stage_expected_inventory,
+        ),
         "filePolicy": {
             "artifactTypes": [
                 "DTO_DRAFT",
@@ -729,7 +734,9 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "blockedClassNames": ["OperationModelReviewRequired"],
             "blockedMarkers": ["P41_OPERATION_MODEL_REVIEW_REQUIRED"],
             "exactExpectedFileCount": len(inventory),
+            "exactStageExpectedFileCount": len(stage_expected_inventory),
             "exactExpectedInventoryRequired": True,
+            "stageExactInventoryRequired": stage in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
             "genericCoverageFirst": True,
             "benchmarkNamesAreNotAnswerKeys": True,
             "composerStages": list(AI_DRAFT_PACK_COMPOSER_STAGES),
@@ -816,7 +823,11 @@ def render_ai_java_mybatis_draft_pack_prompt(
     )
 
 
-def _ai_draft_pack_output_contract(stage: str) -> dict[str, Any]:
+def _ai_draft_pack_output_contract(
+    stage: str,
+    *,
+    stage_expected_inventory: Sequence[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
     file_keys = [
         "artifactType",
         "path",
@@ -863,6 +874,7 @@ def _ai_draft_pack_output_contract(stage: str) -> dict[str, Any]:
                 "Return only this stage's file slice. The deterministic composer will merge "
                 "role-stage files into AiJavaMyBatisDraftPack.v0.1 and run integration checks."
             ),
+            "exactStageExpectedFiles": stage_expected_inventory,
         }
     return {
         "schemaVersion": "AiJavaMyBatisDraftPack.v0.1",
@@ -884,6 +896,26 @@ def _ai_draft_pack_output_contract(stage: str) -> dict[str, Any]:
         ],
         "fileKeys": file_keys,
     }
+
+
+def _ai_draft_pack_stage_expected_inventory(
+    stage: str,
+    inventory: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    stage_artifacts = {
+        "dto_inventory": {"DTO_DRAFT"},
+        "dto_content": {"DTO_DRAFT"},
+        "service_content": {"SERVICE_DRAFT"},
+        "mapper_interface_content": {"MAPPER_INTERFACE"},
+        "mapper_xml_content": {"MAPPER_XML"},
+    }.get(stage)
+    if not stage_artifacts:
+        return [dict(item) for item in inventory]
+    return [
+        dict(item)
+        for item in inventory
+        if str(item.get("artifactType") or "") in stage_artifacts
+    ]
 
 
 def build_draft_pack_evidence_bundle(

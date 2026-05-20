@@ -1003,6 +1003,10 @@ def _ai_draft_pack_stage_trace_lines(context: GenerationContext) -> list[str]:
             continue
         failed_rule_ids = _sequence(component.get("failedRuleIds"))
         diagnostics = _mapping(component.get("failureDiagnostics") or {})
+        missing_files = _sequence(
+            diagnostics.get("missingExpectedStageFiles")
+            or component.get("missingExpectedStageFiles")
+        )
         stage_lines.append(
             "- "
             f"stage={_table_text(stage)} "
@@ -1011,7 +1015,52 @@ def _ai_draft_pack_stage_trace_lines(context: GenerationContext) -> list[str]:
             f"failedRuleIds={_refs(failed_rule_ids)} "
             f"failureStage={_table_text(component.get('failureStage') or diagnostics.get('failureStage') or '')} "
             f"errorCode={_table_text(component.get('errorCode') or diagnostics.get('errorCode') or '')}"
+            f" missingExpectedStageFileCount={_table_text(len(missing_files) or '')}"
         )
+        if missing_files:
+            summarized = [
+                f"{_table_text(_mapping(item).get('artifactType') or '')} "
+                f"{_table_text(_mapping(item).get('path') or '')} "
+                f"stage={_table_text(_mapping(item).get('owningStage') or '')}"
+                for item in missing_files[:20]
+                if isinstance(item, Mapping)
+            ]
+            stage_lines.append(
+                "- missing_expected_stage_files: "
+                f"{'; '.join(summarized) or 'REVIEW_REQUIRED'}"
+            )
+        floor_files = _sequence(component.get("files"))
+        if str(component.get("component") or "") == "ai_draft_pack_dto_content_floor":
+            stage_lines.append(
+                "- dto_content_floor: "
+                f"fileCount={_table_text(component.get('fileCount') or len(floor_files))}; "
+                f"reviewMarker={_table_text(component.get('reviewMarker') or 'REVIEW_REQUIRED')}"
+            )
+    root_diagnostics = _mapping(
+        trace.get("failureDiagnostics") or pack.get("failureDiagnostics") or {}
+    )
+    root_missing_files = _sequence(root_diagnostics.get("missingExpectedStageFiles"))
+    if root_missing_files:
+        summarized = [
+            f"{_table_text(_mapping(item).get('artifactType') or '')} "
+            f"{_table_text(_mapping(item).get('path') or '')} "
+            f"stage={_table_text(_mapping(item).get('owningStage') or '')}"
+            for item in root_missing_files[:20]
+            if isinstance(item, Mapping)
+        ]
+        stage_lines.append(
+            "- missing_expected_stage_files: "
+            f"{'; '.join(summarized) or 'REVIEW_REQUIRED'}"
+        )
+        root_targets = _sequence(
+            root_diagnostics.get("repairTargetStages")
+            or root_diagnostics.get("targetStages")
+        )
+        if root_targets:
+            stage_lines.append(
+                "- repair_routing: "
+                f"targetStages={_refs(root_targets)}; caveat=REVIEW_REQUIRED"
+            )
     validation = _mapping(trace.get("validation") or pack.get("validation") or {})
     failed_rules = _sequence(validation.get("failedRuleIds"))
     if failed_rules:

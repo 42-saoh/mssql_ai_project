@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Iterable, Mapping, Sequence
@@ -2505,6 +2506,19 @@ def ai_draft_pack_failure_diagnostics(
     if safe_findings:
         diagnostics["validationFindingCount"] = len(validation_findings or ())
         diagnostics["validationFindings"] = safe_findings
+    missing_files = _missing_expected_stage_files_from_ai_draft_findings(
+        validation_findings or ()
+    )
+    if missing_files:
+        diagnostics["missingExpectedStageFiles"] = missing_files
+        diagnostics["missingExpectedStageFileCount"] = len(missing_files)
+        diagnostics["repairTargetStages"] = sorted(
+            {
+                str(item.get("owningStage") or "")
+                for item in missing_files
+                if str(item.get("owningStage") or "").strip()
+            }
+        )
     if quality_report is not None:
         diagnostics["qualityFailedCheckCount"] = len(quality_report.failed_checks)
         diagnostics["qualityFailedRuleIds"] = list(
@@ -2574,6 +2588,63 @@ def _safe_ai_draft_validation_findings(findings: Sequence[str]) -> list[str]:
         text = str(finding)
         safe.append(text[:300])
     return safe
+
+
+def _missing_expected_stage_files_from_ai_draft_findings(
+    findings: Sequence[str],
+) -> list[dict[str, str]]:
+    parsed: list[dict[str, str]] = []
+    marker = "missing expected stage files:"
+    for finding in findings:
+        text = str(finding)
+        if marker not in text:
+            continue
+        payload = text.split(marker, 1)[1].strip()
+        if payload.endswith("."):
+            payload = payload[:-1]
+        try:
+            raw_items = json.loads(payload)
+        except json.JSONDecodeError:
+            raw_items = _legacy_missing_ai_draft_stage_files(payload)
+        if not isinstance(raw_items, Sequence) or isinstance(raw_items, str | bytes):
+            continue
+        for item in raw_items:
+            if isinstance(item, Mapping):
+                artifact_type = str(item.get("artifactType") or "")
+                path = str(item.get("path") or "")
+                class_name = str(item.get("className") or "")
+                owning_stage = str(item.get("owningStage") or "") or _ai_draft_owning_stage(
+                    artifact_type
+                )
+            else:
+                parts = str(item).split(maxsplit=1)
+                artifact_type = parts[0] if parts else ""
+                path = parts[1] if len(parts) > 1 else ""
+                class_name = path.rsplit("/", 1)[-1].removesuffix(".java").removesuffix(".xml")
+                owning_stage = _ai_draft_owning_stage(artifact_type)
+            if artifact_type or path:
+                parsed.append(
+                    {
+                        "artifactType": artifact_type,
+                        "path": path,
+                        "className": class_name,
+                        "owningStage": owning_stage,
+                    }
+                )
+    return parsed[:80]
+
+
+def _legacy_missing_ai_draft_stage_files(payload: str) -> list[str]:
+    return re.findall(r"([A-Z_]+\s+[^'\\],]+)", payload)
+
+
+def _ai_draft_owning_stage(artifact_type: str) -> str:
+    return {
+        ArtifactType.DTO_DRAFT.value: "dto_content",
+        ArtifactType.SERVICE_DRAFT.value: "service_content",
+        ArtifactType.MAPPER_INTERFACE.value: "mapper_interface_content",
+        ArtifactType.MAPPER_XML.value: "mapper_xml_content",
+    }.get(str(artifact_type or ""), "integration_quality_gate")
 
 
 def ai_draft_pack_allowed_evidence_refs(

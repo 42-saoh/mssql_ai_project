@@ -132,7 +132,7 @@ class AiJavaMyBatisDraftPackStageOutput(StrictModel):
     stage: str = Field(min_length=1)
     source_policy: str = Field(default="sanitized_facts_only", alias="sourcePolicy")
     production_ready: bool = Field(default=False, alias="productionReady")
-    files: list[AiJavaMyBatisDraftPackFile] = Field(min_length=1)
+    files: list[AiJavaMyBatisDraftPackFile] = Field(default_factory=list)
     evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
     review_markers: list[str] = Field(default_factory=list, alias="reviewMarkers")
     assumptions: list[str] = Field(default_factory=list)
