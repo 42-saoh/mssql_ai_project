@@ -450,6 +450,135 @@ def test_metadata_design_search_only_returns_search_result_and_schema_evidence(
         assert forbidden not in serialized
 
 
+def test_metadata_design_search_only_overrides_refine_conversation_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search_calls: list[dict[str, Any]] = []
+
+    def fake_search_metadata_objects(**kwargs: Any) -> MetadataSearchResponse:
+        search_calls.append(kwargs)
+        return MetadataSearchResponse.model_validate(
+            {
+                "dbProfileId": "master",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "limit": 2,
+                "sourceProfile": "master",
+                "sourceDatabase": "master",
+                "snapshotId": "search-snapshot-1",
+                "results": [
+                    {
+                        "objectIdentity": {
+                            "schema": "dbo",
+                            "name": "PPM_CUSTOMER_ORDER",
+                            "type": "TABLE",
+                        },
+                        "targetKey": "mssql://master/dbo/PPM_CUSTOMER_ORDER?type=TABLE",
+                        "sourceProfile": "master",
+                        "sourceDatabase": "master",
+                        "snapshotId": "search-snapshot-1",
+                        "evidenceRefs": [
+                            {
+                                "type": "MSSQL_METADATA",
+                                "objectRef": "dbo.PPM_CUSTOMER_ORDER",
+                                "locator": "fixture://metadata/search#PPM_CUSTOMER_ORDER",
+                                "snapshotId": "search-snapshot-1",
+                            }
+                        ],
+                        "caveats": [],
+                        "reviewRequired": False,
+                        "blockers": [],
+                    }
+                ],
+                "caveats": [],
+                "reviewRequired": False,
+                "blockers": [],
+            }
+        )
+
+    monkeypatch.setattr(
+        "api_app.metadata_design_service.search_metadata_objects",
+        fake_search_metadata_objects,
+    )
+    service = MetadataDesignChatService(model_gateway=FakeModelGateway())
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "search order",
+                "searchInputs": {
+                    "query": "order",
+                    "objectTypes": ["TABLE"],
+                    "limit": 2,
+                    "includeTableSchema": False,
+                },
+                "options": {
+                    "useLlmAnalysis": False,
+                    "intentMode": "SEARCH_ONLY",
+                    "conversationMode": "REFINE_CURRENT",
+                },
+            }
+        )
+    ).to_response()
+
+    assert response["resultKind"] == "SEARCH_RESULT"
+    assert response["interpretedIntent"]["intent"] == "SEARCH_METADATA"
+    assert response["searchResult"]["results"][0]["objectIdentity"]["name"] == (
+        "PPM_CUSTOMER_ORDER"
+    )
+    assert response.get("tableProposal") is None
+    assert search_calls and search_calls[0]["query"] == "order"
+
+
+def test_metadata_design_design_table_overrides_search_keywords(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = DesignSpyRegistry(empty=True)
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: registry,
+    )
+
+    def fail_search_metadata_objects(**_kwargs: Any) -> MetadataSearchResponse:
+        raise AssertionError("DESIGN_TABLE mode must not execute metadata search")
+
+    monkeypatch.setattr(
+        "api_app.metadata_design_service.search_metadata_objects",
+        fail_search_metadata_objects,
+    )
+    service = MetadataDesignChatService(model_gateway=FakeModelGateway())
+
+    response = service.design(
+        MetadataDesignRunRequest.model_validate(
+            {
+                "dbProfileId": "master",
+                "message": "search order metadata and create a table",
+                "designInputs": {
+                    "tableNameHint": "PPM_ORDER_REQ",
+                    "fields": [
+                        {"name": "customer name", "description": "Customer name"},
+                        {"name": "order date", "description": "Order date"},
+                    ],
+                },
+                "options": {
+                    "useLlmAnalysis": False,
+                    "intentMode": "DESIGN_TABLE",
+                    "conversationMode": "NEW_DESIGN",
+                    "generateDtoDraft": True,
+                },
+            }
+        )
+    ).to_response()
+
+    assert response["resultKind"] == "DESIGN_PROPOSAL"
+    assert response["interpretedIntent"]["intent"] == "CREATE_TABLE"
+    assert response["tableProposal"]["tableName"] == "PPM_ORDER_REQ"
+    assert response.get("searchResult") is None
+    assert response["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+    assert registry.calls
+
+
 def test_metadata_design_no_candidates_uses_policy_with_review_required(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

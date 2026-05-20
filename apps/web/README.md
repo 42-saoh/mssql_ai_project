@@ -16,6 +16,9 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 
 ## SP Request Progress
 
+- The SP Analysis target input keeps an inline procedure search combobox. It uses the Web
+  `/api/metadata/procedure-search` helper, which proxies the narrow public
+  `GET /api/v1/metadata/procedure-search` endpoint for PROCEDURE suggestions.
 - The single SP request form submits with `runAsync=true`, receives a `jobId` immediately, and
   redirects to `/jobs/[jobId]` while the API runs the workflow in the background.
 - `/jobs/[jobId]` shows `Estimated progress`, a status-based progress bar, and auto-refreshes every
@@ -47,8 +50,9 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 
 - Search now runs through the metadata design chat. The public Web proxy posts to
   `POST /api/metadata/design-runs`, which calls public
-  `POST /api/v1/metadata/design-runs` with `intentMode=SEARCH_ONLY` or AUTO-detected
-  search intent and then polls `GET /api/metadata/design-runs/{runId}`.
+  `POST /api/v1/metadata/design-runs` with the explicit Web work mode mapped to
+  `intentMode=SEARCH_ONLY` for search or `intentMode=DESIGN_TABLE` for table
+  design/refinement, then polls `GET /api/metadata/design-runs/{runId}`.
 - `Analyze metadata` is a client-side async action. It calls the internal Web route `POST /api/metadata/analysis-runs`, which proxies public `POST /api/v1/metadata/analysis-runs`; the client then polls `GET /api/metadata/analysis-runs/{runId}` until the public run reaches `SUCCEEDED` or `FAILED`.
 - The public analysis-run API uses durable platform storage when
   `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql` has been manually applied.
@@ -64,7 +68,11 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 ## Metadata Design Chat
 
 - `/metadata/design` submits natural-language table design and refinement messages to the Web proxy `POST /api/metadata/design-runs`, which calls public `POST /api/v1/metadata/design-runs`.
-- The visible form is chat-focused: metadata profile, `NEW_DESIGN`/`REFINE_CURRENT` mode, optional table name hint, search object type/limit controls, and message. The legacy field row UI is not rendered.
+- The visible form is chat-focused: metadata profile, explicit work mode (`Search metadata`,
+  `New table design`, or `Refine current design`), optional table name hint, search object
+  type/limit controls, and message. `/metadata/design?intent=search` starts in search mode,
+  and search results remain in search mode until the user chooses a table hint or switches modes.
+  The legacy field row UI is not rendered.
 - The client polls `GET /api/metadata/design-runs/{runId}` and can reopen a durable thread with `GET /api/metadata/design-conversations/{conversationId}`.
 - Search results render object identity cards plus TABLE schema evidence in `relatedMetadata`.
   Design proposal results render interpreted intent, applied changes, related metadata candidates,

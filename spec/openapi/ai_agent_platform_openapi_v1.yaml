@@ -408,6 +408,59 @@ paths:
           $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/procedure-search:
+    get:
+      tags: [metadata]
+      summary: Search stored procedure identities for SP Analysis autocomplete.
+      operationId: searchProcedures
+      description: |
+        Returns a narrow, read-only PROCEDURE suggestion list for the SP Analysis target
+        input. General metadata search remains available through metadata design chat
+        runs; this endpoint does not expose table/view/function search, row data, SQL/SP
+        definitions, procedure execution output, DDL/DML controls, secrets, raw prompts,
+        or raw provider traces.
+      parameters:
+        - name: dbProfileId
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ppm
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ""
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Stored procedure autocomplete suggestions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataProcedureSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/metadata/analyze:
     post:
       tags: [metadata]
@@ -1530,6 +1583,38 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetadataSearchBlocker"
+    MetadataProcedureSearchSuggestion:
+      type: object
+      required:
+        - schema
+        - name
+        - sourceDatabase
+        - reviewRequired
+        - caveats
+      properties:
+        schema:
+          type: string
+        name:
+          type: string
+        targetKey:
+          type: string
+          description: Canonical target key for this stored procedure identity.
+        sourceDatabase:
+          type: string
+        reviewRequired:
+          type: boolean
+        caveats:
+          type: array
+          items:
+            type: string
+    MetadataProcedureSearchResponse:
+      type: object
+      required: [suggestions]
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataProcedureSearchSuggestion"
     MetadataAnalysisOptions:
       type: object
       properties:

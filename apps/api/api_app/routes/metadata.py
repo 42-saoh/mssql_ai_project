@@ -32,6 +32,7 @@ from api_app.metadata_service import (
     invoke_metadata_tool,
     list_safe_metadata_profiles,
     list_safe_metadata_tools,
+    search_metadata_objects,
 )
 from api_app.schemas import (
     MetadataAnalysisRequest,
@@ -40,10 +41,12 @@ from api_app.schemas import (
     MetadataDesignConversation,
     MetadataDesignRunRequest,
     MetadataDesignRunStatus,
+    MetadataProcedureSearchResponse,
+    MetadataProcedureSearchSuggestion,
     MetadataToolInvokeRequest,
     MetadataToolInvokeResponse,
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, Path, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, status
 from mssql_mcp_app.errors import MetadataToolError
 
 router = APIRouter(prefix="/api/v1/metadata", tags=["metadata"])
@@ -63,6 +66,61 @@ def list_metadata_tools() -> dict:
     return {
         "tools": [tool.to_response() for tool in list_safe_metadata_tools()],
     }
+
+
+@router.get("/procedure-search", response_model=MetadataProcedureSearchResponse)
+def search_procedures(
+    db_profile_id: Annotated[
+        str,
+        Query(alias="dbProfileId", min_length=1),
+    ] = "ppm",
+    query: Annotated[str, Query()] = "",
+    limit: Annotated[int, Query()] = 20,
+) -> MetadataProcedureSearchResponse:
+    normalized_query = query.strip()
+    if not normalized_query:
+        return MetadataProcedureSearchResponse()
+
+    try:
+        search_response = search_metadata_objects(
+            db_profile_id=db_profile_id.strip(),
+            query=normalized_query,
+            object_types=("PROCEDURE",),
+            limit=_clamp_procedure_search_limit(limit),
+        )
+    except MetadataSearchDependencyError as exc:
+        raise api_http_exception(
+            status_code=exc.status_code,
+            detail=exc.detail,
+            code=exc.code,
+        ) from exc
+    except MetadataToolError as exc:
+        raise api_http_exception(
+            status_code=exc.http_status,
+            detail=exc.message,
+            code=exc.code,
+        ) from exc
+    except ValueError as exc:
+        raise api_http_exception(
+            status_code=422,
+            detail=str(exc),
+            code="VALIDATION_ERROR",
+        ) from exc
+
+    return MetadataProcedureSearchResponse(
+        suggestions=[
+            MetadataProcedureSearchSuggestion(
+                schema=result.object_identity.schema_name,
+                name=result.object_identity.name,
+                targetKey=result.target_key,
+                sourceDatabase=result.source_database,
+                reviewRequired=result.review_required,
+                caveats=result.caveats,
+            )
+            for result in search_response.results
+            if result.object_identity.type == "PROCEDURE"
+        ]
+    )
 
 
 @router.post("/tools/{toolName}/invoke", response_model=MetadataToolInvokeResponse)
@@ -182,6 +240,10 @@ def get_metadata_analysis_run(
             code="METADATA_ANALYSIS_RUN_NOT_FOUND",
         )
     return run
+
+
+def _clamp_procedure_search_limit(value: int) -> int:
+    return min(max(value, 1), 100)
 
 
 @router.post(

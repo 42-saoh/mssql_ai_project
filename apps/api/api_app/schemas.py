@@ -285,6 +285,19 @@ class MetadataSearchResponse(ApiModel):
     blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
 
 
+class MetadataProcedureSearchSuggestion(ApiModel):
+    schema_name: str = Field(alias="schema")
+    name: str
+    target_key: str | None = Field(default=None, alias="targetKey")
+    source_database: str = Field(alias="sourceDatabase")
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    caveats: list[str] = Field(default_factory=list)
+
+
+class MetadataProcedureSearchResponse(ApiModel):
+    suggestions: list[MetadataProcedureSearchSuggestion] = Field(default_factory=list)
+
+
 class MetadataAnalysisOptions(ApiModel):
     use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
     use_ai_tool_orchestration: bool = Field(

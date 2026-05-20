@@ -284,6 +284,25 @@ export interface MetadataSearchResponse {
   blockers: MetadataSearchBlocker[];
 }
 
+export interface MetadataProcedureSearchRequest {
+  dbProfileId?: string;
+  query?: string;
+  limit?: number;
+}
+
+export interface MetadataProcedureSearchSuggestion {
+  schema: string;
+  name: string;
+  targetKey?: string | null;
+  sourceDatabase: string;
+  reviewRequired: boolean;
+  caveats: string[];
+}
+
+export interface MetadataProcedureSearchResponse {
+  suggestions: MetadataProcedureSearchSuggestion[];
+}
+
 export interface MetadataAnalysisOptions {
   useLlmAnalysis?: boolean;
   useAiToolOrchestration?: boolean;

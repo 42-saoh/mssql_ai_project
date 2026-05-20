@@ -80,6 +80,7 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "RequestedOutputType" in data["components"]["schemas"]
     assert "WorkflowStepType" in data["components"]["schemas"]
     assert "/api/v1/metadata/search" not in data["paths"]
+    assert "/api/v1/metadata/procedure-search" in data["paths"]
     assert "/api/v1/metadata/analyze" in data["paths"]
     assert "/api/v1/metadata/analysis-runs" in data["paths"]
     assert "/api/v1/metadata/analysis-runs/{runId}" in data["paths"]
@@ -88,6 +89,7 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "/api/v1/metadata/design-conversations/{conversationId}" in data["paths"]
     assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
+    assert "MetadataProcedureSearchResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisRunStatus" in data["components"]["schemas"]
     assert "MetadataDesignRunRequest" in data["components"]["schemas"]
@@ -127,6 +129,11 @@ def test_openapi_metadata_search_is_integrated_into_design_run_contract() -> Non
     schemas = openapi["components"]["schemas"]
 
     assert "/api/v1/metadata/search" not in openapi["paths"]
+    procedure_search = openapi["paths"]["/api/v1/metadata/procedure-search"]["get"]
+    assert procedure_search["operationId"] == "searchProcedures"
+    assert procedure_search["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataProcedureSearchResponse"
+    }
     assert schemas["MetadataSearchObjectType"]["enum"] == [
         "PROCEDURE",
         "TABLE",
@@ -186,8 +193,24 @@ def test_openapi_metadata_search_is_integrated_into_design_run_contract() -> Non
     response_properties = set(schemas["MetadataSearchResponse"]["properties"])
     result_properties = set(result_schema["properties"])
     identity_properties = set(schemas["MetadataObjectIdentity"]["properties"])
+    procedure_search_response = schemas["MetadataProcedureSearchResponse"]
+    procedure_suggestion = schemas["MetadataProcedureSearchSuggestion"]
+    assert procedure_search_response["properties"]["suggestions"]["items"] == {
+        "$ref": "#/components/schemas/MetadataProcedureSearchSuggestion"
+    }
+    assert set(procedure_suggestion["properties"]) == {
+        "schema",
+        "name",
+        "targetKey",
+        "sourceDatabase",
+        "reviewRequired",
+        "caveats",
+    }
     assert forbidden_response_fields.isdisjoint(
-        response_properties | result_properties | identity_properties
+        response_properties
+        | result_properties
+        | identity_properties
+        | set(procedure_suggestion["properties"])
     )
 
 

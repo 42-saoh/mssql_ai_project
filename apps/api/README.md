@@ -279,7 +279,8 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
 
 ## Metadata design search
 
-- Public metadata search now runs through `POST /api/v1/metadata/design-runs` as `resultKind=SEARCH_RESULT`; the removed `GET` search route returns 404.
+- General metadata search runs through `POST /api/v1/metadata/design-runs` as `resultKind=SEARCH_RESULT`; the removed `GET /api/v1/metadata/search` route still returns 404.
+- SP Analysis procedure-name autocomplete uses the narrow public `GET /api/v1/metadata/procedure-search` route. It returns PROCEDURE suggestions only and internally reuses the read-only `search_metadata_objects` helper.
 - API 는 MSSQL MCP registry boundary 를 통해 metadata inventory tool 을 호출한다. 기본 테스트
   모드는 fixture-backed repository 를 사용하고, `MSSQL_ENABLE_LIVE_METADATA=1` 일 때는
   env-gated live metadata repository 를 사용한다.

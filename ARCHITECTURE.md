@@ -48,6 +48,12 @@ The result contains `createTableScriptPreview` and an optional `DTO_DRAFT` previ
 manual-review preview only: it is not persisted as an artifact, does not revive a retired DDL output
 contract, and is never applied by the platform.
 
+SP Analysis procedure-name autocomplete uses a separate narrow public
+`GET /api/v1/metadata/procedure-search` endpoint. It returns only sanitized PROCEDURE identity
+suggestions from the same read-only metadata search helper; it does not restore general
+`GET /api/v1/metadata/search`, expose table/view/function search, expand the public MCP invoke
+allowlist, or authorize row data, procedure execution, DDL/DML, apply, deploy, or publish.
+
 ## P40 Metadata Design Natural-Language Chat Architecture
 
 P40 keeps the P38 endpoints and v10 `METADATA_DESIGN_RUNS` JSON storage, and adds
@@ -752,7 +758,7 @@ packages/templates
 - P23/P26 LLM-assisted SP analysis quality eval 은 simple/medium/complex synthetic fixtures 를 `FakeModelGateway` 로 fixture-first scoring 한다. API/Web live 기본 profile 은 `openai_sp_semantic_analysis` / `gpt-5.5` 이고, `openai_fast_test` 는 기본 `gpt-5-nano` 에서 `OPENAI_MODEL_FAST_TEST` 로 optional live confidence 모델을 바꿀 수 있다. Optional live OpenAI quality gate 는 confidence signal 이며 production readiness 기준이 아니다. Live 품질 gate 실패는 P24 guide generation failure 가 아니라 P23/P26 semantic-analysis confidence failure 로 해석한다.
 - P24 SP migration guide quality eval 은 sanitized simple/medium/complex fixtures 를 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` draft artifact type 으로 렌더링하고 `evaluate_p24_migration_guide_quality` 로 점수화한다. P24 v0.3 기준 출력은 내부 section id 를 heading 으로 노출하지 않고 한국어 사용자-facing 제목과 숨김 section anchor, 개요/기능/의존성/DML/phase 표를 사용한다. 새 persisted artifact type, API/Web/DB schema 변경, live DB access 는 없으며 Java/MyBatis 는 `draft_only_readiness_notes` 경계에 남긴다.
 - Workflow orchestrator 는 metadata 수집과 deterministic analysis 이후 bounded MCP metadata tool orchestration, bounded platform context tool orchestration, LLM semantic analysis 를 기본 실행한다. `useAiToolOrchestration=true` 와 `usePlatformToolOrchestration=true` 가 기본값이며 `useLlmAnalysis=false` 이면 둘 다 자동 비활성화된다. MCP planner 는 active/read-only MCP catalog 전체를 후보로 보지만, 실행은 내부 registry 와 deterministic policy gate 로만 수행하고 public invoke API allowlist 는 확장하지 않는다. Platform planner 는 `spec/agent-tools/platform_ai_tool_catalog.yaml` 의 internal/read-only tool 만 후보로 보며 current job/db profile/target scope 를 벗어나지 않는다. 수집 결과는 sanitized `aiToolEvidence`, `platformToolEvidence`, `mcp.<toolName>.<hash>`, `platform.<toolName>.<hash>` deterministic fact id 로 semantic prompt 에 전달된다. P33 이후 MCP fact id 는 volatile `snapshotId`/`collectedAt` 이 아니라 sanitized content 와 argument hash 기반 `contentHash` 로 안정화하며, planner metrics 는 cache hit/miss count 를 포함한다. LLM output 은 `business_rules`, `modernization_points`, `risk_flags`, `review_markers`, `conversion_guidance`, `migration_guide_insights`, `assumptions` 보강으로 제한하고, LLM inference evidence 는 validation 에서 `REVIEW_REQUIRED` 로 유지한다.
-- Metadata analysis은 `POST /api/v1/metadata/analyze`를 유지한다. Metadata search는 공개 `GET` route가 아니라 `POST /api/v1/metadata/design-runs` chat run의 `resultKind=SEARCH_RESULT`로 통합되며,
+- Metadata analysis은 `POST /api/v1/metadata/analyze`를 유지한다. General metadata search는 공개 `GET` route가 아니라 `POST /api/v1/metadata/design-runs` chat run의 `resultKind=SEARCH_RESULT`로 통합되며, SP Analysis procedure autocomplete만 좁은 `GET /api/v1/metadata/procedure-search` route를 사용한다.
   analyze API 안에서만 bounded AI tool planner 를 기본 실행한다. 이 경로도 active/read-only MCP
   catalog 전체를 후보로 보되 내부 registry 로만 실행하며, public invoke API allowlist 는 계속
   `get_dependency_closure`, `resolve_dependency_reference` 두 개로 제한한다. 결과는 sanitized

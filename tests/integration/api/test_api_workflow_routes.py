@@ -19,8 +19,10 @@ from api_app.dependencies import (
 from api_app.main import app
 from api_app.metadata_analysis_runs import execute_metadata_analysis_run
 from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.metadata_service import MetadataSearchDependencyError
 from api_app.recovery_worker import run_recovery_once
 from api_app.repositories import KnowledgePersistenceError, ValidationReportRecord
+from api_app.schemas import MetadataSearchResponse
 from api_app.workflow import (
     AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
     OPERATION_MODEL_AGENT_TYPE,
@@ -1139,6 +1141,122 @@ def test_metadata_search_route_is_removed(client: TestClient) -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_metadata_procedure_search_route_returns_autocomplete_suggestions(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fake_search_metadata_objects(**kwargs: Any) -> MetadataSearchResponse:
+        calls.append(kwargs)
+        return MetadataSearchResponse.model_validate(
+            {
+                "dbProfileId": kwargs["db_profile_id"],
+                "query": kwargs["query"],
+                "objectTypes": ["PROCEDURE"],
+                "limit": kwargs["limit"],
+                "sourceProfile": kwargs["db_profile_id"],
+                "sourceDatabase": "PPM",
+                "results": [
+                    {
+                        "objectIdentity": {
+                            "schema": "dbo",
+                            "name": "usp_ProcessOrderBatch",
+                            "type": "PROCEDURE",
+                        },
+                        "targetKey": "mssql://ppm/dbo/usp_ProcessOrderBatch?type=PROCEDURE",
+                        "sourceProfile": kwargs["db_profile_id"],
+                        "sourceDatabase": "PPM",
+                        "evidenceRefs": [],
+                        "caveats": [],
+                        "reviewRequired": False,
+                        "blockers": [],
+                    }
+                ],
+                "caveats": [],
+                "reviewRequired": False,
+                "blockers": [],
+            }
+        )
+
+    monkeypatch.setattr(
+        "api_app.routes.metadata.search_metadata_objects",
+        fake_search_metadata_objects,
+    )
+
+    response = client.get(
+        "/api/v1/metadata/procedure-search",
+        params={"dbProfileId": "ppm", "query": "order", "limit": "250"},
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "db_profile_id": "ppm",
+            "query": "order",
+            "object_types": ("PROCEDURE",),
+            "limit": 100,
+        }
+    ]
+    assert response.json()["suggestions"] == [
+        {
+            "schema": "dbo",
+            "name": "usp_ProcessOrderBatch",
+            "targetKey": "mssql://ppm/dbo/usp_ProcessOrderBatch?type=PROCEDURE",
+            "sourceDatabase": "PPM",
+            "reviewRequired": False,
+            "caveats": [],
+        }
+    ]
+
+
+def test_metadata_procedure_search_route_empty_query_is_empty(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_search_metadata_objects(**_kwargs: Any) -> MetadataSearchResponse:
+        raise AssertionError("empty procedure search must not call metadata search")
+
+    monkeypatch.setattr(
+        "api_app.routes.metadata.search_metadata_objects",
+        fail_search_metadata_objects,
+    )
+
+    response = client.get(
+        "/api/v1/metadata/procedure-search",
+        params={"dbProfileId": "ppm", "query": "   "},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"suggestions": []}
+
+
+def test_metadata_procedure_search_route_preserves_dependency_errors(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_search_metadata_objects(**_kwargs: Any) -> MetadataSearchResponse:
+        raise MetadataSearchDependencyError(
+            code="LIVE_METADATA_UNAVAILABLE",
+            detail="Live metadata unavailable.",
+            status_code=503,
+        )
+
+    monkeypatch.setattr(
+        "api_app.routes.metadata.search_metadata_objects",
+        fail_search_metadata_objects,
+    )
+
+    response = client.get(
+        "/api/v1/metadata/procedure-search",
+        params={"dbProfileId": "ppm", "query": "order"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "LIVE_METADATA_UNAVAILABLE"
+    assert response.json()["detail"] == "Live metadata unavailable."
 
 
 def test_metadata_design_search_run_returns_read_only_identity_response(

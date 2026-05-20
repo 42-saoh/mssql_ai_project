@@ -11,6 +11,7 @@ import type {
 
 const DESIGN_TIMEOUT_MS = 120_000;
 const DESIGN_POLL_INTERVAL_MS = 1_500;
+const SEARCH_MESSAGE_PLACEHOLDER = "search order, TB_ORDER, or dbo.PPM_CUSTOMER_ORDER";
 const NEW_DESIGN_MESSAGE_PLACEHOLDER =
   "고객명, 주소, 주문일이 있는 주문 요청 테이블을 만들어줘.";
 const REFINE_CURRENT_MESSAGE_PLACEHOLDER =
@@ -21,7 +22,17 @@ interface DesignError {
   message: string;
 }
 
-type ConversationMode = "NEW_DESIGN" | "REFINE_CURRENT";
+export type MetadataDesignWorkMode =
+  | "SEARCH_METADATA"
+  | "NEW_TABLE_DESIGN"
+  | "REFINE_CURRENT_DESIGN";
+
+type MetadataDesignIntentMode = NonNullable<
+  MetadataDesignRunRequest["options"]
+>["intentMode"];
+type MetadataDesignConversationMode = NonNullable<
+  MetadataDesignRunRequest["options"]
+>["conversationMode"];
 
 const objectTypeOptions: MetadataSearchObjectType[] = [
   "PROCEDURE",
@@ -32,9 +43,11 @@ const objectTypeOptions: MetadataSearchObjectType[] = [
 
 export function MetadataDesignChat({
   defaultDbProfileId,
+  initialWorkMode = "NEW_TABLE_DESIGN",
   profiles,
 }: Readonly<{
   defaultDbProfileId: string;
+  initialWorkMode?: MetadataDesignWorkMode;
   profiles: MetadataProfile[];
 }>) {
   const [dbProfileId, setDbProfileId] = useState(defaultDbProfileId);
@@ -43,8 +56,7 @@ export function MetadataDesignChat({
   const [searchLimit, setSearchLimit] = useState(20);
   const [searchObjectTypes, setSearchObjectTypes] =
     useState<MetadataSearchObjectType[]>(objectTypeOptions);
-  const [conversationMode, setConversationMode] =
-    useState<ConversationMode>("NEW_DESIGN");
+  const [workMode, setWorkMode] = useState<MetadataDesignWorkMode>(initialWorkMode);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [runs, setRuns] = useState<MetadataDesignRunStatus[]>([]);
   const [run, setRun] = useState<MetadataDesignRunStatus | null>(null);
@@ -53,10 +65,9 @@ export function MetadataDesignChat({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
-  const messagePlaceholder =
-    conversationMode === "REFINE_CURRENT"
-      ? REFINE_CURRENT_MESSAGE_PLACEHOLDER
-      : NEW_DESIGN_MESSAGE_PLACEHOLDER;
+  const conversationMode = conversationModeForWorkMode(workMode);
+  const intentMode = intentModeForWorkMode(workMode);
+  const messagePlaceholder = placeholderForWorkMode(workMode);
   const canSubmit = !isLoading && message.trim().length > 0;
 
   const request = useMemo<MetadataDesignRunRequest>(
@@ -80,13 +91,14 @@ export function MetadataDesignChat({
         maxCandidates: 5,
         generateDtoDraft: true,
         conversationMode,
-        intentMode: "AUTO",
+        intentMode,
       },
     }),
     [
       conversationId,
       conversationMode,
       dbProfileId,
+      intentMode,
       message,
       searchLimit,
       searchObjectTypes,
@@ -145,7 +157,11 @@ export function MetadataDesignChat({
       if (nextRun.status === "SUCCEEDED" && nextRun.result) {
         setRun(nextRun);
         setRuns((current) => [...current, nextRun]);
-        setConversationMode("REFINE_CURRENT");
+        setWorkMode(
+          nextRun.result.resultKind === "SEARCH_RESULT"
+            ? "SEARCH_METADATA"
+            : "REFINE_CURRENT_DESIGN",
+        );
         setMessage("");
       } else {
         throw {
@@ -227,13 +243,16 @@ export function MetadataDesignChat({
                 </select>
               </label>
               <label>
-                <span>Conversation mode</span>
+                <span>Work mode</span>
                 <select
-                  value={conversationMode}
-                  onChange={(event) => setConversationMode(event.target.value as ConversationMode)}
+                  value={workMode}
+                  onChange={(event) =>
+                    setWorkMode(event.target.value as MetadataDesignWorkMode)
+                  }
                 >
-                  <option value="NEW_DESIGN">New design</option>
-                  <option value="REFINE_CURRENT">Refine current</option>
+                  <option value="SEARCH_METADATA">Search metadata</option>
+                  <option value="NEW_TABLE_DESIGN">New table design</option>
+                  <option value="REFINE_CURRENT_DESIGN">Refine current design</option>
                 </select>
               </label>
               <label>
@@ -304,7 +323,7 @@ export function MetadataDesignChat({
             run={run}
             onUseTableHint={(tableName) => {
               setTableNameHint(tableName);
-              setConversationMode("NEW_DESIGN");
+              setWorkMode("NEW_TABLE_DESIGN");
               setMessage(`Create a table design using ${tableName} as metadata reference.`);
             }}
           />
@@ -669,6 +688,26 @@ function normalizeError(error: unknown): DesignError {
     return { code: "METADATA_DESIGN_BLOCKED", message: error.message };
   }
   return { code: "METADATA_DESIGN_BLOCKED", message: "Metadata design could not run." };
+}
+
+function conversationModeForWorkMode(
+  workMode: MetadataDesignWorkMode,
+): MetadataDesignConversationMode {
+  return workMode === "REFINE_CURRENT_DESIGN" ? "REFINE_CURRENT" : "NEW_DESIGN";
+}
+
+function intentModeForWorkMode(workMode: MetadataDesignWorkMode): MetadataDesignIntentMode {
+  return workMode === "SEARCH_METADATA" ? "SEARCH_ONLY" : "DESIGN_TABLE";
+}
+
+function placeholderForWorkMode(workMode: MetadataDesignWorkMode): string {
+  if (workMode === "SEARCH_METADATA") {
+    return SEARCH_MESSAGE_PLACEHOLDER;
+  }
+  if (workMode === "REFINE_CURRENT_DESIGN") {
+    return REFINE_CURRENT_MESSAGE_PLACEHOLDER;
+  }
+  return NEW_DESIGN_MESSAGE_PLACEHOLDER;
 }
 
 function clampSearchLimit(value: string): number {

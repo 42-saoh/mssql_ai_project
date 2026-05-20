@@ -183,6 +183,10 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert 'href="/metadata/design"' in layout
     assert "MetadataDesignChat" in page
     assert "api.listMetadataProfiles()" in page
+    assert "searchParams" in page
+    assert "initialWorkModeForIntent(firstParam(params.intent))" in page
+    assert 'value === "search" ? "SEARCH_METADATA" : "NEW_TABLE_DESIGN"' in page
+    assert "initialWorkMode={initialWorkMode}" in page
     assert 'fetch("/api/metadata/design-runs"' in component
     assert "/api/metadata/design-runs/${encodeURIComponent(nextRun.runId)}" in component
     assert "metadata-chat-shell" in component
@@ -195,12 +199,22 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert component.index("metadata-chat-composer") < component.index(
         "metadata-design-output-stack"
     )
-    assert "Conversation mode" in component
+    assert "Work mode" in component
+    assert "Search metadata" in component
+    assert "New table design" in component
+    assert "Refine current design" in component
+    assert "conversationModeForWorkMode" in component
+    assert "intentModeForWorkMode" in component
     assert "conversationMode" in component
     assert "Search limit" in component
     assert "Search object types" in component
     assert "searchInputs" in component
-    assert "intentMode: \"AUTO\"" in component
+    assert "intentMode," in component
+    assert '"SEARCH_ONLY"' in component
+    assert '"DESIGN_TABLE"' in component
+    assert 'nextRun.result.resultKind === "SEARCH_RESULT"' in component
+    assert '"REFINE_CURRENT_DESIGN"' in component
+    assert 'setWorkMode("NEW_TABLE_DESIGN")' in component
     assert "SEARCH_RESULT" in component
     assert "searchResult" in component
     assert "Use as table hint" in component
@@ -272,6 +286,12 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     job_auto_refresh = (WEB_ROOT / "components" / "job-auto-refresh.tsx").read_text(
         encoding="utf-8"
     )
+    procedure_search_route = (
+        WEB_ROOT / "app" / "api" / "metadata" / "procedure-search" / "route.ts"
+    ).read_text(encoding="utf-8")
+    portal_api = (WEB_ROOT / "lib" / "api" / "portal-api.ts").read_text(
+        encoding="utf-8"
+    )
     http_client = (WEB_ROOT / "lib" / "api" / "http-client.ts").read_text(encoding="utf-8")
     source = _web_source()
 
@@ -307,14 +327,19 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert 'name="name" readOnly type="hidden"' in source
     assert "SingleProcedureTargetInput" in request_form
     assert "BatchProcedureTargetsInput" in request_form
-    assert "ProcedureTargetInput" in source
+    assert "ProcedureSearchCombobox" in source
+    assert 'fetch(`/api/metadata/procedure-search?' in source
     assert "/api/metadata/search" not in source
     assert "searchMetadataObjects" not in source
-    assert "Use Metadata design chat to search before submitting." in source
+    assert "api.searchProcedures({ dbProfileId, query, limit })" in procedure_search_route
+    assert "submitMetadataDesignRun" not in procedure_search_route
+    assert "getMetadataDesignRun" not in procedure_search_route
+    assert "searchProcedures" in portal_api
+    assert "/api/v1/metadata/procedure-search" in http_client
     assert "Type at least 2 characters." not in source
     assert "field-code--empty" in source
     assert "Add to batch" in source
-    assert "Type and add PROCEDURE targets one at a time." in source
+    assert "Search and add PROCEDURE targets one at a time." in source
     assert "required" in _form_control_block(source, "batchTargets")
     assert not (WEB_ROOT / "app" / "api" / "metadata" / "search" / "route.ts").exists()
     global_css = (WEB_ROOT / "app" / "globals.css").read_text(encoding="utf-8")

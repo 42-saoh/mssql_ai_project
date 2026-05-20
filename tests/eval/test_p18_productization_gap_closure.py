@@ -100,6 +100,7 @@ def test_p18b_web_http_and_auth_boundaries_are_explicit() -> None:
         "/api/v1/artifacts/",
         "/validation",
         "/api/v1/metadata/db-profiles",
+        "/api/v1/metadata/procedure-search",
         "/api/v1/metadata/design-runs",
         "/api/v1/registry/versions",
     )
