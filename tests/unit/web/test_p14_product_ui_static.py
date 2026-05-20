@@ -146,6 +146,48 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert "dependencyClosure.data.unresolved" in smoke
 
 
+def test_metadata_search_results_use_business_labels_and_modal_contract() -> None:
+    search_page = (WEB_ROOT / "app" / "metadata" / "search" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    results = (WEB_ROOT / "components" / "metadata-search-results.tsx").read_text(
+        encoding="utf-8"
+    )
+    modal = (WEB_ROOT / "components" / "metadata-table-detail-modal.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "MetadataSearchResults" in search_page
+    assert "formatTableDisplayName" in results
+    assert "formatColumnDisplayName" in results
+    assert "formatParentTableDisplayName" in results
+    assert "설명 없음" in results
+    assert "metadata-result-button" in results
+    assert "setSelectedTable" in results
+    assert "MetadataTableDetailModal" in results
+
+    assert 'role="dialog"' in modal
+    assert 'aria-modal="true"' in modal
+    assert "aria-labelledby" in modal
+    assert "Escape" in modal
+    assert "필드명" in modal
+    assert "필드 디스크립션" in modal
+    assert "타입" in modal
+    assert "상세 필드 정보 없음" in modal
+
+    forbidden_result_display_terms = (
+        "targetKey",
+        "evidenceRefs",
+        "snapshotId",
+        "sourceProfile",
+        "sourceDatabase",
+        "evidence.locator",
+    )
+    for term in forbidden_result_display_terms:
+        assert term not in results
+        assert term not in modal
+
+
 def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     layout = (WEB_ROOT / "app" / "layout.tsx").read_text(encoding="utf-8")
     page = (WEB_ROOT / "app" / "metadata" / "design" / "page.tsx").read_text(
@@ -186,6 +228,8 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert 'href="/metadata/design"' in layout
     assert "MetadataDesignChat" in page
     assert "api.listMetadataProfiles()" in page
+    assert "DEFAULT_METADATA_PROFILE" in page
+    assert "defaultDbProfileId={DEFAULT_METADATA_PROFILE}" in page
     assert "searchParams" not in page
     assert "initialWorkMode" not in page
     assert 'fetch("/api/metadata/design-runs"' in component
@@ -212,13 +256,28 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert "searchResult" not in component
     assert "Use as table hint" not in component
     assert "MetadataEvidenceCandidates" in component
+    assert "DEFAULT_METADATA_PROFILE" in component
+    assert "TABLE_NAME_HINT_PLACEHOLDER" in component
     assert 'const [message, setMessage] = useState("")' in component
+    assert 'const [tableNameHint, setTableNameHint] = useState("")' in component
+    assert 'useState("PPM_ORDER_REQ")' not in component
     assert "messagePlaceholder" in component
     assert "placeholder={messagePlaceholder}" in component
+    assert "placeholder={TABLE_NAME_HINT_PLACEHOLDER}" in component
+    assert "dbProfileId: DEFAULT_METADATA_PROFILE" in component
+    assert "aria-readonly" in component
+    assert "Reset" in component
     assert "const canSubmit = !isLoading && message.trim().length > 0" in component
     assert "disabled={!canSubmit}" in component
     assert "interpretedIntent" in component
     assert "appliedChanges" in component
+    assert "originalMappings" in component
+    assert "editableMappings" in component
+    assert "validateEditableMappings" in component
+    assert "Regenerate previews" in component
+    assert "buildRegeneratedPreview" in component
+    assert "escapeSqlUnicodeLiteral" in component
+    assert "MS_Description" in component
     assert "createTableScriptPreview" in component
     assert "Download SQL preview" in component
     assert "Download DTO draft" in component
@@ -237,6 +296,9 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert "grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr)" not in styles
     assert ".metadata-chat-layout" not in styles
     assert "api.submitMetadataDesignRun(payload)" in submit_route
+    assert "DEFAULT_METADATA_PROFILE" in submit_route
+    assert "dbProfileId: DEFAULT_METADATA_PROFILE" in submit_route
+    assert "tableNameHint: tableNameHint || undefined" in submit_route
     assert "conversationMode: request.options?.conversationMode ?? \"NEW_DESIGN\"" in submit_route
     assert "intentMode" not in submit_route
     assert "includeTableSchema" not in submit_route
@@ -549,6 +611,9 @@ def test_validation_and_metadata_caveat_ui_avoids_false_error_states() -> None:
     metadata_search = (WEB_ROOT / "app" / "metadata" / "search" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    metadata_search_results = (
+        WEB_ROOT / "components" / "metadata-search-results.tsx"
+    ).read_text(encoding="utf-8")
     metadata_design = (WEB_ROOT / "components" / "metadata-design-chat.tsx").read_text(
         encoding="utf-8"
     )
@@ -568,10 +633,10 @@ def test_validation_and_metadata_caveat_ui_avoids_false_error_states() -> None:
     assert "displayCaveatText(item)" in artifact_preview
 
     assert "api.searchMetadataObjects" in metadata_search
-    assert "splitMetadataBlockers(response.blockers)" in metadata_search
+    assert "splitMetadataBlockers(response.blockers)" in metadata_search_results
     assert "searchResult" not in metadata_design
     assert "Evidence bound" in metadata_design
-    assert "metadataCaveatMessages(response.caveats, caveatBlockers)" in metadata_search
+    assert "metadataCaveatMessages(response.caveats, caveatBlockers)" in metadata_search_results
     assert "REVIEW_REQUIRED" in metadata_design
 
     assert "DEPENDENCY_METADATA_INCOMPLETE" in display_helpers

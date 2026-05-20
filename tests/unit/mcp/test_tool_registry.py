@@ -195,9 +195,60 @@ def test_fixture_metadata_object_search_returns_identity_only_results() -> None:
     assert {"PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"} <= result_types
     assert data["blockers"][0]["code"] == "DEPENDENCY_METADATA_INCOMPLETE"
     assert all(result["evidenceRefs"] for result in data["results"])
+    table_result = next(
+        result
+        for result in data["results"]
+        if result["objectIdentity"] == {
+            "schema": "dbo",
+            "name": "TB_ORDER",
+            "type": "TABLE",
+        }
+    )
+    assert table_result["description"] == (
+        "Synthetic order header table used for metadata-only MCP tests."
+    )
+    assert table_result["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
+    assert {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    } in table_result["columns"]
+    column_result = next(
+        result
+        for result in data["results"]
+        if result["objectIdentity"] == {
+            "schema": "dbo",
+            "name": "TB_ORDER.ORDER_DATE",
+            "type": "COLUMN",
+        }
+    )
+    assert column_result["description"] == "Date when the synthetic order was placed."
+    assert column_result["dataType"] == "DATE"
+    assert column_result["column"] == {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    }
+    assert column_result["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
 
     serialized = str(data).lower()
-    for forbidden in ("rowdata", "row_data", "create procedure", "create view", "create function"):
+    for forbidden in (
+        "rowdata",
+        "row_data",
+        "definition",
+        "sqltext",
+        "create procedure",
+        "create view",
+        "create function",
+    ):
         assert forbidden not in serialized
 
 
@@ -747,6 +798,112 @@ def test_live_metadata_object_search_queries_ppm_only_without_definition_text() 
     }
     assert payload["data"]["results"][0]["sourceDatabase"] == "PPM"
     assert "definition" not in str(payload).lower()
+
+
+class SearchLiveTableMetadataRepository(LiveMetadataRepository):
+    def __init__(self) -> None:
+        super().__init__(
+            settings=LiveMetadataSettings(
+                live_metadata_enabled=True,
+                metadata_host="127.0.0.1",
+                metadata_port=1433,
+                metadata_user="readonly_user",
+                metadata_password="secret",
+                metadata_db_fallback="master",
+                default_profile_id="master",
+                profile_file="config/mssql/local_docker_profiles.yaml",
+                connect_timeout_seconds=7,
+            ),
+            profiles=[
+                DbProfile(
+                    id="ppm",
+                    label="Pilot Analysis Target DB (PPM)",
+                    database="PPM",
+                    purpose="pilot-analysis-target",
+                )
+            ],
+        )
+        self.queried_sql: list[str] = []
+
+    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+        assert database == "PPM"
+        assert tool_name == "search_metadata_objects"
+        assert "sys.sql_modules" not in sql
+        self.queried_sql.append(sql)
+        if "sys.tables" in sql:
+            return [
+                {
+                    "object_id": 7,
+                    "schema_name": "dbo",
+                    "table_name": "TB_ORDER",
+                    "table_description": "Live order table metadata.",
+                    "column_name": "ORDER_DATE",
+                    "type_name": "date",
+                    "max_length": 3,
+                    "precision": 10,
+                    "scale": 0,
+                    "column_id": 1,
+                    "is_nullable": False,
+                    "is_identity": False,
+                    "column_description": "Live order date metadata.",
+                }
+            ]
+        assert "sys.objects" in sql
+        return [
+            {
+                "object_id": 7,
+                "object_type": "U",
+                "schema_name": "dbo",
+                "object_name": "TB_ORDER",
+                "description": "Live order table metadata.",
+                "dep_schema_name": None,
+                "dep_object_name": None,
+                "dep_referenced_type": None,
+                "referenced_class_desc": None,
+                "is_ambiguous": None,
+            }
+        ]
+
+
+def test_live_metadata_object_search_table_results_include_safe_catalog_columns() -> None:
+    repository = SearchLiveTableMetadataRepository()
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "search_metadata_objects",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "limit": 5,
+            }
+        },
+    )
+
+    assert len(repository.queried_sql) == 2
+    result = payload["data"]["results"][0]
+    assert result["objectIdentity"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "type": "TABLE",
+    }
+    assert result["description"] == "Live order table metadata."
+    assert result["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Live order table metadata.",
+    }
+    assert result["columns"] == [
+        {
+            "name": "ORDER_DATE",
+            "description": "Live order date metadata.",
+            "dataType": "DATE",
+        }
+    ]
+    serialized = str(payload).lower()
+    for forbidden in ("rowdata", "row_data", "definition", "sqltext", "sys.sql_modules"):
+        assert forbidden not in serialized
 
 
 class DefinitionShapeLiveMetadataRepository(LiveMetadataRepository):

@@ -10,7 +10,7 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 - `/jobs/[jobId]` - workflow status, sanitized LLM trace summary, knowledge assets, and draft artifacts.
 - `/knowledge/assets/[assetId]` and `/knowledge/assets/[assetId]/versions/[versionId]/facts` - sanitized knowledge asset version and fact graph views.
 - `/artifacts/[artifactId]` - artifact preview, copy/download controls, evidence refs, caveats, sanitized trace, and explicit validation trigger.
-- `/metadata/search` - read-only metadata search UI for object and column identities, evidence refs, and caveats.
+- `/metadata/search` - read-only metadata search UI for business-readable table/column descriptions and table field details; evidence refs stay in the API contract but are not rendered in the result cards.
 - `/metadata/design` - natural-language metadata design chat UI for durable table script previews and DTO_DRAFT previews.
 - `/metadata/dependencies` - read-only dependency closure and reference resolver diagnostics.
 
@@ -67,12 +67,16 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 ## Metadata Design Chat
 
 - `/metadata/design` submits natural-language table design and refinement messages to the Web proxy `POST /api/metadata/design-runs`, which calls public `POST /api/v1/metadata/design-runs`.
-- The visible form is chat-focused: metadata profile, conversation mode (`New design` or
-  `Refine current`), optional table name hint, and message. The legacy field row UI is not rendered.
+- The visible form is chat-focused: fixed metadata profile `ppm`, conversation mode
+  (`New design` or `Refine current`), optional table name hint, and message. The table name
+  example is a placeholder only and is omitted from the request unless the user enters a value.
 - The client polls `GET /api/metadata/design-runs/{runId}` and can reopen a durable thread with `GET /api/metadata/design-conversations/{conversationId}`.
 - Design results render interpreted intent, applied changes, related metadata candidates,
-  standardization mappings, a `createTableScriptPreview`, and a non-persisted `DTO_DRAFT`
-  preview stored only in the design run result JSON.
+  editable standardization mappings, a `createTableScriptPreview`, and a non-persisted
+  `DTO_DRAFT` preview stored only in the design run result JSON.
+- Users can edit mapping output values in the browser and regenerate the SQL/DTO previews from
+  those edited mappings. The regenerated preview is client-side only; follow-up chat/refine runs
+  continue to use the durable server-side design run baseline.
 - SQL and Java downloads are client Blob previews. They do not use workflow artifact storage, artifact download helpers, source repository writes, deploy, publish, execute, or apply flows.
 - The page invokes no row-data tools and never renders raw prompts, raw provider responses, full SQL/SP definitions, procedure execution output, secrets, or apply controls.
 
@@ -97,6 +101,6 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
 
 - `/jobs/[jobId]` reads `GET /api/v1/jobs/{jobId}/knowledge-assets` and renders safe summaries plus Web asset/fact graph links.
 - Metadata analysis `knowledgeAssets[]` summaries remain in the reusable analysis panel; the
-  `/metadata/search` page remains the read-only metadata search entrypoint.
+  `/metadata/search` page remains the read-only metadata search entrypoint and does not add prompt, analysis, row-data, execution, DDL/DML, apply, publish, or deploy behavior.
 - The Web client includes sanitized knowledge export support, but does not render raw fact payloads, raw metadata payloads, provider traces, row data, or raw SQL.
 - Draft artifact downloads are Web-internal convenience routes backed by existing sanitized artifact preview APIs. Single artifact files and job-level ZIP bundles are draft-only and do not add publish/deploy/execute/apply behavior.

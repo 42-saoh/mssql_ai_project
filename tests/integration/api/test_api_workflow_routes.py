@@ -1158,6 +1158,23 @@ def test_metadata_search_route_returns_read_only_identity_response(
     assert result["objectIdentity"]["type"] in {"PROCEDURE", "TABLE"}
     assert result["evidenceRefs"]
     assert "blockers" in result
+    table_result = next(
+        item
+        for item in payload["results"]
+        if item["objectIdentity"] == {
+            "schema": "dbo",
+            "name": "TB_ORDER",
+            "type": "TABLE",
+        }
+    )
+    assert table_result["description"] == (
+        "Synthetic order header table used for metadata-only MCP tests."
+    )
+    assert {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    } in table_result["columns"]
 
     forbidden_keys = {
         "rowdata",
@@ -1203,6 +1220,23 @@ def test_metadata_search_route_returns_column_identities(
     assert all(result["objectIdentity"]["type"] == "COLUMN" for result in payload["results"])
     assert all(result["targetKey"] for result in payload["results"])
     assert all(result["evidenceRefs"] for result in payload["results"])
+    order_date = next(
+        result
+        for result in payload["results"]
+        if result["objectIdentity"]["name"] == "TB_ORDER.ORDER_DATE"
+    )
+    assert order_date["description"] == "Date when the synthetic order was placed."
+    assert order_date["dataType"] == "DATE"
+    assert order_date["column"] == {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    }
+    assert order_date["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
 
     serialized = str(payload).lower()
     assert "row_data" not in serialized

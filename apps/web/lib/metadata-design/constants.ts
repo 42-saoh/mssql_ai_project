@@ -1,0 +1,2 @@
+export const DEFAULT_METADATA_PROFILE = "ppm";
+export const TABLE_NAME_HINT_PLACEHOLDER = "PPM_ORDER_REQ";

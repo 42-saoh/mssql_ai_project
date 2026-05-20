@@ -1508,6 +1508,26 @@ components:
           description: For COLUMN results, this is the owning object and column as table.column.
         type:
           $ref: "#/components/schemas/MetadataSearchObjectType"
+    MetadataSearchTableSummary:
+      type: object
+      required: [schema, name]
+      properties:
+        schema:
+          type: string
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+    MetadataSearchColumnSummary:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        dataType:
+          type: [string, "null"]
     MetadataSearchBlocker:
       type: object
       required: [code, message]
@@ -1546,6 +1566,24 @@ components:
           type: string
         snapshotId:
           type: string
+        description:
+          type: [string, "null"]
+        logicalName:
+          type: [string, "null"]
+        dataType:
+          type: [string, "null"]
+        table:
+          anyOf:
+            - $ref: "#/components/schemas/MetadataSearchTableSummary"
+            - type: "null"
+        column:
+          anyOf:
+            - $ref: "#/components/schemas/MetadataSearchColumnSummary"
+            - type: "null"
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchColumnSummary"
         evidenceRefs:
           type: array
           items:
@@ -1581,8 +1619,7 @@ components:
         objectTypes:
           type: array
           items:
-            type: string
-            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+            $ref: "#/components/schemas/MetadataSearchObjectType"
         limit:
           type: integer
           minimum: 1

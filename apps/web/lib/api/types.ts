@@ -263,12 +263,30 @@ export interface MetadataSearchObjectIdentity {
   type: MetadataSearchObjectType;
 }
 
+export interface MetadataSearchTableSummary {
+  schema: string;
+  name: string;
+  description?: string | null;
+}
+
+export interface MetadataSearchColumnSummary {
+  name: string;
+  description?: string | null;
+  dataType?: string | null;
+}
+
 export interface MetadataSearchResult {
   objectIdentity: MetadataSearchObjectIdentity;
   targetKey?: string | null;
   sourceProfile: string;
   sourceDatabase: string;
   snapshotId?: string;
+  description?: string | null;
+  logicalName?: string | null;
+  dataType?: string | null;
+  table?: MetadataSearchTableSummary | null;
+  column?: MetadataSearchColumnSummary | null;
+  columns?: MetadataSearchColumnSummary[];
   evidenceRefs: EvidenceRef[];
   caveats: string[];
   reviewRequired: boolean;

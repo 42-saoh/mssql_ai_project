@@ -2,6 +2,7 @@ import { DependencyBlocker } from "@/components/dependency-blocker";
 import { MetadataDesignChat } from "@/components/metadata-design-chat";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
+import { DEFAULT_METADATA_PROFILE } from "@/lib/metadata-design/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function MetadataDesignPage() {
 
   return (
     <MetadataDesignChat
-      defaultDbProfileId={profiles.defaultProfileId}
+      defaultDbProfileId={DEFAULT_METADATA_PROFILE}
       profiles={profiles.profiles}
     />
   );

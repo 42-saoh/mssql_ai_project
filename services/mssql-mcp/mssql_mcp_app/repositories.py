@@ -1331,6 +1331,16 @@ class LiveMetadataRepository:
         catalog_object_types = [
             object_type for object_type in object_types if object_type != "COLUMN"
         ]
+        searchable_tables: list[dict[str, Any]] = []
+        if "TABLE" in object_types or "COLUMN" in object_types:
+            searchable_tables = self._searchable_live_tables(
+                profile,
+                tool_name="search_metadata_objects",
+            )
+        searchable_tables_by_key = {
+            (str(table.get("schema", "")).casefold(), str(table.get("name", "")).casefold()): table
+            for table in searchable_tables
+        }
         type_codes = _search_sql_type_codes(catalog_object_types)
         if type_codes:
             type_placeholders = ", ".join(["%s"] * len(type_codes))
@@ -1375,15 +1385,26 @@ class LiveMetadataRepository:
                 tool_name="search_metadata_objects",
                 profile=profile,
             )
-            results.extend(
-                _metadata_search_result_item(item, context=context)
-                for item in _metadata_search_items_from_live_rows(self, rows)
-            )
+            for item in _metadata_search_items_from_live_rows(self, rows):
+                if item.get("objectType") == "TABLE":
+                    table = searchable_tables_by_key.get(
+                        (
+                            str(item.get("schema", "")).casefold(),
+                            str(item.get("name", "")).casefold(),
+                        )
+                    )
+                    if table:
+                        item["description"] = item.get("description") or table.get("description")
+                        item["logicalName"] = item.get("logicalName") or table.get("logicalName")
+                        item["columns"] = _metadata_search_column_summaries(
+                            table.get("columns", [])
+                        )
+                        item["table"] = _metadata_search_table_summary(
+                            {**table, "description": item.get("description")}
+                        )
+                results.append(_metadata_search_result_item(item, context=context))
         if "COLUMN" in object_types:
-            for table in self._searchable_live_tables(
-                profile,
-                tool_name="search_metadata_objects",
-            ):
+            for table in searchable_tables:
                 for column in table.get("columns", []):
                     item = _metadata_search_column_item(
                         table,
@@ -4368,6 +4389,32 @@ def _metadata_search_score(item: dict[str, Any], query: str) -> int:
     return score
 
 
+def _metadata_search_table_summary(table: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema": table.get("schema"),
+        "name": table.get("name"),
+        "description": table.get("description"),
+    }
+
+
+def _metadata_search_column_summary(column: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": column.get("name"),
+        "description": column.get("description"),
+        "dataType": column.get("dataType"),
+    }
+
+
+def _metadata_search_column_summaries(columns: Any) -> list[dict[str, Any]]:
+    if not isinstance(columns, list):
+        return []
+    return [
+        _metadata_search_column_summary(column)
+        for column in columns
+        if isinstance(column, dict)
+    ]
+
+
 def _metadata_search_column_item(
     table: dict[str, Any],
     column: dict[str, Any],
@@ -4382,6 +4429,9 @@ def _metadata_search_column_item(
         "description": column.get("description"),
         "descriptionStatus": column.get("descriptionStatus", "CONFIRMED"),
         "dataType": column.get("dataType"),
+        "table": _metadata_search_table_summary(table),
+        "column": _metadata_search_column_summary(column),
+        "columns": _metadata_search_column_summaries(table.get("columns", [])),
         "evidenceRefs": evidence_refs,
     }
 
@@ -4393,7 +4443,7 @@ def _metadata_search_result_item(
 ) -> dict[str, Any]:
     caveats = _dedupe(item.get("caveats", []))
     blockers = _blockers_for_caveats(caveats)
-    return {
+    result = {
         "objectIdentity": {
             "schema": item.get("schema"),
             "name": item.get("name"),
@@ -4408,6 +4458,12 @@ def _metadata_search_result_item(
         "blockers": blockers,
         "score": int(item.get("score", 0)),
     }
+    for key in ("description", "logicalName", "dataType", "table", "column", "columns"):
+        if key in item:
+            result[key] = item[key]
+    if item.get("objectType") == "TABLE" and "table" not in result:
+        result["table"] = _metadata_search_table_summary(item)
+    return result
 
 
 def _metadata_search_items_from_live_rows(

@@ -15,9 +15,11 @@ from api_app.schemas import (
     EvidenceRef,
     MetadataProfile,
     MetadataSearchBlocker,
+    MetadataSearchColumnSummary,
     MetadataSearchObjectIdentity,
     MetadataSearchResponse,
     MetadataSearchResult,
+    MetadataSearchTableSummary,
     MetadataToolInvokeResponse,
     MetadataToolSummary,
 )
@@ -344,6 +346,59 @@ def _source_database_for_profile(db_profile_id: str, profiles: list[Any]) -> str
     return db_profile_id
 
 
+def _metadata_search_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _metadata_search_table_summary(value: Any) -> MetadataSearchTableSummary | None:
+    if not isinstance(value, dict):
+        return None
+    schema = _metadata_search_text(value.get("schema"))
+    name = _metadata_search_text(value.get("name"))
+    if not schema or not name:
+        return None
+    return MetadataSearchTableSummary(
+        schema=schema,
+        name=name,
+        description=_metadata_search_text(value.get("description")),
+    )
+
+
+def _metadata_search_column_summary(value: Any) -> MetadataSearchColumnSummary | None:
+    if not isinstance(value, dict):
+        return None
+    name = _metadata_search_text(value.get("name"))
+    if not name:
+        return None
+    return MetadataSearchColumnSummary(
+        name=name,
+        description=_metadata_search_text(value.get("description")),
+        dataType=_metadata_search_text(value.get("dataType")),
+    )
+
+
+def _metadata_search_column_summaries(value: Any) -> list[MetadataSearchColumnSummary] | None:
+    if not isinstance(value, list):
+        return None
+    columns = [
+        column
+        for column in (_metadata_search_column_summary(item) for item in value)
+        if column is not None
+    ]
+    return columns or None
+
+
+def _metadata_search_column_name(identity_name: str) -> str:
+    return identity_name.rsplit(".", 1)[-1] if identity_name else ""
+
+
+def _metadata_search_parent_table_name(identity_name: str) -> str:
+    return identity_name.rsplit(".", 1)[0] if "." in identity_name else identity_name
+
+
 def _metadata_search_result(
     *,
     item: dict[str, Any],
@@ -359,6 +414,38 @@ def _metadata_search_result(
     result_source_profile = str(item.get("sourceProfile") or source_profile)
     result_source_database = str(item.get("sourceDatabase") or source_database)
     result_snapshot_id = str(item.get("snapshotId") or payload_snapshot_id or "") or None
+    description = _metadata_search_text(item.get("description"))
+    logical_name = _metadata_search_text(item.get("logicalName"))
+    data_type = _metadata_search_text(item.get("dataType"))
+    table_summary = _metadata_search_table_summary(item.get("table"))
+    column_summary = _metadata_search_column_summary(item.get("column"))
+    columns = _metadata_search_column_summaries(item.get("columns"))
+    if object_type == "TABLE" and table_summary is None:
+        table_summary = MetadataSearchTableSummary(
+            schema=schema,
+            name=name,
+            description=description,
+        )
+    if object_type == "COLUMN" and column_summary is None:
+        column_summary = MetadataSearchColumnSummary(
+            name=_metadata_search_column_name(name),
+            description=description,
+            dataType=data_type,
+        )
+    if object_type == "COLUMN" and table_summary is None:
+        table_name = _metadata_search_parent_table_name(name)
+        table_summary = MetadataSearchTableSummary(
+            schema=schema,
+            name=table_name,
+            description=None,
+        )
+    if description is None:
+        if object_type == "TABLE" and table_summary is not None:
+            description = table_summary.description
+        if object_type == "COLUMN" and column_summary is not None:
+            description = column_summary.description
+    if data_type is None and column_summary is not None:
+        data_type = column_summary.data_type
     caveats = _dedupe(str(value) for value in item.get("caveats", []) if value)
     blockers = _dedupe_blockers(
         [
@@ -389,6 +476,12 @@ def _metadata_search_result(
         sourceProfile=result_source_profile,
         sourceDatabase=result_source_database,
         snapshotId=result_snapshot_id,
+        description=description,
+        logicalName=logical_name,
+        dataType=data_type,
+        table=table_summary,
+        column=column_summary,
+        columns=columns,
         evidenceRefs=evidence_refs,
         caveats=caveats,
         reviewRequired=bool(item.get("reviewRequired") or caveats or blockers),

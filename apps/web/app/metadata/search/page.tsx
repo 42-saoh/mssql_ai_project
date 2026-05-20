@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { DependencyBlocker } from "@/components/dependency-blocker";
-import { StatusPill } from "@/components/status-pill";
+import { MetadataSearchResults } from "@/components/metadata-search-results";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 import type { PortalApi } from "@/lib/api/portal-api";
 import type { MetadataSearchObjectType } from "@/lib/api/types";
-import { metadataCaveatMessages, splitMetadataBlockers } from "@/lib/display-caveats";
 
 export const dynamic = "force-dynamic";
 
@@ -94,8 +93,6 @@ export default async function MetadataSearchPage({
 
   const profileResponse = profileResult.value;
   const response = searchResult.value;
-  const { caveatBlockers, hardBlockers } = splitMetadataBlockers(response.blockers);
-  const responseCaveats = metadataCaveatMessages(response.caveats, caveatBlockers);
 
   return (
     <div className="stack">
@@ -108,9 +105,8 @@ export default async function MetadataSearchPage({
           <span className="quiet-label">MCP boundary</span>
         </div>
         <p className="lede">
-          Search object and column identities, evidence refs, caveats, and blockers through the
-          portal API adapter. Results never include row data, SQL definition text, procedure
-          execution, or DDL/DML controls.
+          Search table and column descriptions through the portal API adapter. Results never
+          include row data, SQL definition text, procedure execution, or DDL/DML controls.
         </p>
       </section>
 
@@ -165,92 +161,7 @@ export default async function MetadataSearchPage({
         </form>
       </section>
 
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Search results</p>
-            <h2>
-              {response.sourceDatabase}.{response.query}
-            </h2>
-          </div>
-          <StatusPill
-            value={response.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-            label={response.reviewRequired ? "근거 보강 필요" : "Evidence only"}
-          />
-        </div>
-
-        <dl className="metric-grid">
-          <div>
-            <dt>Profile</dt>
-            <dd>{response.sourceProfile}</dd>
-          </div>
-          <div>
-            <dt>Database</dt>
-            <dd>{response.sourceDatabase}</dd>
-          </div>
-          <div>
-            <dt>Results</dt>
-            <dd>{response.results.length}</dd>
-          </div>
-        </dl>
-
-        {hardBlockers.length > 0 ? (
-          <div className="blocker-list">
-            {hardBlockers.map((blocker) => (
-              <article className="blocker-row" key={blocker.code}>
-                <strong>{blocker.code}</strong>
-                <span>{blocker.message}</span>
-              </article>
-            ))}
-          </div>
-        ) : null}
-
-        {responseCaveats.length > 0 ? (
-          <div className="callout">
-            <strong>Evidence caveats</strong>
-            <ul>
-              {responseCaveats.map((caveat) => (
-                <li key={caveat}>{caveat}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <div className="metadata-result-list">
-          {response.results.map((result) => {
-            const identity = result.objectIdentity;
-            const fullName = `${identity.schema}.${identity.name}`;
-            const resultCaveats = metadataCaveatMessages(result.caveats, result.blockers);
-
-            return (
-              <article className="metadata-result-row" key={`${identity.type}-${fullName}`}>
-                <div>
-                  <p className="eyebrow">{identity.type}</p>
-                  <h3>{fullName}</h3>
-                  <p>
-                    {result.sourceProfile} - {result.sourceDatabase}
-                    {result.snapshotId ? ` - ${result.snapshotId}` : ""}
-                  </p>
-                  {result.targetKey ? <code>{result.targetKey}</code> : null}
-                </div>
-                <div className="metadata-result-detail">
-                  <StatusPill
-                    value={result.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-                    label={result.reviewRequired ? "근거 보강 필요" : "Evidence only"}
-                  />
-                  {result.evidenceRefs.map((evidence) => (
-                    <code key={`${fullName}-${evidence.locator}`}>{evidence.locator}</code>
-                  ))}
-                  {resultCaveats.length > 0 ? (
-                    <small>{resultCaveats.join(" · ")}</small>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
+      <MetadataSearchResults response={response} />
     </div>
   );
 }

@@ -89,6 +89,8 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "/api/v1/metadata/design-conversations/{conversationId}" in data["paths"]
     assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
+    assert "MetadataSearchTableSummary" in data["components"]["schemas"]
+    assert "MetadataSearchColumnSummary" in data["components"]["schemas"]
     assert "MetadataProcedureSearchResponse" not in data["components"]["schemas"]
     assert "MetadataAnalysisResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisRunStatus" in data["components"]["schemas"]
@@ -142,6 +144,9 @@ def test_openapi_metadata_search_and_design_contracts_are_separate() -> None:
         "VIEW",
         "FUNCTION",
     ]
+    assert schemas["MetadataSearchResponse"]["properties"]["objectTypes"]["items"] == {
+        "$ref": "#/components/schemas/MetadataSearchObjectType"
+    }
     assert schemas["MetadataObjectIdentity"]["properties"]["type"]["enum"] == [
         "PROCEDURE",
         "TABLE",
@@ -167,6 +172,26 @@ def test_openapi_metadata_search_and_design_contracts_are_separate() -> None:
     assert result_schema["properties"]["objectIdentity"] == {
         "$ref": "#/components/schemas/MetadataSearchObjectIdentity"
     }
+    assert result_schema["properties"]["description"]["type"] == ["string", "null"]
+    assert result_schema["properties"]["logicalName"]["type"] == ["string", "null"]
+    assert result_schema["properties"]["dataType"]["type"] == ["string", "null"]
+    assert result_schema["properties"]["table"] == {
+        "anyOf": [
+            {"$ref": "#/components/schemas/MetadataSearchTableSummary"},
+            {"type": "null"},
+        ]
+    }
+    assert result_schema["properties"]["column"] == {
+        "anyOf": [
+            {"$ref": "#/components/schemas/MetadataSearchColumnSummary"},
+            {"type": "null"},
+        ]
+    }
+    assert result_schema["properties"]["columns"]["items"] == {
+        "$ref": "#/components/schemas/MetadataSearchColumnSummary"
+    }
+    assert schemas["MetadataSearchTableSummary"]["required"] == ["schema", "name"]
+    assert schemas["MetadataSearchColumnSummary"]["required"] == ["name"]
     assert result_schema["properties"]["evidenceRefs"]["items"] == {
         "$ref": "#/components/schemas/EvidenceRef"
     }

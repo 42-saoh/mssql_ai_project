@@ -6,6 +6,7 @@ import {
   portalApiErrorCode,
 } from "@/lib/api/errors";
 import type { MetadataDesignRunRequest } from "@/lib/api/types";
+import { DEFAULT_METADATA_PROFILE } from "@/lib/metadata-design/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +30,16 @@ export async function POST(request: Request) {
 
 function normalizeRequest(request: MetadataDesignRunRequest): MetadataDesignRunRequest {
   const maxCandidates = clampMaxCandidates(Number(request.options?.maxCandidates ?? 5));
+  const designInputs = request.designInputs ?? {};
+  const tableNameHint =
+    typeof designInputs.tableNameHint === "string" ? designInputs.tableNameHint.trim() : "";
   return {
     ...request,
+    dbProfileId: DEFAULT_METADATA_PROFILE,
     designInputs: {
       fields: [],
-      ...request.designInputs,
+      ...designInputs,
+      tableNameHint: tableNameHint || undefined,
     },
     options: {
       ...request.options,

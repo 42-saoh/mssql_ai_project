@@ -262,12 +262,30 @@ class MetadataSearchObjectIdentity(ApiModel):
     type: Literal["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
 
 
+class MetadataSearchTableSummary(ApiModel):
+    schema_name: str = Field(alias="schema")
+    name: str
+    description: str | None = None
+
+
+class MetadataSearchColumnSummary(ApiModel):
+    name: str
+    description: str | None = None
+    data_type: str | None = Field(default=None, alias="dataType")
+
+
 class MetadataSearchResult(ApiModel):
     object_identity: MetadataSearchObjectIdentity = Field(alias="objectIdentity")
     target_key: str | None = Field(default=None, alias="targetKey")
     source_profile: str = Field(alias="sourceProfile")
     source_database: str = Field(alias="sourceDatabase")
     snapshot_id: str | None = Field(default=None, alias="snapshotId")
+    description: str | None = None
+    logical_name: str | None = Field(default=None, alias="logicalName")
+    data_type: str | None = Field(default=None, alias="dataType")
+    table: MetadataSearchTableSummary | None = None
+    column: MetadataSearchColumnSummary | None = None
+    columns: list[MetadataSearchColumnSummary] | None = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list, alias="evidenceRefs")
     caveats: list[str] = Field(default_factory=list)
     review_required: bool = Field(default=False, alias="reviewRequired")
