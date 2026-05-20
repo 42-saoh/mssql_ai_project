@@ -657,6 +657,35 @@ class WorkflowService:
             static_analysis=static_analysis,
             operation_model_run=operation_model_run,
         )
+        ai_draft_run: AgentRunRecord | None = None
+        ai_draft_quality: ValidationReport | None = None
+        if RequestedOutputType.JAVA_MYBATIS_DRAFT.value in set(request.outputs):
+            try:
+                ai_draft_run, ai_draft_quality = self._run_ai_draft_pack_planning(
+                    job_id,
+                    request_record=request,
+                    context=context,
+                )
+            except AiDraftPackWorkflowError:
+                failed_run = self._latest_ai_draft_pack_run(job_id)
+                context = generation_context_from_request(
+                    request,
+                    metadata,
+                    agent_run,
+                    static_analysis=static_analysis,
+                    operation_model_run=operation_model_run,
+                    ai_draft_pack_run=failed_run,
+                )
+                self._store_requested_analysis_artifacts(job_id, request, context)
+                raise
+            context = generation_context_from_request(
+                request,
+                metadata,
+                agent_run,
+                static_analysis=static_analysis,
+                operation_model_run=operation_model_run,
+                ai_draft_pack_run=ai_draft_run,
+            )
         artifacts: list[ArtifactRecord] = []
         for output in request.outputs:
             if output == RequestedOutputType.SP_ANALYSIS_DOCUMENT.value:
@@ -680,19 +709,8 @@ class WorkflowService:
                     )
                 )
             elif output == RequestedOutputType.JAVA_MYBATIS_DRAFT.value:
-                ai_draft_run, ai_draft_quality = self._run_ai_draft_pack_planning(
-                    job_id,
-                    request_record=request,
-                    context=context,
-                )
-                context = generation_context_from_request(
-                    request,
-                    metadata,
-                    agent_run,
-                    static_analysis=static_analysis,
-                    operation_model_run=operation_model_run,
-                    ai_draft_pack_run=ai_draft_run,
-                )
+                if ai_draft_run is None or ai_draft_quality is None:
+                    continue
                 artifacts.extend(
                     self._store_ai_draft_pack_artifacts(
                         job_id,
@@ -710,6 +728,30 @@ class WorkflowService:
                         agent_run,
                     )
                     for artifact_type in artifact_types_for_requested_output(output)
+                )
+        return artifacts
+
+    def _store_requested_analysis_artifacts(
+        self,
+        job_id: str,
+        request: WorkRequestRecord,
+        context: GenerationContext,
+    ) -> list[ArtifactRecord]:
+        artifacts: list[ArtifactRecord] = []
+        for output in request.outputs:
+            if output == RequestedOutputType.SP_ANALYSIS_DOCUMENT.value:
+                artifacts.append(
+                    self._store_rendered_artifact(
+                        job_id,
+                        render_artifact(ArtifactType.SP_ANALYSIS_DOC, context),
+                    )
+                )
+            elif output == RequestedOutputType.DEPENDENCY_REPORT.value:
+                artifacts.append(
+                    self._store_rendered_artifact(
+                        job_id,
+                        render_artifact(ArtifactType.DEPENDENCY_REPORT, context),
+                    )
                 )
         return artifacts
 
@@ -1263,6 +1305,15 @@ class WorkflowService:
                 run.agent_type == OPERATION_MODEL_AGENT_TYPE
                 and run.status == AgentRunStatus.SUCCEEDED.value
             ):
+                return run
+        return None
+
+    def _latest_ai_draft_pack_run(self, job_id: str) -> AgentRunRecord | None:
+        runs = self.repository.list_agent_runs(job_id, limit=100)
+        if not runs:
+            return None
+        for run in runs:
+            if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE:
                 return run
         return None
 
@@ -2894,6 +2945,26 @@ def ai_draft_pack_for_generation(
     payload = ai_draft_pack_run.structured_output
     if not isinstance(payload, Mapping):
         return None
+    if str(payload.get("status") or "").upper() == "FAILED":
+        return {
+            key: payload[key]
+            for key in (
+                "schemaVersion",
+                "contractTarget",
+                "targetRef",
+                "sourcePolicy",
+                "productionReady",
+                "status",
+                "reviewMarkers",
+                "qualityGateFindings",
+                "failureDiagnostics",
+                "componentInvocations",
+                "validation",
+                "repair",
+                "assumptions",
+            )
+            if key in payload
+        }
     return validate_ai_java_mybatis_draft_pack_output(payload).to_storage_dict()
 
 
@@ -3131,6 +3202,8 @@ def operation_model_fallback_invocation(
     }
     if failure_diagnostics:
         component["failureDiagnostics"] = dict(failure_diagnostics)
+        component["failureStage"] = str(failure_diagnostics.get("failureStage") or "")
+        component["errorCode"] = str(failure_diagnostics.get("errorCode") or "")
     return ModelInvocationRecord(
         provider="workflow",
         model="deterministic-operation-model-fallback",
@@ -3732,6 +3805,7 @@ def llm_trace_summary(agent_run: AgentRunRecord | None) -> dict[str, object] | N
         "outputHash": invocation.get("outputHash"),
         "tokenUsage": invocation.get("tokenUsage", {}),
         "latencyMs": invocation.get("latencyMs"),
+        "componentInvocations": list(invocation.get("componentInvocations") or []),
     }
 
 

@@ -962,22 +962,55 @@ def _ai_draft_pack_evidence_rows(context: GenerationContext) -> list[str]:
 
 def _ai_draft_pack_stage_trace_lines(context: GenerationContext) -> list[str]:
     trace = _mapping(context.value("aiDraftPackTrace", {}) or {})
+    operation_trace = _mapping(context.value("operationModelTrace", {}) or {})
     pack = _mapping(context.value("aiDraftPack", {}) or {})
+    stage_lines: list[str] = []
+    if operation_trace:
+        stage_lines.append(
+            "- "
+            f"p41_operation_model status={_table_text(operation_trace.get('status') or 'REVIEW_REQUIRED')} "
+            f"agentRunId={_table_text(operation_trace.get('agentRunId') or '')} "
+            f"summary={_table_text(operation_trace.get('summary') or '')}"
+        )
+        for component in _mapping_items(operation_trace.get("componentInvocations")):
+            stage = str(
+                component.get("stage")
+                or component.get("component")
+                or component.get("action")
+                or ""
+            )
+            if not stage:
+                continue
+            diagnostics = _mapping(component.get("failureDiagnostics") or {})
+            stage_lines.append(
+                "- "
+                f"p41_component={_table_text(stage)} "
+                f"status={_table_text(component.get('status') or 'REVIEW_REQUIRED')} "
+                f"failureStage={_table_text(component.get('failureStage') or diagnostics.get('failureStage') or '')} "
+                f"errorCode={_table_text(component.get('errorCode') or diagnostics.get('errorCode') or '')}"
+            )
     components = _mapping_items(trace.get("componentInvocations")) or _mapping_items(
         pack.get("componentInvocations")
     )
-    stage_lines: list[str] = []
     for component in components:
-        stage = str(component.get("stage") or "")
+        stage = str(
+            component.get("stage")
+            or component.get("component")
+            or component.get("action")
+            or ""
+        )
         if not stage:
             continue
         failed_rule_ids = _sequence(component.get("failedRuleIds"))
+        diagnostics = _mapping(component.get("failureDiagnostics") or {})
         stage_lines.append(
             "- "
             f"stage={_table_text(stage)} "
             f"status={_table_text(component.get('status') or 'REVIEW_REQUIRED')} "
             f"fileCount={_table_text(component.get('fileCount') or component.get('stageCount') or '')} "
-            f"failedRuleIds={_refs(failed_rule_ids)}"
+            f"failedRuleIds={_refs(failed_rule_ids)} "
+            f"failureStage={_table_text(component.get('failureStage') or diagnostics.get('failureStage') or '')} "
+            f"errorCode={_table_text(component.get('errorCode') or diagnostics.get('errorCode') or '')}"
         )
     validation = _mapping(trace.get("validation") or pack.get("validation") or {})
     failed_rules = _sequence(validation.get("failedRuleIds"))

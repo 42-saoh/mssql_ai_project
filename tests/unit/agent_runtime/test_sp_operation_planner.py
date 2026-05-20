@@ -22,6 +22,7 @@ from ai_agent_runtime.operation_model import (
     validate_sp_operation_model_output,
 )
 from ai_agent_runtime.operation_planner import (
+    DTO_RECONCILED_MARKER,
     EVIDENCE_REPAIRED_MARKER,
     VALIDATOR_REPAIRED_MARKER,
     OperationModelPlanningError,
@@ -49,6 +50,53 @@ def _operation_model_with_unknown_dto_ref(payload: dict[str, Any]) -> dict[str, 
     dirty = deepcopy(payload)
     dirty["operations"][0]["dtoBlueprintRefs"] = ["MissingBranchCommand"]
     return dirty
+
+
+def _operation_model_without_dto_blueprints(
+    payload: dict[str, Any],
+    dto_names: set[str],
+) -> dict[str, Any]:
+    dirty = deepcopy(payload)
+    dirty["dtoBlueprints"] = [
+        dto for dto in dirty["dtoBlueprints"] if dto["name"] not in dto_names
+    ]
+    return dirty
+
+
+def _append_branch_dto(
+    payload: dict[str, Any],
+    *,
+    operation_id: str,
+    name: str,
+    role: str,
+) -> None:
+    operation = next(
+        operation
+        for operation in payload["operations"]
+        if operation["operationId"] == operation_id
+    )
+    if name not in operation["dtoBlueprintRefs"]:
+        operation["dtoBlueprintRefs"].append(name)
+    evidence_refs = list(operation["evidenceRefs"])
+    branch_refs = list(operation["branchCondition"]["evidenceRefs"])
+    payload["dtoBlueprints"].append(
+        {
+            "name": name,
+            "role": role,
+            "operationIds": [operation_id],
+            "fields": [
+                {
+                    "name": "reviewRequiredField",
+                    "dbType": "REVIEW_REQUIRED",
+                    "source": f"operation.{operation_id}",
+                    "required": False,
+                    "evidenceRefs": evidence_refs or branch_refs,
+                }
+            ],
+            "evidenceRefs": evidence_refs or branch_refs,
+            "reviewMarkers": ["RESULT_SHAPE_REVIEW_REQUIRED"],
+        }
+    )
 
 
 def test_operation_model_prompt_uses_sanitized_statement_evidence_contract() -> None:
@@ -169,6 +217,107 @@ def test_operation_model_run_records_branch_sidecar_for_complex_sp() -> None:
     assert [run.agent_type for run in result.sidecar_runs] == [BRANCH_PLANNER_AGENT_TYPE]
     assert result.final_run.agent_type == "LLM_SP_OPERATION_PLANNER"
     assert result.sidecar_runs[0].structured_output["targetRef"] == payload["targetRef"]
+
+
+def test_operation_model_reconciles_branch_plan_dto_inventory_floor() -> None:
+    branch_plan = _fixture_operation_model()
+    expected_dtos = {
+        "ManageBondSearchCriteria",
+        "ManageBondSearchRow",
+        "ManageBondErpCallRequest",
+        "ManageBondErpCallResult",
+        "ManageBondErpStatusCommand",
+        "ManageBondPcsCreateCommand",
+        "ManageBondPcsCreateResult",
+    }
+    _append_branch_dto(
+        branch_plan,
+        operation_id="approveBond",
+        name="ManageBondErpCallRequest",
+        role="CALL_REQUEST",
+    )
+    _append_branch_dto(
+        branch_plan,
+        operation_id="approveBond",
+        name="ManageBondErpCallResult",
+        role="CALL_RESULT",
+    )
+    _append_branch_dto(
+        branch_plan,
+        operation_id="approveBond",
+        name="ManageBondErpStatusCommand",
+        role="COMMAND",
+    )
+    _append_branch_dto(
+        branch_plan,
+        operation_id="createBond",
+        name="ManageBondPcsCreateCommand",
+        role="COMMAND",
+    )
+    _append_branch_dto(
+        branch_plan,
+        operation_id="createBond",
+        name="ManageBondPcsCreateResult",
+        role="RESULT",
+    )
+    final_model = _operation_model_without_dto_blueprints(branch_plan, expected_dtos)
+    gateway = _SequencedOperationGateway([branch_plan, final_model])
+
+    result = build_sp_operation_model_run_result(
+        target_ref=branch_plan["targetRef"],
+        statement_evidence=_statement_evidence(branch_plan),
+        allowed_evidence_refs=_allowed_refs(branch_plan),
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    dto_names = {dto["name"] for dto in result.final_run.structured_output["dtoBlueprints"]}
+    component_names = {
+        component["component"]
+        for component in result.final_run.model_invocation.component_invocations
+    }
+
+    assert expected_dtos <= dto_names
+    assert result.sidecar_runs[0].status == AgentRunStatus.SUCCEEDED
+    assert "sp_operation_model_dto_blueprint_reconciler" in component_names
+    assert DTO_RECONCILED_MARKER in result.final_run.structured_output["reviewMarkers"]
+    assert [payload["taskMode"] for payload in gateway.prompt_payloads] == [
+        "branch_plan",
+        "final_model",
+    ]
+
+
+def test_operation_model_reconciles_generic_missing_dto_from_ref_suffix() -> None:
+    branch_plan = _fixture_operation_model()
+    final_model = deepcopy(branch_plan)
+    operation = final_model["operations"][0]
+    operation["dtoBlueprintRefs"].append("SyntheticOrderAuditCallRequest")
+    gateway = _SequencedOperationGateway([branch_plan, final_model])
+
+    result = build_sp_operation_model_run_result(
+        target_ref=branch_plan["targetRef"],
+        statement_evidence=_statement_evidence(branch_plan),
+        allowed_evidence_refs=_allowed_refs(branch_plan),
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    synthetic = next(
+        dto
+        for dto in result.final_run.structured_output["dtoBlueprints"]
+        if dto["name"] == "SyntheticOrderAuditCallRequest"
+    )
+    reconciler = next(
+        component
+        for component in result.final_run.model_invocation.component_invocations
+        if component["component"] == "sp_operation_model_dto_blueprint_reconciler"
+    )
+
+    assert synthetic["role"] == "CALL_REQUEST"
+    assert synthetic["operationIds"] == [operation["operationId"]]
+    assert synthetic["fields"]
+    assert reconciler["generatedDtoCount"] == 1
+    assert "ManageBondDTO" not in json.dumps(result.final_run.to_storage_dict())
 
 
 def test_operation_model_run_repairs_branch_plan_validation_failure() -> None:

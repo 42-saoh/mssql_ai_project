@@ -98,6 +98,15 @@ For complex SPs, operation-model planning now uses internal task splitting:
 The repair pass does not receive raw failed provider payloads and does not use
 `responses_httpx` fallback.
 
+The final and repair stages now treat `operations[].dtoBlueprintRefs` as required
+DTO inventory. Before `SpOperationModel.v0.1` validation, deterministic
+reconciliation restores missing DTO blueprints from sanitized
+`branchPlanContext.dtoBlueprints`; if the branch plan lacks a referenced DTO, it
+creates the smallest evidence-backed `REVIEW_REQUIRED` blueprint from statement
+inputs/outputs/writes, branch variables, SP parameters, and generic role suffix
+rules. This keeps operation refs and DTO `operationIds` aligned without
+target-specific DTO constants.
+
 In the workflow orchestrator, `JAVA_MYBATIS_DRAFT` now has an operation-model
 planning stage between semantic analysis and artifact generation. The stage calls the
 deterministic extractor with transient procedure definition text, stores only
@@ -391,6 +400,9 @@ operation-model adequacy gate runs before draft generation: branch-heavy SPs
 with shallow operation counts, shallow statement evidence, shallow DTO
 blueprints, weak branch predicates, or missing DML/call/result responsibilities
 record `P42_INVENTORY_CONTRACT_INCOMPLETE` and persist no Java/MyBatis artifacts.
+The DTO inventory stage uses the reconciled union of operation
+`dtoBlueprintRefs` and `dtoBlueprints`, so Service/Mapper/XML generation remains
+driven by operation ids and statement refs rather than benchmark answer keys.
 
 The deterministic validator now blocks token-only draft files. DTO class and
 field names must be ASCII Java identifiers and required fields must be declared.
@@ -400,6 +412,9 @@ must contain statement-level database logic and wrapper-only calls to the
 original target procedure cannot pass. If repair still fails the quality gate,
 the workflow records `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and stores no fallback
 skeletons. Generated artifacts remain draft-only with `productionReady=false`;
+when analysis documents are requested in the same job, the dependency report is
+rendered after the draft attempt so sanitized P41/P50 stage traces and failure
+caveats are preserved in the Evidence Dossier.
 P50 adds no public API, DB schema, UI, public MCP route, public artifact type, or
 production readiness change.
 

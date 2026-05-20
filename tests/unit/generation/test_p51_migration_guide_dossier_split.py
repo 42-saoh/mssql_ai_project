@@ -123,6 +123,8 @@ def test_p51_evidence_dossier_preserves_removed_evidence_and_audit_sections() ->
         assert evidence_id in dossier.content
 
     assert "### p50_stage_trace" in dossier.content
+    assert "p41_operation_model" in dossier.content
+    assert "sp_operation_model_dto_blueprint_reconciler" in dossier.content
     assert "stage=service_content" in dossier.content
     assert "p50.ai_draft_pack.service.business_flow" in dossier.content
     assert "repair_routing" in dossier.content
@@ -197,6 +199,18 @@ def _context() -> GenerationContext:
                 "llmTrace": {
                     "agentRunId": "p51-split-test",
                     "outputHash": "hash_agent-runtime.modelInvocation.outputHash_fixture",
+                },
+                "operationModelTrace": {
+                    "agentRunId": "p41-split-test",
+                    "status": "SUCCEEDED",
+                    "summary": "SP operation model planned after DTO reconciliation.",
+                    "componentInvocations": [
+                        {
+                            "component": "sp_operation_model_dto_blueprint_reconciler",
+                            "status": "SUCCEEDED",
+                            "restoredDtoCount": 2,
+                        }
+                    ],
                 },
                 "aiDraftPackTrace": {
                     "componentInvocations": [

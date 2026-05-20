@@ -4,7 +4,13 @@ import json
 from copy import deepcopy
 
 import pytest
-from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
+from ai_agent_domain import (
+    ArtifactStatus,
+    ArtifactType,
+    JobStatus,
+    RequestedOutputType,
+    WorkflowStepType,
+)
 from ai_agent_generation import GenerationContext
 from ai_agent_runtime import (
     AI_DRAFT_PACK_MODEL_PROFILE_ID,
@@ -236,6 +242,14 @@ def _model_invocation(
 def _operation_model_with_unknown_dto_ref(payload: dict) -> dict:
     dirty = deepcopy(payload)
     dirty["operations"][0]["dtoBlueprintRefs"] = ["MissingBranchCommand"]
+    return dirty
+
+
+def _operation_model_without_dto_blueprints(payload: dict, dto_names: set[str]) -> dict:
+    dirty = deepcopy(payload)
+    dirty["dtoBlueprints"] = [
+        dto for dto in dirty["dtoBlueprints"] if dto["name"] not in dto_names
+    ]
     return dirty
 
 
@@ -755,6 +769,76 @@ def test_operation_model_branch_plan_repair_allows_ai_draft_pack_generation() ->
     assert "CREATE PROCEDURE" not in serialized
 
 
+def test_p41_reconciles_final_model_dto_refs_before_p50_draft_generation() -> None:
+    operation_model = p41_operation_model_fixture()
+    final_missing_dtos = _operation_model_without_dto_blueprints(
+        operation_model,
+        {"ManageBondSearchCriteria", "ManageBondSearchRow"},
+    )
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+
+    class FinalModelDtoReconciliationGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__(
+                ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack}
+            )
+            self.operation_outputs: list[object] = [operation_model, final_missing_dtos]
+
+        def plan_sp_operation_model(self, *, prompt, profile) -> ModelInvocationRecord:
+            output = self.operation_outputs.pop(0)
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-final-model-dto-reconciliation",
+                structured_output=deepcopy(output),
+            )
+
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FinalModelDtoReconciliationGateway(),
+    )
+
+    _request_record, job = service.submit_sp_analysis(manage_bond_request())
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    runs = repository.list_agent_runs(job.job_id) or []
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    ai_draft_run = next(run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE)
+    dto_names = {dto["name"] for dto in operation_run.structured_output["dtoBlueprints"]}
+    component_names = {
+        component.get("component")
+        for component in operation_run.model_invocation.get("componentInvocations", [])
+    }
+    validation_debug = [
+        (
+            artifact.type.value,
+            artifact.title,
+            repository.latest_validation_for(artifact.artifact_id).status
+            if repository.latest_validation_for(artifact.artifact_id)
+            else None,
+            repository.latest_validation_for(artifact.artifact_id).checks
+            if repository.latest_validation_for(artifact.artifact_id)
+            else None,
+        )
+        for artifact in artifacts
+    ]
+    assert job.status == JobStatus.VALIDATION_COMPLETE, (
+        job.error_code,
+        job.error_message,
+        ai_draft_run.status,
+        ai_draft_run.structured_output.get("failureDiagnostics"),
+        validation_debug,
+    )
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert {"ManageBondSearchCriteria", "ManageBondSearchRow"} <= dto_names
+    assert "sp_operation_model_dto_blueprint_reconciler" in component_names
+    assert any(artifact.type == ArtifactType.DTO_DRAFT for artifact in artifacts)
+    assert any(artifact.type == ArtifactType.SERVICE_DRAFT for artifact in artifacts)
+    assert not any("OperationModelReviewRequired" in artifact.content for artifact in artifacts)
+
+
 def test_operation_model_branch_plan_repair_failure_keeps_p42_review_required_stop() -> None:
     operation_model = p41_operation_model_fixture()
     dirty_branch_plan = _operation_model_with_unknown_dto_ref(operation_model)
@@ -906,6 +990,81 @@ def test_operation_model_repair_failure_keeps_p42_review_required_stop() -> None
     )
     assert "dtoBlueprints must not be empty" in serialized
     assert "CREATE PROCEDURE" not in serialized
+
+
+def test_p51_dossier_keeps_p41_p50_trace_when_java_draft_stops() -> None:
+    operation_model = p41_operation_model_fixture()
+
+    class OperationRepairFailingGateway(FakeModelGateway):
+        def __init__(self) -> None:
+            super().__init__()
+            self.operation_outputs: list[object] = [
+                operation_model,
+                ModelGatewayError(
+                    "invalid operation model",
+                    code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                    provider_error={
+                        "stage": "sp_operation_model",
+                        "schemaName": "sp_operation_model",
+                        "findings": ["operations must not be empty."],
+                    },
+                ),
+                ModelGatewayError(
+                    "repair invalid",
+                    code="OPENAI_SP_OPERATION_MODEL_INVALID",
+                    provider_error={
+                        "stage": "operation_model_repair",
+                        "schemaName": "sp_operation_model",
+                        "findings": ["dtoBlueprints must not be empty."],
+                    },
+                ),
+            ]
+
+        def plan_sp_operation_model(self, *, prompt, profile) -> ModelInvocationRecord:
+            output = self.operation_outputs.pop(0)
+            if isinstance(output, Exception):
+                raise output
+            return _model_invocation(
+                prompt=prompt,
+                profile=profile,
+                provider="spy-operation-repair-failure",
+                structured_output=deepcopy(output),
+            )
+
+    request = manage_bond_request()
+    request.outputs = [
+        RequestedOutputType.SP_ANALYSIS_DOCUMENT,
+        RequestedOutputType.DEPENDENCY_REPORT,
+        RequestedOutputType.JAVA_MYBATIS_DRAFT,
+    ]
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=OperationRepairFailingGateway(),
+    )
+
+    _request_record, job = service.submit_sp_analysis(request)
+
+    artifacts = repository.list_job_artifacts(job.job_id) or []
+    dossier = next(artifact for artifact in artifacts if artifact.type == ArtifactType.DEPENDENCY_REPORT)
+
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    assert "p41_operation_model" in dossier.content
+    assert "operation_model_repair" in dossier.content
+    assert "ai_draft_pack_workflow_gate" in dossier.content
+    assert "P42_AI_DRAFT_PACK_REVIEW_REQUIRED" in dossier.content
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
+    )
 
 
 @pytest.mark.parametrize(

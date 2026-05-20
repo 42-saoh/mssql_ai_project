@@ -594,6 +594,8 @@ def render_sp_operation_model_prompt(
         },
         "dtoBlueprintPolicy": {
             "mustNotCollapseToSingleDto": True,
+            "dtoBlueprintRefsAreInventoryContract": True,
+            "branchPlanContextIsInventoryFloor": bool(branch_plan_context),
             "expectedRoles": [
                 "QUERY",
                 "RESULT",
@@ -608,6 +610,11 @@ def render_sp_operation_model_prompt(
                 "SearchRow, ApproveCommand, CreateBatchItem, or FinanceCallRequest. "
                 "If business names are inferred from branch flags only, keep a "
                 "REVIEW_REQUIRED marker."
+            ),
+            "referenceRule": (
+                "Every operations[].dtoBlueprintRefs entry is a required DTO blueprint. "
+                "When branchPlanContext.dtoBlueprints contains the name, copy or merge that "
+                "DTO rather than dropping it."
             ),
         },
         "evidenceRefContract": {
@@ -1457,7 +1464,8 @@ def _operation_task_mode_instruction(task_mode: str) -> dict[str, Any]:
             ),
             "requirements": [
                 "Do not depend on failed provider payload text.",
-                "Use repairContext.validationFindings as constraints to satisfy.",
+                "Use repairContext.validationFindings and repairContext.missingDtoBlueprintRefs as constraints to satisfy.",
+                "If an operation references a DTO, dtoBlueprints must include that DTO or preserve it from branchPlanContext.",
                 "Preserve total statement coverage and allowed evidenceRefs discipline.",
                 "Return a complete schema-valid SpOperationModel.v0.1 object.",
             ],
@@ -1465,8 +1473,9 @@ def _operation_task_mode_instruction(task_mode: str) -> dict[str, Any]:
     return {
         "goal": "Assemble the final branch-level operation model for Java/MyBatis drafting.",
         "requirements": [
-            "Use branchPlanContext when present as sanitized planning guidance.",
+            "Use branchPlanContext when present as the sanitized DTO inventory floor, not optional guidance.",
             "Connect every operation to statementRefs and dtoBlueprintRefs.",
+            "Do not delete or collapse branchPlanContext.dtoBlueprints while assembling the final model.",
             "Create separate QUERY, RESULT, COMMAND, BATCH_ITEM, and CALL_REQUEST DTOs when evidence supports them.",
             "Keep weak inferences as REVIEW_REQUIRED markers instead of collapsing responsibilities.",
         ],

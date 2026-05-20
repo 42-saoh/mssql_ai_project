@@ -80,6 +80,13 @@ hardened with internal `branch_plan`, `final_model`, and validator-guided
 `SpOperationModel.v0.1`; repair receives sanitized validation findings only and
 does not store raw provider payloads or fall back to `responses_httpx`.
 
+After the `job_bffb6a362a` audit, `operations[].dtoBlueprintRefs` are treated as
+an operation-model inventory contract. The final and repair stages reconcile any
+missing `dtoBlueprints[]` from the sanitized branch-plan DTO floor first, then
+from statement/branch evidence with `REVIEW_REQUIRED` markers when fields or
+roles are uncertain. This preserves DTO responsibilities for P50 without using
+ManageBond-specific runtime constants.
+
 ## P42 AI Draft Pack Renewal
 
 P42 starts after the observed `job_6864d2734e` failure mode: Java/MyBatis
@@ -283,6 +290,12 @@ statement-level SELECT/INSERT/UPDATE/DELETE/MERGE/EXEC/CALL logic and cannot
 pass as a wrapper-only call to the original target procedure. If repair still
 does not satisfy the deterministic quality gate, the workflow records
 `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and persists no fallback skeletons.
+
+P50 consumes the reconciled P41 DTO inventory for its DTO inventory stage. When
+Java/MyBatis drafting fails after SP analysis artifacts were requested, the
+workflow still renders the dependency report with sanitized P41/P50 stage trace,
+failure stage, validation findings, and repair caveats so evidence is conserved
+without leaking raw prompt, provider response, SP text, or failed Java/XML bodies.
 
 P50 remains draft-only and internal: no public API, DB schema, UI, public MCP
 route, public artifact type, source apply, deploy, row-data query, procedure

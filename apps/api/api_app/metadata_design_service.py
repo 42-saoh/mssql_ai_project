@@ -568,13 +568,7 @@ def _metadata_search_design_result(
         searchResult=search_result,
         dtoDraft=None,
         aiToolEvidence={
-            "status": (
-                REVIEW_REQUIRED
-                if search_result.review_required
-                or caveats
-                or any(item["status"] != "SUCCEEDED" for item in tool_results)
-                else "SUCCEEDED"
-            ),
+            "status": REVIEW_REQUIRED if search_result.review_required else "SUCCEEDED",
             "toolResults": tool_results,
             "plannerMetrics": {
                 "status": "SKIPPED",

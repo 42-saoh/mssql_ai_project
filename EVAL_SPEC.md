@@ -71,6 +71,11 @@ P41 validates the operation-model renewal path for complex SP code generation:
   `LLM_SP_OPERATION_MODEL_REPAIR` sidecar AgentRuns. Tests must prove the modes
   `branch_plan`, `final_model`, and `repair` stay sanitized and that validator repair
   succeeds at most once before falling back to review-required behavior.
+- `operations[].dtoBlueprintRefs` are an inventory contract: final/repair output
+  must reconcile missing `dtoBlueprints[]` from the branch-plan DTO floor or
+  evidence-backed `REVIEW_REQUIRED` minimal blueprints before validation. This
+  must preserve DTO refs such as criteria, row, command, batch item, call request,
+  and call result responsibilities without ManageBond-specific runtime constants.
 - Workflow fallback cases such as missing procedure definition, disabled LLM planning,
   or planner failure must emit `P41_OPERATION_MODEL_REVIEW_REQUIRED` and an explicit
   `OperationModelReviewRequired` DTO instead of silently producing the legacy single DTO.
@@ -330,11 +335,17 @@ Acceptance checks:
 - Repair receives sanitized findings, expected inventory, and statement evidence
   only. If repair still fails deterministic quality, the workflow records
   `P42_AI_DRAFT_PACK_REVIEW_REQUIRED` and persists no fallback skeletons.
+- DTO inventory planning uses the reconciled union of `operations[].dtoBlueprintRefs`
+  and `dtoBlueprints[]`; missing DTO refs must be surfaced as structured repair
+  context or restored before draft-pack validation rather than silently dropped.
 - Role-stage outputs use the internal `AiJavaMyBatisDraftPackStage.v0.1`
   contract and are composed into the unchanged `AiJavaMyBatisDraftPack.v0.1`
   output. `p50.ai_draft_pack.service.business_flow` repair routes to
   `service_content`; `p50.ai_draft_pack.mapper_xml.db_operation` repair routes
   to `mapper_xml_content`.
+- Evidence Dossier rendering must preserve sanitized P41/P50 stage trace,
+  validation findings, failure stage, and repair caveats even when Java/MyBatis
+  drafting fails and no DTO/Service/Mapper/XML artifacts are persisted.
 
 Passing criteria:
 - `powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-fixture PYTEST_ARGS="tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p44_framework_runtime_replay.py tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py"` passes.
