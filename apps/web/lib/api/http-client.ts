@@ -4,7 +4,7 @@ import type {
   MetadataAnalysisRequest,
   MetadataDesignRunRequest,
   KnowledgeExportRequest,
-  MetadataProcedureSearchRequest,
+  MetadataSearchRequest,
   MetadataToolInvokeRequest,
   MetadataToolName,
   SPAnalysisBatchRequest,
@@ -189,19 +189,17 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       });
     },
 
-    searchProcedures(request: MetadataProcedureSearchRequest) {
+    searchMetadataObjects(request: MetadataSearchRequest) {
       const params = new URLSearchParams();
-      if (request.dbProfileId) {
-        params.set("dbProfileId", request.dbProfileId);
-      }
-      if (request.query) {
-        params.set("query", request.query);
-      }
+      params.set("dbProfileId", request.dbProfileId);
+      params.set("query", request.query);
       if (request.limit !== undefined) {
         params.set("limit", String(request.limit));
       }
-      const suffix = params.size > 0 ? `?${params.toString()}` : "";
-      return readJson(fetcher, baseUrl, `/api/v1/metadata/procedure-search${suffix}`);
+      for (const objectType of request.objectTypes ?? []) {
+        params.append("objectTypes", objectType);
+      }
+      return readJson(fetcher, baseUrl, `/api/v1/metadata/search?${params.toString()}`);
     },
 
     submitMetadataAnalysisRun(request: MetadataAnalysisRequest) {

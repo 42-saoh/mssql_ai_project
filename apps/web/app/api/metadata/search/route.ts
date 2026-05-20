@@ -14,10 +14,28 @@ export async function GET(request: Request) {
   const query = params.get("query")?.trim() || "";
   const limit = clampLimit(Number(params.get("limit") ?? 20));
 
+  if (!query) {
+    return NextResponse.json({ suggestions: [] });
+  }
+
   try {
     const api = getPortalApi();
-    const response = await api.searchProcedures({ dbProfileId, query, limit });
-    return NextResponse.json(response);
+    const response = await api.searchMetadataObjects({
+      dbProfileId,
+      query,
+      objectTypes: ["PROCEDURE"],
+      limit,
+    });
+    return NextResponse.json({
+      suggestions: response.results.map((result) => ({
+        schema: result.objectIdentity.schema,
+        name: result.objectIdentity.name,
+        targetKey: result.targetKey,
+        sourceDatabase: result.sourceDatabase,
+        reviewRequired: result.reviewRequired,
+        caveats: result.caveats,
+      })),
+    });
   } catch (error) {
     const status = error instanceof PortalApiHttpError ? error.status : 500;
     return NextResponse.json(

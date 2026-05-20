@@ -378,8 +378,8 @@ function ClosureForm({
       </div>
       <div className="form-actions">
         <button type="submit">Invoke closure</button>
-        <Link className="secondary-action" href="/metadata/design?intent=search">
-          Search in design chat
+        <Link className="secondary-action" href="/metadata/search">
+          Search metadata
         </Link>
       </div>
     </form>
@@ -445,8 +445,8 @@ function ResolverForm({
       </div>
       <div className="form-actions">
         <button type="submit">Invoke resolver</button>
-        <Link className="secondary-action" href="/metadata/design?intent=search">
-          Search in design chat
+        <Link className="secondary-action" href="/metadata/search">
+          Search metadata
         </Link>
       </div>
     </form>

@@ -14,9 +14,9 @@ import type {
   MetadataDesignConversation,
   MetadataDesignRunRequest,
   MetadataDesignRunStatus,
-  MetadataProcedureSearchRequest,
-  MetadataProcedureSearchResponse,
   MetadataProfile,
+  MetadataSearchRequest,
+  MetadataSearchResponse,
   MetadataToolInvokeRequest,
   MetadataToolInvokeResponse,
   MetadataToolName,
@@ -63,9 +63,7 @@ export interface PortalApi {
     request: MetadataToolInvokeRequest,
   ): Promise<MetadataToolInvokeResponse>;
   analyzeMetadata(request: MetadataAnalysisRequest): Promise<MetadataAnalysisResponse>;
-  searchProcedures(
-    request: MetadataProcedureSearchRequest,
-  ): Promise<MetadataProcedureSearchResponse>;
+  searchMetadataObjects(request: MetadataSearchRequest): Promise<MetadataSearchResponse>;
   submitMetadataAnalysisRun(request: MetadataAnalysisRequest): Promise<MetadataAnalysisRunStatus>;
   getMetadataAnalysisRun(runId: string): Promise<MetadataAnalysisRunStatus>;
   submitMetadataDesignRun(request: MetadataDesignRunRequest): Promise<MetadataDesignRunStatus>;

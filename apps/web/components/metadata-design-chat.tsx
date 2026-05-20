@@ -6,12 +6,10 @@ import type {
   MetadataDesignRunRequest,
   MetadataDesignRunStatus,
   MetadataProfile,
-  MetadataSearchObjectType,
 } from "@/lib/api/types";
 
 const DESIGN_TIMEOUT_MS = 120_000;
 const DESIGN_POLL_INTERVAL_MS = 1_500;
-const SEARCH_MESSAGE_PLACEHOLDER = "search order, TB_ORDER, or dbo.PPM_CUSTOMER_ORDER";
 const NEW_DESIGN_MESSAGE_PLACEHOLDER =
   "고객명, 주소, 주문일이 있는 주문 요청 테이블을 만들어줘.";
 const REFINE_CURRENT_MESSAGE_PLACEHOLDER =
@@ -22,41 +20,22 @@ interface DesignError {
   message: string;
 }
 
-export type MetadataDesignWorkMode =
-  | "SEARCH_METADATA"
-  | "NEW_TABLE_DESIGN"
-  | "REFINE_CURRENT_DESIGN";
-
-type MetadataDesignIntentMode = NonNullable<
-  MetadataDesignRunRequest["options"]
->["intentMode"];
 type MetadataDesignConversationMode = NonNullable<
   MetadataDesignRunRequest["options"]
 >["conversationMode"];
 
-const objectTypeOptions: MetadataSearchObjectType[] = [
-  "PROCEDURE",
-  "TABLE",
-  "VIEW",
-  "FUNCTION",
-];
-
 export function MetadataDesignChat({
   defaultDbProfileId,
-  initialWorkMode = "NEW_TABLE_DESIGN",
   profiles,
 }: Readonly<{
   defaultDbProfileId: string;
-  initialWorkMode?: MetadataDesignWorkMode;
   profiles: MetadataProfile[];
 }>) {
   const [dbProfileId, setDbProfileId] = useState(defaultDbProfileId);
   const [message, setMessage] = useState("");
   const [tableNameHint, setTableNameHint] = useState("PPM_ORDER_REQ");
-  const [searchLimit, setSearchLimit] = useState(20);
-  const [searchObjectTypes, setSearchObjectTypes] =
-    useState<MetadataSearchObjectType[]>(objectTypeOptions);
-  const [workMode, setWorkMode] = useState<MetadataDesignWorkMode>(initialWorkMode);
+  const [conversationMode, setConversationMode] =
+    useState<MetadataDesignConversationMode>("NEW_DESIGN");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [runs, setRuns] = useState<MetadataDesignRunStatus[]>([]);
   const [run, setRun] = useState<MetadataDesignRunStatus | null>(null);
@@ -65,9 +44,10 @@ export function MetadataDesignChat({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
-  const conversationMode = conversationModeForWorkMode(workMode);
-  const intentMode = intentModeForWorkMode(workMode);
-  const messagePlaceholder = placeholderForWorkMode(workMode);
+  const messagePlaceholder =
+    conversationMode === "REFINE_CURRENT"
+      ? REFINE_CURRENT_MESSAGE_PLACEHOLDER
+      : NEW_DESIGN_MESSAGE_PLACEHOLDER;
   const canSubmit = !isLoading && message.trim().length > 0;
 
   const request = useMemo<MetadataDesignRunRequest>(
@@ -78,12 +58,6 @@ export function MetadataDesignChat({
       designInputs: {
         tableNameHint: tableNameHint || undefined,
       },
-      searchInputs: {
-        query: message,
-        objectTypes: searchObjectTypes,
-        limit: searchLimit,
-        includeTableSchema: true,
-      },
       options: {
         useLlmAnalysis: true,
         useAiToolOrchestration: true,
@@ -91,19 +65,9 @@ export function MetadataDesignChat({
         maxCandidates: 5,
         generateDtoDraft: true,
         conversationMode,
-        intentMode,
       },
     }),
-    [
-      conversationId,
-      conversationMode,
-      dbProfileId,
-      intentMode,
-      message,
-      searchLimit,
-      searchObjectTypes,
-      tableNameHint,
-    ],
+    [conversationId, conversationMode, dbProfileId, message, tableNameHint],
   );
 
   useEffect(() => {
@@ -157,11 +121,7 @@ export function MetadataDesignChat({
       if (nextRun.status === "SUCCEEDED" && nextRun.result) {
         setRun(nextRun);
         setRuns((current) => [...current, nextRun]);
-        setWorkMode(
-          nextRun.result.resultKind === "SEARCH_RESULT"
-            ? "SEARCH_METADATA"
-            : "REFINE_CURRENT_DESIGN",
-        );
+        setConversationMode("REFINE_CURRENT");
         setMessage("");
       } else {
         throw {
@@ -210,11 +170,7 @@ export function MetadataDesignChat({
                   <div className="chat-message chat-message--assistant">
                     <strong>Assistant</strong>
                     <p>{item.result.assistantMessage}</p>
-                    <small>
-                      {item.result.tableProposal?.tableName ??
-                        item.result.searchResult?.query ??
-                        item.result.resultKind}
-                    </small>
+                    <small>{item.result.tableProposal.tableName}</small>
                   </div>
                 ) : null}
               </div>
@@ -243,16 +199,15 @@ export function MetadataDesignChat({
                 </select>
               </label>
               <label>
-                <span>Work mode</span>
+                <span>Conversation mode</span>
                 <select
-                  value={workMode}
+                  value={conversationMode}
                   onChange={(event) =>
-                    setWorkMode(event.target.value as MetadataDesignWorkMode)
+                    setConversationMode(event.target.value as MetadataDesignConversationMode)
                   }
                 >
-                  <option value="SEARCH_METADATA">Search metadata</option>
-                  <option value="NEW_TABLE_DESIGN">New table design</option>
-                  <option value="REFINE_CURRENT_DESIGN">Refine current design</option>
+                  <option value="NEW_DESIGN">New design</option>
+                  <option value="REFINE_CURRENT">Refine current</option>
                 </select>
               </label>
               <label>
@@ -262,34 +217,7 @@ export function MetadataDesignChat({
                   onChange={(event) => setTableNameHint(event.target.value)}
                 />
               </label>
-              <label>
-                <span>Search limit</span>
-                <input
-                  min="1"
-                  max="100"
-                  type="number"
-                  value={searchLimit}
-                  onChange={(event) => setSearchLimit(clampSearchLimit(event.target.value))}
-                />
-              </label>
             </div>
-            <fieldset>
-              <legend>Search object types</legend>
-              <div className="toggle-row">
-                {objectTypeOptions.map((objectType) => (
-                  <label key={objectType}>
-                    <input
-                      type="checkbox"
-                      checked={searchObjectTypes.includes(objectType)}
-                      onChange={() =>
-                        setSearchObjectTypes((current) => toggleObjectType(current, objectType))
-                      }
-                    />
-                    {objectType}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
             <label className="metadata-chat-message-field">
               <span>Message</span>
               <textarea
@@ -319,129 +247,20 @@ export function MetadataDesignChat({
 
       {run?.result ? (
         <div className="metadata-design-output-stack">
-          <MetadataDesignResultView
-            run={run}
-            onUseTableHint={(tableName) => {
-              setTableNameHint(tableName);
-              setWorkMode("NEW_TABLE_DESIGN");
-              setMessage(`Create a table design using ${tableName} as metadata reference.`);
-            }}
-          />
+          <MetadataDesignResultView run={run} />
         </div>
       ) : null}
     </div>
   );
 }
 
-function MetadataDesignResultView({
-  run,
-  onUseTableHint,
-}: Readonly<{
-  run: MetadataDesignRunStatus;
-  onUseTableHint: (tableName: string) => void;
-}>) {
+function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStatus }>) {
   const result = run.result;
   if (!result) {
     return null;
   }
   const dtoDraft = result.dtoDraft;
   const tableProposal = result.tableProposal;
-  if (result.resultKind === "SEARCH_RESULT") {
-    return (
-      <>
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Metadata search</p>
-              <h2>{result.searchResult?.query ?? "Search result"}</h2>
-            </div>
-            <StatusPill
-              value={result.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-              label={result.reviewRequired ? "REVIEW_REQUIRED" : "Evidence bound"}
-            />
-          </div>
-          <p className="lede">{result.assistantMessage}</p>
-          <dl className="metric-grid">
-            <div>
-              <dt>Run</dt>
-              <dd>{run.runId}</dd>
-            </div>
-            <div>
-              <dt>Intent</dt>
-              <dd>{result.interpretedIntent.intent}</dd>
-            </div>
-            <div>
-              <dt>Results</dt>
-              <dd>{result.searchResult?.results.length ?? 0}</dd>
-            </div>
-          </dl>
-        </section>
-
-        {result.searchResult ? (
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Search results</p>
-                <h2>{result.searchResult.sourceDatabase}</h2>
-              </div>
-            </div>
-            {result.searchResult.blockers.length > 0 ? (
-              <div className="blocker-list">
-                {result.searchResult.blockers.map((blocker) => (
-                  <article className="blocker-row" key={blocker.code}>
-                    <strong>{blocker.code}</strong>
-                    <span>{blocker.message}</span>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-            <div className="metadata-result-list">
-              {result.searchResult.results.map((item) => {
-                const identity = item.objectIdentity;
-                const fullName = `${identity.schema}.${identity.name}`;
-                return (
-                  <article className="metadata-result-row" key={`${identity.type}-${fullName}`}>
-                    <div>
-                      <p className="eyebrow">{identity.type}</p>
-                      <h3>{fullName}</h3>
-                      <p>
-                        {item.sourceProfile} - {item.sourceDatabase}
-                      </p>
-                      {item.targetKey ? <code>{item.targetKey}</code> : null}
-                    </div>
-                    <div className="metadata-result-detail">
-                      <StatusPill
-                        value={item.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-                        label={item.reviewRequired ? "review" : "evidence"}
-                      />
-                      {identity.type === "TABLE" ? (
-                        <button
-                          type="button"
-                          className="secondary-action"
-                          onClick={() => onUseTableHint(fullName)}
-                        >
-                          Use as table hint
-                        </button>
-                      ) : null}
-                      {item.evidenceRefs.slice(0, 4).map((evidence) => (
-                        <code key={`${fullName}-${evidence.locator}`}>{evidence.locator}</code>
-                      ))}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <MetadataEvidenceCandidates result={result} />
-      </>
-    );
-  }
-
-  if (!tableProposal) {
-    return null;
-  }
   return (
     <>
       <section className="panel">
@@ -688,43 +507,4 @@ function normalizeError(error: unknown): DesignError {
     return { code: "METADATA_DESIGN_BLOCKED", message: error.message };
   }
   return { code: "METADATA_DESIGN_BLOCKED", message: "Metadata design could not run." };
-}
-
-function conversationModeForWorkMode(
-  workMode: MetadataDesignWorkMode,
-): MetadataDesignConversationMode {
-  return workMode === "REFINE_CURRENT_DESIGN" ? "REFINE_CURRENT" : "NEW_DESIGN";
-}
-
-function intentModeForWorkMode(workMode: MetadataDesignWorkMode): MetadataDesignIntentMode {
-  return workMode === "SEARCH_METADATA" ? "SEARCH_ONLY" : "DESIGN_TABLE";
-}
-
-function placeholderForWorkMode(workMode: MetadataDesignWorkMode): string {
-  if (workMode === "SEARCH_METADATA") {
-    return SEARCH_MESSAGE_PLACEHOLDER;
-  }
-  if (workMode === "REFINE_CURRENT_DESIGN") {
-    return REFINE_CURRENT_MESSAGE_PLACEHOLDER;
-  }
-  return NEW_DESIGN_MESSAGE_PLACEHOLDER;
-}
-
-function clampSearchLimit(value: string): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return 20;
-  }
-  return Math.min(Math.max(Math.trunc(parsed), 1), 100);
-}
-
-function toggleObjectType(
-  current: MetadataSearchObjectType[],
-  objectType: MetadataSearchObjectType,
-): MetadataSearchObjectType[] {
-  if (current.includes(objectType)) {
-    const next = current.filter((item) => item !== objectType);
-    return next.length > 0 ? next : current;
-  }
-  return [...current, objectType];
 }

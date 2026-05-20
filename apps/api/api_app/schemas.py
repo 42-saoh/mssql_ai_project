@@ -285,19 +285,6 @@ class MetadataSearchResponse(ApiModel):
     blockers: list[MetadataSearchBlocker] = Field(default_factory=list)
 
 
-class MetadataProcedureSearchSuggestion(ApiModel):
-    schema_name: str = Field(alias="schema")
-    name: str
-    target_key: str | None = Field(default=None, alias="targetKey")
-    source_database: str = Field(alias="sourceDatabase")
-    review_required: bool = Field(default=False, alias="reviewRequired")
-    caveats: list[str] = Field(default_factory=list)
-
-
-class MetadataProcedureSearchResponse(ApiModel):
-    suggestions: list[MetadataProcedureSearchSuggestion] = Field(default_factory=list)
-
-
 class MetadataAnalysisOptions(ApiModel):
     use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
     use_ai_tool_orchestration: bool = Field(
@@ -646,16 +633,6 @@ class MetadataDesignInputs(ApiModel):
     fields: list[MetadataDesignFieldInput] = Field(default_factory=list)
 
 
-class MetadataDesignSearchInputs(ApiModel):
-    query: str | None = Field(default=None, min_length=1)
-    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
-        default_factory=list,
-        alias="objectTypes",
-    )
-    limit: int = Field(default=20, ge=1, le=100)
-    include_table_schema: bool = Field(default=True, alias="includeTableSchema")
-
-
 class MetadataDesignOptions(ApiModel):
     use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
     use_ai_tool_orchestration: bool = Field(default=True, alias="useAiToolOrchestration")
@@ -669,10 +646,6 @@ class MetadataDesignOptions(ApiModel):
         default="NEW_DESIGN",
         alias="conversationMode",
     )
-    intent_mode: Literal["AUTO", "SEARCH_ONLY", "DESIGN_TABLE"] = Field(
-        default="AUTO",
-        alias="intentMode",
-    )
 
 
 class MetadataDesignRunRequest(ApiModel):
@@ -682,10 +655,6 @@ class MetadataDesignRunRequest(ApiModel):
     design_inputs: MetadataDesignInputs = Field(
         default_factory=MetadataDesignInputs,
         alias="designInputs",
-    )
-    search_inputs: MetadataDesignSearchInputs = Field(
-        default_factory=MetadataDesignSearchInputs,
-        alias="searchInputs",
     )
     options: MetadataDesignOptions = Field(default_factory=MetadataDesignOptions)
 
@@ -699,7 +668,6 @@ class MetadataDesignRunRequest(ApiModel):
             self.message.strip()
             or self.design_inputs.table_name_hint
             or self.design_inputs.table_description
-            or self.search_inputs.query
             or has_field
         ):
             raise ValueError("metadata design request must include message or designInputs.")
@@ -767,7 +735,7 @@ class MetadataDesignIntentChange(ApiModel):
 
 
 class MetadataDesignInterpretedIntent(ApiModel):
-    intent: Literal["CREATE_TABLE", "REFINE_TABLE", "SEARCH_METADATA", "UNKNOWN"] = "UNKNOWN"
+    intent: Literal["CREATE_TABLE", "REFINE_TABLE", "UNKNOWN"] = "UNKNOWN"
     table_name_candidate: str | None = Field(default=None, alias="tableNameCandidate")
     table_description: str | None = Field(default=None, alias="tableDescription")
     fields: list[MetadataDesignFieldInput] = Field(default_factory=list)
@@ -786,10 +754,6 @@ class MetadataDesignAppliedChange(ApiModel):
 
 
 class MetadataDesignResult(ApiModel):
-    result_kind: Literal["SEARCH_RESULT", "DESIGN_PROPOSAL"] = Field(
-        default="DESIGN_PROPOSAL",
-        alias="resultKind",
-    )
     assistant_message: str = Field(alias="assistantMessage")
     interpreted_intent: MetadataDesignInterpretedIntent = Field(
         default_factory=MetadataDesignInterpretedIntent,
@@ -807,8 +771,7 @@ class MetadataDesignResult(ApiModel):
         default_factory=list,
         alias="standardizationMappings",
     )
-    table_proposal: MetadataTableProposal | None = Field(default=None, alias="tableProposal")
-    search_result: MetadataSearchResponse | None = Field(default=None, alias="searchResult")
+    table_proposal: MetadataTableProposal = Field(alias="tableProposal")
     dto_draft: MetadataGeneratedDraft | None = Field(default=None, alias="dtoDraft")
     ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
     deterministic_facts: list[dict[str, Any]] = Field(

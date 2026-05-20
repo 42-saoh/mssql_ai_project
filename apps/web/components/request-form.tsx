@@ -61,8 +61,8 @@ export function RequestForm({
 
         <div className="form-actions">
           <button type="submit">Submit request</button>
-          <Link className="secondary-action" href="/metadata/design?intent=search">
-            Search in design chat
+          <Link className="secondary-action" href="/metadata/search">
+            Search metadata
           </Link>
         </div>
       </form>

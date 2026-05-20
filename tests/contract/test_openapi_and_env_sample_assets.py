@@ -79,8 +79,8 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "ValidationReport" in data["components"]["schemas"]
     assert "RequestedOutputType" in data["components"]["schemas"]
     assert "WorkflowStepType" in data["components"]["schemas"]
-    assert "/api/v1/metadata/search" not in data["paths"]
-    assert "/api/v1/metadata/procedure-search" in data["paths"]
+    assert "/api/v1/metadata/search" in data["paths"]
+    assert "/api/v1/metadata/procedure-search" not in data["paths"]
     assert "/api/v1/metadata/analyze" in data["paths"]
     assert "/api/v1/metadata/analysis-runs" in data["paths"]
     assert "/api/v1/metadata/analysis-runs/{runId}" in data["paths"]
@@ -89,7 +89,7 @@ def test_openapi_skeleton_exists_and_parses() -> None:
     assert "/api/v1/metadata/design-conversations/{conversationId}" in data["paths"]
     assert "/api/v1/metadata/tools/{toolName}/invoke" in data["paths"]
     assert "MetadataSearchResponse" in data["components"]["schemas"]
-    assert "MetadataProcedureSearchResponse" in data["components"]["schemas"]
+    assert "MetadataProcedureSearchResponse" not in data["components"]["schemas"]
     assert "MetadataAnalysisResponse" in data["components"]["schemas"]
     assert "MetadataAnalysisRunStatus" in data["components"]["schemas"]
     assert "MetadataDesignRunRequest" in data["components"]["schemas"]
@@ -120,7 +120,7 @@ def test_openapi_exposes_canonical_target_keys_on_public_history_surface() -> No
     assert schemas["MetadataDependencyGraphNode"]["properties"]["targetKey"]["type"] == "string"
 
 
-def test_openapi_metadata_search_is_integrated_into_design_run_contract() -> None:
+def test_openapi_metadata_search_and_design_contracts_are_separate() -> None:
     openapi = yaml.safe_load(
         (ROOT / "spec" / "openapi" / "ai_agent_platform_openapi_v1.yaml").read_text(
             encoding="utf-8"
@@ -128,11 +128,12 @@ def test_openapi_metadata_search_is_integrated_into_design_run_contract() -> Non
     )
     schemas = openapi["components"]["schemas"]
 
-    assert "/api/v1/metadata/search" not in openapi["paths"]
-    procedure_search = openapi["paths"]["/api/v1/metadata/procedure-search"]["get"]
-    assert procedure_search["operationId"] == "searchProcedures"
-    assert procedure_search["responses"]["200"]["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/MetadataProcedureSearchResponse"
+    assert "/api/v1/metadata/search" in openapi["paths"]
+    assert "/api/v1/metadata/procedure-search" not in openapi["paths"]
+    search_route = openapi["paths"]["/api/v1/metadata/search"]["get"]
+    assert search_route["operationId"] == "searchMetadataObjects"
+    assert search_route["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MetadataSearchResponse"
     }
     assert schemas["MetadataSearchObjectType"]["enum"] == [
         "PROCEDURE",
@@ -141,38 +142,19 @@ def test_openapi_metadata_search_is_integrated_into_design_run_contract() -> Non
         "FUNCTION",
     ]
     request_schema = schemas["MetadataDesignRunRequest"]
-    search_inputs = schemas["MetadataDesignSearchInputs"]
     design_options = schemas["MetadataDesignOptions"]
     design_result = schemas["MetadataDesignResult"]
     interpreted_intent = schemas["MetadataDesignInterpretedIntent"]
 
-    assert request_schema["properties"]["searchInputs"] == {
-        "$ref": "#/components/schemas/MetadataDesignSearchInputs"
+    assert "MetadataDesignSearchInputs" not in schemas
+    assert "searchInputs" not in request_schema["properties"]
+    assert "intentMode" not in design_options["properties"]
+    assert "SEARCH_METADATA" not in interpreted_intent["properties"]["intent"]["enum"]
+    assert "resultKind" not in design_result["properties"]
+    assert "searchResult" not in design_result["properties"]
+    assert design_result["properties"]["tableProposal"] == {
+        "$ref": "#/components/schemas/MetadataTableProposal"
     }
-    assert search_inputs["properties"]["objectTypes"]["items"] == {
-        "$ref": "#/components/schemas/MetadataSearchObjectType"
-    }
-    assert search_inputs["properties"]["includeTableSchema"]["default"] is True
-    assert search_inputs["properties"]["limit"]["maximum"] == 100
-    assert design_options["properties"]["intentMode"]["default"] == "AUTO"
-    assert design_options["properties"]["intentMode"]["enum"] == [
-        "AUTO",
-        "SEARCH_ONLY",
-        "DESIGN_TABLE",
-    ]
-    assert "SEARCH_METADATA" in interpreted_intent["properties"]["intent"]["enum"]
-    assert design_result["properties"]["resultKind"]["enum"] == [
-        "SEARCH_RESULT",
-        "DESIGN_PROPOSAL",
-    ]
-    assert design_result["properties"]["searchResult"]["oneOf"] == [
-        {"$ref": "#/components/schemas/MetadataSearchResponse"},
-        {"type": "null"},
-    ]
-    assert design_result["properties"]["tableProposal"]["oneOf"] == [
-        {"$ref": "#/components/schemas/MetadataTableProposal"},
-        {"type": "null"},
-    ]
 
     result_schema = schemas["MetadataSearchResult"]
     assert result_schema["properties"]["objectIdentity"] == {
@@ -193,24 +175,10 @@ def test_openapi_metadata_search_is_integrated_into_design_run_contract() -> Non
     response_properties = set(schemas["MetadataSearchResponse"]["properties"])
     result_properties = set(result_schema["properties"])
     identity_properties = set(schemas["MetadataObjectIdentity"]["properties"])
-    procedure_search_response = schemas["MetadataProcedureSearchResponse"]
-    procedure_suggestion = schemas["MetadataProcedureSearchSuggestion"]
-    assert procedure_search_response["properties"]["suggestions"]["items"] == {
-        "$ref": "#/components/schemas/MetadataProcedureSearchSuggestion"
-    }
-    assert set(procedure_suggestion["properties"]) == {
-        "schema",
-        "name",
-        "targetKey",
-        "sourceDatabase",
-        "reviewRequired",
-        "caveats",
-    }
     assert forbidden_response_fields.isdisjoint(
         response_properties
         | result_properties
         | identity_properties
-        | set(procedure_suggestion["properties"])
     )
 
 

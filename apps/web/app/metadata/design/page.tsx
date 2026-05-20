@@ -1,20 +1,11 @@
 import { DependencyBlocker } from "@/components/dependency-blocker";
-import {
-  MetadataDesignChat,
-  type MetadataDesignWorkMode,
-} from "@/components/metadata-design-chat";
+import { MetadataDesignChat } from "@/components/metadata-design-chat";
 import { getPortalApi } from "@/lib/api/client";
 import { formatPortalApiError, portalApiErrorCode } from "@/lib/api/errors";
 
 export const dynamic = "force-dynamic";
 
-export default async function MetadataDesignPage({
-  searchParams,
-}: Readonly<{
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}>) {
-  const params = await searchParams;
-  const initialWorkMode = initialWorkModeForIntent(firstParam(params.intent));
+export default async function MetadataDesignPage() {
   let profiles;
   try {
     const api = getPortalApi();
@@ -34,16 +25,7 @@ export default async function MetadataDesignPage({
   return (
     <MetadataDesignChat
       defaultDbProfileId={profiles.defaultProfileId}
-      initialWorkMode={initialWorkMode}
       profiles={profiles.profiles}
     />
   );
-}
-
-function firstParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function initialWorkModeForIntent(value: string | undefined): MetadataDesignWorkMode {
-  return value === "search" ? "SEARCH_METADATA" : "NEW_TABLE_DESIGN";
 }

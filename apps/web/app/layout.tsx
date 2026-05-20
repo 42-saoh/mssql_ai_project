@@ -22,6 +22,7 @@ export default function RootLayout({
           <nav aria-label="Primary navigation">
             <Link href="/requests/new">SP Analysis</Link>
             <Link href="/jobs">Analysis history</Link>
+            <Link href="/metadata/search">Metadata search</Link>
             <Link href="/metadata/design">Metadata design</Link>
             <Link href="/metadata/dependencies">Dependency diagnostics</Link>
           </nav>

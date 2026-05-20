@@ -277,10 +277,11 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
   in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation
   mapping, audit payload shape 를 유지하되 production persistence 로 사용하지 않는다.
 
-## Metadata design search
+## Metadata search and design
 
-- General metadata search runs through `POST /api/v1/metadata/design-runs` as `resultKind=SEARCH_RESULT`; the removed `GET /api/v1/metadata/search` route still returns 404.
-- SP Analysis procedure-name autocomplete uses the narrow public `GET /api/v1/metadata/procedure-search` route. It returns PROCEDURE suggestions only and internally reuses the read-only `search_metadata_objects` helper.
+- General metadata search uses the public read-only `GET /api/v1/metadata/search` route and returns sanitized `MetadataSearchResponse` object identity evidence.
+- SP Analysis procedure-name autocomplete is implemented by the Web `/api/metadata/search` proxy with `objectTypes=["PROCEDURE"]`; there is no separate public `GET /api/v1/metadata/procedure-search` route.
+- Metadata design uses `POST /api/v1/metadata/design-runs` for table design/refinement only and returns table proposal/DTO preview results rather than search-only runs.
 - API 는 MSSQL MCP registry boundary 를 통해 metadata inventory tool 을 호출한다. 기본 테스트
   모드는 fixture-backed repository 를 사용하고, `MSSQL_ENABLE_LIVE_METADATA=1` 일 때는
   env-gated live metadata repository 를 사용한다.

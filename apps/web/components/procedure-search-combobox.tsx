@@ -183,7 +183,7 @@ function ProcedureSearchCombobox({
           query: normalizedQuery,
           limit: "100",
         });
-        const response = await fetch(`/api/metadata/procedure-search?${params.toString()}`, {
+        const response = await fetch(`/api/metadata/search?${params.toString()}`, {
           signal: controller.signal,
         });
         const payload = (await response.json()) as ProcedureSearchResponse;

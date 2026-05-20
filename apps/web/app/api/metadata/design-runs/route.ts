@@ -29,18 +29,11 @@ export async function POST(request: Request) {
 
 function normalizeRequest(request: MetadataDesignRunRequest): MetadataDesignRunRequest {
   const maxCandidates = clampMaxCandidates(Number(request.options?.maxCandidates ?? 5));
-  const searchLimit = clampSearchLimit(Number(request.searchInputs?.limit ?? 20));
   return {
     ...request,
     designInputs: {
       fields: [],
       ...request.designInputs,
-    },
-    searchInputs: {
-      objectTypes: ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
-      includeTableSchema: true,
-      ...request.searchInputs,
-      limit: searchLimit,
     },
     options: {
       ...request.options,
@@ -50,7 +43,6 @@ function normalizeRequest(request: MetadataDesignRunRequest): MetadataDesignRunR
       maxCandidates,
       generateDtoDraft: request.options?.generateDtoDraft ?? true,
       conversationMode: request.options?.conversationMode ?? "NEW_DESIGN",
-      intentMode: request.options?.intentMode ?? "AUTO",
     },
   };
 }
@@ -60,11 +52,4 @@ function clampMaxCandidates(value: number): number {
     return 5;
   }
   return Math.min(Math.max(Math.trunc(value), 1), 10);
-}
-
-function clampSearchLimit(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 20;
-  }
-  return Math.min(Math.max(Math.trunc(value), 1), 100);
 }

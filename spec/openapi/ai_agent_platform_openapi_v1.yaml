@@ -408,30 +408,45 @@ paths:
           $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
-  /api/v1/metadata/procedure-search:
+  /api/v1/metadata/search:
     get:
       tags: [metadata]
-      summary: Search stored procedure identities for SP Analysis autocomplete.
-      operationId: searchProcedures
+      summary: Search read-only MSSQL metadata objects.
+      operationId: searchMetadataObjects
       description: |
-        Returns a narrow, read-only PROCEDURE suggestion list for the SP Analysis target
-        input. General metadata search remains available through metadata design chat
-        runs; this endpoint does not expose table/view/function search, row data, SQL/SP
-        definitions, procedure execution output, DDL/DML controls, secrets, raw prompts,
-        or raw provider traces.
+        Searches metadata object identities through the MSSQL Metadata MCP read-only boundary.
+        The response is limited to object identity, profile/database context, snapshot/evidence
+        references, evidence caveats, machine caveat markers, and blocker codes. It never returns row
+        data, executes stored procedures, exposes SQL definition text, or performs DDL/DML.
+        PPM search must not fall back to PLF when PPM is unavailable.
       parameters:
         - name: dbProfileId
           in: query
-          required: false
+          required: true
           schema:
             type: string
-            default: ppm
+          examples:
+            master:
+              value: master
+            ppm:
+              value: ppm
         - name: query
           in: query
-          required: false
+          required: true
           schema:
             type: string
-            default: ""
+            minLength: 1
+          example: order
+        - name: objectTypes
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/MetadataSearchObjectType"
+            default: [PROCEDURE, TABLE, VIEW, FUNCTION]
         - name: limit
           in: query
           required: false
@@ -442,11 +457,11 @@ paths:
             maximum: 100
       responses:
         "200":
-          description: Stored procedure autocomplete suggestions.
+          description: Metadata object search results and blocker/caveat context.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MetadataProcedureSearchResponse"
+                $ref: "#/components/schemas/MetadataSearchResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "403":
@@ -574,11 +589,10 @@ paths:
       operationId: submitMetadataDesignRun
       description: |
         Starts a durable metadata design chat run. The run accepts a natural-language
-        message, optional conversation mode, intentMode, API-compatible field inputs,
-        searchInputs, and table hints. AUTO or SEARCH_ONLY search intent returns
-        read-only metadata search results and optional TABLE schema candidates; table
-        design intent returns sanitized interpreted intent, applied changes,
-        evidence-bound table script, and DTO previews.
+        message, optional conversation mode, API-compatible field inputs, and table
+        hints, searches related metadata through read-only MCP tools, and returns
+        sanitized interpreted intent, applied changes, evidence-bound table script,
+        and DTO previews.
         The v10 `METADATA_DESIGN_RUNS` schema is manual-apply only. Results never
         include row data, raw SQL/SP definitions, procedure execution output,
         secrets, raw prompts, raw provider traces, apply controls, or workflow
@@ -1583,38 +1597,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetadataSearchBlocker"
-    MetadataProcedureSearchSuggestion:
-      type: object
-      required:
-        - schema
-        - name
-        - sourceDatabase
-        - reviewRequired
-        - caveats
-      properties:
-        schema:
-          type: string
-        name:
-          type: string
-        targetKey:
-          type: string
-          description: Canonical target key for this stored procedure identity.
-        sourceDatabase:
-          type: string
-        reviewRequired:
-          type: boolean
-        caveats:
-          type: array
-          items:
-            type: string
-    MetadataProcedureSearchResponse:
-      type: object
-      required: [suggestions]
-      properties:
-        suggestions:
-          type: array
-          items:
-            $ref: "#/components/schemas/MetadataProcedureSearchSuggestion"
     MetadataAnalysisOptions:
       type: object
       properties:
@@ -1733,24 +1715,6 @@ components:
           items:
             $ref: "#/components/schemas/MetadataDesignFieldInput"
           default: []
-    MetadataDesignSearchInputs:
-      type: object
-      properties:
-        query:
-          type: string
-        objectTypes:
-          type: array
-          items:
-            $ref: "#/components/schemas/MetadataSearchObjectType"
-          default: [PROCEDURE, TABLE, VIEW, FUNCTION]
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100
-          default: 20
-        includeTableSchema:
-          type: boolean
-          default: true
     MetadataDesignOptions:
       type: object
       properties:
@@ -1780,13 +1744,6 @@ components:
             - NEW_DESIGN
             - REFINE_CURRENT
           default: NEW_DESIGN
-        intentMode:
-          type: string
-          enum:
-            - AUTO
-            - SEARCH_ONLY
-            - DESIGN_TABLE
-          default: AUTO
     MetadataDesignRunRequest:
       type: object
       required: [dbProfileId, message]
@@ -1801,8 +1758,6 @@ components:
           type: string
         designInputs:
           $ref: "#/components/schemas/MetadataDesignInputs"
-        searchInputs:
-          $ref: "#/components/schemas/MetadataDesignSearchInputs"
         options:
           $ref: "#/components/schemas/MetadataDesignOptions"
     MetadataRelatedMetadata:
@@ -1969,7 +1924,6 @@ components:
           enum:
             - CREATE_TABLE
             - REFINE_TABLE
-            - SEARCH_METADATA
             - UNKNOWN
         tableNameCandidate:
           type: string
@@ -2016,12 +1970,12 @@ components:
     MetadataDesignResult:
       type: object
       required:
-        - resultKind
         - assistantMessage
         - interpretedIntent
         - appliedChanges
         - relatedMetadata
         - standardizationMappings
+        - tableProposal
         - aiToolEvidence
         - deterministicFacts
         - reviewMarkers
@@ -2029,12 +1983,6 @@ components:
         - reviewRequired
         - componentInvocations
       properties:
-        resultKind:
-          type: string
-          enum:
-            - SEARCH_RESULT
-            - DESIGN_PROPOSAL
-          default: DESIGN_PROPOSAL
         assistantMessage:
           type: string
         interpretedIntent:
@@ -2052,13 +2000,7 @@ components:
           items:
             $ref: "#/components/schemas/MetadataStandardizationMapping"
         tableProposal:
-          oneOf:
-            - $ref: "#/components/schemas/MetadataTableProposal"
-            - type: "null"
-        searchResult:
-          oneOf:
-            - $ref: "#/components/schemas/MetadataSearchResponse"
-            - type: "null"
+          $ref: "#/components/schemas/MetadataTableProposal"
         dtoDraft:
           oneOf:
             - $ref: "#/components/schemas/MetadataGeneratedDraft"

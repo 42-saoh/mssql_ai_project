@@ -98,8 +98,8 @@ export default async function HomePage() {
           <Link className="secondary-action" href="/jobs">
             View all analysis history
           </Link>
-          <Link className="secondary-action" href="/metadata/design?intent=search">
-            Search in design chat
+          <Link className="secondary-action" href="/metadata/search">
+            Search metadata
           </Link>
         </div>
       </section>
@@ -153,15 +153,15 @@ export default async function HomePage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Metadata design</p>
-              <h2>Search and table previews</h2>
+              <h2>Table previews</h2>
             </div>
             <StatusPill value="CHAT" label="design-run" />
           </div>
           <p className="lede">
-            Ask for object search, table schema evidence, or a new table design in one durable
-            metadata design conversation.
+            Ask for a new table design or refine the current draft with read-only metadata
+            evidence.
           </p>
-          <Link href="/metadata/design?intent=search">Open metadata design chat</Link>
+          <Link href="/metadata/design">Open metadata design chat</Link>
         </div>
       </section>
 

@@ -90,7 +90,7 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
         blocker_code=None,
         summary=(
             "P21 live portal gate passed with PLF workflow access, live PPM metadata "
-            "design-chat search, and explicit validation."
+            "search, and explicit validation."
         ),
         checks=[
             _check("ppm_metadata_search", "pass", summary=metadata_result["summary"]),
@@ -101,36 +101,22 @@ def run_probe(*, load_dotenv: bool = True) -> dict[str, Any]:
 
 
 def _search_ppm_metadata(client: TestClient) -> dict[str, Any]:
-    response = client.post(
-        "/api/v1/metadata/design-runs",
-        json={
+    response = client.get(
+        "/api/v1/metadata/search",
+        params={
             "dbProfileId": "ppm",
-            "message": f"search {os.getenv('P21_METADATA_SEARCH_QUERY', 'proc')}",
-            "searchInputs": {
-                "query": os.getenv("P21_METADATA_SEARCH_QUERY", "proc"),
-                "objectTypes": ["PROCEDURE"],
-                "limit": 1,
-                "includeTableSchema": False,
-            },
-            "options": {"useLlmAnalysis": False, "intentMode": "SEARCH_ONLY"},
+            "query": os.getenv("P21_METADATA_SEARCH_QUERY", "proc"),
+            "objectTypes": ["PROCEDURE"],
+            "limit": "1",
         },
     )
-    if response.status_code != 202:
+    if response.status_code != 200:
         raise ProbeFailure.from_response(
             response,
             fallback_blocker="P21_LIVE_PPM_UNAVAILABLE",
             check_name="ppm_metadata_search",
         )
-    submitted = response.json()
-    poll_response = client.get(f"/api/v1/metadata/design-runs/{submitted.get('runId')}")
-    if poll_response.status_code != 200:
-        raise ProbeFailure.from_response(
-            poll_response,
-            fallback_blocker="P21_LIVE_PPM_UNAVAILABLE",
-            check_name="ppm_metadata_search",
-        )
-    payload = poll_response.json()
-    search_result = (payload.get("result") or {}).get("searchResult") or {}
+    search_result = response.json()
     results = search_result.get("results") or []
     if not results:
         raise ProbeFailure(

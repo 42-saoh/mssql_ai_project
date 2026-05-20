@@ -60,7 +60,7 @@ def test_p14_sample_names_come_from_live_manifest_not_web_source() -> None:
 def test_p14_web_source_keeps_forbidden_actions_out_of_ui() -> None:
     source = _web_source().lower()
 
-    assert "/api/v1/metadata/search" not in source
+    assert "/api/v1/metadata/search" in source
     assert "/api/v1/metadata/analyze" in source
     assert "/api/v1/metadata/tools" in source
     assert "/api/v1/knowledge/" in source
@@ -108,8 +108,9 @@ def test_p29_dependency_diagnostics_use_safe_invocation_without_schema_exposure(
     assert 'cleanParam(params, "dbProfileId", "ppm")' in page
     assert 'cleanParam(params, "objectName", "GetInspItemsCd")' in page
     assert 'cleanParam(params, "referencedName", "PEX_INSP_ITEMS")' in page
-    assert 'redirect("/metadata/design?intent=search")' in search_page
-    assert "MetadataAnalyzeAction" not in search_page
+    assert "Metadata search" in search_page
+    assert "api.searchMetadataObjects" in search_page
+    assert "MetadataAnalyzeAction" in search_page
     assert 'fetch("/api/metadata/analysis-runs"' in analyze_action
     assert "/api/metadata/analysis-runs/${encodeURIComponent(run.runId)}" in analyze_action
     assert "AI_METADATA_ANALYSIS_TIMEOUT" in analyze_action
@@ -183,10 +184,8 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert 'href="/metadata/design"' in layout
     assert "MetadataDesignChat" in page
     assert "api.listMetadataProfiles()" in page
-    assert "searchParams" in page
-    assert "initialWorkModeForIntent(firstParam(params.intent))" in page
-    assert 'value === "search" ? "SEARCH_METADATA" : "NEW_TABLE_DESIGN"' in page
-    assert "initialWorkMode={initialWorkMode}" in page
+    assert "searchParams" not in page
+    assert "initialWorkMode" not in page
     assert 'fetch("/api/metadata/design-runs"' in component
     assert "/api/metadata/design-runs/${encodeURIComponent(nextRun.runId)}" in component
     assert "metadata-chat-shell" in component
@@ -199,25 +198,17 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert component.index("metadata-chat-composer") < component.index(
         "metadata-design-output-stack"
     )
-    assert "Work mode" in component
-    assert "Search metadata" in component
-    assert "New table design" in component
-    assert "Refine current design" in component
-    assert "conversationModeForWorkMode" in component
-    assert "intentModeForWorkMode" in component
+    assert "Conversation mode" in component
+    assert "New design" in component
+    assert "Refine current" in component
     assert "conversationMode" in component
-    assert "Search limit" in component
-    assert "Search object types" in component
-    assert "searchInputs" in component
-    assert "intentMode," in component
-    assert '"SEARCH_ONLY"' in component
-    assert '"DESIGN_TABLE"' in component
-    assert 'nextRun.result.resultKind === "SEARCH_RESULT"' in component
-    assert '"REFINE_CURRENT_DESIGN"' in component
-    assert 'setWorkMode("NEW_TABLE_DESIGN")' in component
-    assert "SEARCH_RESULT" in component
-    assert "searchResult" in component
-    assert "Use as table hint" in component
+    assert "Search limit" not in component
+    assert "Search object types" not in component
+    assert "searchInputs" not in component
+    assert "intentMode" not in component
+    assert "SEARCH_RESULT" not in component
+    assert "searchResult" not in component
+    assert "Use as table hint" not in component
     assert "MetadataEvidenceCandidates" in component
     assert 'const [message, setMessage] = useState("")' in component
     assert "messagePlaceholder" in component
@@ -245,8 +236,8 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert ".metadata-chat-layout" not in styles
     assert "api.submitMetadataDesignRun(payload)" in submit_route
     assert "conversationMode: request.options?.conversationMode ?? \"NEW_DESIGN\"" in submit_route
-    assert "intentMode: request.options?.intentMode ?? \"AUTO\"" in submit_route
-    assert "includeTableSchema: true" in submit_route
+    assert "intentMode" not in submit_route
+    assert "includeTableSchema" not in submit_route
     assert "api.getMetadataDesignRun(runId)" in poll_route
     assert "api.getMetadataDesignConversation(conversationId)" in conversation_route
     assert "submitMetadataDesignRun" in portal_api
@@ -287,7 +278,7 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
         encoding="utf-8"
     )
     procedure_search_route = (
-        WEB_ROOT / "app" / "api" / "metadata" / "procedure-search" / "route.ts"
+        WEB_ROOT / "app" / "api" / "metadata" / "search" / "route.ts"
     ).read_text(encoding="utf-8")
     portal_api = (WEB_ROOT / "lib" / "api" / "portal-api.ts").read_text(
         encoding="utf-8"
@@ -328,20 +319,22 @@ def test_p21_web_pages_use_strict_http_api_without_demo_fallbacks() -> None:
     assert "SingleProcedureTargetInput" in request_form
     assert "BatchProcedureTargetsInput" in request_form
     assert "ProcedureSearchCombobox" in source
-    assert 'fetch(`/api/metadata/procedure-search?' in source
-    assert "/api/metadata/search" not in source
-    assert "searchMetadataObjects" not in source
-    assert "api.searchProcedures({ dbProfileId, query, limit })" in procedure_search_route
+    assert 'fetch(`/api/metadata/search?' in source
+    assert "/api/metadata/procedure-search" not in source
+    assert "api.searchMetadataObjects" in procedure_search_route
+    assert 'objectTypes: ["PROCEDURE"]' in procedure_search_route
     assert "submitMetadataDesignRun" not in procedure_search_route
     assert "getMetadataDesignRun" not in procedure_search_route
-    assert "searchProcedures" in portal_api
-    assert "/api/v1/metadata/procedure-search" in http_client
+    assert "searchMetadataObjects" in portal_api
+    assert "/api/v1/metadata/search" in http_client
     assert "Type at least 2 characters." not in source
     assert "field-code--empty" in source
     assert "Add to batch" in source
     assert "Search and add PROCEDURE targets one at a time." in source
     assert "required" in _form_control_block(source, "batchTargets")
-    assert not (WEB_ROOT / "app" / "api" / "metadata" / "search" / "route.ts").exists()
+    assert not (
+        WEB_ROOT / "app" / "api" / "metadata" / "procedure-search" / "route.ts"
+    ).exists()
     global_css = (WEB_ROOT / "app" / "globals.css").read_text(encoding="utf-8")
     assert "align-items: start;" in global_css
     assert "position: absolute;" in global_css
@@ -572,10 +565,11 @@ def test_validation_and_metadata_caveat_ui_avoids_false_error_states() -> None:
     assert "displayCaveatText(check.message" in artifact_preview
     assert "displayCaveatText(item)" in artifact_preview
 
-    assert 'redirect("/metadata/design?intent=search")' in metadata_search
-    assert "result.searchResult.blockers.map" in metadata_design
+    assert "api.searchMetadataObjects" in metadata_search
+    assert "splitMetadataBlockers(response.blockers)" in metadata_search
+    assert "searchResult" not in metadata_design
     assert "Evidence bound" in metadata_design
-    assert "metadataCaveatMessages(response.caveats, caveatBlockers)" not in metadata_search
+    assert "metadataCaveatMessages(response.caveats, caveatBlockers)" in metadata_search
     assert "REVIEW_REQUIRED" in metadata_design
 
     assert "DEPENDENCY_METADATA_INCOMPLETE" in display_helpers

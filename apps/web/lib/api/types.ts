@@ -284,23 +284,11 @@ export interface MetadataSearchResponse {
   blockers: MetadataSearchBlocker[];
 }
 
-export interface MetadataProcedureSearchRequest {
-  dbProfileId?: string;
-  query?: string;
+export interface MetadataSearchRequest {
+  dbProfileId: string;
+  query: string;
+  objectTypes?: MetadataSearchObjectType[];
   limit?: number;
-}
-
-export interface MetadataProcedureSearchSuggestion {
-  schema: string;
-  name: string;
-  targetKey?: string | null;
-  sourceDatabase: string;
-  reviewRequired: boolean;
-  caveats: string[];
-}
-
-export interface MetadataProcedureSearchResponse {
-  suggestions: MetadataProcedureSearchSuggestion[];
 }
 
 export interface MetadataAnalysisOptions {
@@ -593,13 +581,6 @@ export interface MetadataDesignInputs {
   fields?: MetadataDesignFieldInput[];
 }
 
-export interface MetadataDesignSearchInputs {
-  query?: string | null;
-  objectTypes?: MetadataSearchObjectType[];
-  limit?: number;
-  includeTableSchema?: boolean;
-}
-
 export interface MetadataDesignOptions {
   useLlmAnalysis?: boolean;
   useAiToolOrchestration?: boolean;
@@ -607,7 +588,6 @@ export interface MetadataDesignOptions {
   maxCandidates?: number;
   generateDtoDraft?: boolean;
   conversationMode?: "NEW_DESIGN" | "REFINE_CURRENT";
-  intentMode?: "AUTO" | "SEARCH_ONLY" | "DESIGN_TABLE";
 }
 
 export interface MetadataDesignRunRequest {
@@ -615,7 +595,6 @@ export interface MetadataDesignRunRequest {
   message: string;
   conversationId?: string | null;
   designInputs?: MetadataDesignInputs;
-  searchInputs?: MetadataDesignSearchInputs;
   options?: MetadataDesignOptions;
 }
 
@@ -679,7 +658,7 @@ export interface MetadataDesignIntentChange {
 }
 
 export interface MetadataDesignInterpretedIntent {
-  intent: "CREATE_TABLE" | "REFINE_TABLE" | "SEARCH_METADATA" | "UNKNOWN";
+  intent: "CREATE_TABLE" | "REFINE_TABLE" | "UNKNOWN";
   tableNameCandidate?: string | null;
   tableDescription?: string | null;
   fields: MetadataDesignFieldInput[];
@@ -698,14 +677,12 @@ export interface MetadataDesignAppliedChange {
 }
 
 export interface MetadataDesignResult {
-  resultKind: "SEARCH_RESULT" | "DESIGN_PROPOSAL";
   assistantMessage: string;
   interpretedIntent: MetadataDesignInterpretedIntent;
   appliedChanges: MetadataDesignAppliedChange[];
   relatedMetadata: MetadataRelatedMetadata[];
   standardizationMappings: MetadataStandardizationMapping[];
-  tableProposal?: MetadataTableProposal | null;
-  searchResult?: MetadataSearchResponse | null;
+  tableProposal: MetadataTableProposal;
   dtoDraft?: MetadataGeneratedDraft | null;
   aiToolEvidence: Record<string, unknown>;
   deterministicFacts: Record<string, unknown>[];
