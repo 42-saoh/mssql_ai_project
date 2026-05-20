@@ -57,6 +57,7 @@ DESIGN_PROMPT_VERSION = "prompt:metadata_design_chat_intent@0.1.0"
 DESIGN_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_tool_plan@0.1.0"
 POLICY_REF = "policy:platform_db_standardization_rules_for_ai@1.0"
 REVIEW_REQUIRED = "REVIEW_REQUIRED"
+METADATA_DESIGN_DTO_DRAFT_PACKAGE = "com.pec.metadata.design.dto"
 FORBIDDEN_TEXT_RE = re.compile(
     (
         r"(password|secret|token|api[_-]?key|connection\s*string|row\s*data|"
@@ -1679,7 +1680,7 @@ def _build_dto_draft(table_proposal: MetadataTableProposal) -> MetadataGenerated
         fields.append((java_type, snake_to_lower_camel(column.name.lower()), column))
     imports = java_imports_for_types([java_type for java_type, _, _ in fields])
     lines = [
-        "package com.example.metadata.dto;",
+        f"package {METADATA_DESIGN_DTO_DRAFT_PACKAGE};",
         "",
         *imports,
         *([] if not imports else [""]),
@@ -1717,6 +1718,7 @@ def _build_dto_draft(table_proposal: MetadataTableProposal) -> MetadataGenerated
         reviewRequired=True,
         reviewReasons=[
             "REVIEW_REQUIRED: DTO preview is not a compiled source artifact.",
+            "REVIEW_REQUIRED: Target application package must be confirmed before source adoption.",
             *table_proposal.review_reasons,
         ],
     )

@@ -18,6 +18,7 @@ storage:
 outputs:
   table_script_field: createTableScriptPreview
   dto_preview_artifact_type: DTO_DRAFT
+  dto_preview_package: com.pec.metadata.design.dto
   not_workflow_artifacts: true
 required_evidence:
   - search_columns

@@ -21,6 +21,9 @@ REQUIRED_P42_REVIEW_MARKERS = {
     "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
     "TRANSACTION_BOUNDARY_REVIEW_REQUIRED",
 }
+P42_MODEL_PACKAGE = "com.pec.ppm.workflow.draft.model"
+P42_SERVICE_PACKAGE = "com.pec.ppm.workflow.draft.service"
+P42_MAPPER_PACKAGE = "com.pec.ppm.workflow.draft.mapper"
 
 SANITIZED_MANAGE_BOND_SQL = """
 CREATE PROCEDURE PPM.dbo.PCO_GU_ManageBond_PRC
@@ -215,9 +218,18 @@ def _p42_materialized_content(file: dict[str, Any]) -> str:
     artifact_type = file["artifactType"]
     class_name = file["className"]
     if artifact_type == "DTO_DRAFT":
-        fields = "\n".join(f"    private String {field};" for field in file["requiredFields"])
+        fields = list(file["requiredFields"])
+        declarations = "\n".join(f"    private String {field};" for field in fields)
+        accessors = "\n\n".join(_p42_string_accessors(field) for field in fields)
         markers = " ".join(file.get("reviewMarkers") or ["REVIEW_REQUIRED"])
-        return f"public class {class_name} {{\n    // {markers} draft DTO.\n{fields}\n}}"
+        return (
+            f"package {P42_MODEL_PACKAGE};\n\n"
+            f"public class {class_name} {{\n"
+            f"    // {markers} draft DTO.\n"
+            f"{declarations}\n\n"
+            f"{accessors}\n"
+            "}"
+        )
     if artifact_type == "SERVICE_DRAFT":
         return _p42_service_content(file)
     if artifact_type == "MAPPER_INTERFACE":
@@ -225,6 +237,18 @@ def _p42_materialized_content(file: dict[str, Any]) -> str:
     if artifact_type == "MAPPER_XML":
         return _p42_mapper_xml_content(file)
     raise AssertionError(f"Unexpected P42 artifact type: {artifact_type}")
+
+
+def _p42_string_accessors(field: str) -> str:
+    suffix = field[:1].upper() + field[1:]
+    return (
+        f"    public String get{suffix}() {{\n"
+        f"        return {field};\n"
+        "    }\n\n"
+        f"    public void set{suffix}(String {field}) {{\n"
+        f"        this.{field} = {field};\n"
+        "    }"
+    )
 
 
 def _p42_method_parameter_type(method: str) -> str:
@@ -249,16 +273,27 @@ def _p42_service_content(file: dict[str, Any]) -> str:
         if method == "readBond":
             methods.append(
                 "    public List<ManageBondSearchRow> "
-                "readBond(ManageBondSearchCriteria criteria) { return mapper.readBond(criteria); }"
+                "readBond(ManageBondSearchCriteria criteria) {\n"
+                '        Objects.requireNonNull(criteria, "criteria");\n'
+                "        return mapper.readBond(criteria);\n"
+                "    }"
             )
         else:
             methods.append(
                 f"    public int {method}({parameter_type} command) "
-                f"{{ return mapper.{method}(command); }}"
+                "{\n"
+                '        Objects.requireNonNull(command, "command");\n'
+                f"        int affectedRows = mapper.{method}(command);\n"
+                "        return affectedRows;\n"
+                "    }"
             )
     references = " ".join(file["references"])
     return (
+        f"package {P42_SERVICE_PACKAGE};\n\n"
+        f"import {P42_MODEL_PACKAGE}.*;\n"
+        f"import {P42_MAPPER_PACKAGE}.ManageBondMapper;\n"
         "import java.util.List;\n"
+        "import java.util.Objects;\n\n"
         "public class ManageBondService {\n"
         "    private final ManageBondMapper mapper;\n"
         "    public ManageBondService(ManageBondMapper mapper) { this.mapper = mapper; }\n"
@@ -280,7 +315,10 @@ def _p42_mapper_interface_content(file: dict[str, Any]) -> str:
             methods.append(f"    int {method}({parameter_type} command);")
     references = " ".join(file["references"])
     return (
+        f"package {P42_MAPPER_PACKAGE};\n\n"
+        f"import {P42_MODEL_PACKAGE}.*;\n"
         "import java.util.List;\n"
+        "\n"
         "public interface ManageBondMapper {\n"
         f"    // REVIEW_REQUIRED draft references: {references}\n"
         f"{chr(10).join(methods)}\n"
@@ -294,8 +332,8 @@ def _p42_mapper_xml_content(file: dict[str, Any]) -> str:
         parameter_type = _p42_method_parameter_type(method)
         if method == "readBond":
             statements.append(
-                '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
-                'resultType="ManageBondSearchRow">\n'
+                f'  <select id="readBond" parameterType="{_p42_dto_fqcn("ManageBondSearchCriteria")}" '
+                'resultMap="ManageBondSearchRowMap">\n'
                 "    SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD\n"
                 "    FROM PPM.dbo.PCO_GUAR\n"
                 "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}\n"
@@ -303,17 +341,28 @@ def _p42_mapper_xml_content(file: dict[str, Any]) -> str:
             )
         else:
             statements.append(
-                f'  <update id="{method}" parameterType="{parameter_type}">\n'
+                f'  <update id="{method}" parameterType="{_p42_dto_fqcn(parameter_type)}">\n'
                 f"{_p42_mapper_sql_body(method)}\n"
                 "  </update>"
             )
     references = " ".join(file["references"])
     return (
-        '<mapper namespace="ManageBondMapper">\n'
+        f'<mapper namespace="{P42_MAPPER_PACKAGE}.ManageBondMapper">\n'
         f"  <!-- REVIEW_REQUIRED DTO references: {references} -->\n"
+        f'  <resultMap id="ManageBondSearchRowMap" type="{_p42_dto_fqcn("ManageBondSearchRow")}">\n'
+        '    <result column="CTRT_NO" property="contractNum"/>\n'
+        '    <result column="ORDR_NO" property="ordNum"/>\n'
+        '    <result column="GUAR_TP_CD" property="bondKindCode"/>\n'
+        '    <result column="GUAR_ST_CD" property="bondStatusCode"/>\n'
+        '    <result column="GUAR_APRV_YN" property="approvalYn"/>\n'
+        "  </resultMap>\n"
         f"{chr(10).join(statements)}\n"
         "</mapper>"
     )
+
+
+def _p42_dto_fqcn(class_name: str) -> str:
+    return f"{P42_MODEL_PACKAGE}.{class_name}"
 
 
 def _p42_mapper_sql_body(method: str) -> str:

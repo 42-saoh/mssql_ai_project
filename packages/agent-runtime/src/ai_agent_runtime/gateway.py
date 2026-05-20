@@ -642,6 +642,13 @@ def _default_fake_ai_draft_pack_output(
         if isinstance(prompt_payload.get("qualityGates"), Mapping)
         else None
     )
+    package_context = _fake_java_package_context(prompt_payload)
+    model_package = package_context["modelPackage"]
+    service_package = package_context["servicePackage"]
+    mapper_package = package_context["mapperPackage"]
+    draft_criteria_fqcn = f"{model_package}.DraftSearchCriteria"
+    draft_row_fqcn = f"{model_package}.DraftSearchRow"
+    draft_mapper_fqcn = f"{mapper_package}.DraftMapper"
     review_markers = [
         "P42_AI_DRAFT_PACK_REVIEW_REQUIRED",
         "CROSS_DB_WRITE_REVIEW_REQUIRED",
@@ -661,6 +668,7 @@ def _default_fake_ai_draft_pack_output(
                     item,
                     evidence_refs=evidence_refs,
                     review_markers=review_markers,
+                    package_context=package_context,
                 )
                 for item in expected_inventory
             ],
@@ -693,15 +701,22 @@ def _default_fake_ai_draft_pack_output(
                 "role": "QUERY_DTO",
                 "className": "DraftSearchCriteria",
                 "content": (
+                    f"package {model_package};\n\n"
                     "public class DraftSearchCriteria {\n"
                     "    // REVIEW_REQUIRED DraftSearchCriteria\n"
-                    "    private String reviewRequiredField;\n"
+                    "    private String draftEvidenceKey;\n\n"
+                    "    public String getDraftEvidenceKey() {\n"
+                    "        return draftEvidenceKey;\n"
+                    "    }\n\n"
+                    "    public void setDraftEvidenceKey(String draftEvidenceKey) {\n"
+                    "        this.draftEvidenceKey = draftEvidenceKey;\n"
+                    "    }\n"
                     "}"
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
                 "reviewMarkers": review_markers,
-                "requiredFields": ["reviewRequiredField"],
+                "requiredFields": ["draftEvidenceKey"],
             },
             {
                 "artifactType": "DTO_DRAFT",
@@ -709,15 +724,22 @@ def _default_fake_ai_draft_pack_output(
                 "role": "RESULT_DTO",
                 "className": "DraftSearchRow",
                 "content": (
+                    f"package {model_package};\n\n"
                     "public class DraftSearchRow {\n"
                     "    // REVIEW_REQUIRED DraftSearchRow\n"
-                    "    private String reviewRequiredField;\n"
+                    "    private String draftEvidenceKey;\n\n"
+                    "    public String getDraftEvidenceKey() {\n"
+                    "        return draftEvidenceKey;\n"
+                    "    }\n\n"
+                    "    public void setDraftEvidenceKey(String draftEvidenceKey) {\n"
+                    "        this.draftEvidenceKey = draftEvidenceKey;\n"
+                    "    }\n"
                     "}"
                 ),
                 "operationIds": ["reviewDraft"],
                 "evidenceRefs": evidence_refs,
                 "reviewMarkers": review_markers,
-                "requiredFields": ["reviewRequiredField"],
+                "requiredFields": ["draftEvidenceKey"],
             },
             {
                 "artifactType": "SERVICE_DRAFT",
@@ -725,12 +747,17 @@ def _default_fake_ai_draft_pack_output(
                 "role": "SERVICE",
                 "className": "DraftService",
                 "content": (
+                    f"package {service_package};\n\n"
+                    f"import {draft_criteria_fqcn};\n"
+                    f"import {draft_mapper_fqcn};\n\n"
                     "public class DraftService {\n"
                     "    private final DraftMapper mapper;\n"
                     "    public DraftService(DraftMapper mapper) { this.mapper = mapper; }\n"
                     "    // REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow\n"
                     "    public Object reviewDraft(DraftSearchCriteria criteria) {\n"
-                    "        return mapper.reviewDraft(criteria);\n"
+                    "        java.util.Objects.requireNonNull(criteria, \"criteria\");\n"
+                    "        Object result = mapper.reviewDraft(criteria);\n"
+                    "        return result;\n"
                     "    }\n"
                     "}"
                 ),
@@ -745,6 +772,8 @@ def _default_fake_ai_draft_pack_output(
                 "role": "MAPPER_INTERFACE",
                 "className": "DraftMapper",
                 "content": (
+                    f"package {mapper_package};\n\n"
+                    f"import {draft_criteria_fqcn};\n\n"
                     "public interface DraftMapper {\n"
                     "    // REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow\n"
                     "    Object reviewDraft(DraftSearchCriteria criteria);\n"
@@ -761,12 +790,15 @@ def _default_fake_ai_draft_pack_output(
                 "role": "MAPPER_XML",
                 "className": "DraftMapperSQL",
                 "content": (
-                    '<mapper namespace="DraftMapper">\n'
+                    f'<mapper namespace="{draft_mapper_fqcn}">\n'
                     "  <!-- REVIEW_REQUIRED DraftSearchCriteria DraftSearchRow -->\n"
-                    '  <select id="reviewDraft" parameterType="DraftSearchCriteria" '
-                    'resultType="DraftSearchRow">\n'
-                    "    SELECT REVIEW_REQUIRED_ID FROM dbo.ReviewRequiredEvidence\n"
-                    "    WHERE REVIEW_REQUIRED_ID = #{reviewRequiredField}\n"
+                    f'  <resultMap id="DraftSearchRowMap" type="{draft_row_fqcn}">\n'
+                    '    <result column="DRAFT_EVIDENCE_KEY" property="draftEvidenceKey"/>\n'
+                    "  </resultMap>\n"
+                    f'  <select id="reviewDraft" parameterType="{draft_criteria_fqcn}" '
+                    'resultMap="DraftSearchRowMap">\n'
+                    "    SELECT DRAFT_EVIDENCE_KEY FROM dbo.DraftEvidence\n"
+                    "    WHERE DRAFT_EVIDENCE_KEY = #{draftEvidenceKey}\n"
                     "  </select>\n"
                     "</mapper>"
                 ),
@@ -921,6 +953,7 @@ def _fake_ai_draft_pack_file(
     *,
     evidence_refs: Sequence[str],
     review_markers: Sequence[str],
+    package_context: Mapping[str, str],
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "artifactType": str(item.get("artifactType") or ""),
@@ -954,13 +987,23 @@ def _fake_ai_draft_pack_file(
                 if isinstance(value, Sequence) and not isinstance(value, str | bytes)
                 else value
             )
-    payload["content"] = _fake_ai_draft_pack_content(payload)
+    payload["content"] = _fake_ai_draft_pack_content(
+        payload,
+        package_context=package_context,
+    )
     return payload
 
 
-def _fake_ai_draft_pack_content(file: Mapping[str, Any]) -> str:
+def _fake_ai_draft_pack_content(
+    file: Mapping[str, Any],
+    *,
+    package_context: Mapping[str, str],
+) -> str:
     artifact_type = str(file.get("artifactType") or "")
     class_name = str(file.get("className") or "DraftFile")
+    model_package = str(package_context.get("modelPackage") or "")
+    service_package = str(package_context.get("servicePackage") or "")
+    mapper_package = str(package_context.get("mapperPackage") or "")
     markers = " ".join(str(marker) for marker in file.get("reviewMarkers", []) if str(marker))
     methods = [
         str(method)
@@ -973,45 +1016,143 @@ def _fake_ai_draft_pack_content(file: Mapping[str, Any]) -> str:
         if str(reference).strip()
     )
     if artifact_type == "DTO_DRAFT":
-        fields = "\n".join(
-            f"    private String {field};"
+        field_names = [
+            str(field)
             for field in file.get("requiredFields", [])
             if str(field).strip()
+        ] or ["draftEvidenceKey"]
+        fields = "\n".join(f"    private String {field};" for field in field_names)
+        accessors = "\n\n".join(_fake_java_string_accessors(field) for field in field_names)
+        return (
+            f"package {model_package};\n\n"
+            f"public class {class_name} {{\n"
+            f"    // {markers} draft DTO.\n"
+            f"{fields}\n\n"
+            f"{accessors}\n"
+            "}"
         )
-        return f"public class {class_name} {{\n    // {markers} draft DTO.\n{fields}\n}}"
     if artifact_type == "SERVICE_DRAFT":
         method_text = "\n".join(
-            f"    public Object {method}(Object command) "
-            f"{{ return mapper.{method}(command); }}"
+            f"    public Object {method}(Object command) {{\n"
+            '        java.util.Objects.requireNonNull(command, "command");\n'
+            f"        Object result = mapper.{method}(command);\n"
+            "        return result;\n"
+            "    }"
             for method in methods
         )
+        mapper_class = class_name[:-7] + "Mapper" if class_name.endswith("Service") else "DraftMapper"
         return (
+            f"package {service_package};\n\n"
+            f"import {mapper_package}.{mapper_class};\n\n"
             f"public class {class_name} {{\n"
-            "    private final Object mapper;\n"
-            f"    public {class_name}(Object mapper) {{ this.mapper = mapper; }}\n"
+            f"    private final {mapper_class} mapper;\n"
+            f"    public {class_name}({mapper_class} mapper) {{ this.mapper = mapper; }}\n"
             f"    // REVIEW_REQUIRED {references}\n{method_text}\n}}"
         )
     if artifact_type == "MAPPER_INTERFACE":
         method_text = "\n".join(f"    Object {method}(Object command);" for method in methods)
         return (
+            f"package {mapper_package};\n\n"
             f"public interface {class_name} {{\n"
             f"    // REVIEW_REQUIRED {references}\n{method_text}\n}}"
         )
     if artifact_type == "MAPPER_XML":
-        statement_text = "\n".join(
-            f'  <select id="{method}" parameterType="map" resultType="map">\n'
-            f"    SELECT DRAFT_ID FROM dbo.DraftEvidence WHERE DRAFT_ID = #{{draftId}}\n"
-            f"  </select>"
-            for method in methods
+        refs = [
+            str(reference)
+            for reference in file.get("references", [])
+            if str(reference).strip()
+        ]
+        parameter_type = _fake_dto_fqcn(refs[0], package_context) if refs else ""
+        result_type = (
+            _fake_dto_fqcn(refs[1] if len(refs) > 1 else refs[0], package_context)
+            if refs
+            else ""
         )
+        result_map = (
+            f'  <resultMap id="DraftResultMap" type="{result_type}">\n'
+            '    <result column="DRAFT_EVIDENCE_KEY" property="draftEvidenceKey"/>\n'
+            "  </resultMap>\n"
+            if result_type
+            else ""
+        )
+        statement_parts = []
+        for method in methods:
+            parameter_attr = f' parameterType="{parameter_type}"' if parameter_type else ""
+            if method.lower().startswith(("read", "search", "select")) and result_type:
+                statement_parts.append(
+                    f'  <select id="{method}"{parameter_attr} resultMap="DraftResultMap">\n'
+                    "    SELECT DRAFT_EVIDENCE_KEY FROM dbo.DraftEvidence\n"
+                    "    WHERE DRAFT_EVIDENCE_KEY = #{draftEvidenceKey}\n"
+                    "  </select>"
+                )
+            else:
+                statement_parts.append(
+                    f'  <update id="{method}"{parameter_attr}>\n'
+                    "    UPDATE dbo.DraftEvidence\n"
+                    "    SET DRAFT_EVIDENCE_VALUE = #{draftEvidenceKey}\n"
+                    "    WHERE DRAFT_EVIDENCE_KEY = #{draftEvidenceKey}\n"
+                    "  </update>"
+                )
+        statement_text = "\n".join(statement_parts)
         namespace = class_name[:-3] if class_name.endswith("SQL") else class_name
         return (
-            f'<mapper namespace="{namespace}">\n'
+            f'<mapper namespace="{mapper_package}.{namespace}">\n'
             f"  <!-- REVIEW_REQUIRED {references} -->\n"
+            f"{result_map}"
             f"{statement_text}\n"
             "</mapper>"
         )
     return f"// REVIEW_REQUIRED {class_name} {markers} {references}"
+
+
+def _fake_dto_fqcn(class_name: str, package_context: Mapping[str, str]) -> str:
+    return f"{package_context['modelPackage']}.{class_name}"
+
+
+def _fake_java_package_context(prompt_payload: Mapping[str, Any]) -> dict[str, str]:
+    sanitized_context = prompt_payload.get("sanitizedDraftContext")
+    raw_context = (
+        sanitized_context.get("javaPackageContext")
+        if isinstance(sanitized_context, Mapping)
+        else None
+    )
+    raw_package_context = raw_context if isinstance(raw_context, Mapping) else {}
+    model_package = _fake_valid_java_package(
+        str(raw_package_context.get("modelPackage") or raw_package_context.get("dtoPackage") or "")
+    )
+    service_package = _fake_valid_java_package(
+        str(raw_package_context.get("servicePackage") or "")
+    )
+    mapper_package = _fake_valid_java_package(str(raw_package_context.get("mapperPackage") or ""))
+    return {
+        "modelPackage": model_package or "com.pec.draft.workflow.draft.model",
+        "servicePackage": service_package or "com.pec.draft.workflow.draft.service",
+        "mapperPackage": mapper_package or "com.pec.draft.workflow.draft.mapper",
+    }
+
+
+def _fake_valid_java_package(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if re.fullmatch(
+        r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*",
+        text,
+    ):
+        return text
+    return ""
+
+
+def _fake_java_string_accessors(field: str) -> str:
+    suffix = field[:1].upper() + field[1:]
+    return (
+        f"    public String get{suffix}() {{\n"
+        f"        return {field};\n"
+        "    }\n\n"
+        f"    public void set{suffix}(String {field}) {{\n"
+        f"        this.{field} = {field};\n"
+        "    }"
+    )
 
 
 class OpenAIModelGateway:

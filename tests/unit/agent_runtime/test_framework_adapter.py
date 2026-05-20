@@ -30,6 +30,7 @@ from tests.helpers.framework_adapters import (
     BaselineResponsesFrameworkAdapter,
     FakeAiGenerationFrameworkAdapter,
 )
+from tests.helpers.p42_manage_bond import p42_ai_draft_pack_fixture
 
 FIXTURE_PATH = Path("fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml")
 
@@ -39,32 +40,7 @@ def _fixture() -> dict[str, Any]:
 
 
 def _valid_pack() -> dict[str, Any]:
-    fixture = _fixture()
-    target = fixture["ai_draft_pack_quality_target"]
-    quality_gates = fixture["quality_gates"]
-    return {
-        "schemaVersion": target["schemaVersion"],
-        "contractTarget": target["contractTarget"],
-        "targetRef": target["targetRef"],
-        "sourcePolicy": target["sourcePolicy"],
-        "productionReady": target["productionReady"],
-        "files": [_file_with_content(file) for file in target["expectedFiles"]],
-        "evidenceRefs": list(target["evidenceRefs"]),
-        "reviewMarkers": list(target["reviewMarkers"]),
-        "qualityGates": {
-            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
-            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
-            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
-            "requiredReviewMarkers": list(target["reviewMarkers"]),
-            "blockerPatterns": list(quality_gates["blocker_patterns"]),
-            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
-            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
-            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
-                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
-            ),
-        },
-        "assumptions": ["P43B adapter fixture pack is draft-only and productionReady=false."],
-    }
+    return p42_ai_draft_pack_fixture()
 
 
 def _file_with_content(file: dict[str, Any]) -> dict[str, Any]:

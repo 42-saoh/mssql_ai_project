@@ -22,6 +22,9 @@ from api_app.workflow import (
 )
 
 from tests.helpers.framework_replay import (
+    SYNTHETIC_MAPPER_PACKAGE,
+    SYNTHETIC_MODEL_PACKAGE,
+    SYNTHETIC_SERVICE_PACKAGE,
     assert_no_collapsed_or_fallback_pack as _assert_no_collapsed_or_fallback_pack,
     assert_no_raw_trace_leakage as _assert_no_raw_trace_leakage,
     pack_from_inventory as _pack_from_inventory,
@@ -75,6 +78,20 @@ def test_p45_gate_enabled_missing_prerequisites_returns_sanitized_blockers(
     assert "OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1" in missing
     assert "OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1" in missing
     assert not any("sk-" in item.lower() for item in missing)
+
+
+def test_p45_synthetic_context_includes_concrete_java_package_policy() -> None:
+    context = _synthetic_generation_context()
+    package_context = ai_draft_pack_context(context)["javaPackageContext"]
+
+    assert package_context == {
+        "modelPackage": SYNTHETIC_MODEL_PACKAGE,
+        "dtoPackage": SYNTHETIC_MODEL_PACKAGE,
+        "servicePackage": SYNTHETIC_SERVICE_PACKAGE,
+        "mapperPackage": SYNTHETIC_MAPPER_PACKAGE,
+        "mapperNamespaceRule": "full_mapper_interface_name",
+    }
+    assert "..." not in json.dumps(package_context, sort_keys=True)
 
 
 def test_p45_openai_agents_live_gate() -> None:
@@ -132,7 +149,19 @@ def test_p45_openai_agents_live_gate() -> None:
         sort_keys=True,
     )
 
-    assert report.status == ValidationStatus.PASSED
+    if report.status != ValidationStatus.PASSED:
+        failed = [
+            {
+                "ruleId": check.rule_id,
+                "severity": check.severity.value,
+                "message": check.message[:300],
+            }
+            for check in report.failed_checks[:10]
+        ]
+        pytest.fail(
+            "P45 OpenAI Agents live gate failed deterministic validation; "
+            f"production_ready remains false: {json.dumps(failed, sort_keys=True)}"
+        )
     assert run.model_invocation.provider == "openai-agents-sdk"
     assert run.model_invocation.component_invocations[-1]["orchestrator"] == "langgraph"
     assert "CREATE PROCEDURE" not in serialized_invocation.upper()

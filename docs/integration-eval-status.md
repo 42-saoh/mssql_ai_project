@@ -12,6 +12,12 @@ values while blocking new retired artifact inserts/type changes. The platform re
 
 ## Summary
 
+P38/P40 metadata design `DTO_DRAFT` previews now use the deterministic internal
+package `com.pec.metadata.design.dto` instead of placeholder `com.example`
+packages. The preview remains a non-executable, non-workflow artifact with
+`REVIEW_REQUIRED` source-adoption package caveats; it is separate from P42/P47
+AI Draft Pack `javaPackageContext` for Java/MyBatis SP conversion drafts.
+
 P24C update: the generation package now renders the P24 migration guide section
 taxonomy and scores the rendered `SP_ANALYSIS_DOC` plus `DEPENDENCY_REPORT`
 artifact pair with a fixture-first evaluator. P24 remains `production_ready: false`;

@@ -22,6 +22,12 @@ from ai_agent_runtime.prompts import render_ai_java_mybatis_draft_pack_prompt
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
 from ai_agent_validation.models import ValidationStatus
 from tests.helpers.framework_adapters import FakeAiGenerationFrameworkAdapter
+from tests.helpers.p42_manage_bond import (
+    P42_MAPPER_PACKAGE,
+    P42_MODEL_PACKAGE,
+    P42_SERVICE_PACKAGE,
+    p42_ai_draft_pack_fixture,
+)
 
 FIXTURE_PATH = Path("fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml")
 
@@ -31,32 +37,7 @@ def _fixture() -> dict[str, Any]:
 
 
 def _valid_pack() -> dict[str, Any]:
-    fixture = _fixture()
-    target = fixture["ai_draft_pack_quality_target"]
-    quality_gates = fixture["quality_gates"]
-    return {
-        "schemaVersion": target["schemaVersion"],
-        "contractTarget": target["contractTarget"],
-        "targetRef": target["targetRef"],
-        "sourcePolicy": target["sourcePolicy"],
-        "productionReady": target["productionReady"],
-        "files": [_file_with_content(file) for file in target["expectedFiles"]],
-        "evidenceRefs": target["evidenceRefs"],
-        "reviewMarkers": list(target["reviewMarkers"]),
-        "qualityGates": {
-            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
-            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
-            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
-            "requiredReviewMarkers": list(target["reviewMarkers"]),
-            "blockerPatterns": list(quality_gates["blocker_patterns"]),
-            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
-            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
-            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
-                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
-            ),
-        },
-        "assumptions": ["P42B fixture pack is draft-only and productionReady=false."],
-    }
+    return p42_ai_draft_pack_fixture()
 
 
 def _file_with_content(file: dict[str, Any]) -> dict[str, Any]:
@@ -197,12 +178,23 @@ def _pack_without_paths(payload: dict[str, Any], paths: set[str]) -> dict[str, A
     return dirty
 
 
+def _p42_java_package_context() -> dict[str, str]:
+    return {
+        "modelPackage": P42_MODEL_PACKAGE,
+        "dtoPackage": P42_MODEL_PACKAGE,
+        "servicePackage": P42_SERVICE_PACKAGE,
+        "mapperPackage": P42_MAPPER_PACKAGE,
+        "mapperNamespaceRule": "full_mapper_interface_name",
+    }
+
+
 def _prompt(payload: dict[str, Any]):
     fixture = _fixture()
     return render_ai_java_mybatis_draft_pack_prompt(
         target_ref=payload["targetRef"],
         sanitized_draft_context={
             "targetRef": payload["targetRef"],
+            "javaPackageContext": _p42_java_package_context(),
             "branchVariables": fixture["guide_quality_facts"]["branch_variables"],
             "reviewRequiredFacts": fixture["guide_quality_facts"]["review_required_facts"],
             "raw_guide_body": "CREATE PROCEDURE should be removed",
@@ -246,6 +238,22 @@ def test_ai_draft_pack_prompt_uses_sanitized_staged_contract() -> None:
     assert prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["exactFiles"]
     assert "aggregate files" in prompt_payload["filePolicy"]["nonDtoAggregatePolicy"]["rule"]
     assert prompt_payload["filePolicy"]["methodCoveragePolicy"]["requiredServiceMethods"]
+    assert prompt_payload["filePolicy"]["statementUnitDtosForbidden"] is True
+    assert prompt_payload["filePolicy"]["businessOperationGroupingRequired"] is True
+    assert prompt_payload["filePolicy"]["servicePassThroughForbidden"] is True
+    assert prompt_payload["filePolicy"]["strictMapperFqcnAndResultMapRequired"] is True
+    assert prompt_payload["filePolicy"]["placeholderSqlAndDtoBlocked"] is True
+    assert prompt_payload["filePolicy"]["javaPackageContextRequired"] is True
+    assert prompt_payload["filePolicy"]["placeholderPackagesBlocked"] is True
+    assert prompt_payload["sanitizedDraftContext"]["javaPackageContext"]["modelPackage"] == (
+        P42_MODEL_PACKAGE
+    )
+    assert "one DTO per" in prompt.system_prompt
+    assert "operations[].statementRefs" in prompt.system_prompt
+    assert "Mapper XML namespace" in prompt.system_prompt
+    assert "placeholder SELECT" in prompt.system_prompt
+    assert "sanitizedDraftContext.javaPackageContext" in prompt.system_prompt
+    assert "com.example" in prompt.system_prompt
     assert prompt_payload["evidenceRefContract"]["allowedFactIds"]
     assert "CREATE PROCEDURE" not in prompt.user_prompt
     assert "raw_guide_body" not in prompt.user_prompt
@@ -259,7 +267,10 @@ def test_ai_draft_pack_role_stage_prompt_uses_stage_contract() -> None:
     payload = _valid_pack()
     prompt = render_ai_java_mybatis_draft_pack_prompt(
         target_ref=payload["targetRef"],
-        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        sanitized_draft_context={
+            "targetRef": payload["targetRef"],
+            "javaPackageContext": _p42_java_package_context(),
+        },
         expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
         quality_gates=payload["qualityGates"],
         allowed_evidence_refs=_allowed_refs(payload),
@@ -314,6 +325,11 @@ def test_fake_gateway_returns_schema_valid_ai_draft_pack() -> None:
     assert invocation.output_schema_version == AI_JAVA_MYBATIS_DRAFT_PACK_OUTPUT_SCHEMA_VERSION
     assert invocation.structured_output["targetRef"] == payload["targetRef"]
     assert invocation.structured_output["productionReady"] is False
+    serialized = json.dumps(invocation.structured_output)
+    assert P42_MODEL_PACKAGE in serialized
+    assert P42_SERVICE_PACKAGE in serialized
+    assert P42_MAPPER_PACKAGE in serialized
+    assert "com.example" not in serialized
     assert {file["className"] for file in invocation.structured_output["files"]} >= {
         "ManageBondSearchCriteria",
         "ManageBondSearchRow",
@@ -343,7 +359,10 @@ def test_ai_draft_pack_run_repairs_invalid_structured_output_once() -> None:
 
     run = build_ai_java_mybatis_draft_pack_run(
         target_ref=payload["targetRef"],
-        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        sanitized_draft_context={
+            "targetRef": payload["targetRef"],
+            "javaPackageContext": _p42_java_package_context(),
+        },
         expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
         quality_gates=payload["qualityGates"],
         model_gateway=gateway,
@@ -407,7 +426,10 @@ def test_ai_draft_pack_framework_adapter_runs_role_specific_stages() -> None:
 
     run = build_ai_java_mybatis_draft_pack_run(
         target_ref=payload["targetRef"],
-        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        sanitized_draft_context={
+            "targetRef": payload["targetRef"],
+            "javaPackageContext": _p42_java_package_context(),
+        },
         expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
         quality_gates=payload["qualityGates"],
         model_gateway=FakeModelGateway(),
@@ -452,7 +474,10 @@ def test_ai_draft_pack_framework_adapter_materializes_missing_dto_files_from_flo
 
     run = build_ai_java_mybatis_draft_pack_run(
         target_ref=payload["targetRef"],
-        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        sanitized_draft_context={
+            "targetRef": payload["targetRef"],
+            "javaPackageContext": _p42_java_package_context(),
+        },
         expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
         quality_gates=payload["qualityGates"],
         model_gateway=FakeModelGateway(),
@@ -476,10 +501,50 @@ def test_ai_draft_pack_framework_adapter_materializes_missing_dto_files_from_flo
     assert "private String contractNum;" in files_by_path[
         "dto/ManageBondSearchCriteria.java"
     ]["content"]
+    assert f"package {P42_MODEL_PACKAGE};" in files_by_path[
+        "dto/ManageBondSearchCriteria.java"
+    ]["content"]
+    assert "PACKAGE_CONTEXT_REVIEW_REQUIRED" not in files_by_path[
+        "dto/ManageBondSearchCriteria.java"
+    ]["reviewMarkers"]
     assert floor_component["fileCount"] == len(dto_paths_to_drop)
     assert validate_ai_java_mybatis_draft_pack_quality(
         run.structured_output
     ).status == ValidationStatus.PASSED
+
+
+def test_ai_draft_pack_dto_floor_marks_missing_package_context_review_required() -> None:
+    payload = _valid_pack()
+    dto_paths_to_drop = {"dto/ManageBondSearchCriteria.java"}
+    dto_stage_payload = _pack_without_paths(payload, dto_paths_to_drop)
+    adapter = FakeAiGenerationFrameworkAdapter(
+        output=payload,
+        stage_outputs={
+            "dto_inventory": dto_stage_payload,
+            "dto_content": dto_stage_payload,
+        },
+        candidate_framework="openai_agents_sdk_missing_package_context_fixture",
+    )
+
+    run = build_ai_java_mybatis_draft_pack_run(
+        target_ref=payload["targetRef"],
+        sanitized_draft_context={"targetRef": payload["targetRef"]},
+        expected_inventory=_fixture()["ai_draft_pack_quality_target"]["expectedFiles"],
+        quality_gates=payload["qualityGates"],
+        model_gateway=FakeModelGateway(),
+        profile_id="openai_fast_test",
+        allowed_evidence_refs=_allowed_refs(payload),
+        framework_adapter=adapter,
+    )
+
+    floor_file = next(
+        file
+        for file in run.structured_output["files"]
+        if file["path"] == "dto/ManageBondSearchCriteria.java"
+    )
+
+    assert "package com.pec.draft.workflow.draft.model;" in floor_file["content"]
+    assert "PACKAGE_CONTEXT_REVIEW_REQUIRED" in floor_file["reviewMarkers"]
 
 
 def test_ai_draft_pack_framework_adapter_does_not_floor_missing_non_dto_stage_files() -> None:

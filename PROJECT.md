@@ -31,6 +31,11 @@ and keeps `production_ready: false`: no row-data query, procedure execution, bus
 DB DDL/DML, automatic DDL apply, source deployment, raw prompt/provider response
 storage, or secret storage is authorized.
 
+The optional metadata design `DTO_DRAFT` preview uses the deterministic internal
+package `com.pec.metadata.design.dto` instead of placeholder packages such as
+`com.example`; the target application source package remains `REVIEW_REQUIRED`
+before any manual source adoption.
+
 ## P40 Metadata Design Natural-Language Chat Baseline
 
 P40 keeps the P38 durable run API and storage model but changes `/metadata/design`
@@ -44,6 +49,10 @@ successful run in the same conversation as the baseline and applies add/remove/t
 change instructions; missing or ambiguous baselines remain `REVIEW_REQUIRED`.
 `designInputs.fields` remains API-compatible, but the Web UI no longer exposes field
 row inputs. P40 adds no new DDL and keeps `production_ready: false`.
+
+P40 inherits the P38 metadata design DTO preview package policy. This preview
+package is separate from P42/P47 AI Draft Pack `javaPackageContext`, which governs
+Java/MyBatis draft artifacts for stored procedure conversion.
 
 ## P41 SP Operation Model Renewal Groundwork
 

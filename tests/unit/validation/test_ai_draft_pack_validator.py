@@ -1,185 +1,39 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from pathlib import Path
 from typing import Any
 
-import yaml
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
 from ai_agent_validation.ai_draft_pack import (
     RULE_ASCII_IDENTIFIER,
     RULE_DTO_FIELD,
+    RULE_DTO_INVENTORY,
+    RULE_DTO_STRUCTURE,
     RULE_FORBIDDEN_PAYLOAD,
     RULE_MAPPER_CONSISTENCY,
     RULE_MAPPER_METHOD,
     RULE_MAPPER_XML,
     RULE_MAPPER_XML_DB_OPERATION,
+    RULE_MAPPER_XML_PLACEHOLDER,
+    RULE_MAPPER_XML_TYPE,
     RULE_NON_DTO_AGGREGATE,
     RULE_NON_DTO_REFERENCE,
+    RULE_PACKAGE_CONTEXT,
     RULE_REVIEW_MARKER,
     RULE_SCHEMA,
     RULE_SERVICE_FLOW,
 )
 from ai_agent_validation.models import ValidationStatus
-
-FIXTURE_PATH = Path("fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml")
-
-
-def _fixture() -> dict[str, Any]:
-    return yaml.safe_load(FIXTURE_PATH.read_text(encoding="utf-8"))
+from tests.helpers.p42_manage_bond import (
+    P42_MAPPER_PACKAGE,
+    P42_MODEL_PACKAGE,
+    P42_SERVICE_PACKAGE,
+    p42_ai_draft_pack_fixture,
+)
 
 
 def _valid_pack() -> dict[str, Any]:
-    fixture = _fixture()
-    target = fixture["ai_draft_pack_quality_target"]
-    quality_gates = fixture["quality_gates"]
-    return {
-        "schemaVersion": target["schemaVersion"],
-        "contractTarget": target["contractTarget"],
-        "targetRef": target["targetRef"],
-        "sourcePolicy": target["sourcePolicy"],
-        "productionReady": target["productionReady"],
-        "files": [_file_with_content(file) for file in target["expectedFiles"]],
-        "evidenceRefs": list(target["evidenceRefs"]),
-        "reviewMarkers": list(target["reviewMarkers"]),
-        "qualityGates": {
-            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
-            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
-            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
-            "requiredReviewMarkers": list(target["reviewMarkers"]),
-            "blockerPatterns": list(quality_gates["blocker_patterns"]),
-            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
-            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
-            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
-                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
-            ),
-        },
-        "assumptions": ["P42C fixture pack is draft-only and productionReady=false."],
-    }
-
-
-def _file_with_content(file: dict[str, Any]) -> dict[str, Any]:
-    payload = {
-        "artifactType": file["artifactType"],
-        "path": file["path"],
-        "role": file["role"],
-        "className": file["className"],
-        "content": _content_for(file),
-        "operationIds": list(file["operationIds"]),
-        "evidenceRefs": list(file["evidenceRefs"]),
-        "reviewMarkers": list(file.get("reviewMarkers") or []),
-    }
-    for optional_key in ("dtoRole", "requiredFields", "references"):
-        if optional_key in file:
-            payload[optional_key] = deepcopy(file[optional_key])
-    return payload
-
-
-def _content_for(file: dict[str, Any]) -> str:
-    artifact_type = file["artifactType"]
-    class_name = file["className"]
-    if artifact_type == "DTO_DRAFT":
-        fields = "\n".join(f"    private String {field};" for field in file["requiredFields"])
-        return (
-            f"public class {class_name} {{\n"
-            f"    // REVIEW_REQUIRED draft DTO backed by sanitized evidence.\n"
-            f"{fields}\n"
-            "}"
-        )
-    if artifact_type == "MAPPER_XML":
-        references = " ".join(file["references"])
-        statements = "\n".join(
-            _xml_statement_for(operation_id)
-            for operation_id in file["operationIds"]
-        )
-        return (
-            '<mapper namespace="ManageBondMapper">\n'
-            f"  <!-- REVIEW_REQUIRED DTO references: {references} -->\n"
-            f"{statements}\n"
-            "</mapper>"
-        )
-    references = " ".join(file.get("references") or ())
-    methods = "\n".join(
-        _method_for(artifact_type, operation_id) for operation_id in file["operationIds"]
-    )
-    if artifact_type == "MAPPER_INTERFACE":
-        return (
-            f"public interface {class_name} {{\n"
-            f"    // REVIEW_REQUIRED DTO references: {references}\n"
-            f"{methods}\n"
-            "}"
-        )
-    return (
-        f"public class {class_name} {{\n"
-        "    private final ManageBondMapper mapper;\n"
-        "    public ManageBondService(ManageBondMapper mapper) { this.mapper = mapper; }\n"
-        f"    // REVIEW_REQUIRED DTO references: {references}\n"
-        f"{methods}\n"
-        "}"
-    )
-
-
-def _method_for(artifact_type: str, method: str) -> str:
-    parameter_type = _parameter_type(method)
-    if artifact_type == "MAPPER_INTERFACE":
-        if method == "readBond":
-            return "    List<ManageBondSearchRow> readBond(ManageBondSearchCriteria criteria);"
-        return f"    int {method}({parameter_type} command);"
-    if method == "readBond":
-        return (
-            "    public List<ManageBondSearchRow> "
-            "readBond(ManageBondSearchCriteria criteria) { return mapper.readBond(criteria); }"
-        )
-    return (
-        f"    public int {method}({parameter_type} command) "
-        f"{{ return mapper.{method}(command); }}"
-    )
-
-
-def _parameter_type(method: str) -> str:
-    return {
-        "readBond": "ManageBondSearchCriteria",
-        "approveAdvanceBond": "ApproveAdvanceBondCommand",
-        "approveDefectBond": "ApproveDefectBondCommand",
-        "sendFinanceTransfer": "FinanceTransferCommand",
-        "createBond": "CreateBondCommand",
-        "createRetentionBondBatch": "CreateRetentionBondBatchItem",
-        "updateBond": "UpdateBondCommand",
-        "deleteBond": "DeleteBondCommand",
-        "updateVendorBond": "VendorBondUpdateCommand",
-        "updateOnlineBond": "OnlineBondUpdateCommand",
-    }[method]
-
-
-def _xml_statement_for(method: str) -> str:
-    if method == "readBond":
-        return (
-            '  <select id="readBond" parameterType="ManageBondSearchCriteria" '
-            'resultType="ManageBondSearchRow">\n'
-            "    SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD\n"
-            "    FROM PPM.dbo.PCO_GUAR\n"
-            "    WHERE CTRT_NO = #{contractNum} AND ORDR_NO = #{ordNum}\n"
-            "  </select>"
-        )
-    return (
-        f'  <update id="{method}" parameterType="{_parameter_type(method)}">\n'
-        f"{_sql_body_for(method)}\n"
-        "  </update>"
-    )
-
-
-def _sql_body_for(method: str) -> str:
-    return {
-        "approveAdvanceBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_APRV_YN = #{approvalYn} WHERE CTRT_NO = #{contractNum}",
-        "approveDefectBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_ST_CD = 'APPROVED' WHERE GUAR_SEQ = #{sequence}",
-        "sendFinanceTransfer": "    EXEC PPM.dbo.PCS_PY_SaveInvoicePrepaidReg_PRC #{contractNum}, #{ordNum}, #{userId}",
-        "createBond": "    INSERT INTO PPM.dbo.PCO_GUAR (CTRT_NO, ORDR_NO, GUAR_TP_CD) VALUES (#{contractNum}, #{ordNum}, #{bondKindCode})",
-        "createRetentionBondBatch": "    UPDATE PPM.dbo.PCS_RTNM_PAYRPT SET RTNM_AMT = #{retentionAmount} WHERE RTNM_SEQ = #{retentionSeq}",
-        "updateBond": "    UPDATE PPM.dbo.PCO_GUAR SET GUAR_AMT = #{currencyInsureAmt} WHERE GUAR_SEQ = #{sequence}",
-        "deleteBond": "    DELETE FROM PPM.dbo.PCO_GUAR WHERE CTRT_NO = #{contractNum} AND GUAR_SEQ = #{sequence}",
-        "updateVendorBond": "    UPDATE PPM.dbo.PCS_ADVM_PAYRPT SET VNDR_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
-        "updateOnlineBond": "    UPDATE PPM.dbo.PCS_PAY_CMPD_RPT SET ONLINE_GUAR_NO = #{sequence} WHERE CTRT_NO = #{contractNum}",
-    }[method]
+    return p42_ai_draft_pack_fixture()
 
 
 def _file(payload: dict[str, Any], class_name: str) -> dict[str, Any]:
@@ -193,6 +47,53 @@ def _file_by_type(payload: dict[str, Any], artifact_type: str) -> dict[str, Any]
 def _failed_rule_ids(payload: dict[str, Any]) -> set[str]:
     report = validate_ai_java_mybatis_draft_pack_quality(payload)
     return {check.rule_id for check in report.failed_checks}
+
+
+def _dto_content(class_name: str, fields: list[str]) -> str:
+    declarations = "\n".join(f"    private String {field};" for field in fields)
+    accessors = "\n\n".join(_accessors(field) for field in fields)
+    return (
+        f"package {P42_MODEL_PACKAGE};\n\n"
+        f"public class {class_name} {{\n"
+        "    // REVIEW_REQUIRED sanitized regression DTO.\n"
+        f"{declarations}\n\n"
+        f"{accessors}\n"
+        "}"
+    )
+
+
+def _accessors(field: str) -> str:
+    suffix = field[:1].upper() + field[1:]
+    return (
+        f"    public String get{suffix}() {{\n"
+        f"        return {field};\n"
+        "    }\n\n"
+        f"    public void set{suffix}(String {field}) {{\n"
+        f"        this.{field} = {field};\n"
+        "    }"
+    )
+
+
+def _append_dto(
+    payload: dict[str, Any],
+    *,
+    class_name: str,
+    operation_ids: list[str],
+    required_fields: list[str],
+    dto_role: str = "COMMAND",
+) -> None:
+    source = deepcopy(_file(payload, "DeleteBondCommand"))
+    source.update(
+        {
+            "path": f"dto/{class_name}.java",
+            "className": class_name,
+            "operationIds": operation_ids,
+            "dtoRole": dto_role,
+            "requiredFields": required_fields,
+            "content": _dto_content(class_name, required_fields),
+        }
+    )
+    payload["files"].append(source)
 
 
 def test_valid_manage_bond_pack_passes_quality_gate() -> None:
@@ -279,7 +180,10 @@ def test_missing_mapper_method_fails_content_quality() -> None:
         "",
     )
 
-    assert RULE_MAPPER_METHOD in _failed_rule_ids(payload)
+    failed = _failed_rule_ids(payload)
+
+    assert RULE_MAPPER_METHOD in failed
+    assert RULE_MAPPER_CONSISTENCY in failed
 
 
 def test_invalid_mapper_xml_fails_static_xml_quality() -> None:
@@ -290,38 +194,91 @@ def test_invalid_mapper_xml_fails_static_xml_quality() -> None:
     assert RULE_MAPPER_XML in _failed_rule_ids(payload)
 
 
-def test_p50_mojibake_identifiers_fail_content_quality() -> None:
+def test_p50_invalid_java_identifiers_fail_content_quality() -> None:
     payload = _valid_pack()
     dto = _file(payload, "ManageBondSearchCriteria")
-    dto["className"] = "ManageBond검색조건"
-    dto["content"] = dto["content"].replace("ManageBondSearchCriteria", "ManageBond검색조건")
+    invalid_class_name = "9ManageBondSearchCriteria"
+    dto["className"] = invalid_class_name
+    dto["content"] = dto["content"].replace("ManageBondSearchCriteria", invalid_class_name)
     payload["qualityGates"]["requiredDtoClasses"] = [
-        "ManageBond검색조건" if item == "ManageBondSearchCriteria" else item
+        invalid_class_name if item == "ManageBondSearchCriteria" else item
         for item in payload["qualityGates"]["requiredDtoClasses"]
     ]
     for file in payload["files"]:
         if "references" in file:
             file["references"] = [
-                "ManageBond검색조건" if item == "ManageBondSearchCriteria" else item
+                invalid_class_name if item == "ManageBondSearchCriteria" else item
                 for item in file["references"]
             ]
         file["content"] = file["content"].replace(
             "ManageBondSearchCriteria",
-            "ManageBond검색조건",
+            invalid_class_name,
         )
 
     assert RULE_ASCII_IDENTIFIER in _failed_rule_ids(payload)
+
+
+def test_p50_placeholder_java_packages_are_blocked() -> None:
+    payload = _valid_pack()
+    dto = _file(payload, "ManageBondSearchCriteria")
+    dto["content"] = dto["content"].replace(P42_MODEL_PACKAGE, "com.example.dto")
+
+    assert RULE_PACKAGE_CONTEXT in _failed_rule_ids(payload)
+
+    payload = _valid_pack()
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    mapper_xml["content"] = mapper_xml["content"].replace(
+        f"{P42_MAPPER_PACKAGE}.ManageBondMapper",
+        "org.example.mapper.ManageBondMapper",
+    )
+
+    assert RULE_PACKAGE_CONTEXT in _failed_rule_ids(payload)
+
+    payload = _valid_pack()
+    service = _file_by_type(payload, "SERVICE_DRAFT")
+    service["content"] = service["content"].replace(
+        f"import {P42_MODEL_PACKAGE}.*;",
+        "import example.model.*;",
+    )
+
+    assert RULE_PACKAGE_CONTEXT in _failed_rule_ids(payload)
 
 
 def test_p50_empty_service_body_fails_content_quality() -> None:
     payload = _valid_pack()
     service = _file_by_type(payload, "SERVICE_DRAFT")
     service["content"] = service["content"].replace(
-        "    public int updateOnlineBond(OnlineBondUpdateCommand command) { return mapper.updateOnlineBond(command); }",
-        "    public int updateOnlineBond(OnlineBondUpdateCommand command) {}",
+        '        Objects.requireNonNull(command, "command");\n'
+        "        int affectedRows = mapper.updateOnlineBond(command);\n"
+        "        return affectedRows;\n",
+        "",
     )
 
     assert RULE_SERVICE_FLOW in _failed_rule_ids(payload)
+
+
+def test_p50_mapper_pass_through_service_is_blocked() -> None:
+    payload = _valid_pack()
+    service = _file_by_type(payload, "SERVICE_DRAFT")
+    service["content"] = service["content"].replace(
+        '        Objects.requireNonNull(command, "command");\n'
+        "        int affectedRows = mapper.updateOnlineBond(command);\n"
+        "        return affectedRows;\n",
+        "        return mapper.updateOnlineBond(command);\n",
+    )
+
+    assert RULE_SERVICE_FLOW in _failed_rule_ids(payload)
+
+
+def test_p50_service_call_to_missing_mapper_method_is_blocked() -> None:
+    payload = _valid_pack()
+    service = _file_by_type(payload, "SERVICE_DRAFT")
+    service["content"] = service["content"].replace(
+        "mapper.updateOnlineBond(command)",
+        "mapper.archiveOnlineBond(command)",
+    )
+
+    assert RULE_MAPPER_CONSISTENCY in _failed_rule_ids(payload)
 
 
 def test_p50_job_68456af0fc_service_and_mapper_xml_regression_is_blocked() -> None:
@@ -332,12 +289,13 @@ def test_p50_job_68456af0fc_service_and_mapper_xml_regression_is_blocked() -> No
     service["className"] = "ManageBondReadQueryService"
     service["operationIds"] = ["readBond"]
     service["content"] = (
+        f"package {P42_SERVICE_PACKAGE};\n"
         "public class ManageBondReadQueryService {\n"
         "    public void readBond(ManageBondSearchCriteria criteria) {}\n"
         "}"
     )
     mapper_xml["content"] = (
-        '<mapper namespace="ManageBondMapper">\n'
+        f'<mapper namespace="{P42_MAPPER_PACKAGE}.ManageBondMapper">\n'
         '  <select id="readBond"></select>\n'
         '  <update id="approveAdvanceBond"></update>\n'
         '  <update id="approveDefectBond"></update>\n'
@@ -361,7 +319,10 @@ def test_p50_job_68456af0fc_service_and_mapper_xml_regression_is_blocked() -> No
 def test_p50_mapper_interface_and_xml_must_match() -> None:
     payload = _valid_pack()
     mapper_xml = _file_by_type(payload, "MAPPER_XML")
-    mapper_xml["content"] = mapper_xml["content"].replace('id="updateOnlineBond"', 'id="updateOnlineBondSql"')
+    mapper_xml["content"] = mapper_xml["content"].replace(
+        'id="updateOnlineBond"',
+        'id="updateOnlineBondSql"',
+    )
 
     failed = _failed_rule_ids(payload)
 
@@ -369,11 +330,62 @@ def test_p50_mapper_interface_and_xml_must_match() -> None:
     assert RULE_MAPPER_XML in failed
 
 
+def test_p50_mapper_xml_namespace_must_match_interface_fqcn() -> None:
+    payload = _valid_pack()
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    mapper_xml["content"] = mapper_xml["content"].replace(
+        f'namespace="{P42_MAPPER_PACKAGE}.ManageBondMapper"',
+        f'namespace="{P42_MAPPER_PACKAGE}.OtherMapper"',
+    )
+
+    assert RULE_MAPPER_CONSISTENCY in _failed_rule_ids(payload)
+
+
+def test_p50_mapper_xml_parameter_and_result_types_must_be_known_dtos() -> None:
+    payload = _valid_pack()
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    mapper_xml["content"] = mapper_xml["content"].replace(
+        f"{P42_MODEL_PACKAGE}.OnlineBondUpdateCommand",
+        f"{P42_MODEL_PACKAGE}.MissingCommand",
+    )
+
+    assert RULE_MAPPER_XML_TYPE in _failed_rule_ids(payload)
+
+
+def test_p50_raw_substitution_and_procedure_name_exec_are_blocked() -> None:
+    payload = _valid_pack()
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    mapper_xml["content"] = mapper_xml["content"].replace(
+        "UPDATE PPM.dbo.PCS_PAY_CMPD_RPT",
+        "EXEC ${procedureName}",
+    )
+
+    assert RULE_MAPPER_XML_PLACEHOLDER in _failed_rule_ids(payload)
+
+
+def test_p50_placeholder_select_and_review_required_field_are_blocked() -> None:
+    payload = _valid_pack()
+    mapper_xml = _file_by_type(payload, "MAPPER_XML")
+    mapper_xml["content"] = mapper_xml["content"].replace(
+        "SELECT CTRT_NO, ORDR_NO, GUAR_TP_CD, GUAR_ST_CD",
+        "SELECT CAST(NULL AS varchar(1)) AS reviewRequiredField",
+    )
+
+    assert RULE_MAPPER_XML_PLACEHOLDER in _failed_rule_ids(payload)
+
+    payload = _valid_pack()
+    dto = _file(payload, "OnlineBondUpdateCommand")
+    dto["requiredFields"] = ["reviewRequiredField"]
+    dto["content"] = _dto_content("OnlineBondUpdateCommand", ["reviewRequiredField"])
+
+    assert RULE_DTO_STRUCTURE in _failed_rule_ids(payload)
+
+
 def test_p50_wrapper_only_original_sp_mapper_xml_fails_content_quality() -> None:
     payload = _valid_pack()
     mapper_xml = _file_by_type(payload, "MAPPER_XML")
     mapper_xml["content"] = (
-        '<mapper namespace="ManageBondMapper">\n'
+        f'<mapper namespace="{P42_MAPPER_PACKAGE}.ManageBondMapper">\n'
         '  <update id="readBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
         '  <update id="approveAdvanceBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
         '  <update id="approveDefectBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</update>\n'
@@ -421,7 +433,7 @@ def test_p50_shallow_six_file_pack_fails_content_quality() -> None:
                 }
             ]
     payload["files"][-1]["content"] = (
-        '<mapper namespace="ManageBondMapper">\n'
+        f'<mapper namespace="{P42_MAPPER_PACKAGE}.ManageBondMapper">\n'
         '  <select id="readBond">EXEC dbo.PCO_GU_ManageBond_PRC #{crudFlag}</select>\n'
         '  <update id="createBond"></update>\n'
         "</mapper>"
@@ -431,6 +443,31 @@ def test_p50_shallow_six_file_pack_fails_content_quality() -> None:
 
     assert RULE_MAPPER_XML_DB_OPERATION in failed
     assert RULE_MAPPER_XML in failed
+
+
+def test_p50_job_b75885a986_fragmented_dto_inventory_is_blocked() -> None:
+    payload = _valid_pack()
+    for index in range(1, 22):
+        _append_dto(
+            payload,
+            class_name=f"ManageBondProcess{index:03d}",
+            operation_ids=[f"processFragment{index}"],
+            required_fields=[f"fragmentField{index}"],
+        )
+
+    assert RULE_DTO_INVENTORY in _failed_rule_ids(payload)
+
+
+def test_p50_duplicate_same_operation_same_role_dtos_are_blocked() -> None:
+    payload = _valid_pack()
+    _append_dto(
+        payload,
+        class_name="DeleteBondDuplicateCommand",
+        operation_ids=["deleteBond"],
+        required_fields=["bondKindCode", "contractNum", "ordNum", "sequence"],
+    )
+
+    assert RULE_DTO_INVENTORY in _failed_rule_ids(payload)
 
 
 def test_forbidden_payload_markers_fail_quality_gate() -> None:

@@ -31,6 +31,7 @@ result_contract:
     - tableProposal
     - dtoDraft
   dto_preview_artifact_type: DTO_DRAFT
+  dto_preview_package: com.pec.metadata.design.dto
   not_workflow_artifacts: true
 natural_language_examples:
   new_design:

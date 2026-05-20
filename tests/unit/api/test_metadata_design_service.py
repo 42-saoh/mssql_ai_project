@@ -9,11 +9,22 @@ from ai_agent_runtime import FakeModelGateway
 from ai_agent_runtime.models import AgentRunStatus, ModelInvocationRecord, stable_json_hash
 from api_app.metadata_analysis_service import MetadataAnalysisService
 from api_app.metadata_design_runs import execute_metadata_design_run
-from api_app.metadata_design_service import MetadataDesignChatService
+from api_app.metadata_design_service import (
+    METADATA_DESIGN_DTO_DRAFT_PACKAGE,
+    MetadataDesignChatService,
+)
 from api_app.recovery_worker import run_recovery_once
 from api_app.schemas import MetadataDesignRunRequest
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
+
+FORBIDDEN_DTO_PACKAGE_FRAGMENTS = ("com.example", "org.example", "example.")
+
+
+def _assert_metadata_dto_package(content: str) -> None:
+    assert f"package {METADATA_DESIGN_DTO_DRAFT_PACKAGE};" in content
+    for forbidden in FORBIDDEN_DTO_PACKAGE_FRAGMENTS:
+        assert forbidden not in content
 
 
 class DesignSpyRegistry:
@@ -347,6 +358,7 @@ def test_metadata_design_builds_table_script_and_dto_from_metadata(
     ]
     assert response["dtoDraft"]["artifactType"] == "DTO_DRAFT"
     assert response["dtoDraft"]["fileName"] == "PpmCustomerOrderDto.java"
+    _assert_metadata_dto_package(response["dtoDraft"]["content"])
     assert "public class PpmCustomerOrderDto" in response["dtoDraft"]["content"]
     assert "private String customerNm;" in response["dtoDraft"]["content"]
     assert response["interpretedIntent"]["intent"] == "CREATE_TABLE"
@@ -354,6 +366,10 @@ def test_metadata_design_builds_table_script_and_dto_from_metadata(
     assert response["relatedMetadata"]
     assert response["standardizationMappings"][0]["source"] == "METADATA"
     assert response["reviewRequired"] is True
+    assert any(
+        "Target application package must be confirmed before source adoption" in reason
+        for reason in response["dtoDraft"]["reviewReasons"]
+    )
     assert any(
         ref.startswith("mcp.search_columns") or ref.startswith("mcp.get_table_schema")
         for ref in response["tableProposal"]["evidenceRefs"]
@@ -436,6 +452,7 @@ def test_metadata_design_no_candidates_uses_policy_with_review_required(
     assert response["tableProposal"]["reviewRequired"] is True
     assert "REVIEW_REQUIRED" in response["tableProposal"]["createTableScriptPreview"]
     assert response["dtoDraft"]["reviewRequired"] is True
+    _assert_metadata_dto_package(response["dtoDraft"]["content"])
     assert "METADATA_DESIGN_NO_SIMILAR_METADATA" in response["caveats"]
 
 
@@ -1012,3 +1029,4 @@ def test_recovery_worker_processes_queued_metadata_design_run(
     assert record is not None
     assert record.status == "SUCCEEDED"
     assert record.result["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+    _assert_metadata_dto_package(record.result["dtoDraft"]["content"])

@@ -151,6 +151,7 @@ class LangGraphAiDraftPackOrchestrator:
             try:
                 run_payload = _build_run_from_stage_outputs(
                     target_ref=target_ref,
+                    sanitized_draft_context=sanitized_draft_context,
                     stage_outputs=state.get("stageOutputs", {}),
                     expected_inventory=expected_inventory,
                     quality_gates=quality_gates,

@@ -2042,6 +2042,13 @@ def ai_draft_pack_context(context: GenerationContext) -> dict[str, Any]:
         "targetRef": operation_model.get("targetRef") or context.sp_name,
         "entityName": context.entity_name,
         "spName": context.sp_name,
+        "javaPackageContext": {
+            "modelPackage": context.model_package,
+            "dtoPackage": context.model_package,
+            "servicePackage": context.service_package,
+            "mapperPackage": context.mapper_package,
+            "mapperNamespaceRule": "full_mapper_interface_name",
+        },
         "inputParams": [item.__dict__ for item in context.input_params],
         "resultShape": list(context.result_shape),
         "evidenceRefs": [ref.object_ref for ref in context.evidence_refs if ref.object_ref],
@@ -2074,12 +2081,10 @@ def ai_draft_pack_expected_inventory(context: GenerationContext) -> list[dict[st
     operation_model = context.operation_model
     dto_blueprints = operation_model.get("dtoBlueprints")
     if isinstance(dto_blueprints, list):
-        inventory = [
-            _inventory_item_from_dto_blueprint(item, operation_model)
-            for item in dto_blueprints
-            if isinstance(item, Mapping)
-            and str(item.get("name") or "") != "OperationModelReviewRequired"
-        ]
+        inventory = _operation_first_dto_inventory(
+            operation_model=operation_model,
+            context=context,
+        )
         if inventory:
             entity_name = operation_model_entity_name(operation_model) or context.entity_name
             operation_ids = _operation_ids_for_inventory(inventory)
@@ -2307,6 +2312,56 @@ def ai_draft_pack_inventory_findings(
         )
 
     dto_count = len(inventory_dtos)
+    inventory_dto_items = [
+        item
+        for item in expected_inventory
+        if item.get("artifactType") == ArtifactType.DTO_DRAFT.value
+    ]
+    if branch_heavy and dto_count > 20:
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: branch-heavy SP inventory produced "
+            f"{dto_count} DTO files; expected operation-role DTO compression before draft."
+        )
+    if (
+        branch_heavy
+        and statement_ids
+        and dto_count >= max(20, int(len(statement_ids) * 0.8))
+    ):
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: DTO inventory is too close to "
+            f"statement count ({dto_count} DTOs vs {len(statement_ids)} statements), "
+            "suggesting statement-unit DTO generation."
+        )
+    fragment_like = [
+        str(item.get("className") or "")
+        for item in inventory_dto_items
+        if _fragment_like_inventory_class_name(str(item.get("className") or ""))
+    ]
+    if len(fragment_like) >= 5:
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: DTO inventory contains "
+            f"statement/phase fragment-like class names: {', '.join(fragment_like[:12])}."
+        )
+    empty_field_dtos = [
+        str(item.get("className") or "")
+        for item in inventory_dto_items
+        if not [
+            field
+            for field in item.get("requiredFields", [])
+            if str(field).strip() and not _is_review_placeholder_field_name(str(field))
+        ]
+    ]
+    if empty_field_dtos:
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: DTO inventory has no evidence-backed "
+            f"requiredFields for: {', '.join(empty_field_dtos[:12])}."
+        )
+    duplicate_role_fields = _duplicate_inventory_role_fields(inventory_dto_items)
+    if duplicate_role_fields:
+        findings.append(
+            f"{P42_INVENTORY_CONTRACT_INCOMPLETE}: duplicate same-role DTO field sets "
+            f"must be merged before draft: {', '.join(duplicate_role_fields[:8])}."
+        )
     write_or_call_count = sum(
         1
         for item in statements
@@ -2724,9 +2779,7 @@ def _inventory_item_from_dto_blueprint(
     required_fields = [
         field
         for field in dict.fromkeys([*statement_required_fields, *blueprint_required_fields])
-        if field and field != "field"
-    ] or [
-        "reviewRequiredField"
+        if field and field != "field" and not _is_review_placeholder_field_name(field)
     ]
     evidence_refs = [
         str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip()
@@ -2747,8 +2800,114 @@ def _inventory_item_from_dto_blueprint(
         "evidenceRefs": evidence_refs,
         "reviewMarkers": [
             str(marker) for marker in item.get("reviewMarkers", []) if str(marker).strip()
-        ],
+        ]
+        + ([] if required_fields else ["DTO_REQUIRED_FIELDS_REVIEW_REQUIRED"]),
     }
+
+
+def _operation_first_dto_inventory(
+    *,
+    operation_model: Mapping[str, Any],
+    context: GenerationContext,
+) -> list[dict[str, Any]]:
+    raw_blueprints = [
+        item
+        for item in operation_model.get("dtoBlueprints", [])
+        if isinstance(item, Mapping)
+        and str(item.get("name") or "") != "OperationModelReviewRequired"
+    ]
+    if not raw_blueprints:
+        return []
+    blueprint_by_name = {
+        str(item.get("name") or ""): item
+        for item in raw_blueprints
+        if str(item.get("name") or "").strip()
+    }
+    inventory_by_class: dict[str, dict[str, Any]] = {}
+    referenced_names: set[str] = set()
+    operations = [
+        item
+        for item in operation_model.get("operations", [])
+        if isinstance(item, Mapping)
+    ]
+    for operation in operations:
+        operation_id = str(operation.get("operationId") or "").strip()
+        operation_methods = [
+            method_id
+            for method_id in [_draft_method_id_from_operation_ref(operation_id)]
+            if method_id
+        ] or ["reviewDraft"]
+        statement_refs = _operation_statement_refs(operation)
+        operation_markers = _review_markers_from_value(operation.get("reviewMarkers"))
+        for blueprint_name in _operation_dto_blueprint_refs(operation):
+            blueprint = blueprint_by_name.get(blueprint_name)
+            if blueprint is None:
+                continue
+            referenced_names.add(blueprint_name)
+            item = _inventory_item_from_dto_blueprint(blueprint, operation_model)
+            if item.get("operationIds") == ["reviewDraft"]:
+                item["operationIds"] = operation_methods
+            item["evidenceRefs"] = list(
+                dict.fromkeys(
+                    [
+                        *statement_refs,
+                        *[str(ref) for ref in item.get("evidenceRefs", []) if str(ref).strip()],
+                    ]
+                )
+            ) or [ref.object_ref for ref in context.evidence_refs if ref.object_ref][:1]
+            item["reviewMarkers"] = list(
+                dict.fromkeys(
+                    [
+                        *[str(marker) for marker in item.get("reviewMarkers", []) if str(marker).strip()],
+                        *operation_markers,
+                    ]
+                )
+            )
+            _merge_inventory_item(inventory_by_class, item)
+
+    for blueprint in raw_blueprints:
+        blueprint_name = str(blueprint.get("name") or "")
+        if blueprint_name in referenced_names:
+            continue
+        item = _inventory_item_from_dto_blueprint(blueprint, operation_model)
+        _merge_inventory_item(inventory_by_class, item)
+
+    return list(inventory_by_class.values())
+
+
+def _operation_dto_blueprint_refs(operation: Mapping[str, Any]) -> list[str]:
+    refs = operation.get("dtoBlueprintRefs")
+    if not isinstance(refs, Sequence) or isinstance(refs, str | bytes):
+        return []
+    return list(dict.fromkeys(str(ref) for ref in refs if str(ref).strip()))
+
+
+def _operation_statement_refs(operation: Mapping[str, Any]) -> list[str]:
+    refs = operation.get("statementRefs")
+    if not isinstance(refs, Sequence) or isinstance(refs, str | bytes):
+        return []
+    return list(dict.fromkeys(str(ref) for ref in refs if str(ref).strip()))
+
+
+def _merge_inventory_item(
+    inventory_by_class: dict[str, dict[str, Any]],
+    item: dict[str, Any],
+) -> None:
+    class_name = str(item.get("className") or "")
+    existing = inventory_by_class.get(class_name)
+    if existing is None:
+        inventory_by_class[class_name] = item
+        return
+    for key in ("operationIds", "evidenceRefs", "reviewMarkers", "requiredFields", "references"):
+        merged = [
+            str(value)
+            for value in [
+                *existing.get(key, []),
+                *item.get(key, []),
+            ]
+            if str(value).strip()
+        ]
+        existing[key] = list(dict.fromkeys(merged))
 
 
 def _call_request_statement_fields(
@@ -3114,6 +3273,47 @@ def _safe_java_field_name(raw_name: str, *, index: int) -> str:
     if not re.match(r"^[A-Za-z_$]", candidate):
         candidate = f"field{candidate[:1].upper()}{candidate[1:]}"
     return candidate
+
+
+def _is_review_placeholder_field_name(value: str) -> bool:
+    return bool(re.fullmatch(r"reviewRequiredField\d*", str(value or ""), flags=re.IGNORECASE))
+
+
+def _fragment_like_inventory_class_name(class_name: str) -> bool:
+    return bool(
+        re.search(
+            r"(?:Init(?:Result)?|Subsystem|Process\d+|Kind\d{2,}|Crud(?:Read|Create|Update|Delete)|DeleteResult|SValueResult)$",
+            str(class_name or ""),
+        )
+    )
+
+
+def _duplicate_inventory_role_fields(
+    inventory_dto_items: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    seen: dict[tuple[tuple[str, ...], str, tuple[str, ...]], str] = {}
+    duplicates: list[str] = []
+    for item in inventory_dto_items:
+        fields = tuple(
+            sorted(
+                str(field)
+                for field in item.get("requiredFields", [])
+                if str(field).strip()
+                and not _is_review_placeholder_field_name(str(field))
+            )
+        )
+        if not fields:
+            continue
+        role = str(item.get("dtoRole") or item.get("role") or "").upper()
+        operations = tuple(sorted(str(ref) for ref in item.get("operationIds", []) if str(ref).strip()))
+        signature = (operations, role, fields)
+        class_name = str(item.get("className") or "")
+        existing = seen.get(signature)
+        if existing:
+            duplicates.append(f"{existing}/{class_name}")
+        else:
+            seen[signature] = class_name
+    return duplicates
 
 
 def _pascal_from_ascii_tokens(value: str) -> str:

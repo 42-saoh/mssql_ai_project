@@ -8,6 +8,10 @@ from typing import Any
 import yaml
 from ai_agent_validation import validate_ai_java_mybatis_draft_pack_quality
 from ai_agent_validation.models import ValidationStatus
+from tests.helpers.p42_manage_bond import (
+    P42_MAPPER_PACKAGE,
+    p42_ai_draft_pack_fixture,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "fixtures" / "eval" / "ai_draft_pack_p42_manage_bond_v1.yaml"
@@ -33,37 +37,20 @@ ALLOWED_ARTIFACT_TYPES = {
     "MAPPER_XML",
 }
 
+REQUIRED_P42_REVIEW_MARKERS = {
+    "CROSS_DB_WRITE_REVIEW_REQUIRED",
+    "CALLED_PROCEDURE_IO_REVIEW_REQUIRED",
+    "TVF_OR_PROCEDURE_KIND_REVIEW_REQUIRED",
+    "TRANSACTION_BOUNDARY_REVIEW_REQUIRED",
+}
+
 
 def _yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def _materialized_pack(fixture: dict[str, Any]) -> dict[str, Any]:
-    target = fixture["ai_draft_pack_quality_target"]
-    quality_gates = fixture["quality_gates"]
-    return {
-        "schemaVersion": target["schemaVersion"],
-        "contractTarget": target["contractTarget"],
-        "targetRef": target["targetRef"],
-        "sourcePolicy": target["sourcePolicy"],
-        "productionReady": target["productionReady"],
-        "files": [_materialized_file(file) for file in target["expectedFiles"]],
-        "evidenceRefs": list(target["evidenceRefs"]),
-        "reviewMarkers": list(target["reviewMarkers"]),
-        "qualityGates": {
-            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
-            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
-            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
-            "requiredReviewMarkers": list(target["reviewMarkers"]),
-            "blockerPatterns": list(quality_gates["blocker_patterns"]),
-            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
-            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
-            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
-                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
-            ),
-        },
-        "assumptions": ["P42C eval materialization is sanitized and productionReady=false."],
-    }
+    return p42_ai_draft_pack_fixture()
 
 
 def _materialized_file(file: dict[str, Any]) -> dict[str, Any]:
@@ -317,6 +304,36 @@ def test_p42_manage_bond_materialized_pack_passes_deterministic_validator() -> N
     assert set(fixture["expected_quality_report"]["reviewRequiredFindings"]) <= set(
         report.manual_review_points
     )
+
+
+def test_p50_manage_bond_static_draft_contract_has_operation_role_shape() -> None:
+    fixture = _yaml(FIXTURE)
+    payload = _materialized_pack(fixture)
+    required_methods = set(fixture["quality_gates"]["required_service_methods"])
+    dto_files = [file for file in payload["files"] if file["artifactType"] == "DTO_DRAFT"]
+    service = next(file for file in payload["files"] if file["artifactType"] == "SERVICE_DRAFT")
+    mapper = next(file for file in payload["files"] if file["artifactType"] == "MAPPER_INTERFACE")
+    mapper_xml = next(file for file in payload["files"] if file["artifactType"] == "MAPPER_XML")
+
+    assert 3 < len(dto_files) <= 20
+    assert not any(file["className"] == "ManageBondDto" for file in dto_files)
+    assert not any("Process537" in file["className"] for file in dto_files)
+    assert all(file["operationIds"] and file["evidenceRefs"] for file in payload["files"])
+    assert set(payload["reviewMarkers"]) >= REQUIRED_P42_REVIEW_MARKERS
+    assert "Objects.requireNonNull" in service["content"]
+    assert f'namespace="{P42_MAPPER_PACKAGE}.ManageBondMapper"' in mapper_xml["content"]
+    assert "com.example" not in str(payload)
+    assert "org.example" not in str(payload)
+    assert "<resultMap" in mapper_xml["content"]
+    assert "resultType=\"map\"" not in mapper_xml["content"]
+    assert "reviewRequiredField" not in mapper_xml["content"]
+    assert "CAST(NULL AS" not in mapper_xml["content"]
+    assert "${" not in mapper_xml["content"]
+    assert "procedureName" not in mapper_xml["content"]
+    for method in required_methods:
+        assert method in service["content"]
+        assert method in mapper["content"]
+        assert f'id="{method}"' in mapper_xml["content"]
 
 
 def test_p42_manage_bond_fallback_skeleton_pattern_is_not_acceptance_output() -> None:

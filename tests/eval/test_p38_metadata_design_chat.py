@@ -7,12 +7,22 @@ from typing import Any
 import pytest
 import yaml
 from ai_agent_runtime import FakeModelGateway
-from api_app.metadata_design_service import MetadataDesignChatService
+from api_app.metadata_design_service import (
+    METADATA_DESIGN_DTO_DRAFT_PACKAGE,
+    MetadataDesignChatService,
+)
 from api_app.schemas import MetadataDesignRunRequest
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = ROOT / "spec" / "eval" / "p38_metadata_design_chat_contract.yaml"
 FIXTURE = ROOT / "fixtures" / "eval" / "metadata_design_chat_p38_v1.yaml"
+FORBIDDEN_DTO_PACKAGE_FRAGMENTS = ("com.example", "org.example", "example.")
+
+
+def _assert_metadata_dto_package(content: str) -> None:
+    assert f"package {METADATA_DESIGN_DTO_DRAFT_PACKAGE};" in content
+    for forbidden in FORBIDDEN_DTO_PACKAGE_FRAGMENTS:
+        assert forbidden not in content
 
 
 class P38EvalRegistry:
@@ -113,6 +123,7 @@ def test_p38_contract_and_fixture_are_aligned() -> None:
     assert fixture["expected"]["dtoArtifactType"] == contract["outputs"][
         "dto_preview_artifact_type"
     ]
+    assert contract["outputs"]["dto_preview_package"] == METADATA_DESIGN_DTO_DRAFT_PACKAGE
     assert set(contract["required_paths"]) == {
         "/api/v1/metadata/design-runs",
         "/api/v1/metadata/design-runs/{runId}",
@@ -151,6 +162,7 @@ def test_p38_fixture_design_eval_generates_evidence_backed_outputs(
     assert "[CUSTOMER_NM] VARCHAR(100)" in response["tableProposal"][
         "createTableScriptPreview"
     ]
+    _assert_metadata_dto_package(response["dtoDraft"]["content"])
     assert "public class PpmOrderReqDto" in response["dtoDraft"]["content"]
     assert any(
         "PK/FK and index structure must be confirmed" in reason

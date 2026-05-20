@@ -6,9 +6,14 @@ from pathlib import Path
 
 import pytest
 
-import yaml
 from ai_agent_runtime import FakeModelGateway
 from scripts import p42_live_ai_draft_pack_probe
+from tests.helpers.p42_manage_bond import (
+    P42_MAPPER_PACKAGE,
+    P42_MODEL_PACKAGE,
+    P42_SERVICE_PACKAGE,
+    p42_ai_draft_pack_fixture,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED_ENV = (
@@ -36,90 +41,32 @@ EXPECTED_REDACTION = {
 
 
 def _valid_fixture_pack() -> dict:
-    fixture = yaml.safe_load(
-        (ROOT / "fixtures" / "eval" / "ai_draft_pack_p42_manage_bond_v1.yaml").read_text(
-            encoding="utf-8"
-        )
-    )
-    target = fixture["ai_draft_pack_quality_target"]
-    quality_gates = fixture["quality_gates"]
-    return {
-        "schemaVersion": target["schemaVersion"],
-        "contractTarget": target["contractTarget"],
-        "targetRef": target["targetRef"],
-        "sourcePolicy": target["sourcePolicy"],
-        "productionReady": target["productionReady"],
-        "files": [_file_with_content(file) for file in target["expectedFiles"]],
-        "evidenceRefs": list(target["evidenceRefs"]),
-        "reviewMarkers": list(target["reviewMarkers"]),
-        "qualityGates": {
-            "requiredDtoClasses": list(quality_gates["required_dto_classes"]),
-            "requiredServiceMethods": list(quality_gates["required_service_methods"]),
-            "requiredMapperMethods": list(quality_gates["required_mapper_methods"]),
-            "requiredReviewMarkers": list(target["reviewMarkers"]),
-            "blockerPatterns": list(quality_gates["blocker_patterns"]),
-            "blankContentIsBlocker": bool(quality_gates["blank_content_is_blocker"]),
-            "dtoCollapseIsBlocker": bool(quality_gates["dto_collapse_is_blocker"]),
-            "fallbackSkeletonPersistenceAllowedOnFailure": bool(
-                quality_gates["fallback_skeleton_persistence_allowed_on_failure"]
-            ),
-        },
-        "assumptions": ["Sanitized fixture live-mode test payload is draft-only."],
-    }
+    return p42_ai_draft_pack_fixture()
 
 
-def _file_with_content(file: dict) -> dict:
-    operation_ids = list(file["operationIds"])
-    references = list(file.get("references") or [])
-    class_name = file["className"]
-    if file["artifactType"] == "DTO_DRAFT":
-        fields = "\n".join(
-            f"    private String {field};" for field in file.get("requiredFields", [])
-        )
-        content = (
-            f"public class {class_name} {{\n"
-            f"    // REVIEW_REQUIRED draft DTO backed by sanitized evidence.\n"
-            f"{fields}\n"
-            "}"
-        )
-    elif file["artifactType"] == "MAPPER_XML":
-        methods = "\n".join(
-            f'  <select id="{operation_id}" parameterType="map" resultType="map">'
-            f"/* SQL_SKELETON_REVIEW_REQUIRED */</select>"
-            for operation_id in operation_ids
-        )
-        reference_comment = " ".join(references)
-        content = f'<mapper namespace="{class_name}">\n<!-- {reference_comment} -->\n{methods}\n</mapper>'
-    else:
-        methods = "\n".join(
-            f"    public void {operation_id}() {{}}" for operation_id in operation_ids
-        )
-        reference_comment = " ".join(references)
-        content = (
-            f"public class {class_name} {{\n"
-            f"    // REVIEW_REQUIRED draft {reference_comment}\n{methods}\n}}"
-        )
-        if file["artifactType"] == "MAPPER_INTERFACE":
-            content = (
-                f"public interface {class_name} {{\n"
-                f"    // REVIEW_REQUIRED draft {reference_comment}\n{methods}\n}}"
-            )
-    payload = {
-        "artifactType": file["artifactType"],
-        "path": file["path"],
-        "role": file["role"],
-        "className": class_name,
-        "content": content,
-        "operationIds": operation_ids,
-        "evidenceRefs": list(file["evidenceRefs"]),
-        "reviewMarkers": list(file.get("reviewMarkers") or []),
+def _assert_fixture_pack_uses_current_java_contract(pack: dict) -> None:
+    contents = {
+        file["artifactType"]: file["content"]
+        for file in pack["files"]
+        if file["artifactType"] != "DTO_DRAFT"
     }
-    if "dtoRole" in file:
-        payload["dtoRole"] = file["dtoRole"]
-    for optional_key in ("requiredFields", "references"):
-        if optional_key in file:
-            payload[optional_key] = list(file[optional_key])
-    return payload
+    dto_contents = [
+        file["content"] for file in pack["files"] if file["artifactType"] == "DTO_DRAFT"
+    ]
+    assert dto_contents
+    for content in dto_contents:
+        assert f"package {P42_MODEL_PACKAGE};" in content
+        assert "public String get" in content
+        assert "public void set" in content
+        assert "com.example" not in content
+        assert "org.example" not in content
+    assert f"package {P42_SERVICE_PACKAGE};" in contents["SERVICE_DRAFT"]
+    assert f"package {P42_MAPPER_PACKAGE};" in contents["MAPPER_INTERFACE"]
+    assert f'<mapper namespace="{P42_MAPPER_PACKAGE}.ManageBondMapper">' in contents[
+        "MAPPER_XML"
+    ]
+    assert f'parameterType="{P42_MODEL_PACKAGE}.' in contents["MAPPER_XML"]
+    assert f'type="{P42_MODEL_PACKAGE}.ManageBondSearchRow"' in contents["MAPPER_XML"]
 
 
 def test_p42_live_gate_disabled_does_not_initialize_live_access(
@@ -236,6 +183,7 @@ def test_p42_sanitized_fixture_live_mode_passes_without_ppm_or_raw_sp(
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
 
     fixture_pack = _valid_fixture_pack()
+    _assert_fixture_pack_uses_current_java_contract(fixture_pack)
     target_ref = fixture_pack["targetRef"]
 
     def fail_on_ppm_access(*_args, **_kwargs):
@@ -289,6 +237,17 @@ def test_p42_env_sample_and_docker_compose_forward_live_gate_name() -> None:
     assert "P42_LIVE_REPLAY_GATE" in compose_text
     assert "P42_LIVE_REPLAY_MODE" in compose_text
     assert "tests/eval/test_p42_live_ai_draft_pack_replay_gate.py" in suites_text
+
+
+def test_p42_sanitized_fixture_context_includes_java_package_policy() -> None:
+    fixture = p42_live_ai_draft_pack_probe._load_ai_draft_pack_fixture()
+    context = p42_live_ai_draft_pack_probe._fixture_sanitized_context(fixture)
+
+    assert context["javaPackageContext"] == {
+        "modelPackage": P42_MODEL_PACKAGE,
+        "servicePackage": P42_SERVICE_PACKAGE,
+        "mapperPackage": P42_MAPPER_PACKAGE,
+    }
 
 
 def test_p42_live_ai_draft_pack_replay_gate() -> None:

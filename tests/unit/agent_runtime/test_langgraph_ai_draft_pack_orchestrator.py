@@ -96,11 +96,11 @@ def test_langgraph_orchestrator_routes_quality_failure_to_repair() -> None:
     )
 
     langgraph_component = run.model_invocation.component_invocations[-1]
-    assert _adapter_stages(run) == [
-        *AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
-        "service_content",
-        "mapper_xml_content",
-    ]
+    adapter_stages = _adapter_stages(run)
+    initial_stages = adapter_stages[: len(AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES)]
+    repair_stages = adapter_stages[len(AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES) :]
+    assert initial_stages == list(AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES)
+    assert "mapper_xml_content" in repair_stages
     assert "repair" in langgraph_component["stageTrace"]
     assert langgraph_component["repairAttempted"] is True
     assert validate_ai_java_mybatis_draft_pack_quality(

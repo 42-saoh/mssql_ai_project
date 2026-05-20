@@ -7,7 +7,10 @@ from typing import Any
 import pytest
 import yaml
 from ai_agent_runtime import FakeModelGateway
-from api_app.metadata_design_service import MetadataDesignChatService
+from api_app.metadata_design_service import (
+    METADATA_DESIGN_DTO_DRAFT_PACKAGE,
+    MetadataDesignChatService,
+)
 from api_app.schemas import MetadataDesignRunRequest
 
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
@@ -15,6 +18,13 @@ from tests.unit.api.fake_repository import MemoryWorkflowRepository
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = ROOT / "spec" / "eval" / "p40_metadata_design_natural_language_chat_contract.yaml"
 FIXTURE = ROOT / "fixtures" / "eval" / "metadata_design_natural_language_chat_p40_v1.yaml"
+FORBIDDEN_DTO_PACKAGE_FRAGMENTS = ("com.example", "org.example", "example.")
+
+
+def _assert_metadata_dto_package(content: str) -> None:
+    assert f"package {METADATA_DESIGN_DTO_DRAFT_PACKAGE};" in content
+    for forbidden in FORBIDDEN_DTO_PACKAGE_FRAGMENTS:
+        assert forbidden not in content
 
 
 class P40EvalRegistry:
@@ -151,6 +161,10 @@ def test_p40_contract_and_fixture_are_aligned() -> None:
     assert fixture["expected"]["dtoArtifactType"] == contract["result_contract"][
         "dto_preview_artifact_type"
     ]
+    assert (
+        contract["result_contract"]["dto_preview_package"]
+        == METADATA_DESIGN_DTO_DRAFT_PACKAGE
+    )
     assert contract["storage"]["no_new_ddl"] is True
     assert "REFINE_CURRENT" in contract["input_contract"]["conversation_modes"]
 
@@ -189,6 +203,7 @@ def test_p40_new_design_and_refine_eval_generate_chat_outputs(
     assert new_response["tableProposal"]["tableName"] == expected["tableName"]
     assert expected["tableScriptField"] in new_response["tableProposal"]
     assert new_response["dtoDraft"]["artifactType"] == expected["dtoArtifactType"]
+    _assert_metadata_dto_package(new_response["dtoDraft"]["content"])
     assert refine_response["interpretedIntent"]["intent"] == "REFINE_TABLE"
     assert set(expected["requiredAppliedActions"]) <= {
         change["action"] for change in refine_response["appliedChanges"]
@@ -200,6 +215,7 @@ def test_p40_new_design_and_refine_eval_generate_chat_outputs(
     assert "DLV_MEMO" in refine_columns
     assert refine_columns["ORDER_DT"] == "VARCHAR(8)"
     assert refine_response["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+    _assert_metadata_dto_package(refine_response["dtoDraft"]["content"])
     assert reference_response["interpretedIntent"]["intent"] == "CREATE_TABLE"
     assert reference_response["interpretedIntent"]["tableNameCandidate"] == expected[
         "referenceTableName"
@@ -213,6 +229,7 @@ def test_p40_new_design_and_refine_eval_generate_chat_outputs(
     assert "DBO_PCS_CTRT_DBO_PEM_CTRT" not in reference_response["tableProposal"][
         "createTableScriptPreview"
     ]
+    _assert_metadata_dto_package(reference_response["dtoDraft"]["content"])
     reference_columns = {
         column["name"]: column["dataType"]
         for column in reference_response["tableProposal"]["columns"]
@@ -256,6 +273,7 @@ def test_p40_no_metadata_fallback_keeps_review_required(
     assert "METADATA_DESIGN_NO_SIMILAR_METADATA" in response["caveats"]
     assert response["tableProposal"]["reviewRequired"] is True
     assert response["dtoDraft"]["reviewRequired"] is True
+    _assert_metadata_dto_package(response["dtoDraft"]["content"])
 
 
 def _persist_successful_baseline(

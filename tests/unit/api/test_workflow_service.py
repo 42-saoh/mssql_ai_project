@@ -37,7 +37,9 @@ from api_app.workflow import (
     P42_INVENTORY_CONTRACT_INCOMPLETE,
     WORKFLOW_METADATA_NOTE,
     WorkflowService,
+    ai_draft_pack_context,
     ai_draft_pack_expected_inventory,
+    ai_draft_pack_inventory_findings,
     ai_draft_pack_quality_gates,
     dependency_procedure_candidates,
     generation_context_from_request,
@@ -49,6 +51,9 @@ from tests.helpers.framework_adapters import (
 
 from tests.helpers.p42_manage_bond import (
     ManageBondMetadataGateway,
+    P42_MAPPER_PACKAGE,
+    P42_MODEL_PACKAGE,
+    P42_SERVICE_PACKAGE,
     manage_bond_request,
     p41_operation_model_fixture,
     p42_ai_draft_pack_fixture,
@@ -329,7 +334,13 @@ def test_p42_inventory_derives_java_method_ids_from_operation_refs() -> None:
     mapper_item = next(item for item in inventory if item["artifactType"] == "MAPPER_INTERFACE")
     mapper_xml_item = next(item for item in inventory if item["artifactType"] == "MAPPER_XML")
     quality_gates = ai_draft_pack_quality_gates(context, inventory)
+    search_dto = next(item for item in inventory if item["className"] == "ComplexSearchCriteria")
+    update_dto = next(item for item in inventory if item["className"] == "ComplexUpdateCommand")
 
+    assert search_dto["operationIds"] == ["complexCrudRQuery"]
+    assert update_dto["operationIds"] == ["complexCrudUUpdate"]
+    assert "stmt.select.s001" in search_dto["evidenceRefs"]
+    assert "stmt.update.s002" in update_dto["evidenceRefs"]
     assert service_item["operationIds"] == ["complexCrudRQuery", "complexCrudUUpdate"]
     assert mapper_item["operationIds"] == service_item["operationIds"]
     assert mapper_xml_item["operationIds"] == service_item["operationIds"]
@@ -340,6 +351,68 @@ def test_p42_inventory_derives_java_method_ids_from_operation_refs() -> None:
         for item in inventory
         for operation_id in item.get("operationIds", [])
     )
+
+
+def test_p50_branchy_fragment_dto_inventory_is_rejected_before_draft() -> None:
+    operations = []
+    statements = []
+    dto_blueprints = []
+    for index in range(1, 23):
+        statement_id = f"stmt.update.s{index:03d}"
+        dto_name = f"ManageBondProcess{index:03d}"
+        operation_id = f"op.process{index:03d}"
+        operations.append(
+            {
+                "operationId": operation_id,
+                "branchCondition": {
+                    "expression": "CRUDFlag = 'U'" if index % 2 else "CRUDFlag = 'C'",
+                },
+                "statementRefs": [statement_id],
+                "dtoBlueprintRefs": [dto_name],
+            }
+        )
+        statements.append({"statementId": statement_id, "operation": "UPDATE"})
+        dto_blueprints.append(
+            {
+                "name": dto_name,
+                "role": "COMMAND",
+                "operationIds": [operation_id],
+                "fields": [{"name": f"FragmentValue{index}"}],
+                "evidenceRefs": [statement_id],
+                "reviewMarkers": [],
+            }
+        )
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "sample",
+            "request": {
+                "entityName": "ManageBond",
+                "spName": "dbo.PCO_GU_ManageBond_PRC",
+                "inputParams": [
+                    {"name": "CRUDFlag", "dbType": "varchar(20)"},
+                    {"name": "GUBUNFlag", "dbType": "varchar(1)"},
+                    {"name": "BondKindCode", "dbType": "varchar(3)"},
+                    {"name": "SubSystem", "dbType": "varchar(20)"},
+                    {"name": "SValue", "dbType": "varchar(max)"},
+                ],
+                "operationModel": {
+                    "targetRef": "dbo.PCO_GU_ManageBond_PRC",
+                    "operations": operations,
+                    "statementEvidence": statements,
+                    "dtoBlueprints": dto_blueprints,
+                    "reviewMarkers": ["TRANSACTION_BOUNDARY_REVIEW_REQUIRED"],
+                },
+            },
+        }
+    )
+
+    inventory = ai_draft_pack_expected_inventory(context)
+    findings = ai_draft_pack_inventory_findings(context, inventory)
+    serialized = "\n".join(findings)
+
+    assert len([item for item in inventory if item["artifactType"] == "DTO_DRAFT"]) == 22
+    assert P42_INVENTORY_CONTRACT_INCOMPLETE in serialized
+    assert "statement/phase fragment-like class names" in serialized
 
 
 def test_sp_analysis_options_default_to_high_quality_ai_hybrid() -> None:
@@ -579,10 +652,11 @@ def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts()
     )
     assert "int updateVendorBond(VendorBondUpdateCommand command)" in mapper_content
     assert "int updateOnlineBond(OnlineBondUpdateCommand command)" in mapper_content
-    assert 'parameterType="ManageBondSearchCriteria"' in mapper_xml_content
-    assert 'resultType="ManageBondSearchRow"' in mapper_xml_content
-    assert 'parameterType="VendorBondUpdateCommand"' in mapper_xml_content
-    assert 'parameterType="OnlineBondUpdateCommand"' in mapper_xml_content
+    assert f'parameterType="{P42_MODEL_PACKAGE}.ManageBondSearchCriteria"' in mapper_xml_content
+    assert 'resultMap="ManageBondSearchRowMap"' in mapper_xml_content
+    assert f'parameterType="{P42_MODEL_PACKAGE}.VendorBondUpdateCommand"' in mapper_xml_content
+    assert f'parameterType="{P42_MODEL_PACKAGE}.OnlineBondUpdateCommand"' in mapper_xml_content
+    assert "com.example" not in mapper_xml_content
     operation_runs = [
         run
         for run in repository.list_agent_runs(job.job_id) or []
@@ -604,6 +678,14 @@ def test_p42_manage_bond_workflow_wires_ai_draft_pack_into_multi_dto_artifacts()
         operation_model_run=operation_runs[0],
         ai_draft_pack_run=ai_draft_runs[0],
     )
+    draft_context = ai_draft_pack_context(context)
+    assert draft_context["javaPackageContext"] == {
+        "modelPackage": P42_MODEL_PACKAGE,
+        "dtoPackage": P42_MODEL_PACKAGE,
+        "servicePackage": P42_SERVICE_PACKAGE,
+        "mapperPackage": P42_MAPPER_PACKAGE,
+        "mapperNamespaceRule": "full_mapper_interface_name",
+    }
     assert context.request["aiDraftPack"]["schemaVersion"] == "AiJavaMyBatisDraftPack.v0.1"
     assert context.request["aiDraftPackTrace"]["agentRunId"] == ai_draft_runs[0].agent_run_id
 
@@ -1736,7 +1818,7 @@ def test_p42_workflow_repairs_invalid_quality_once_and_persists_artifacts() -> N
     )
 
 
-def test_p42_workflow_reference_guard_preserves_missing_mapper_xml_dto_token() -> None:
+def test_p50_workflow_blocks_unknown_mapper_xml_dto_type() -> None:
     operation_model = p41_operation_model_fixture()
     ai_draft_pack = p42_ai_draft_pack_fixture()
     for file in ai_draft_pack["files"]:
@@ -1758,22 +1840,26 @@ def test_p42_workflow_reference_guard_preserves_missing_mapper_xml_dto_token() -
 
     _request_record, job = service.submit_sp_analysis(manage_bond_request())
 
-    mapper_xml = next(
-        artifact
-        for artifact in repository.list_job_artifacts(job.job_id) or []
-        if artifact.type == ArtifactType.MAPPER_XML
-    )
+    artifacts = repository.list_job_artifacts(job.job_id) or []
     ai_draft_run = next(
         run
         for run in repository.list_agent_runs(job.job_id) or []
         if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
     )
+    diagnostics = ai_draft_run.structured_output["failureDiagnostics"]
 
-    assert job.status == JobStatus.VALIDATION_COMPLETE
-    assert "CreateRetentionBondBatchItem" in mapper_xml.content
-    assert any(
-        component["component"] == "ai_draft_pack_reference_guard"
-        for component in ai_draft_run.model_invocation["componentInvocations"]
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == P42_AI_DRAFT_PACK_REVIEW_REQUIRED
+    assert "mapper_xml.dto_type" in json.dumps(diagnostics)
+    assert not any(
+        artifact.type
+        in {
+            ArtifactType.DTO_DRAFT,
+            ArtifactType.SERVICE_DRAFT,
+            ArtifactType.MAPPER_INTERFACE,
+            ArtifactType.MAPPER_XML,
+        }
+        for artifact in artifacts
     )
 
 

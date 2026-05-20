@@ -85,7 +85,10 @@ Every evidenceRefs array must use ids copied exactly from evidenceRefContract.al
 Use statementEvidence as deterministic evidence; do not promote LLM inference to metadata fact.
 Keep productionReady false and sourcePolicy sanitized_facts_only. Preserve separate DTO blueprints
 for query criteria, result rows, commands, batch items, and called procedure request shapes. Never
-collapse all procedure inputs/results into one DTO. Mark weak business naming, result-shape
+collapse all procedure inputs/results into one DTO and never create DTO blueprints per SQL
+statement fragment. First group statementEvidence into BusinessOperation entries by branch
+condition, statementRefs, and business responsibility; then attach role DTO blueprint refs to those
+operations. Mark weak business naming, result-shape
 uncertainty, cross-database writes, dynamic SQL, TVF/procedure uncertainty, and called procedure
 I/O as REVIEW_REQUIRED. Never include raw SQL snippets, row data, prompt/provider trace ids,
 procedure execution, DDL/DML apply, deployment, or secrets.
@@ -106,7 +109,21 @@ JSON. Use sanitized draft context, expected file inventory, quality gates, and e
 Keep productionReady false and sourcePolicy sanitized_facts_only. Produce multiple DTO_DRAFT files
 for query criteria, result rows, commands, batch items, and called procedure request shapes; keep
 SERVICE_DRAFT, MAPPER_INTERFACE, and MAPPER_XML as single files. Never create procedure-wide
-single DTO collapse or OperationModelReviewRequired fallback skeletons. Every file must contain
+single DTO collapse or OperationModelReviewRequired fallback skeletons. Do not create one DTO per
+SQL statement or fragment; group statementEvidence through operations[].statementRefs into
+BusinessOperation responsibilities first, then draft role DTOs from those operations. Service
+public methods must be business use-case orchestration methods, not simple pass-through wrappers
+around one mapper call. Mapper interface method names must exactly equal Mapper XML statement ids,
+Mapper XML namespace must be the Mapper interface FQCN, and parameterType/resultType/resultMap
+types must be DTO FQCNs from the pack; never use java.util.List, List, Map, java.util.Map,
+Object, or collection/raw types as XML parameterType/resultType. For batch operations, bind the
+operation's BatchItem or Command DTO FQCN and show any collection handling through bounded static
+MyBatis structure only when evidence supports it. Use resultMap for SELECT result DTO mapping.
+Placeholder DTO fields, placeholder SELECT rows, generic execute methods, raw ${{...}}
+substitution, and procedureName-driven EXEC/CALL are quality failures. Use
+sanitizedDraftContext.javaPackageContext
+for DTO/model, Service, Mapper, and Mapper XML namespace packages; do not emit com.example,
+org.example, example.*, or other placeholder packages. Every file must contain
 non-empty draft content,
 operationIds, evidenceRefs copied exactly from evidenceRefContract.allowedFactIds, and reviewMarkers
 when facts are weak. Use draftPackEvidenceBundle as the authoritative generic coverage plan:
@@ -739,6 +756,13 @@ def render_ai_java_mybatis_draft_pack_prompt(
             "stageExactInventoryRequired": stage in AI_JAVA_MYBATIS_DRAFT_PACK_ROLE_STAGES,
             "genericCoverageFirst": True,
             "benchmarkNamesAreNotAnswerKeys": True,
+            "statementUnitDtosForbidden": True,
+            "businessOperationGroupingRequired": True,
+            "servicePassThroughForbidden": True,
+            "strictMapperFqcnAndResultMapRequired": True,
+            "placeholderSqlAndDtoBlocked": True,
+            "javaPackageContextRequired": True,
+            "placeholderPackagesBlocked": True,
             "composerStages": list(AI_DRAFT_PACK_COMPOSER_STAGES),
             "composerRule": (
                 "Plan DTO inventory first, then draft DTO content, Service orchestration, "
@@ -1012,15 +1036,32 @@ def _bounded_json_summary(value: Any, *, limit: int = 40) -> Any:
 
 def _ai_draft_pack_stage_task(stage: str) -> str:
     if stage == "dto_inventory":
-        return "Derive DTO file inventory from DML, SP/FN parameters, result fields, and call I/O."
+        return (
+            "Derive operation-role DTO inventory from operations[].statementRefs, branch "
+            "conditions, DML inputs, result fields, batch items, and call I/O; do not create "
+            "one DTO per SQL statement or fragment."
+        )
     if stage == "dto_content":
-        return "Draft DTO fields and accessors from the DTO responsibility matrix."
+        return (
+            "Draft DTO fields, package, constructor/accessor or Lombok policy from the DTO "
+            "responsibility matrix without placeholder reviewRequiredField DTOs."
+        )
     if stage == "service_content":
-        return "Draft Service business orchestration and mapper calls without SQL text."
+        return (
+            "Draft Service business orchestration methods with transaction/review markers for "
+            "writes; avoid mapper pass-through wrappers and SQL text."
+        )
     if stage == "mapper_interface_content":
-        return "Draft Mapper interface signatures matching Service calls and XML ids."
+        return (
+            "Draft Mapper interface signatures whose method names exactly match Service calls "
+            "and Mapper XML statement ids."
+        )
     if stage == "mapper_xml_content":
-        return "Draft Mapper XML DB-facing DML and call statements from statement evidence."
+        return (
+            "Draft Mapper XML with namespace equal to Mapper interface FQCN, DTO FQCN "
+            "parameterType/resultMap types, no raw collection/generic parameterType values, "
+            "static #{...} bindings, and no placeholder SQL."
+        )
     if stage == "integration_quality_gate":
         return "Check DTO, Service, Mapper interface, and Mapper XML consistency before repair."
     if stage == "file_inventory":
@@ -1051,7 +1092,10 @@ def _operation_coverage_matrix(
     expected_inventory: Sequence[Mapping[str, Any]],
     quality_gates: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
-    statements_by_operation = _statements_by_operation(statement_evidence)
+    statements_by_operation = _statements_by_operation(
+        operations=operations,
+        statement_evidence=statement_evidence,
+    )
     inventory_by_operation = _inventory_by_operation(expected_inventory)
     required_service = set(_strings(quality_gates.get("requiredServiceMethods")))
     required_mapper = set(_strings(quality_gates.get("requiredMapperMethods")))
@@ -1160,15 +1204,38 @@ def _mapper_coverage_contract(
         "rule": (
             "Use one aggregate Service, one aggregate Mapper interface, and one aggregate "
             "Mapper XML. Each required mapper method must appear as a Java mapper method "
-            "and XML statement id."
+            "and XML statement id. XML namespace must equal the Mapper interface FQCN; "
+            "parameterType/resultType/resultMap types must be DTO FQCNs and SELECT "
+            "statements must use resultMap column-to-field mappings. XML parameterType "
+            "and resultType must not be java.util.List, List, Map, java.util.Map, Object, "
+            "or other raw collection/generic types; batch statements still bind an "
+            "evidence-backed BatchItem or Command DTO FQCN."
         ),
     }
 
 
 def _statements_by_operation(
+    *,
+    operations: Sequence[Mapping[str, Any]],
     statement_evidence: Sequence[Mapping[str, Any]],
 ) -> dict[str, list[str]]:
+    known_statement_ids = {
+        str(statement.get("statementId") or "")
+        for statement in statement_evidence
+        if str(statement.get("statementId") or "").strip()
+    }
     result: dict[str, list[str]] = {}
+    for operation in operations:
+        operation_id = str(operation.get("operationId") or "")
+        refs = [
+            str(ref)
+            for ref in _strings(operation.get("statementRefs"))
+            if not known_statement_ids or str(ref) in known_statement_ids
+        ]
+        if operation_id and refs:
+            result.setdefault(operation_id, []).extend(refs)
+    if result:
+        return {key: _deduped(value) for key, value in result.items()}
     for statement in statement_evidence:
         operation = str(statement.get("operation") or statement.get("operationId") or "")
         statement_id = str(statement.get("statementId") or "")

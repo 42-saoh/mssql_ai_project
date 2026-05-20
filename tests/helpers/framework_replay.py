@@ -7,6 +7,10 @@ from typing import Any
 from ai_agent_domain import ArtifactType
 from ai_agent_generation import GenerationContext
 
+SYNTHETIC_MODEL_PACKAGE = "com.pec.synthetic.workflow.draft.model"
+SYNTHETIC_SERVICE_PACKAGE = "com.pec.synthetic.workflow.draft.service"
+SYNTHETIC_MAPPER_PACKAGE = "com.pec.synthetic.workflow.draft.mapper"
+
 
 def synthetic_generation_context() -> GenerationContext:
     target_ref = "dbo.usp_SyntheticComplexOrder_PRC"
@@ -96,7 +100,11 @@ def synthetic_generation_context() -> GenerationContext:
         {
             "sampleId": "framework-replay-synthetic-complex-sp",
             "request": {
+                "systemCode": "synthetic",
+                "businessCodeLv1": "workflow",
+                "businessCodeLv2": "draft",
                 "entityName": "SyntheticOrder",
+                "resourceName": "synthetic-order",
                 "spName": target_ref,
                 "operationModel": operation_model,
             },
@@ -164,23 +172,30 @@ def materialized_content(file: dict[str, Any]) -> str:
     class_name = file["className"]
     operation_ids = list(file.get("operationIds", []))
     if artifact_type == ArtifactType.DTO_DRAFT.value:
+        fields = list(file.get("requiredFields", []))
         fields = "\n".join(
-            f"    private String {field};" for field in file.get("requiredFields", [])
+            f"    private String {field};" for field in fields
+        )
+        accessors = "\n\n".join(
+            _string_accessors(field) for field in file.get("requiredFields", [])
         )
         return (
+            f"package {SYNTHETIC_MODEL_PACKAGE};\n\n"
             f"public class {class_name} {{\n"
             "    // REVIEW_REQUIRED draft DTO backed by sanitized evidence.\n"
-            f"{fields}\n"
+            f"{fields}\n\n"
+            f"{accessors}\n"
             "}"
         )
     references = " ".join(file.get("references") or ())
     if artifact_type == ArtifactType.SERVICE_DRAFT.value:
-        methods = "\n".join(
-            f"    public Object {operation_id}(Object command) "
-            f"{{ return mapper.{operation_id}(command); }}"
-            for operation_id in operation_ids
-        )
+        methods = "\n".join(_service_method(operation_id) for operation_id in operation_ids)
         return (
+            f"package {SYNTHETIC_SERVICE_PACKAGE};\n\n"
+            f"import {SYNTHETIC_MAPPER_PACKAGE}.SyntheticOrderMapper;\n"
+            f"import {SYNTHETIC_MODEL_PACKAGE}.*;\n"
+            "import java.util.List;\n"
+            "import java.util.Objects;\n\n"
             f"public class {class_name} {{\n"
             "    private final SyntheticOrderMapper mapper;\n"
             f"    public {class_name}(SyntheticOrderMapper mapper) "
@@ -191,27 +206,105 @@ def materialized_content(file: dict[str, Any]) -> str:
         )
     if artifact_type == ArtifactType.MAPPER_INTERFACE.value:
         methods = "\n".join(
-            f"    Object {operation_id}(Object command);" for operation_id in operation_ids
+            _mapper_interface_method(operation_id) for operation_id in operation_ids
         )
         return (
+            f"package {SYNTHETIC_MAPPER_PACKAGE};\n\n"
+            f"import {SYNTHETIC_MODEL_PACKAGE}.*;\n"
+            "import java.util.List;\n\n"
             f"public interface {class_name} {{\n"
             f"    // REVIEW_REQUIRED DTO references: {references}\n"
             f"{methods}\n"
             "}"
         )
-    statements = "\n".join(
-        f'  <select id="{operation_id}">\n'
-        "    SELECT SYNTHETIC_ID FROM dbo.SyntheticOrderEvidence "
-        "WHERE SYNTHETIC_ID = #{syntheticId}\n"
-        "  </select>"
-        for operation_id in operation_ids
-    )
+    statements = "\n".join(_mapper_xml_statement(operation_id) for operation_id in operation_ids)
     return (
-        '<mapper namespace="SyntheticOrderMapper">\n'
+        f'<mapper namespace="{SYNTHETIC_MAPPER_PACKAGE}.SyntheticOrderMapper">\n'
         f"  <!-- REVIEW_REQUIRED DTO references: {references} -->\n"
+        f'  <resultMap id="SyntheticOrderSearchRowMap" type="{_dto_fqcn("SyntheticOrderSearchRow")}">\n'
+        '    <result column="CONTRACT_NUM" property="ContractNum"/>\n'
+        '    <result column="ORDER_STATUS" property="OrderStatus"/>\n'
+        "  </resultMap>\n"
         f"{statements}\n"
         "</mapper>"
     )
+
+
+def _string_accessors(field: str) -> str:
+    suffix = field[:1].upper() + field[1:]
+    return (
+        f"    public String get{suffix}() {{\n"
+        f"        return {field};\n"
+        "    }\n\n"
+        f"    public void set{suffix}(String {field}) {{\n"
+        f"        this.{field} = {field};\n"
+        "    }"
+    )
+
+
+def _dto_fqcn(class_name: str) -> str:
+    return f"{SYNTHETIC_MODEL_PACKAGE}.{class_name}"
+
+
+def _service_method(operation_id: str) -> str:
+    if operation_id == "syntheticOrderSearch":
+        return (
+            "    public List<SyntheticOrderSearchRow> "
+            "syntheticOrderSearch(SyntheticOrderSearchCriteria criteria) {\n"
+            '        Objects.requireNonNull(criteria, "criteria");\n'
+            "        return mapper.syntheticOrderSearch(criteria);\n"
+            "    }"
+        )
+    parameter_type = _operation_parameter_type(operation_id)
+    return (
+        f"    public int {operation_id}({parameter_type} command) {{\n"
+        '        Objects.requireNonNull(command, "command");\n'
+        f"        int affectedRows = mapper.{operation_id}(command);\n"
+        "        return affectedRows;\n"
+        "    }"
+    )
+
+
+def _mapper_interface_method(operation_id: str) -> str:
+    if operation_id == "syntheticOrderSearch":
+        return (
+            "    List<SyntheticOrderSearchRow> "
+            "syntheticOrderSearch(SyntheticOrderSearchCriteria criteria);"
+        )
+    return f"    int {operation_id}({_operation_parameter_type(operation_id)} command);"
+
+
+def _mapper_xml_statement(operation_id: str) -> str:
+    if operation_id == "syntheticOrderSearch":
+        return (
+            f'  <select id="syntheticOrderSearch" parameterType="{_dto_fqcn("SyntheticOrderSearchCriteria")}" '
+            'resultMap="SyntheticOrderSearchRowMap">\n'
+            "    SELECT CONTRACT_NUM, ORDER_STATUS\n"
+            "    FROM dbo.SyntheticOrderEvidence\n"
+            "    WHERE CONTRACT_NUM = #{ContractNum} AND STATUS_CODE = #{StatusCode}\n"
+            "  </select>"
+        )
+    parameter_type = _dto_fqcn(_operation_parameter_type(operation_id))
+    if operation_id == "syncSyntheticOrderAudit":
+        return (
+            f'  <update id="syncSyntheticOrderAudit" parameterType="{parameter_type}">\n'
+            "    EXEC dbo.usp_SyncSyntheticOrderAudit #{ContractNum}, #{AuditUserId}\n"
+            "  </update>"
+        )
+    return (
+        f'  <update id="{operation_id}" parameterType="{parameter_type}">\n'
+        "    UPDATE dbo.SyntheticOrderEvidence\n"
+        "    SET APPROVAL_YN = #{ApprovalYN}\n"
+        "    WHERE CONTRACT_NUM = #{ContractNum}\n"
+        "  </update>"
+    )
+
+
+def _operation_parameter_type(operation_id: str) -> str:
+    return {
+        "approveSyntheticOrder": "ApproveSyntheticOrderCommand",
+        "syncSyntheticOrderAudit": "SyntheticOrderAuditCallRequest",
+    }[operation_id]
 
 
 def collapse_to_two_dtos(pack: dict[str, Any]) -> dict[str, Any]:

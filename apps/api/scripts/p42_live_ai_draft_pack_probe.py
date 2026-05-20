@@ -51,6 +51,11 @@ TARGET = {
     "schema": "dbo",
     "name": "PCO_GU_ManageBond_PRC",
 }
+JAVA_PACKAGE_CONTEXT = {
+    "modelPackage": "com.pec.ppm.workflow.draft.model",
+    "servicePackage": "com.pec.ppm.workflow.draft.service",
+    "mapperPackage": "com.pec.ppm.workflow.draft.mapper",
+}
 REQUIRED_ENV = (
     LIVE_GATE_ENV,
     "MSSQL_ENABLE_LIVE_METADATA",
@@ -427,6 +432,7 @@ def _fixture_sanitized_context(fixture: Mapping[str, Any]) -> dict[str, Any]:
         "targetRef": facts["target_ref"],
         "branchVariables": list(facts["branch_variables"]),
         "reviewRequiredFacts": list(facts["review_required_facts"]),
+        "javaPackageContext": dict(JAVA_PACKAGE_CONTEXT),
         "dependencyEvidenceSummary": {
             "sameDatabaseCount": len(facts["major_dependencies"]["same_database"]),
             "crossDatabaseCount": len(facts["major_dependencies"]["cross_database"]),

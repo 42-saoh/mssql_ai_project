@@ -27,6 +27,14 @@ REFERENCE_GUARD_COMPONENT = "ai_draft_pack_reference_guard"
 COMPOSER_COMPONENT = "ai_draft_pack_internal_composer"
 DTO_FLOOR_COMPONENT = "ai_draft_pack_dto_content_floor"
 DTO_FLOOR_REVIEW_MARKER = "DTO_CONTENT_FLOOR_REVIEW_REQUIRED"
+PACKAGE_CONTEXT_REVIEW_MARKER = "PACKAGE_CONTEXT_REVIEW_REQUIRED"
+DEFAULT_JAVA_PACKAGE_CONTEXT = {
+    "modelPackage": "com.pec.draft.workflow.draft.model",
+    "dtoPackage": "com.pec.draft.workflow.draft.model",
+    "servicePackage": "com.pec.draft.workflow.draft.service",
+    "mapperPackage": "com.pec.draft.workflow.draft.mapper",
+    "mapperNamespaceRule": "full_mapper_interface_name",
+}
 AI_DRAFT_PACK_COMPOSER_STAGES = (
     "dto_inventory",
     "dto_content",
@@ -242,6 +250,7 @@ def _build_ai_java_mybatis_draft_pack_staged_run(
     try:
         return _build_run_from_stage_outputs(
             target_ref=target_ref,
+            sanitized_draft_context=sanitized_draft_context,
             stage_outputs=stage_outputs,
             expected_inventory=expected_inventory,
             quality_gates=quality_gates,
@@ -279,6 +288,7 @@ def _build_ai_java_mybatis_draft_pack_staged_run(
         last_invocation = invocation
     return _build_run_from_stage_outputs(
         target_ref=target_ref,
+        sanitized_draft_context=sanitized_draft_context,
         stage_outputs=stage_outputs,
         expected_inventory=expected_inventory,
         quality_gates=quality_gates,
@@ -292,6 +302,7 @@ def _build_ai_java_mybatis_draft_pack_staged_run(
 def _build_run_from_stage_outputs(
     *,
     target_ref: str,
+    sanitized_draft_context: Mapping[str, Any],
     stage_outputs: Mapping[str, Mapping[str, Any]],
     expected_inventory: Sequence[Mapping[str, Any]],
     quality_gates: Mapping[str, Any],
@@ -304,6 +315,7 @@ def _build_run_from_stage_outputs(
         raise AiDraftPackValidationError(["role stage composer had no model invocation."])
     structured_output, dto_floor_summary = _compose_ai_java_mybatis_draft_pack_output(
         target_ref=target_ref,
+        sanitized_draft_context=sanitized_draft_context,
         stage_outputs=stage_outputs,
         expected_inventory=expected_inventory,
         quality_gates=quality_gates,
@@ -351,6 +363,7 @@ def _build_run_from_stage_outputs(
 def _compose_ai_java_mybatis_draft_pack_output(
     *,
     target_ref: str,
+    sanitized_draft_context: Mapping[str, Any],
     stage_outputs: Mapping[str, Mapping[str, Any]],
     expected_inventory: Sequence[Mapping[str, Any]],
     quality_gates: Mapping[str, Any],
@@ -381,6 +394,9 @@ def _compose_ai_java_mybatis_draft_pack_output(
     missing: list[dict[str, str]] = []
     floor_files: list[dict[str, Any]] = []
     allowed_set = {str(ref) for ref in allowed_refs if str(ref).strip()}
+    package_context, package_context_review_required = _java_package_context(
+        sanitized_draft_context
+    )
     for expected in expected_inventory:
         artifact_type = str(expected.get("artifactType") or "")
         path = str(expected.get("path") or "")
@@ -393,6 +409,8 @@ def _compose_ai_java_mybatis_draft_pack_output(
                     allowed_refs=allowed_refs,
                     allowed_set=allowed_set,
                     source_file=dto_content_files.get(key) or dto_inventory_files.get(key),
+                    package_context=package_context,
+                    package_context_review_required=package_context_review_required,
                 )
                 floor_files.append(actual)
             else:
@@ -490,9 +508,22 @@ def _dto_floor_file(
     allowed_refs: Sequence[str],
     allowed_set: set[str],
     source_file: Mapping[str, Any] | None,
+    package_context: Mapping[str, str],
+    package_context_review_required: bool,
 ) -> dict[str, Any]:
     class_name = str(expected.get("className") or "").strip() or "DraftReviewRequiredDto"
-    required_fields = _strings(expected.get("requiredFields")) or ["reviewRequiredField"]
+    required_fields = [
+        field
+        for field in _strings(expected.get("requiredFields"))
+        if _java_identifier(field) and not _is_placeholder_field(field)
+    ]
+    if not required_fields:
+        raise AiDraftPackValidationError(
+            [
+                "dto_content: expected inventory lacks evidence-backed requiredFields "
+                f"for DTO floor: {expected.get('path') or class_name}."
+            ]
+        )
     evidence_refs = _dedupe_refs(
         [
             *_strings(expected.get("evidenceRefs")),
@@ -506,6 +537,7 @@ def _dto_floor_file(
             *_strings(expected.get("reviewMarkers")),
             *_strings((source_file or {}).get("reviewMarkers")),
             DTO_FLOOR_REVIEW_MARKER,
+            *([PACKAGE_CONTEXT_REVIEW_MARKER] if package_context_review_required else []),
         ]
     )
     return {
@@ -513,7 +545,11 @@ def _dto_floor_file(
         "path": str(expected.get("path") or f"dto/{class_name}.java"),
         "role": str(expected.get("role") or "REVIEW_REQUIRED"),
         "className": class_name,
-        "content": _dto_floor_content(class_name=class_name, fields=required_fields),
+        "content": _dto_floor_content(
+            class_name=class_name,
+            fields=required_fields,
+            package_name=str(package_context.get("modelPackage") or ""),
+        ),
         "operationIds": _strings(expected.get("operationIds")),
         "evidenceRefs": evidence_refs,
         "reviewMarkers": review_markers,
@@ -524,23 +560,90 @@ def _dto_floor_file(
     }
 
 
-def _dto_floor_content(*, class_name: str, fields: Sequence[str]) -> str:
-    declarations = "\n".join(
-        f"    private String {field};"
+def _dto_floor_content(
+    *,
+    class_name: str,
+    fields: Sequence[str],
+    package_name: str,
+) -> str:
+    field_names = [
+        field
         for field in _dedupe(field for field in fields if _java_identifier(field))
-    )
-    if not declarations:
-        declarations = "    private String reviewRequiredField;"
+        if not _is_placeholder_field(field)
+    ]
+    declarations = "\n".join(f"    private String {field};" for field in field_names)
+    accessors = "\n\n".join(_java_string_accessors(field) for field in field_names)
     return (
+        f"package {package_name};\n\n"
         f"public class {class_name} {{\n"
         "    // REVIEW_REQUIRED DTO content floor from sanitized P41 blueprint evidence.\n"
         f"{declarations}\n"
+        "\n"
+        f"{accessors}\n"
         "}"
     )
 
 
 def _java_identifier(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", str(value or "")))
+
+
+def _is_placeholder_field(value: str) -> bool:
+    return bool(re.fullmatch(r"reviewRequiredField\d*", str(value or ""), flags=re.IGNORECASE))
+
+
+def _java_package_context(
+    sanitized_draft_context: Mapping[str, Any],
+) -> tuple[dict[str, str], bool]:
+    raw_context = sanitized_draft_context.get("javaPackageContext")
+    raw_package_context = raw_context if isinstance(raw_context, Mapping) else {}
+    model_package = _valid_java_package(
+        str(
+            raw_package_context.get("modelPackage")
+            or raw_package_context.get("dtoPackage")
+            or ""
+        )
+    )
+    service_package = _valid_java_package(str(raw_package_context.get("servicePackage") or ""))
+    mapper_package = _valid_java_package(str(raw_package_context.get("mapperPackage") or ""))
+    package_context = dict(DEFAULT_JAVA_PACKAGE_CONTEXT)
+    review_required = False
+    if model_package:
+        package_context["modelPackage"] = model_package
+        package_context["dtoPackage"] = model_package
+    else:
+        review_required = True
+    if service_package:
+        package_context["servicePackage"] = service_package
+    else:
+        review_required = True
+    if mapper_package:
+        package_context["mapperPackage"] = mapper_package
+    else:
+        review_required = True
+    return package_context, review_required
+
+
+def _valid_java_package(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parts = text.split(".")
+    if all(_java_identifier(part) for part in parts):
+        return text
+    return ""
+
+
+def _java_string_accessors(field: str) -> str:
+    suffix = field[:1].upper() + field[1:]
+    return (
+        f"    public String get{suffix}() {{\n"
+        f"        return {field};\n"
+        "    }\n\n"
+        f"    public void set{suffix}(String {field}) {{\n"
+        f"        this.{field} = {field};\n"
+        "    }"
+    )
 
 
 def _missing_expected_stage_file(expected: Mapping[str, Any]) -> dict[str, str]:

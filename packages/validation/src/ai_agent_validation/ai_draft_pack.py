@@ -37,6 +37,20 @@ RULE_SERVICE_FLOW = "p50.ai_draft_pack.service.business_flow"
 RULE_MAPPER_CONSISTENCY = "p50.ai_draft_pack.mapper.interface_xml_consistency"
 RULE_MAPPER_XML_DB_OPERATION = "p50.ai_draft_pack.mapper_xml.db_operation"
 RULE_NON_DTO_AGGREGATE = "p50.ai_draft_pack.non_dto.aggregate_file"
+RULE_DTO_STRUCTURE = "p50.ai_draft_pack.dto.structure"
+RULE_DTO_INVENTORY = "p50.ai_draft_pack.dto.inventory"
+RULE_MAPPER_XML_TYPE = "p50.ai_draft_pack.mapper_xml.dto_type"
+RULE_MAPPER_XML_PLACEHOLDER = "p50.ai_draft_pack.mapper_xml.placeholder"
+RULE_PACKAGE_CONTEXT = "p50.ai_draft_pack.package.placeholder"
+
+XML_STATEMENT_TAGS = {"select", "insert", "update", "delete"}
+GENERIC_EXECUTE_METHODS = {
+    "execute",
+    "executeSql",
+    "executeRawSql",
+    "genericExecute",
+    "runSql",
+}
 
 DEFAULT_REQUIRED_REVIEW_MARKERS = (
     "CROSS_DB_WRITE_REVIEW_REQUIRED",
@@ -114,6 +128,7 @@ def validate_ai_java_mybatis_draft_pack_quality(
         )
     )
     checks.extend(_identifier_checks(model))
+    checks.extend(_placeholder_package_checks(model))
     checks.extend(_dto_quality_checks(dto_files, required_dtos))
     checks.extend(
         _non_dto_reference_checks(
@@ -134,6 +149,7 @@ def validate_ai_java_mybatis_draft_pack_quality(
         )
     )
     checks.extend(_service_business_flow_checks(service_files, required_service_methods))
+    checks.extend(_service_mapper_call_consistency_checks(service_files, mapper_files))
     checks.extend(_mapper_method_checks(mapper_files, required_mapper_methods))
     checks.extend(
         _mapper_interface_xml_consistency_checks(
@@ -146,6 +162,8 @@ def validate_ai_java_mybatis_draft_pack_quality(
         _mapper_xml_checks(
             mapper_xml_files,
             required_mapper_methods,
+            dto_files=dto_files,
+            mapper_files=mapper_files,
             target_ref=model.target_ref,
         )
     )
@@ -228,6 +246,36 @@ def _dto_quality_checks(
                 f"{file.path} must declare Java class {file.class_name}.",
             )
         )
+        package_declared = bool(_java_package(file.content))
+        checks.append(
+            _check(
+                package_declared,
+                RULE_DTO_STRUCTURE,
+                f"{file.path} declares a Java package.",
+                f"{file.path} must declare a Java package for FQCN consistency.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+        accessor_policy = _has_dto_accessor_policy(file.content, file.class_name)
+        checks.append(
+            _check(
+                accessor_policy,
+                RULE_DTO_STRUCTURE,
+                f"{file.path} declares constructor/accessor or Lombok DTO policy.",
+                f"{file.path} must declare a constructor/accessor policy or Lombok annotation.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+        placeholder_only = _dto_placeholder_only(file)
+        checks.append(
+            _check(
+                not placeholder_only,
+                RULE_DTO_STRUCTURE,
+                f"{file.path} has evidence-backed DTO fields.",
+                f"{file.path} must not be a placeholder-only DTO such as reviewRequiredField.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
         for field in file.required_fields:
             checks.append(
                 _check(
@@ -237,6 +285,52 @@ def _dto_quality_checks(
                     f"{file.path} is missing required DTO field declaration {field}.",
                 )
             )
+    checks.extend(_dto_inventory_shape_checks(dto_files))
+    return checks
+
+
+def _dto_inventory_shape_checks(
+    dto_files: Sequence[AiJavaMyBatisDraftPackFile],
+) -> list[ValidationCheck]:
+    checks: list[ValidationCheck] = []
+    if len(dto_files) > 20:
+        fragment_count = sum(1 for file in dto_files if _fragment_like_dto_name(file.class_name))
+        checks.append(
+            _check(
+                fragment_count < 5,
+                RULE_DTO_INVENTORY,
+                "DTO inventory is not dominated by statement/phase fragment names.",
+                (
+                    "DTO inventory has more than 20 DTOs and appears statement/phase-fragmented; "
+                    f"fragment-like DTO count={fragment_count}."
+                ),
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+
+    seen_by_signature: dict[tuple[tuple[str, ...], str, tuple[str, ...]], str] = {}
+    for file in dto_files:
+        fields = tuple(sorted(field for field in file.required_fields if field))
+        if not fields:
+            continue
+        operations = tuple(sorted(file.operation_ids))
+        signature = (operations, str(file.dto_role or file.role.value).upper(), fields)
+        existing = seen_by_signature.get(signature)
+        checks.append(
+            _check(
+                existing is None,
+                RULE_DTO_INVENTORY,
+                f"{file.path} has a unique DTO role/field responsibility.",
+                (
+                    f"{file.path} duplicates DTO responsibility already represented by "
+                    f"{existing}: operations={list(operations)}, role={signature[1]}, "
+                    f"fields={list(fields)}."
+                ),
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+        if existing is None:
+            seen_by_signature[signature] = file.path
     return checks
 
 
@@ -338,12 +432,24 @@ def _mapper_method_checks(
     mapper_files: Sequence[AiJavaMyBatisDraftPackFile],
     required_methods: Sequence[str],
 ) -> list[ValidationCheck]:
-    return _method_checks(
+    checks = _method_checks(
         files=mapper_files,
         required_methods=required_methods,
         rule_id=RULE_MAPPER_METHOD,
         label="Mapper interface",
     )
+    for file in mapper_files:
+        generic = sorted(_java_method_names(file.content) & GENERIC_EXECUTE_METHODS)
+        checks.append(
+            _check(
+                not generic,
+                RULE_MAPPER_METHOD,
+                f"{file.path} does not declare generic execute/raw SQL methods.",
+                f"{file.path} must not declare generic execute/raw SQL methods: {generic}.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+    return checks
 
 
 def _method_checks(
@@ -392,6 +498,27 @@ def _identifier_checks(model: AiJavaMyBatisDraftPackOutput) -> list[ValidationCh
     return checks
 
 
+def _placeholder_package_checks(
+    model: AiJavaMyBatisDraftPackOutput,
+) -> list[ValidationCheck]:
+    checks: list[ValidationCheck] = []
+    for file in model.files:
+        refs = _placeholder_package_references(file.content)
+        checks.append(
+            _check(
+                not refs,
+                RULE_PACKAGE_CONTEXT,
+                f"{file.path} does not use placeholder Java package/FQCN values.",
+                (
+                    f"{file.path} must not use placeholder Java package/FQCN values: "
+                    f"{refs}."
+                ),
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+    return checks
+
+
 def _service_business_flow_checks(
     service_files: Sequence[AiJavaMyBatisDraftPackFile],
     required_methods: Sequence[str],
@@ -418,15 +545,53 @@ def _service_business_flow_checks(
                     )
                 )
             )
+            pass_through_only = _is_mapper_pass_through_body(
+                meaningful_body,
+                method=method,
+            )
             checks.append(
                 _check(
-                    body is not None and has_business_flow,
+                    body is not None and has_business_flow and not pass_through_only,
                     RULE_SERVICE_FLOW,
                     f"{file.path} method {method} has non-empty Java orchestration flow.",
-                    f"{file.path} method {method} must have a non-empty Service body with mapper orchestration or branch flow.",
+                    f"{file.path} method {method} must not be a mapper pass-through wrapper.",
                     severity=ValidationSeverity.BLOCKER,
                 )
             )
+    return checks
+
+
+def _service_mapper_call_consistency_checks(
+    service_files: Sequence[AiJavaMyBatisDraftPackFile],
+    mapper_files: Sequence[AiJavaMyBatisDraftPackFile],
+) -> list[ValidationCheck]:
+    mapper_methods: set[str] = set()
+    for file in mapper_files:
+        mapper_methods.update(_java_method_names(file.content))
+
+    checks: list[ValidationCheck] = []
+    for file in service_files:
+        calls = _service_mapper_calls(file.content)
+        unknown = sorted(calls - mapper_methods)
+        generic = sorted(calls & GENERIC_EXECUTE_METHODS)
+        checks.append(
+            _check(
+                not unknown,
+                RULE_MAPPER_CONSISTENCY,
+                f"{file.path} calls only mapper methods declared by the Mapper interface.",
+                f"{file.path} calls mapper methods missing from the Mapper interface: {unknown}.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+        checks.append(
+            _check(
+                not generic,
+                RULE_SERVICE_FLOW,
+                f"{file.path} does not call generic execute/raw SQL mapper methods.",
+                f"{file.path} must not call generic execute/raw SQL mapper methods: {generic}.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
     return checks
 
 
@@ -436,16 +601,22 @@ def _mapper_interface_xml_consistency_checks(
     required_methods: Sequence[str],
 ) -> list[ValidationCheck]:
     mapper_method_names: set[str] = set()
+    mapper_fqcns: set[str] = set()
     for file in mapper_files:
         mapper_method_names.update(_java_method_names(file.content))
+        mapper_fqcns.add(_java_fqcn(file.content, file.class_name))
 
     xml_statement_ids: set[str] = set()
+    xml_namespaces: set[str] = set()
     for file in mapper_xml_files:
         try:
             root = ET.fromstring(file.content)
         except ET.ParseError:
             continue
         xml_statement_ids.update(_xml_statement_ids(root))
+        namespace = str(root.attrib.get("namespace") or "").strip()
+        if namespace:
+            xml_namespaces.add(namespace)
 
     checks: list[ValidationCheck] = []
     for method in required_methods:
@@ -458,6 +629,39 @@ def _mapper_interface_xml_consistency_checks(
                 severity=ValidationSeverity.BLOCKER,
             )
         )
+    extra_mapper_methods = sorted(mapper_method_names - xml_statement_ids)
+    extra_xml_ids = sorted(xml_statement_ids - mapper_method_names)
+    checks.append(
+        _check(
+            not extra_mapper_methods,
+            RULE_MAPPER_CONSISTENCY,
+            "All Mapper interface methods have Mapper XML statements.",
+            f"Mapper interface methods missing from XML statement ids: {extra_mapper_methods}.",
+            severity=ValidationSeverity.BLOCKER,
+        )
+    )
+    checks.append(
+        _check(
+            not extra_xml_ids,
+            RULE_MAPPER_CONSISTENCY,
+            "All Mapper XML statements have Mapper interface methods.",
+            f"Mapper XML statement ids missing from interface methods: {extra_xml_ids}.",
+            severity=ValidationSeverity.BLOCKER,
+        )
+    )
+    if mapper_fqcns and xml_namespaces:
+        checks.append(
+            _check(
+                xml_namespaces <= mapper_fqcns,
+                RULE_MAPPER_CONSISTENCY,
+                "Mapper XML namespace matches Mapper interface FQCN.",
+                (
+                    "Mapper XML namespace must equal the Mapper interface FQCN: "
+                    f"namespaces={sorted(xml_namespaces)}, mapperFqcns={sorted(mapper_fqcns)}."
+                ),
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
     return checks
 
 
@@ -465,9 +669,16 @@ def _mapper_xml_checks(
     mapper_xml_files: Sequence[AiJavaMyBatisDraftPackFile],
     required_methods: Sequence[str],
     *,
+    dto_files: Sequence[AiJavaMyBatisDraftPackFile],
+    mapper_files: Sequence[AiJavaMyBatisDraftPackFile],
     target_ref: str,
 ) -> list[ValidationCheck]:
     checks: list[ValidationCheck] = []
+    dto_fqcns = _dto_fqcns(dto_files)
+    mapper_fqcns = {
+        _java_fqcn(file.content, file.class_name)
+        for file in mapper_files
+    }
     for file in mapper_xml_files:
         try:
             root = ET.fromstring(file.content)
@@ -488,7 +699,20 @@ def _mapper_xml_checks(
                 f"{file.path} must use a mapper root element.",
             )
         )
+        namespace = str(root.attrib.get("namespace") or "").strip()
+        checks.append(
+            _check(
+                namespace in mapper_fqcns,
+                RULE_MAPPER_CONSISTENCY,
+                f"{file.path} namespace matches Mapper interface FQCN.",
+                f"{file.path} namespace must match Mapper interface FQCN, not {namespace!r}.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
         statement_ids = _xml_statement_ids(root)
+        result_maps = _xml_result_maps(root)
+        checks.extend(_xml_dto_type_checks(file, root, dto_fqcns=dto_fqcns))
+        checks.extend(_xml_placeholder_checks(file))
         for method in required_methods:
             statement = _xml_statement_by_id(root, method)
             checks.append(
@@ -501,6 +725,17 @@ def _mapper_xml_checks(
             )
             if statement is None:
                 continue
+            if _local_name(statement.tag) == "select":
+                result_map = str(statement.attrib.get("resultMap") or "").strip()
+                checks.append(
+                    _check(
+                        bool(result_map) and result_map in result_maps,
+                        RULE_MAPPER_XML_TYPE,
+                        f"{file.path} select {method} uses a declared resultMap.",
+                        f"{file.path} select {method} must use a declared resultMap.",
+                        severity=ValidationSeverity.BLOCKER,
+                    )
+                )
             statement_text = _xml_text(statement)
             checks.append(
                 _check(
@@ -508,6 +743,15 @@ def _mapper_xml_checks(
                     RULE_MAPPER_XML_DB_OPERATION,
                     f"{file.path} statement {method} contains statement-level DB logic.",
                     f"{file.path} statement {method} must contain SELECT/INSERT/UPDATE/DELETE/MERGE/EXEC/CALL logic.",
+                    severity=ValidationSeverity.BLOCKER,
+                )
+            )
+            checks.append(
+                _check(
+                    method not in GENERIC_EXECUTE_METHODS,
+                    RULE_MAPPER_XML_DB_OPERATION,
+                    f"{file.path} statement {method} is a business operation id.",
+                    f"{file.path} must not use generic execute/raw SQL statement id {method}.",
                     severity=ValidationSeverity.BLOCKER,
                 )
             )
@@ -655,6 +899,109 @@ def _declares_java_field(content: str, field: str) -> bool:
     )
 
 
+def _declared_java_field_names(content: str) -> set[str]:
+    return {
+        match.group(1)
+        for match in re.finditer(
+            r"\b(?:private|protected|public)\s+[\w.$<>\[\], ?]+\s+"
+            r"([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:[;=])",
+            content,
+        )
+    }
+
+
+def _java_package(content: str) -> str:
+    match = re.search(r"\bpackage\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;", content)
+    return match.group(1) if match else ""
+
+
+def _placeholder_package_references(content: str) -> list[str]:
+    refs: set[str] = set()
+    package_name = _java_package(content)
+    if _is_placeholder_package(package_name):
+        refs.add(package_name)
+    for match in re.finditer(
+        r"\bimport\s+(?:static\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)",
+        content,
+    ):
+        imported = match.group(1)
+        if _is_placeholder_package(imported):
+            refs.add(imported)
+    for match in re.finditer(
+        r"\b(?:namespace|parameterType|resultType|type)\s*=\s*"
+        r"['\"]([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)['\"]",
+        content,
+    ):
+        value = match.group(1)
+        if _is_placeholder_package(value):
+            refs.add(value)
+    for match in re.finditer(
+        r"\b(?:com\.example|org\.example|example)(?:\.[A-Za-z_$][\w$]*)*\b",
+        content,
+    ):
+        value = match.group(0)
+        if _is_placeholder_package(value):
+            refs.add(value)
+    return sorted(refs)
+
+
+def _is_placeholder_package(value: str) -> bool:
+    text = str(value or "").strip()
+    return bool(
+        text == "example"
+        or text.startswith("example.")
+        or text == "com.example"
+        or text.startswith("com.example.")
+        or text == "org.example"
+        or text.startswith("org.example.")
+    )
+
+
+def _java_fqcn(content: str, class_name: str) -> str:
+    package = _java_package(content)
+    return f"{package}.{class_name}" if package else class_name
+
+
+def _dto_fqcns(dto_files: Sequence[AiJavaMyBatisDraftPackFile]) -> set[str]:
+    return {_java_fqcn(file.content, file.class_name) for file in dto_files}
+
+
+def _has_dto_accessor_policy(content: str, class_name: str) -> bool:
+    if re.search(r"\b(?:record)\s+" + re.escape(class_name) + r"\s*\(", content):
+        return True
+    if re.search(r"@(Data|Getter|Setter|Value)\b", content):
+        return True
+    if re.search(r"\bpublic\s+" + re.escape(class_name) + r"\s*\(", content):
+        return True
+    return bool(
+        re.search(
+            r"\bpublic\s+[\w.$<>\[\], ?]+\s+(?:get|is|set)[A-Z][A-Za-z0-9_$]*\s*\(",
+            content,
+        )
+    )
+
+
+def _dto_placeholder_only(file: AiJavaMyBatisDraftPackFile) -> bool:
+    required_fields = {field for field in file.required_fields if field}
+    declared_fields = _declared_java_field_names(file.content)
+    fields = required_fields or declared_fields
+    return bool(fields) and all(_is_placeholder_field(field) for field in fields)
+
+
+def _is_placeholder_field(field: str) -> bool:
+    return bool(re.fullmatch(r"reviewRequiredField\d*", str(field or ""), flags=re.IGNORECASE))
+
+
+def _fragment_like_dto_name(class_name: str) -> bool:
+    name = str(class_name or "")
+    return bool(
+        re.search(
+            r"(?:Init(?:Result)?|Subsystem|Process\d+|Kind\d{2,}|Crud(?:Read|Create|Update|Delete)|DeleteResult|SValueResult)$",
+            name,
+        )
+    )
+
+
 def _java_method_body(content: str, method: str) -> str | None:
     if not _java_identifier(method):
         return None
@@ -677,6 +1024,27 @@ def _java_method_body(content: str, method: str) -> str | None:
     return None
 
 
+def _is_mapper_pass_through_body(body: str, *, method: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(body or "").strip())
+    return bool(
+        re.fullmatch(
+            rf"return\s+mapper\s*\.\s*{re.escape(method)}\s*\([^;]*\)\s*;",
+            normalized,
+        )
+    )
+
+
+def _service_mapper_calls(content: str) -> set[str]:
+    return {
+        match.group(1)
+        for match in re.finditer(
+            r"\b(?:mapper|[A-Za-z_$][A-Za-z0-9_$]*Mapper)\s*\.\s*"
+            r"([A-Za-z_$][A-Za-z0-9_$]*)\s*\(",
+            content,
+        )
+    }
+
+
 def _java_method_names(content: str) -> set[str]:
     pattern = re.compile(
         r"\b(?:public|protected|private)?\s*"
@@ -696,15 +1064,128 @@ def _xml_statement_ids(root: ET.Element) -> set[str]:
     return {
         element.attrib.get("id", "")
         for element in root.iter()
-        if element.attrib.get("id")
+        if element.attrib.get("id") and _local_name(element.tag) in XML_STATEMENT_TAGS
     }
 
 
 def _xml_statement_by_id(root: ET.Element, statement_id: str) -> ET.Element | None:
     for element in root.iter():
-        if element.attrib.get("id") == statement_id:
+        if (
+            element.attrib.get("id") == statement_id
+            and _local_name(element.tag) in XML_STATEMENT_TAGS
+        ):
             return element
     return None
+
+
+def _xml_result_maps(root: ET.Element) -> dict[str, str]:
+    return {
+        str(element.attrib.get("id") or ""): str(element.attrib.get("type") or "")
+        for element in root.iter()
+        if _local_name(element.tag) == "resultMap" and element.attrib.get("id")
+    }
+
+
+def _xml_dto_type_checks(
+    file: AiJavaMyBatisDraftPackFile,
+    root: ET.Element,
+    *,
+    dto_fqcns: set[str],
+) -> list[ValidationCheck]:
+    checks: list[ValidationCheck] = []
+    result_maps = _xml_result_maps(root)
+    for result_map_id, dto_type in result_maps.items():
+        checks.append(
+            _check(
+                _is_known_dto_fqcn(dto_type, dto_fqcns),
+                RULE_MAPPER_XML_TYPE,
+                f"{file.path} resultMap {result_map_id} targets a known DTO FQCN.",
+                (
+                    f"{file.path} resultMap {result_map_id} must target one of the "
+                    f"DTO FQCNs, not {dto_type!r}."
+                ),
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+
+    for element in root.iter():
+        if _local_name(element.tag) not in XML_STATEMENT_TAGS:
+            continue
+        statement_id = str(element.attrib.get("id") or "")
+        parameter_type = str(element.attrib.get("parameterType") or "").strip()
+        result_type = str(element.attrib.get("resultType") or "").strip()
+        result_map_id = str(element.attrib.get("resultMap") or "").strip()
+        if parameter_type:
+            checks.append(
+                _check(
+                    _is_known_dto_fqcn(parameter_type, dto_fqcns),
+                    RULE_MAPPER_XML_TYPE,
+                    f"{file.path} statement {statement_id} parameterType is a known DTO FQCN.",
+                    (
+                        f"{file.path} statement {statement_id} parameterType must be a "
+                        f"known DTO FQCN, not {parameter_type!r}."
+                    ),
+                    severity=ValidationSeverity.BLOCKER,
+                )
+            )
+        if result_type:
+            checks.append(
+                _check(
+                    _is_known_dto_fqcn(result_type, dto_fqcns),
+                    RULE_MAPPER_XML_TYPE,
+                    f"{file.path} statement {statement_id} resultType is a known DTO FQCN.",
+                    (
+                        f"{file.path} statement {statement_id} resultType must be a "
+                        f"known DTO FQCN or be replaced with resultMap, not {result_type!r}."
+                    ),
+                    severity=ValidationSeverity.BLOCKER,
+                )
+            )
+        if result_map_id and result_map_id in result_maps:
+            mapped_type = result_maps[result_map_id]
+            checks.append(
+                _check(
+                    _is_known_dto_fqcn(mapped_type, dto_fqcns),
+                    RULE_MAPPER_XML_TYPE,
+                    f"{file.path} statement {statement_id} resultMap resolves to a known DTO FQCN.",
+                    (
+                        f"{file.path} statement {statement_id} resultMap {result_map_id} "
+                        f"must resolve to a known DTO FQCN, not {mapped_type!r}."
+                    ),
+                    severity=ValidationSeverity.BLOCKER,
+                )
+            )
+    return checks
+
+
+def _xml_placeholder_checks(file: AiJavaMyBatisDraftPackFile) -> list[ValidationCheck]:
+    checks: list[ValidationCheck] = []
+    placeholder_patterns = (
+        (r"\$\{[^}]+\}", "raw string substitution"),
+        (r"\bprocedureName\b", "procedureName-driven EXEC/CALL"),
+        (r"\bCAST\s*\(\s*NULL\s+AS\b", "placeholder CAST(NULL AS ...) SELECT"),
+        (r"\breviewRequiredField\b", "placeholder reviewRequiredField result"),
+        (r"\bTODO(?:-only)?\b", "TODO-only SQL marker"),
+        (r"\bREVIEW_REQUIRED_ID\b", "synthetic REVIEW_REQUIRED_ID row"),
+        (r"\bVALUES\s*\(\s*'REVIEW_REQUIRED'\s*\)", "synthetic REVIEW_REQUIRED values row"),
+        (r"\bresultType\s*=\s*['\"]map['\"]", "generic resultType=map"),
+    )
+    for pattern, label in placeholder_patterns:
+        checks.append(
+            _check(
+                not re.search(pattern, file.content, flags=re.IGNORECASE),
+                RULE_MAPPER_XML_PLACEHOLDER,
+                f"{file.path} does not contain {label}.",
+                f"{file.path} must not contain {label}.",
+                severity=ValidationSeverity.BLOCKER,
+            )
+        )
+    return checks
+
+
+def _is_known_dto_fqcn(value: str, dto_fqcns: set[str]) -> bool:
+    text = str(value or "").strip()
+    return bool(text and "." in text and text in dto_fqcns)
 
 
 def _xml_text(element: ET.Element) -> str:
