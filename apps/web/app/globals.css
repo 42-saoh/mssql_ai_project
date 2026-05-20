@@ -1438,6 +1438,17 @@ input:disabled {
   resize: vertical;
 }
 
+.preview-regeneration-status {
+  margin: 12px 0;
+  border: 1px solid #b8d3dc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #eef8fa;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .mapping-field-error {
   display: block;
   margin-top: 5px;

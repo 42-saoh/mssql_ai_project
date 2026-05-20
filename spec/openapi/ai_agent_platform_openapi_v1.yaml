@@ -1845,6 +1845,8 @@ components:
           type: string
         inputDescription:
           type: string
+        proposedDescription:
+          type: string
         proposedName:
           type: string
         proposedType:

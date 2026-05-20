@@ -273,9 +273,15 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert "appliedChanges" in component
     assert "originalMappings" in component
     assert "editableMappings" in component
+    assert "isRegeneratingPreview" in component
     assert "validateEditableMappings" in component
     assert "Regenerate previews" in component
+    assert "Regenerating..." in component
+    assert "Applying edited mappings to previews..." in component
+    assert "aria-busy={isRegeneratingPreview}" in component
+    assert "disabled={isRegeneratingPreview}" in component
     assert "buildRegeneratedPreview" in component
+    assert "mapping.proposedDescription" in component
     assert "escapeSqlUnicodeLiteral" in component
     assert "MS_Description" in component
     assert "createTableScriptPreview" in component
@@ -293,6 +299,7 @@ def test_p38_metadata_design_chat_page_and_proxy_are_wired() -> None:
     assert ".metadata-chat-composer" in styles
     assert ".metadata-chat-controls" in styles
     assert ".metadata-design-output-stack" in styles
+    assert ".preview-regeneration-status" in styles
     assert "grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr)" not in styles
     assert ".metadata-chat-layout" not in styles
     assert "api.submitMetadataDesignRun(payload)" in submit_route

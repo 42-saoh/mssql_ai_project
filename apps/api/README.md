@@ -346,6 +346,10 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
   `platform_db_standardization_rules_for_ai.json` to produce `standardizationMappings`,
   sanitized `interpretedIntent`, `appliedChanges`, `tableProposal.createTableScriptPreview`, and
   optional `dtoDraft`.
+- Metadata-backed standardization mappings include optional `proposedDescription` from column
+  metadata so table proposal column descriptions and `MS_Description` preview comments use the
+  same matched metadata row as the proposed field name and type, then fall back to source input
+  descriptions when metadata has no description.
 - `GET /api/v1/metadata/design-runs/{runId}` polls one run. `GET
   /api/v1/metadata/design-conversations/{conversationId}` returns recent runs in that
   conversation.

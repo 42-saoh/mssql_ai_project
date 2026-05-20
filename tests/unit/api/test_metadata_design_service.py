@@ -365,6 +365,15 @@ def test_metadata_design_builds_table_script_and_dto_from_metadata(
     assert response["appliedChanges"][0]["action"] == "ADD_FIELD"
     assert response["relatedMetadata"]
     assert response["standardizationMappings"][0]["source"] == "METADATA"
+    assert response["standardizationMappings"][0]["proposedDescription"] == "Customer name."
+    columns = {
+        column["name"]: column
+        for column in response["tableProposal"]["columns"]
+    }
+    assert columns["CUSTOMER_NM"]["description"] == "Customer name."
+    assert "@value = N'Customer name.'" in response["tableProposal"][
+        "createTableScriptPreview"
+    ]
     assert response["reviewRequired"] is True
     assert any(
         "Target application package must be confirmed before source adoption" in reason
@@ -724,6 +733,10 @@ def test_metadata_design_preserves_amount_fields_common_metadata_and_description
     assert {"CTRT_NO", "CTRT_AMT", "TEST_AMT"} <= set(columns)
     assert columns["CTRT_AMT"]["dataType"] == "NUMERIC(18,3)"
     assert columns["TEST_AMT"]["dataType"] == "NUMERIC(18,3)"
+    assert columns["CTRT_NO"]["description"]
+    assert response["standardizationMappings"][0]["proposedDescription"] == columns[
+        "CTRT_NO"
+    ]["description"]
     assert columns["CTRT_AMT"]["reviewRequired"] is True
     assert columns["TEST_AMT"]["reviewRequired"] is True
     assert any(

@@ -1506,10 +1506,16 @@ def _build_standardization_mappings(
         candidate = _best_column_candidate(field, column_candidates)
         if candidate is not None:
             payload = candidate.payload
+            proposed_description = _safe_text(
+                payload.get("description")
+                or payload.get("logicalName")
+                or field.description
+            )
             mappings.append(
                 MetadataStandardizationMapping(
                     inputName=_safe_text(field.name),
                     inputDescription=_safe_text(field.description),
+                    proposedDescription=proposed_description or None,
                     proposedName=_standard_identifier(
                         str(payload.get("columnName") or _safe_text(field.name))
                     ),
@@ -1536,6 +1542,7 @@ def _build_standardization_mappings(
             MetadataStandardizationMapping(
                 inputName=_safe_text(field.name),
                 inputDescription=_safe_text(field.description),
+                proposedDescription=_safe_text(field.description) or None,
                 proposedName=proposed_name,
                 proposedType=_safe_text(field.db_type) or proposed_type,
                 source="STANDARD_POLICY" if not reasons else "REVIEW_REQUIRED",
@@ -1563,7 +1570,10 @@ def _build_table_proposal(
             name=mapping.proposed_name,
             dataType=mapping.proposed_type,
             nullable=True,
-            description=mapping.input_description,
+            description=_safe_text(
+                mapping.proposed_description or mapping.input_description
+            )
+            or None,
             source=(
                 "METADATA"
                 if mapping.source == "METADATA"

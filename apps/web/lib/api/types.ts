@@ -634,6 +634,7 @@ export interface MetadataRelatedMetadata {
 export interface MetadataStandardizationMapping {
   inputName?: string | null;
   inputDescription?: string | null;
+  proposedDescription?: string | null;
   proposedName: string;
   proposedType: string;
   source: "METADATA" | "STANDARD_POLICY" | "REVIEW_REQUIRED";

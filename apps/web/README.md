@@ -75,8 +75,10 @@ Central portal UI for the MSSQL analysis platform. The Web app runs in no-mock H
   editable standardization mappings, a `createTableScriptPreview`, and a non-persisted
   `DTO_DRAFT` preview stored only in the design run result JSON.
 - Users can edit mapping output values in the browser and regenerate the SQL/DTO previews from
-  those edited mappings. The regenerated preview is client-side only; follow-up chat/refine runs
-  continue to use the durable server-side design run baseline.
+  those edited mappings. The mapping table shows a busy state while edited values are applied to
+  the previews. Field descriptions use the same metadata-backed mapping row as field names before
+  falling back to the source input description. The regenerated preview is client-side only;
+  follow-up chat/refine runs continue to use the durable server-side design run baseline.
 - SQL and Java downloads are client Blob previews. They do not use workflow artifact storage, artifact download helpers, source repository writes, deploy, publish, execute, or apply flows.
 - The page invokes no row-data tools and never renders raw prompts, raw provider responses, full SQL/SP definitions, procedure execution output, secrets, or apply controls.
 

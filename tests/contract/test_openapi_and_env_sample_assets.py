@@ -467,6 +467,9 @@ def test_openapi_metadata_design_chat_contract_matches_p38_surface() -> None:
     assert schemas["MetadataDesignInterpretedIntent"]["properties"]["modifications"][
         "items"
     ] == {"$ref": "#/components/schemas/MetadataDesignIntentChange"}
+    assert "proposedDescription" in schemas["MetadataStandardizationMapping"][
+        "properties"
+    ]
     table_schema = schemas["MetadataTableProposal"]
     assert "createTableScriptPreview" in table_schema["properties"]
     assert "DDL_DRAFT" not in str(result_schema)

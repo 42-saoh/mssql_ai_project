@@ -347,6 +347,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
   const [editableMappings, setEditableMappings] = useState<EditableMappingRow[]>([]);
   const [mappingValidationTouched, setMappingValidationTouched] = useState(false);
   const [generatedPreview, setGeneratedPreview] = useState<RegeneratedPreview | null>(null);
+  const [isRegeneratingPreview, setIsRegeneratingPreview] = useState(false);
   const rowsSignature = useMemo(
     () => mappingRowsSignature(editableMappings),
     [editableMappings],
@@ -372,6 +373,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
     setOriginalMappings(rows);
     setEditableMappings(rows);
     setGeneratedPreview(null);
+    setIsRegeneratingPreview(false);
     setMappingValidationTouched(false);
   }, [result, run.runId]);
 
@@ -401,12 +403,18 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
     );
   }
 
-  function regeneratePreviews() {
+  async function regeneratePreviews() {
     setMappingValidationTouched(true);
     if (validationErrors.length > 0) {
       return;
     }
-    setGeneratedPreview(buildRegeneratedPreview(activeResult, editableMappings, rowsSignature));
+    setIsRegeneratingPreview(true);
+    try {
+      await waitForPreviewRegenerationFrame();
+      setGeneratedPreview(buildRegeneratedPreview(activeResult, editableMappings, rowsSignature));
+    } finally {
+      setIsRegeneratingPreview(false);
+    }
   }
 
   return (
@@ -472,18 +480,31 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel" aria-busy={isRegeneratingPreview}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">Standardization</p>
             <h2>Field mappings</h2>
           </div>
-          <button type="button" className="secondary-action" onClick={regeneratePreviews}>
-            Regenerate previews
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={() => {
+              void regeneratePreviews();
+            }}
+            disabled={isRegeneratingPreview}
+            aria-busy={isRegeneratingPreview}
+          >
+            {isRegeneratingPreview ? "Regenerating..." : "Regenerate previews"}
           </button>
         </div>
         {mappingHasChanges ? (
           <p className="quiet-label">Regenerate previews to use edited mappings.</p>
+        ) : null}
+        {isRegeneratingPreview ? (
+          <div className="preview-regeneration-status" aria-live="polite">
+            Applying edited mappings to previews...
+          </div>
         ) : null}
         {validationErrors.length > 0 && mappingValidationTouched ? (
           <div className="blocker-list" aria-live="polite">
@@ -521,6 +542,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
                     <input
                       value={mapping.proposedName}
                       aria-label={`Field name for ${mapping.inputName || mapping.proposedName}`}
+                      disabled={isRegeneratingPreview}
                       onChange={(event) =>
                         updateEditableMapping(
                           mapping.id,
@@ -539,6 +561,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
                     <input
                       value={mapping.proposedType}
                       aria-label={`DB type for ${mapping.proposedName}`}
+                      disabled={isRegeneratingPreview}
                       onChange={(event) =>
                         updateEditableMapping(
                           mapping.id,
@@ -558,6 +581,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
                       <input
                         type="checkbox"
                         checked={mapping.nullable}
+                        disabled={isRegeneratingPreview}
                         onChange={(event) =>
                           updateEditableNullability(mapping.id, event.target.checked)
                         }
@@ -570,6 +594,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
                       className="mapping-description-input"
                       value={mapping.description}
                       aria-label={`Description for ${mapping.proposedName}`}
+                      disabled={isRegeneratingPreview}
                       onChange={(event) =>
                         updateEditableMapping(
                           mapping.id,
@@ -601,6 +626,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
           <button
             type="button"
             className="secondary-action"
+            disabled={isRegeneratingPreview}
             onClick={() =>
               downloadText(
                 `${tableProposal.tableName}.sql`,
@@ -627,6 +653,7 @@ function MetadataDesignResultView({ run }: Readonly<{ run: MetadataDesignRunStat
             <button
               type="button"
               className="secondary-action"
+              disabled={isRegeneratingPreview}
               onClick={() =>
                 downloadText(dtoDraft.fileName, dtoDraft.content, "text/x-java-source")
               }
@@ -706,7 +733,11 @@ function buildEditableMappingRows(result: MetadataDesignResult): EditableMapping
       proposedName: safePreviewText(mapping.proposedName),
       proposedType: safePreviewText(mapping.proposedType),
       nullable: proposalColumn?.nullable ?? true,
-      description: safePreviewText(proposalColumn?.description ?? mapping.inputDescription),
+      description: firstSafePreviewText(
+        proposalColumn?.description,
+        mapping.proposedDescription,
+        mapping.inputDescription,
+      ),
       source: mapping.source,
       evidenceRefs: mapping.evidenceRefs,
       reviewRequired: mapping.reviewRequired,
@@ -1135,6 +1166,28 @@ function safePreviewText(value: unknown): string {
     return "";
   }
   return text;
+}
+
+function firstSafePreviewText(...values: unknown[]): string {
+  for (const value of values) {
+    const text = safePreviewText(value);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function waitForPreviewRegenerationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      setTimeout(resolve, 0);
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 120);
+    });
+  });
 }
 
 function escapeSqlUnicodeLiteral(value: string): string {

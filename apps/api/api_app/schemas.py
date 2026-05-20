@@ -710,6 +710,7 @@ class MetadataRelatedMetadata(ApiModel):
 class MetadataStandardizationMapping(ApiModel):
     input_name: str | None = Field(default=None, alias="inputName")
     input_description: str | None = Field(default=None, alias="inputDescription")
+    proposed_description: str | None = Field(default=None, alias="proposedDescription")
     proposed_name: str = Field(alias="proposedName")
     proposed_type: str = Field(alias="proposedType")
     source: Literal["METADATA", "STANDARD_POLICY", "REVIEW_REQUIRED"]
