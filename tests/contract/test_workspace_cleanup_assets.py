@@ -10,6 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCAL_ARTIFACT_PATHS = (
+    ".tmp/",
     ".codex-docker-localappdata",
     "buildx",
     ".token_seed",

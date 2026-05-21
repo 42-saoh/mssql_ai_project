@@ -773,6 +773,117 @@ def test_v8_canonical_target_key_schema_is_manual_and_no_review_surface() -> Non
         assert forbidden not in upper
 
 
+def test_v11_plf_full_create_schema_consolidates_current_manual_drafts() -> None:
+    ddl_text = (
+        ROOT / "db" / "schema" / "ai_agent_platform_schema_v11_plf_full_create.sql"
+    ).read_text(encoding="utf-8")
+    upper = ddl_text.upper()
+
+    assert "Manual apply only" in ddl_text
+    assert "new, empty PLF database" in ddl_text
+    assert "v2, v3, v4, v6, v7, v8, v9, and v10" in ddl_text
+    for table_name in (
+        "AUTH_USERS",
+        "CORE_DB_PROFILES",
+        "CORE_WORK_REQUESTS",
+        "CORE_JOBS",
+        "ARTIFACTS",
+        "AGENT_RUNS",
+        "MODEL_INVOCATIONS",
+        "KNOWLEDGE_ASSETS",
+        "KNOWLEDGE_ASSET_VERSIONS",
+        "KNOWLEDGE_FACTS",
+        "KNOWLEDGE_FACT_EDGES",
+        "KNOWLEDGE_ASSET_JOB_LINKS",
+        "KNOWLEDGE_EXPORTS",
+        "METADATA_ANALYSIS_RUNS",
+        "METADATA_DESIGN_RUNS",
+    ):
+        assert f"CREATE TABLE dbo.{table_name}" in ddl_text
+
+    assert "CANON_TRGT_KEY_TXT NVARCHAR(300) NULL" in ddl_text
+    assert "VALIDATION_COMPLETE" in ddl_text
+    assert "TRG_ARTIFACTS_BLOCK_P36_RETIRED_TYPES" in ddl_text
+    assert "LIFECYCLE_STAT_CD NVARCHAR(30) NOT NULL DEFAULT 'DRAFT'" in ddl_text
+    assert "IX_KNOWLEDGE_FACTS_SEARCH" in ddl_text
+    assert "IX_METADATA_ANALYSIS_RUNS_STATUS" in ddl_text
+    assert "IX_METADATA_DESIGN_RUNS_CONVERSATION" in ddl_text
+    artifact_storage_values = _ddl_check_values(ddl_text, "CHK_ARTIFACTS_TYPE_CD")
+    assert set(_enum_values(ArtifactType)) <= set(artifact_storage_values)
+    assert {"VO_DRAFT", "MODEL_DRAFT", "DDL_DRAFT"} <= set(artifact_storage_values)
+    for forbidden in (
+        "CREATE DATABASE",
+        "DROP TABLE",
+        "DTO_MODEL_DRAFT",
+        "KNOWLEDGE_ASSET_REVIEWS",
+        "PUBLISH_JOB",
+        "DEPLOY_JOB",
+        "EXECUTE_SQL",
+        "ROW_DATA",
+        "RAW_PROMPT",
+        "RAW_PROVIDER",
+    ):
+        assert forbidden not in upper
+
+
+def test_v11_required_seed_has_only_required_bootstrap_data_without_secret_values() -> None:
+    seed_text = (
+        ROOT / "db" / "schema" / "ai_agent_platform_seed_required_v11.sql"
+    ).read_text(encoding="utf-8")
+    upper = seed_text.upper()
+
+    assert "Manual apply only" in seed_text
+    assert "MERGE dbo.AUTH_ROLES" in seed_text
+    assert "MERGE dbo.AUTH_USERS" in seed_text
+    assert "MERGE dbo.CORE_DB_PROFILES" in seed_text
+    assert "MERGE dbo.CORE_DB_PROFILE_ALLOWED_SCHEMAS" in seed_text
+    for required_value in (
+        "codex-api-local",
+        "USER",
+        "ADMIN",
+        "AUDITOR",
+        "plf",
+        "master",
+        "ppm",
+        "REVIEW_REQUIRED_PLF_HOST",
+        "REVIEW_REQUIRED_METADATA_HOST",
+    ):
+        assert required_value in seed_text
+    assert "REVIEWER" not in upper
+    for forbidden in (
+        "PASSWORD",
+        "TOKEN",
+        "API_KEY",
+        "OPENAI_API_KEY",
+        "PLATFORM_DB_PASSWORD",
+        "MSSQL_METADATA_PASSWORD",
+        "CONNECTION STRING",
+    ):
+        assert forbidden not in upper
+
+
+def test_schema_docs_reference_v11_plf_bootstrap_without_stale_paths() -> None:
+    docs_text = "\n".join(
+        [
+            (ROOT / "db" / "schema" / "README.md").read_text(encoding="utf-8"),
+            (ROOT / "apps" / "api" / "README.md").read_text(encoding="utf-8"),
+            *[
+                path.read_text(encoding="utf-8")
+                for path in (ROOT / "docs").glob("*.md")
+            ],
+        ]
+    )
+
+    assert "ai_agent_platform_schema_v11_plf_full_create.sql" in docs_text
+    assert "ai_agent_platform_seed_required_v11.sql" in docs_text
+    for stale_path in (
+        "ai_agent_platform_schema_v2.sql",
+        "ai_agent_platform_schema_v3_agent_runs.sql",
+        "ai_agent_platform_schema_v4_knowledge_assets.sql",
+    ):
+        assert stale_path not in docs_text
+
+
 def test_platform_repository_checks_v7_metadata_analysis_run_schema() -> None:
     source = (ROOT / "apps" / "api" / "api_app" / "platform_db.py").read_text(
         encoding="utf-8"

@@ -264,8 +264,11 @@ API repository 는 로컬 Platform MSSQL DB를 기준으로 동작한다. `.env`
 - `PLATFORM_DB_REQUESTER_LOGIN`
 
 이 adapter 는 `db/schema/` DDL을 자동 적용하지 않고, source DB 업무 row 조회도 수행하지 않는다.
-수동으로 schema를 적용하고 `AUTH_USERS`, `CORE_DB_PROFILES` 기준 행을 준비한 로컬 DB에서만
-request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽는다.
+새 PLF DB는 `db/schema/ai_agent_platform_schema_v11_plf_full_create.sql` 적용 후
+`db/schema/ai_agent_platform_seed_required_v11.sql`로 `AUTH_USERS`, canonical `AUTH_ROLES`,
+`AUTH_USER_ROLES`, `CORE_DB_PROFILES` 기준 행을 준비한 로컬 DB에서만
+request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽는다. 기존 PLF DB는 DBA가
+버전별 증분 SQL을 검토해 수동 반영한다.
 
 ## Repository adapter boundary
 
@@ -383,8 +386,11 @@ request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽
 - Knowledge curation API 와 reviewer identity writes 는 public/product surface 에 없다.
 - Fact graph edge 는 같은 asset version 의 실제 fact id 를 참조한다. edge endpoint 를 fact 로
   확인할 수 없으면 `REVIEW_REQUIRED` endpoint fact 를 만들어 graph integrity 를 유지한다.
-- Platform DB persistence 는 `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql` 수동 적용을
-  요구한다. `KNOWLEDGE_ASSET_JOB_LINKS`, lifecycle/archive columns, critical
+- Platform DB persistence 는 신규 PLF 기준
+  `db/schema/ai_agent_platform_schema_v11_plf_full_create.sql` 와
+  `db/schema/ai_agent_platform_seed_required_v11.sql` 수동 적용을 요구한다. 기존 DB를 증분 적용하는
+  경우에는 최소 `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql` 이후 knowledge
+  schema가 필요하다. `KNOWLEDGE_ASSET_JOB_LINKS`, lifecycle/archive columns, critical
   indexes 를 포함한 v6 필수 table/column/index 가 없으면 adapter 는
   `KNOWLEDGE_SCHEMA_REQUIRED` 를 missing 목록과 함께 반환하고 API 는 DDL 을 자동 적용하지 않는다.
 - raw SP definition, raw SQL text, row data, procedure execution, DDL/DML, secret,

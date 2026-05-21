@@ -1,5 +1,0 @@
-{
-  "status": "fail",
-  "error": "single procedure combobox missing",
-  "stack": "Error: single procedure combobox missing\n    at assert (D:\\wt\\p35\\.tmp\\request-procedure-selector-smoke.cjs:11:11)\n    at main (D:\\wt\\p35\\.tmp\\request-procedure-selector-smoke.cjs:60:3)"
-}

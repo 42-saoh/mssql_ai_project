@@ -20,6 +20,7 @@ build/
 .codex-state/
 logs/
 tmp/
+.tmp/
 .codex-docker-localappdata/
 buildx/
 .token_seed

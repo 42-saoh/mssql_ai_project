@@ -1,5 +1,0 @@
-{
-  "status": "fail",
-  "error": "locator.waitFor: Timeout 180000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('section').filter({ hasText: /AI-MCP metadata analysis/i }).first().getByRole('link', { name: 'Asset' }).first() to be visible\u001b[22m\n",
-  "stack": "locator.waitFor: Timeout 180000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('section').filter({ hasText: /AI-MCP metadata analysis/i }).first().getByRole('link', { name: 'Asset' }).first() to be visible\u001b[22m\n\n    at main (D:\\wt\\p35\\.tmp\\metadata-analysis-knowledge-link-smoke.cjs:65:60)"
-}
