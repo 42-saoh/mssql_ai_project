@@ -183,8 +183,8 @@ def test_fixture_metadata_object_search_returns_identity_only_results() -> None:
             "arguments": {
                 "dbProfileId": "master",
                 "query": "order",
-                "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
-                "limit": 10,
+                "objectTypes": ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"],
+                "limit": 20,
             }
         },
     )
@@ -192,12 +192,63 @@ def test_fixture_metadata_object_search_returns_identity_only_results() -> None:
     assert payload["ok"] is True
     data = payload["data"]
     result_types = {result["objectIdentity"]["type"] for result in data["results"]}
-    assert {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"} <= result_types
+    assert {"PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"} <= result_types
     assert data["blockers"][0]["code"] == "DEPENDENCY_METADATA_INCOMPLETE"
     assert all(result["evidenceRefs"] for result in data["results"])
+    table_result = next(
+        result
+        for result in data["results"]
+        if result["objectIdentity"] == {
+            "schema": "dbo",
+            "name": "TB_ORDER",
+            "type": "TABLE",
+        }
+    )
+    assert table_result["description"] == (
+        "Synthetic order header table used for metadata-only MCP tests."
+    )
+    assert table_result["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
+    assert {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    } in table_result["columns"]
+    column_result = next(
+        result
+        for result in data["results"]
+        if result["objectIdentity"] == {
+            "schema": "dbo",
+            "name": "TB_ORDER.ORDER_DATE",
+            "type": "COLUMN",
+        }
+    )
+    assert column_result["description"] == "Date when the synthetic order was placed."
+    assert column_result["dataType"] == "DATE"
+    assert column_result["column"] == {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    }
+    assert column_result["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
 
     serialized = str(data).lower()
-    for forbidden in ("rowdata", "row_data", "create procedure", "create view", "create function"):
+    for forbidden in (
+        "rowdata",
+        "row_data",
+        "definition",
+        "sqltext",
+        "create procedure",
+        "create view",
+        "create function",
+    ):
         assert forbidden not in serialized
 
 
@@ -749,6 +800,112 @@ def test_live_metadata_object_search_queries_ppm_only_without_definition_text() 
     assert "definition" not in str(payload).lower()
 
 
+class SearchLiveTableMetadataRepository(LiveMetadataRepository):
+    def __init__(self) -> None:
+        super().__init__(
+            settings=LiveMetadataSettings(
+                live_metadata_enabled=True,
+                metadata_host="127.0.0.1",
+                metadata_port=1433,
+                metadata_user="readonly_user",
+                metadata_password="secret",
+                metadata_db_fallback="master",
+                default_profile_id="master",
+                profile_file="config/mssql/local_docker_profiles.yaml",
+                connect_timeout_seconds=7,
+            ),
+            profiles=[
+                DbProfile(
+                    id="ppm",
+                    label="Pilot Analysis Target DB (PPM)",
+                    database="PPM",
+                    purpose="pilot-analysis-target",
+                )
+            ],
+        )
+        self.queried_sql: list[str] = []
+
+    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+        assert database == "PPM"
+        assert tool_name == "search_metadata_objects"
+        assert "sys.sql_modules" not in sql
+        self.queried_sql.append(sql)
+        if "sys.tables" in sql:
+            return [
+                {
+                    "object_id": 7,
+                    "schema_name": "dbo",
+                    "table_name": "TB_ORDER",
+                    "table_description": "Live order table metadata.",
+                    "column_name": "ORDER_DATE",
+                    "type_name": "date",
+                    "max_length": 3,
+                    "precision": 10,
+                    "scale": 0,
+                    "column_id": 1,
+                    "is_nullable": False,
+                    "is_identity": False,
+                    "column_description": "Live order date metadata.",
+                }
+            ]
+        assert "sys.objects" in sql
+        return [
+            {
+                "object_id": 7,
+                "object_type": "U",
+                "schema_name": "dbo",
+                "object_name": "TB_ORDER",
+                "description": "Live order table metadata.",
+                "dep_schema_name": None,
+                "dep_object_name": None,
+                "dep_referenced_type": None,
+                "referenced_class_desc": None,
+                "is_ambiguous": None,
+            }
+        ]
+
+
+def test_live_metadata_object_search_table_results_include_safe_catalog_columns() -> None:
+    repository = SearchLiveTableMetadataRepository()
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "search_metadata_objects",
+        {
+            "arguments": {
+                "dbProfileId": "ppm",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "limit": 5,
+            }
+        },
+    )
+
+    assert len(repository.queried_sql) == 2
+    result = payload["data"]["results"][0]
+    assert result["objectIdentity"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "type": "TABLE",
+    }
+    assert result["description"] == "Live order table metadata."
+    assert result["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Live order table metadata.",
+    }
+    assert result["columns"] == [
+        {
+            "name": "ORDER_DATE",
+            "description": "Live order date metadata.",
+            "dataType": "DATE",
+        }
+    ]
+    serialized = str(payload).lower()
+    for forbidden in ("rowdata", "row_data", "definition", "sqltext", "sys.sql_modules"):
+        assert forbidden not in serialized
+
+
 class DefinitionShapeLiveMetadataRepository(LiveMetadataRepository):
     def __init__(self) -> None:
         super().__init__(
@@ -773,8 +930,22 @@ class DefinitionShapeLiveMetadataRepository(LiveMetadataRepository):
                 )
             ],
         )
+        self.queried_databases: list[str] = []
 
-    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+    def _query(  # noqa: ANN001
+        self,
+        database,
+        sql,
+        params,
+        *,
+        tool_name,
+        profile,
+        lock_timeout_ms=None,
+    ):
+        self.queried_databases.append(database)
+        if "FROM sys.databases" in sql:
+            assert lock_timeout_ms == 1000
+            return [{"name": params[0], "state_desc": "ONLINE"}]
         if "sys.sql_expression_dependencies" in sql:
             return []
         if tool_name == "get_procedure_definition":
@@ -859,6 +1030,53 @@ def test_live_definition_tools_match_fixture_definition_metadata_shape(
     assert isinstance(live_data["hasDefinitionAccess"], bool)
 
 
+def test_fixture_procedure_definition_supports_confirmed_cross_database_dependency() -> None:
+    settings = load_live_metadata_settings()
+    profiles = load_db_profiles(settings, repo_root=Path.cwd())
+    registry = build_tool_registry(repository=FixtureMetadataRepository(), profiles=profiles)
+
+    payload = registry.invoke_payload(
+        "get_procedure_definition",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "procedureName": "usp_CrossDbOrderAudit",
+                "referencedDatabase": "OtherDB",
+            }
+        },
+    )
+
+    assert payload["data"]["database"] == "OtherDB"
+    assert payload["data"]["referencedDatabase"] == "OtherDB"
+    assert payload["data"]["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
+    assert payload["data"]["objectIdentity"]["database"] == "OtherDB"
+    assert "CREATE PROCEDURE" in payload["data"]["definition"]
+
+
+def test_live_procedure_definition_queries_confirmed_cross_database_target() -> None:
+    repository = DefinitionShapeLiveMetadataRepository()
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    payload = registry.invoke_payload(
+        "get_procedure_definition",
+        {
+            "arguments": {
+                "dbProfileId": "master",
+                "schema": "dbo",
+                "procedureName": "usp_CrossDbOrderAudit",
+                "referencedDatabase": "OtherDB",
+            }
+        },
+    )
+
+    assert payload["data"]["database"] == "OtherDB"
+    assert payload["data"]["referencedDatabase"] == "OtherDB"
+    assert payload["data"]["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
+    assert payload["data"]["objectIdentity"]["database"] == "OtherDB"
+    assert repository.queried_databases == ["master", "OtherDB"]
+
+
 def _dependency_row(**overrides: Any) -> dict[str, Any]:
     row = {
         "object_id": 900,
@@ -931,7 +1149,16 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
         self.external_catalog_error = external_catalog_error
         self.queried_databases: list[str] = []
 
-    def _query(self, database, sql, params, *, tool_name, profile):  # noqa: ANN001
+    def _query(  # noqa: ANN001
+        self,
+        database,
+        sql,
+        params,
+        *,
+        tool_name,
+        profile,
+        lock_timeout_ms=None,
+    ):
         self.queried_databases.append(database)
         assert tool_name in {
             "get_procedure_dependencies",
@@ -946,8 +1173,12 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
         if "FROM sys.sql_expression_dependencies AS dep" in sql:
             return self.dependency_rows
         if "FROM sys.databases" in sql:
+            assert database == "PPM"
+            assert lock_timeout_ms == 1000
             return self.external_database_rows
         if ".sys.objects AS candidate" in sql:
+            assert database == "PPM"
+            assert lock_timeout_ms == 1000
             assert "[OtherDB].sys.objects" in sql
             assert "OtherDB.sys.objects" not in sql
             assert params == ["TB_ORDER", "dbo", "dbo"]
@@ -1025,19 +1256,6 @@ class ProcedureDependencyLiveMetadataRepository(LiveMetadataRepository):
                 "resolutionStrategy": "AMBIGUOUS_CATALOG_NAME",
                 "reviewStatus": "REVIEW_REQUIRED",
                 "isAmbiguous": True,
-            },
-        ),
-        (
-            _dependency_row(referenced_database_name="OtherDB"),
-            {
-                "objectType": "UNKNOWN",
-                "schema": "dbo",
-                "name": "TB_ORDER",
-                "resolutionStatus": "REVIEW_REQUIRED",
-                "resolutionStrategy": "CROSS_DATABASE_NOT_FOUND",
-                "sourceScope": "SAME_SERVER_CROSS_DATABASE",
-                "reviewStatus": "REVIEW_REQUIRED",
-                "isAmbiguous": False,
             },
         ),
         (
@@ -1128,7 +1346,7 @@ def test_live_procedure_dependency_resolver_statuses(
     if dependency_row.get("referenced_database_name") and not dependency_row.get(
         "referenced_server_name"
     ):
-        assert repository.queried_databases == ["PPM", "PPM", "master", "PPM"]
+        assert repository.queried_databases == ["PPM", "PPM", "PPM", "PPM"]
     else:
         assert repository.queried_databases == ["PPM", "PPM", "PPM"]
 
@@ -1173,7 +1391,7 @@ def test_live_procedure_dependency_resolver_confirms_same_server_cross_database_
     assert dependency["reviewStatus"] == "CONFIRMED"
     assert payload["data"]["caveats"] == []
     assert payload["data"]["reviewRequired"] is False
-    assert repository.queried_databases == ["PPM", "PPM", "master", "master", "PPM"]
+    assert repository.queried_databases == ["PPM", "PPM", "PPM", "PPM", "PPM"]
 
 
 def test_live_procedure_dependency_resolver_marks_ambiguous_external_catalog_review() -> None:
@@ -1212,7 +1430,7 @@ def test_live_procedure_dependency_resolver_marks_ambiguous_external_catalog_rev
     assert payload["data"]["caveats"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
 
 
-def test_live_procedure_dependency_resolver_marks_inaccessible_external_catalog_review() -> None:
+def test_live_procedure_dependency_resolver_fails_inaccessible_external_catalog() -> None:
     repository = ProcedureDependencyLiveMetadataRepository(
         dependency_rows=[_dependency_row(referenced_database_name="OtherDB")],
         external_database_rows=[{"name": "OtherDB", "state_desc": "ONLINE"}],
@@ -1224,22 +1442,80 @@ def test_live_procedure_dependency_resolver_marks_inaccessible_external_catalog_
     )
     registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
 
-    payload = registry.invoke_payload(
-        "get_procedure_dependencies",
-        {
-            "arguments": {
-                "dbProfileId": "ppm",
-                "schema": "dbo",
-                "procedureName": "usp_Selected",
-            }
-        },
-    )
+    with pytest.raises(MetadataToolError) as exc_info:
+        registry.invoke_payload(
+            "get_procedure_dependencies",
+            {
+                "arguments": {
+                    "dbProfileId": "ppm",
+                    "schema": "dbo",
+                    "procedureName": "usp_Selected",
+                }
+            },
+        )
 
-    dependency = payload["data"]["dependencies"][0]
-    assert dependency["resolutionStatus"] == "REVIEW_REQUIRED"
-    assert dependency["resolutionStrategy"] == "CROSS_DATABASE_CATALOG_UNAVAILABLE"
-    assert dependency["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
-    assert payload["data"]["caveats"] == ["DEPENDENCY_METADATA_INCOMPLETE"]
+    assert exc_info.value.code == "METADATA_READ_ONLY_PERMISSION_INSUFFICIENT"
+    assert exc_info.value.details["database"] == "PPM"
+    assert exc_info.value.details["externalDatabase"] == "OtherDB"
+    assert exc_info.value.details["externalCatalogStage"] == "object_lookup"
+
+
+def test_live_procedure_dependency_resolver_fails_unavailable_external_catalog() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[_dependency_row(referenced_database_name="OtherDB")],
+        external_database_rows=[{"name": "OtherDB", "state_desc": "ONLINE"}],
+        external_catalog_error=MetadataToolError(
+            "LIVE_METADATA_UNAVAILABLE",
+            "External catalog timeout.",
+            {"database": "OtherDB", "errorClass": "TimeoutError"},
+        ),
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    with pytest.raises(MetadataToolError) as exc_info:
+        registry.invoke_payload(
+            "get_procedure_dependencies",
+            {
+                "arguments": {
+                    "dbProfileId": "ppm",
+                    "schema": "dbo",
+                    "procedureName": "usp_Selected",
+                }
+            },
+        )
+
+    assert exc_info.value.code == "LIVE_METADATA_UNAVAILABLE"
+    assert exc_info.value.details["database"] == "PPM"
+    assert exc_info.value.details["externalDatabase"] == "OtherDB"
+    assert exc_info.value.details["externalCatalogStage"] == "object_lookup"
+    assert exc_info.value.details["errorClass"] == "TimeoutError"
+
+
+def test_live_procedure_dependency_resolver_fails_missing_external_database() -> None:
+    repository = ProcedureDependencyLiveMetadataRepository(
+        dependency_rows=[_dependency_row(referenced_database_name="OtherDB")],
+        external_database_rows=[],
+    )
+    registry = build_tool_registry(repository=repository, profiles=repository.profiles or [])
+
+    with pytest.raises(MetadataToolError) as exc_info:
+        registry.invoke_payload(
+            "get_procedure_dependencies",
+            {
+                "arguments": {
+                    "dbProfileId": "ppm",
+                    "schema": "dbo",
+                    "procedureName": "usp_Selected",
+                }
+            },
+        )
+
+    assert exc_info.value.code == "LIVE_METADATA_UNAVAILABLE"
+    assert exc_info.value.details["database"] == "PPM"
+    assert exc_info.value.details["externalDatabase"] == "OtherDB"
+    assert exc_info.value.details["externalCatalogStage"] == "database_lookup"
+    assert exc_info.value.details["externalCatalogReason"] == "not_found"
+    assert repository.queried_databases == ["PPM", "PPM", "PPM"]
 
 
 @pytest.mark.parametrize(

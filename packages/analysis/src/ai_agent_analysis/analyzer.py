@@ -48,8 +48,8 @@ def analyze_stored_procedure(
             ReviewMarker(
                 code="DYNAMIC_SQL_DEPENDENCY_REVIEW",
                 message=(
-                    "Dynamic SQL was detected; dependencies inside the generated SQL text are "
-                    "not asserted by the static parser."
+                    "Dynamic SQL이 감지되었습니다. 생성 SQL text 내부 의존성은 static parser가 "
+                    "확정하지 않습니다."
                 ),
                 evidence=patterns.dynamic_sql.evidence,
             )
@@ -61,7 +61,7 @@ def analyze_stored_procedure(
         review_markers.append(
             ReviewMarker(
                 code="PROCEDURE_NAME_REVIEW",
-                message="Procedure name could not be resolved from static text.",
+                message="static text에서 procedure name을 결정론적으로 확인하지 못했습니다.",
                 status=EvidenceStatus.REVIEW_REQUIRED,
             )
         )

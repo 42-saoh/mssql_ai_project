@@ -108,7 +108,7 @@ def test_fixture_backed_request_to_validation_complete_happy_path(
     validation_payload = validation.json()
     assert validation_payload["artifactId"] == analysis_artifact_id
     assert validation_payload["status"] == "REVIEW_REQUIRED"
-    assert validation_payload["manualReviewPoints"]
+    assert validation_payload["qualityCaveats"]
 
     validated_preview = client.get(f"/api/v1/artifacts/{analysis_artifact_id}")
     assert validated_preview.status_code == 200

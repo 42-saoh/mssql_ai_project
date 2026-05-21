@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from ai_agent_domain import ArtifactType
+from ai_agent_domain import ArtifactType, JobStatus, WorkflowStepType
+from ai_agent_runtime import FakeModelGateway
 from ai_agent_runtime.gateway import model_profile_from_env
+from ai_agent_runtime.models import AgentRunStatus
+from ai_agent_validation.models import ValidationStatus
 from api_app.dependencies import (
     get_metadata_analysis_service,
     get_repository,
@@ -14,11 +17,26 @@ from api_app.dependencies import (
     reset_application_state,
 )
 from api_app.main import app
+from api_app.metadata_analysis_runs import execute_metadata_analysis_run
 from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.recovery_worker import run_recovery_once
 from api_app.repositories import KnowledgePersistenceError, ValidationReportRecord
-from api_app.workflow import WorkflowService
+from api_app.workflow import (
+    AI_DRAFT_PACK_PLANNER_AGENT_TYPE,
+    OPERATION_MODEL_AGENT_TYPE,
+    SP_WORKFLOW_RECOVERY_BLOCKED,
+    WorkflowService,
+)
 from fastapi.testclient import TestClient
 
+from tests.helpers.p42_manage_bond import (
+    REQUIRED_P42_REVIEW_MARKERS,
+    ManageBondMetadataGateway,
+    manage_bond_request_payload,
+    p41_operation_model_fixture,
+    p42_ai_draft_pack_fixture,
+    validate_persisted_p42_pack,
+)
 from tests.unit.api.fake_repository import MemoryWorkflowRepository
 
 
@@ -54,12 +72,64 @@ class KnowledgeSchemaRequiredRepository(MemoryWorkflowRepository):
             status_code=503,
         )
 
-    def review_knowledge_asset_version(self, **_kwargs: Any):
-        raise KnowledgePersistenceError(
-            "Knowledge assetization requires v5 platform schema objects.",
-            code="KNOWLEDGE_SCHEMA_REQUIRED",
-            status_code=503,
-        )
+
+class ExplodingMetadataAnalysisService(MetadataAnalysisService):
+    def __init__(self) -> None:
+        super().__init__()
+        self.analyze_calls = 0
+
+    def analyze(self, request):  # type: ignore[override]
+        self.analyze_calls += 1
+        raise AssertionError("analyze should not run without a metadata run claim")
+
+
+class RouteMetadataDesignRegistry:
+    def invoke_payload(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        data: dict[str, Any]
+        if tool_name == "search_columns":
+            data = {
+                "candidates": [
+                    {
+                        "schema": "dbo",
+                        "tableName": "PPM_CUSTOMER_ORDER",
+                        "columnName": "CUSTOMER_NM",
+                        "logicalName": "customer name",
+                        "description": "Customer name.",
+                        "dataType": "VARCHAR(100)",
+                        "score": 95,
+                    }
+                ]
+            }
+        elif tool_name == "search_tables":
+            data = {
+                "candidates": [
+                    {
+                        "schema": "dbo",
+                        "tableName": "PPM_CUSTOMER_ORDER",
+                        "description": "Customer order.",
+                        "score": 90,
+                    }
+                ]
+            }
+        else:
+            data = {"candidates": []}
+        return {
+            "ok": True,
+            "toolName": tool_name,
+            "dbProfileId": payload["arguments"]["dbProfileId"],
+            "snapshotId": "route-design-snapshot",
+            "collectedAt": "2026-05-17T00:00:00Z",
+            "evidenceRefs": [
+                {
+                    "id": f"mcp.{tool_name}.route",
+                    "source": "fixture",
+                    "path": f"fixtures/mcp/route_design.json#/{tool_name}",
+                    "objectType": "METADATA",
+                    "objectName": "dbo.PPM_CUSTOMER_ORDER",
+                }
+            ],
+            "data": data,
+        }
 
 
 @pytest.fixture
@@ -188,12 +258,7 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
             "/api/v1/knowledge/assets/"
             f"{sp_knowledge['assetId']}/versions/{sp_knowledge['currentVersionId']}/review"
         ),
-        json={
-            "status": "REVIEWED",
-            "reasonCode": "ROUTE_FIXTURE_REVIEW",
-            "reviewer": "reviewer@example.com",
-            "comment": "reviewed sanitized fixture knowledge",
-        },
+        json={"status": "REVIEW_REQUIRED"},
     )
     reviews = client.get(
         f"/api/v1/knowledge/assets/{sp_knowledge['assetId']}/reviews",
@@ -208,19 +273,29 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert empty_fact_search.json()["code"] == "KNOWLEDGE_SEARCH_FILTER_REQUIRED"
     assert fact_search.status_code == 200
     assert fact_search.json()["facts"]
-    assert review.status_code == 200
-    assert review.json()["toStatus"] == "REVIEWED"
-    assert reviews.status_code == 200
-    assert reviews.json()["reviews"][0]["reasonCode"] == "ROUTE_FIXTURE_REVIEW"
+    assert review.status_code == 404
+    assert reviews.status_code == 404
 
     job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
     assert job.status_code == 200
     assert job.headers["X-Correlation-ID"].startswith("corr_")
     assert job.json()["currentStep"] == "VALIDATE"
+    assert job.json()["dbProfileId"] == "master"
+    assert job.json()["target"] == {
+        "type": "PROCEDURE",
+        "schema": "dbo",
+        "name": "usp_OrderRequest_Select",
+    }
+    assert "SP_ANALYSIS_DOCUMENT" in job.json()["outputs"]
 
     recent_jobs = client.get("/api/v1/jobs", params={"limit": 10})
     assert recent_jobs.status_code == 200
     assert submitted["jobId"] in {item["jobId"] for item in recent_jobs.json()["jobs"]}
+    recent_job = next(
+        item for item in recent_jobs.json()["jobs"] if item["jobId"] == submitted["jobId"]
+    )
+    assert recent_job["target"]["name"] == "usp_OrderRequest_Select"
+    assert recent_job["dbProfileId"] == "master"
 
     listed = client.get(f"/api/v1/jobs/{submitted['jobId']}/artifacts")
     assert listed.status_code == 200
@@ -254,6 +329,153 @@ def test_sp_analysis_request_to_validation_complete_flow(client: TestClient) -> 
     assert latest_validation.headers["X-Correlation-ID"] == "corr-route-flow"
     assert latest_validation.json()["artifactId"] == artifact_id
     assert latest_validation.json()["validationReportId"] == validation.json()["validationReportId"]
+
+
+def test_p42_manage_bond_route_replay_produces_valid_multi_dto_ai_draft_pack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    operation_model = p41_operation_model_fixture()
+    ai_draft_pack = p42_ai_draft_pack_fixture()
+    repository = MemoryWorkflowRepository()
+    service = WorkflowService(
+        repository,
+        metadata_gateway=ManageBondMetadataGateway(),
+        model_gateway=FakeModelGateway(
+            sp_operation_model_by_target_ref={operation_model["targetRef"]: operation_model},
+            ai_draft_pack_by_target_ref={ai_draft_pack["targetRef"]: ai_draft_pack},
+        ),
+    )
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    try:
+        with TestClient(app) as client:
+            submit = client.post(
+                "/api/v1/requests/sp-analysis",
+                headers={"X-Correlation-ID": "corr-p42e-manage-bond"},
+                json=manage_bond_request_payload(),
+            )
+            assert submit.status_code == 202
+            submitted = submit.json()
+            job_id = submitted["jobId"]
+            assert submitted["status"] == "VALIDATION_COMPLETE"
+            assert job_id != "job_6864d2734e"
+            assert repository.get_job("job_6864d2734e") is None
+
+            job = client.get(f"/api/v1/jobs/{job_id}")
+            listed = client.get(f"/api/v1/jobs/{job_id}/artifacts")
+            agent_runs = client.get(f"/api/v1/jobs/{job_id}/agent-runs")
+
+            assert job.status_code == 200
+            assert job.json()["status"] == "VALIDATION_COMPLETE"
+            assert listed.status_code == 200
+            assert agent_runs.status_code == 200
+
+            summaries = listed.json()["artifacts"]
+            artifact_types = [item["type"] for item in summaries]
+            assert artifact_types.count(ArtifactType.DTO_DRAFT.value) == 11
+            assert artifact_types.count(ArtifactType.SERVICE_DRAFT.value) == 1
+            assert artifact_types.count(ArtifactType.MAPPER_INTERFACE.value) == 1
+            assert artifact_types.count(ArtifactType.MAPPER_XML.value) == 1
+
+            for summary in summaries:
+                detail = client.get(f"/api/v1/artifacts/{summary['artifactId']}")
+                assert detail.status_code == 200
+                content = detail.json()["content"]
+                assert content.strip()
+                assert "OperationModelReviewRequired" not in content
+                assert "ManageBondDTO" not in content
+
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    artifacts = repository.list_job_artifacts(job_id) or []
+    dto_artifacts = [artifact for artifact in artifacts if artifact.type == ArtifactType.DTO_DRAFT]
+    service_artifact = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.SERVICE_DRAFT
+    )
+    mapper_artifact = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.MAPPER_INTERFACE
+    )
+    mapper_xml_artifact = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.MAPPER_XML
+    )
+    required_dtos = set(ai_draft_pack["qualityGates"]["requiredDtoClasses"])
+    required_methods = set(ai_draft_pack["qualityGates"]["requiredServiceMethods"])
+    persisted_dto_classes = {
+        artifact.title.rsplit("/", 1)[-1].removesuffix(".java")
+        for artifact in dto_artifacts
+    }
+
+    assert persisted_dto_classes == required_dtos
+    assert len(dto_artifacts) == len(required_dtos)
+    assert "ManageBondDTO" not in persisted_dto_classes
+    assert "OperationModelReviewRequired" not in persisted_dto_classes
+
+    for artifact in artifacts:
+        latest_validation = repository.latest_validation_for(artifact.artifact_id)
+        assert latest_validation is not None
+        assert latest_validation.status in {"PASSED", "REVIEW_REQUIRED"}
+        assert artifact.extra["aiDraftPackSchema"] == "AiJavaMyBatisDraftPack.v0.1"
+        assert artifact.extra["aiDraftPackTargetRef"] == ai_draft_pack["targetRef"]
+        assert artifact.extra["aiDraftPackAgentRunId"]
+        assert artifact.extra["bundleFilePath"] == artifact.title
+        assert artifact.extra["aiFileRole"]
+        assert artifact.extra["operationIds"]
+        assert artifact.extra["qualityScore"] >= 1.0
+        assert artifact.extra["aiEvidenceRefs"]
+        if artifact.type == ArtifactType.DTO_DRAFT:
+            assert artifact.extra["dtoRole"]
+
+    for dto_class in required_dtos:
+        assert dto_class in service_artifact.content
+        assert dto_class in mapper_artifact.content
+        assert dto_class in mapper_xml_artifact.content
+    for method in required_methods:
+        assert method in service_artifact.content
+        assert method in mapper_artifact.content
+        assert method in mapper_xml_artifact.content
+
+    replay_report = validate_persisted_p42_pack(artifacts, expected_pack=ai_draft_pack)
+    assert replay_report.status == ValidationStatus.PASSED
+    assert REQUIRED_P42_REVIEW_MARKERS <= set(replay_report.manual_review_points)
+
+    runs = repository.list_agent_runs(job_id) or []
+    operation_run = next(run for run in runs if run.agent_type == OPERATION_MODEL_AGENT_TYPE)
+    ai_draft_run = next(
+        run for run in runs if run.agent_type == AI_DRAFT_PACK_PLANNER_AGENT_TYPE
+    )
+    assert operation_run.structured_output["targetRef"] == operation_model["targetRef"]
+    assert ai_draft_run.status == AgentRunStatus.SUCCEEDED.value
+    assert REQUIRED_P42_REVIEW_MARKERS <= set(ai_draft_run.structured_output["reviewMarkers"])
+    assert "CREATE PROCEDURE" not in str(ai_draft_run.model_invocation)
+    assert "SET GUAR_APRV_YN" not in str(ai_draft_run.model_invocation)
+
+
+def test_sp_analysis_request_can_return_before_background_workflow_completes(
+    client: TestClient,
+) -> None:
+    submit = client.post(
+        "/api/v1/requests/sp-analysis",
+        params={"runAsync": "true"},
+        json=_sp_analysis_payload(["SP_ANALYSIS_DOCUMENT"]),
+    )
+
+    assert submit.status_code == 202
+    submitted = submit.json()
+    assert submitted["status"] == "SUBMITTED"
+    assert submitted["requestId"].startswith("req_")
+    assert submitted["jobId"].startswith("job_")
+
+    job = client.get(f"/api/v1/jobs/{submitted['jobId']}")
+
+    assert job.status_code == 200
+    assert job.json()["status"] == "VALIDATION_COMPLETE"
+    assert job.json()["progress"] == 1.0
+    assert job.json()["currentStep"] == "VALIDATE"
 
 
 def test_sp_analysis_batch_route_returns_accepted_and_duplicate_rejections(
@@ -392,6 +614,9 @@ def test_jobs_route_lists_recent_jobs_with_bounded_response_shape(
     payload = response.json()
     assert set(payload) == {"jobs"}
     assert [item["jobId"] for item in payload["jobs"]] == list(reversed(created_job_ids[-2:]))
+    assert all(item["dbProfileId"] == "master" for item in payload["jobs"])
+    assert all(item["target"]["schema"] == "dbo" for item in payload["jobs"])
+    assert all(item["outputs"] == ["SP_ANALYSIS_DOCUMENT"] for item in payload["jobs"])
 
 
 def test_latest_validation_route_does_not_create_validation_write(
@@ -471,7 +696,35 @@ def test_invalid_request_returns_validation_error_shape(client: TestClient) -> N
     }
 
 
-def test_approve_without_passed_validation_returns_workflow_conflict(
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", ""),
+        ("name", "   "),
+        ("schema", ""),
+    ],
+)
+def test_blank_sp_analysis_target_fields_return_validation_error_without_job(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+    field: str,
+    value: str,
+) -> None:
+    client, repository = client_and_repository
+    payload = _sp_analysis_payload()
+    payload["target"] = {**payload["target"], field: value}
+
+    response = client.post("/api/v1/requests/sp-analysis", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Request validation failed.",
+        "code": "VALIDATION_ERROR",
+    }
+    assert repository.requests == {}
+    assert repository.jobs == {}
+
+
+def test_approval_route_is_absent(
     client: TestClient,
 ) -> None:
     headers = {"X-Correlation-ID": "corr-approve-conflict"}
@@ -486,20 +739,13 @@ def test_approve_without_passed_validation_returns_workflow_conflict(
     ]
     artifact_id = artifacts[0]["artifactId"]
 
-    approval = client.post(
+    response = client.post(
         f"/api/v1/artifacts/{artifact_id}/approval-decisions",
         headers=headers,
-        json={
-            "decision": "APPROVE",
-            "reviewer": "reviewer@example.com",
-            "comment": "approval must wait for passed validation",
-        },
+        json={"decision": "APPROVE"},
     )
 
-    assert approval.status_code == 400
-    assert approval.headers["X-Correlation-ID"] == "corr-approve-conflict"
-    assert approval.json()["code"] == "WORKFLOW_STATE_CONFLICT"
-    assert "PASSED" in approval.json()["detail"]
+    assert response.status_code == 404
 
     preview = client.get(f"/api/v1/artifacts/{artifact_id}", headers=headers)
     assert preview.status_code == 200
@@ -519,7 +765,7 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     assert len(payload["agentRuns"]) == 1
     run = payload["agentRuns"][0]
     assert run["modelInvocation"]["model"] == model_profile_from_env("openai_fast_test").model
-    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.4.0"
+    assert run["modelInvocation"]["promptVersion"] == "prompt:sp_semantic_analysis@0.4.1"
     assert run["modelInvocation"]["componentInvocations"]
     assert any(
         component["stage"] == "platform_tool_execution"
@@ -527,6 +773,66 @@ def test_llm_request_exposes_sanitized_agent_runs_route(client: TestClient) -> N
     )
     assert "structuredOutput" in run
     assert "CREATE PROCEDURE" not in str(payload)
+
+
+def test_multi_sp_llm_request_exposes_dependency_child_agent_runs_sanitized(
+    client: TestClient,
+) -> None:
+    request_payload = _sp_analysis_llm_payload(
+        ["SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT", "JAVA_MYBATIS_DRAFT"]
+    )
+    request_payload["target"] = {
+        "type": "PROCEDURE",
+        "schema": "dbo",
+        "name": "usp_ProcessOrderBatch",
+    }
+
+    submit = client.post("/api/v1/requests/sp-analysis", json=request_payload)
+
+    assert submit.status_code == 202
+    job_id = submit.json()["jobId"]
+    response = client.get(f"/api/v1/jobs/{job_id}/agent-runs")
+
+    assert response.status_code == 200
+    payload = response.json()
+    runs = payload["agentRuns"]
+    root_runs = [run for run in runs if run["agentType"] == "LLM_SEMANTIC_ANALYST"]
+    child_runs = [
+        run for run in runs if run["agentType"] == "LLM_SEMANTIC_ANALYST_DEPENDENCY"
+    ]
+    assert len(root_runs) == 1
+    assert {run["targetRef"] for run in child_runs} == {
+        "OtherDB.dbo.usp_CrossDbOrderAudit",
+        "dbo.usp_GetOrderSummary",
+    }
+
+    dependency_summary = root_runs[0]["modelInvocation"]["sourceContextSummary"][
+        "dependencyAnalysis"
+    ]
+    assert dependency_summary["mode"] == "CONFIRMED_PROCEDURES"
+    assert dependency_summary["requestedDepth"] == 2
+    assert dependency_summary["analyzedCount"] == len(child_runs)
+    assert dependency_summary["childRunCount"] == len(child_runs)
+    assert dependency_summary["skippedCount"] >= 1
+    analyzed_refs = {item["targetRef"] for item in dependency_summary["analyzedTargets"]}
+    assert analyzed_refs == {
+        "OtherDB.dbo.usp_CrossDbOrderAudit",
+        "dbo.usp_GetOrderSummary",
+    }
+    assert "sourceContextSummary" in dependency_summary["analyzedTargets"][0]
+    cross_db_target = next(
+        item
+        for item in dependency_summary["analyzedTargets"]
+        if item["targetRef"] == "OtherDB.dbo.usp_CrossDbOrderAudit"
+    )
+    assert cross_db_target["database"] == "OtherDB"
+    assert cross_db_target["sourceScope"] == "SAME_SERVER_CROSS_DATABASE"
+    assert dependency_summary["skippedTargets"]
+    assert "CREATE PROCEDURE" not in str(payload)
+    normalized_keys = _normalized_response_keys(payload)
+    assert "proceduredefinition" not in normalized_keys
+    assert "selectedspans" not in normalized_keys
+    assert "providerresponse" not in normalized_keys
 
 
 def test_approval_route_records_enriched_audit_payload_for_passed_validation(
@@ -566,8 +872,20 @@ def test_approval_route_records_enriched_audit_payload_for_passed_validation(
                 "## assumptions_and_todo",
                 "None.",
                 "",
-                "## review_checklist",
-                "- [x] validation package passed.",
+                "## quality_summary",
+                "- validation package passed.",
+                "",
+                "## evidence_map",
+                "- MSSQL_METADATA fixture evidence bound",
+                "",
+                "## known_caveats",
+                "- none",
+                "",
+                "## next_evidence_to_collect",
+                "- none",
+                "",
+                "## draft_readiness",
+                "- draft only",
                 "",
             ]
         ),
@@ -607,41 +925,13 @@ def test_approval_route_records_enriched_audit_payload_for_passed_validation(
     approval = client.post(
         f"/api/v1/artifacts/{artifact.artifact_id}/approval-decisions",
         headers={"X-Correlation-ID": "corr-route-p17c-approval"},
-        json={
-            "decision": "APPROVE",
-            "reviewer": "human.reviewer@example.com",
-            "comment": "route-level approval binding coverage",
-            "validationReportId": validation.validation_report_id,
-        },
+        json={"decision": "APPROVE", "validationReportId": validation.validation_report_id},
     )
 
-    assert approval.status_code == 201
-    assert approval.headers["X-Correlation-ID"] == "corr-route-p17c-approval"
-    assert approval.json()["decision"] == "APPROVE"
-    assert set(approval.json()) == {
-        "approvalId",
-        "artifactId",
-        "decision",
-        "reviewer",
-        "comment",
-        "decidedAt",
-    }
-
-    audit = [
-        event
-        for event in repository.audit_events
-        if event.action == "APPROVAL_DECISION_RECORDED"
-    ][-1]
-    assert audit.correlation_id == "corr-route-p17c-approval"
-    assert audit.payload["correlationId"] == "corr-route-p17c-approval"
-    assert audit.payload["artifactVersion"] == "2026-05-06.p17b.v1"
-    assert audit.payload["artifactRef"]["artifactId"] == artifact.artifact_id
-    assert audit.payload["validationRef"]["validationReportId"] == (
-        validation.validation_report_id
+    assert approval.status_code == 404
+    assert not any(
+        event.action == "APPROVAL_DECISION_RECORDED" for event in repository.audit_events
     )
-    assert audit.payload["approvalRef"]["approvalId"] == approval.json()["approvalId"]
-    assert audit.payload["selectedObjectRefs"] == ["PROCEDURE:dbo.GetInspItemsCd"]
-    assert audit.payload["evidenceRefs"] == artifact.evidence_refs
 
 
 def test_publish_and_export_routes_are_not_exposed(client: TestClient) -> None:
@@ -842,16 +1132,17 @@ def test_metadata_tool_invocation_route_blocks_ppm_template_only_without_plf_fal
     assert "PLF" not in response.text
 
 
-def test_metadata_search_returns_read_only_identity_response(client: TestClient) -> None:
+def test_metadata_search_route_returns_read_only_identity_response(
+    client: TestClient,
+) -> None:
     response = client.get(
         "/api/v1/metadata/search",
-        params=[
-            ("dbProfileId", "master"),
-            ("query", "order"),
-            ("objectTypes", "PROCEDURE"),
-            ("objectTypes", "TABLE"),
-            ("limit", "5"),
-        ],
+        params={
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["PROCEDURE", "TABLE"],
+            "limit": "5",
+        },
     )
 
     assert response.status_code == 200
@@ -860,51 +1151,97 @@ def test_metadata_search_returns_read_only_identity_response(client: TestClient)
     assert payload["sourceProfile"] == "master"
     assert payload["sourceDatabase"] == "master"
     assert payload["snapshotId"] == "mcp-fixture-snapshot-0001"
+    assert payload["objectTypes"] == ["PROCEDURE", "TABLE"]
     assert payload["results"]
     result = payload["results"][0]
     assert set(result["objectIdentity"]) == {"schema", "name", "type"}
     assert result["objectIdentity"]["type"] in {"PROCEDURE", "TABLE"}
     assert result["evidenceRefs"]
     assert "blockers" in result
+    table_result = next(
+        item
+        for item in payload["results"]
+        if item["objectIdentity"] == {
+            "schema": "dbo",
+            "name": "TB_ORDER",
+            "type": "TABLE",
+        }
+    )
+    assert table_result["description"] == (
+        "Synthetic order header table used for metadata-only MCP tests."
+    )
+    assert {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    } in table_result["columns"]
+
+    forbidden_keys = {
+        "rowdata",
+        "row_data",
+        "rawprompt",
+        "rawproviderresponse",
+        "definition",
+        "sqltext",
+        "ddl",
+        "dml",
+        "apply",
+        "deploy",
+        "procedureexecution",
+    }
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(payload))
+    serialized = str(payload).lower()
+    assert "select *" not in serialized
+    assert "create procedure" not in serialized
+
+
+def test_metadata_search_route_returns_column_identities(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/api/v1/metadata/search",
+        params={
+            "dbProfileId": "master",
+            "query": "ORDER_DATE",
+            "objectTypes": ["COLUMN"],
+            "limit": "5",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["objectTypes"] == ["COLUMN"]
+    identities = [result["objectIdentity"] for result in payload["results"]]
+    assert {
+        "schema": "dbo",
+        "name": "TB_ORDER.ORDER_DATE",
+        "type": "COLUMN",
+    } in identities
+    assert all(result["objectIdentity"]["type"] == "COLUMN" for result in payload["results"])
+    assert all(result["targetKey"] for result in payload["results"])
+    assert all(result["evidenceRefs"] for result in payload["results"])
+    order_date = next(
+        result
+        for result in payload["results"]
+        if result["objectIdentity"]["name"] == "TB_ORDER.ORDER_DATE"
+    )
+    assert order_date["description"] == "Date when the synthetic order was placed."
+    assert order_date["dataType"] == "DATE"
+    assert order_date["column"] == {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    }
+    assert order_date["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
 
     serialized = str(payload).lower()
-    forbidden_fields = ("rowdata", "row_data", "definition", "sqltext", "ddl", "dml")
-    assert not any(field in serialized for field in forbidden_fields)
-
-
-def test_metadata_search_validation_and_dependency_error_shapes(client: TestClient) -> None:
-    invalid_type = client.get(
-        "/api/v1/metadata/search",
-        params={
-            "dbProfileId": "master",
-            "query": "order",
-            "objectTypes": "TRIGGER",
-        },
-    )
-    blank_query = client.get(
-        "/api/v1/metadata/search",
-        params={
-            "dbProfileId": "master",
-            "query": "   ",
-            "objectTypes": "TABLE",
-        },
-    )
-    missing_profile = client.get(
-        "/api/v1/metadata/search",
-        params={
-            "dbProfileId": "missing",
-            "query": "order",
-            "objectTypes": "TABLE",
-        },
-    )
-
-    assert invalid_type.status_code == 422
-    assert invalid_type.json()["code"] == "VALIDATION_ERROR"
-    assert blank_query.status_code == 422
-    assert blank_query.json()["code"] == "VALIDATION_ERROR"
-    assert missing_profile.status_code == 404
-    assert missing_profile.json()["code"] == "PROFILE_NOT_FOUND"
-    assert set(missing_profile.json()) == {"detail", "code"}
+    assert "row_data" not in serialized
+    assert "sqltext" not in serialized
+    assert "create procedure" not in serialized
 
 
 def test_metadata_analysis_route_supports_query_and_target_modes(
@@ -944,7 +1281,7 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
         "DTO_READINESS",
     }
     assert query_payload["modelInvocation"]["outputSchemaVersion"] == (
-        "schema:mssql_metadata_analysis@0.1.0"
+        "schema:mssql_metadata_analysis@0.1.1"
     )
     assert query_payload["aiToolEvidence"]["status"] in {"SUCCEEDED", "REVIEW_REQUIRED"}
     assert query_payload["aiToolEvidence"]["plannerMetrics"]["claimAnalysisAvailable"] is True
@@ -962,6 +1299,488 @@ def test_metadata_analysis_route_supports_query_and_target_modes(
     serialized = f"{query_response.text} {target_response.text}".lower()
     forbidden_fields = ("rowdata", "row_data", "definition", "sqltext", "ddl", "dml")
     assert not any(field in serialized for field in forbidden_fields)
+
+
+def test_metadata_analysis_run_submit_and_poll(client: TestClient) -> None:
+    submit_response = client.post(
+        "/api/v1/metadata/analysis-runs",
+        json={
+            "dbProfileId": "master",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": True},
+        },
+    )
+
+    assert submit_response.status_code == 202
+    submitted = submit_response.json()
+    assert submitted["runId"].startswith("metadata_run_")
+    assert submitted["status"] in {"QUEUED", "RUNNING", "SUCCEEDED"}
+    assert submitted["request"]["dbProfileId"] == "master"
+    assert submitted["analysis"] is None
+    assert submitted["error"] is None
+
+    poll_response = client.get(f"/api/v1/metadata/analysis-runs/{submitted['runId']}")
+
+    assert poll_response.status_code == 200
+    polled = poll_response.json()
+    assert polled["runId"] == submitted["runId"]
+    assert polled["status"] == "SUCCEEDED"
+    assert polled["startedAt"]
+    assert polled["completedAt"]
+    assert polled["analysis"]["mode"] == "TARGET"
+    assert polled["analysis"]["target"]["name"] == "TB_ORDER"
+    assert polled["analysis"]["deterministicFacts"]
+    assert any(
+        marker["code"] == "AI_METADATA_ANALYSIS_SKIPPED"
+        for marker in polled["analysis"]["reviewMarkers"]
+    )
+    forbidden_keys = {
+        "rowdata",
+        "rawdefinition",
+        "definitiontext",
+        "sqltext",
+        "ddl",
+        "dml",
+        "execute",
+        "procedureexecution",
+    }
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(submitted))
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(polled))
+
+
+def test_metadata_analysis_run_poll_missing_id_returns_404(client: TestClient) -> None:
+    response = client.get("/api/v1/metadata/analysis-runs/missing")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "METADATA_ANALYSIS_RUN_NOT_FOUND"
+
+
+def test_metadata_design_run_submit_poll_and_conversation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: RouteMetadataDesignRegistry(),
+    )
+
+    submit_response = client.post(
+        "/api/v1/metadata/design-runs",
+        json={
+            "dbProfileId": "master",
+            "message": "Create a customer order table.",
+            "designInputs": {
+                "tableNameHint": "PPM_CUSTOMER_ORDER",
+                "fields": [
+                    {
+                        "name": "customer name",
+                        "description": "Customer name",
+                    }
+                ],
+            },
+            "options": {
+                "llmProfileId": "openai_fast_test",
+                "generateDtoDraft": True,
+            },
+        },
+    )
+
+    assert submit_response.status_code == 202
+    submitted = submit_response.json()
+    assert submitted["runId"].startswith("metadata_design_run_")
+    assert submitted["conversationId"].startswith("metadata_design_conv_")
+    assert submitted["request"]["conversationId"] == submitted["conversationId"]
+    assert submitted["request"]["dbProfileId"] == "master"
+    assert submitted["result"] is None
+    assert submitted["error"] is None
+
+    poll_response = client.get(
+        f"/api/v1/metadata/design-runs/{submitted['runId']}"
+    )
+    conversation_response = client.get(
+        f"/api/v1/metadata/design-conversations/{submitted['conversationId']}"
+    )
+
+    assert poll_response.status_code == 200
+    polled = poll_response.json()
+    assert polled["runId"] == submitted["runId"]
+    assert polled["conversationId"] == submitted["conversationId"]
+    assert polled["status"] == "SUCCEEDED"
+    assert "CREATE TABLE [dbo].[PPM_CUSTOMER_ORDER]" in polled["result"][
+        "tableProposal"
+    ]["createTableScriptPreview"]
+    assert polled["result"]["dtoDraft"]["artifactType"] == "DTO_DRAFT"
+    assert polled["result"]["reviewRequired"] is True
+    assert polled["result"]["relatedMetadata"]
+
+    assert conversation_response.status_code == 200
+    conversation = conversation_response.json()
+    assert conversation["conversationId"] == submitted["conversationId"]
+    assert [run["runId"] for run in conversation["runs"]] == [submitted["runId"]]
+
+    forbidden_keys = {
+        "rowdata",
+        "rawprompt",
+        "rawproviderresponse",
+        "providertrace",
+        "ddldraft",
+        "execute",
+        "deploy",
+        "publish",
+    }
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(submitted))
+    assert forbidden_keys.isdisjoint(_normalized_response_keys(polled))
+
+
+def test_metadata_design_run_sanitizes_secret_like_request_before_storage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "api_app.metadata_design_service._build_internal_registry",
+        lambda _db_profile_id: RouteMetadataDesignRegistry(),
+    )
+
+    response = client.post(
+        "/api/v1/metadata/design-runs",
+        json={
+            "dbProfileId": "master",
+            "message": "password=do-not-return raw prompt select * from dbo.secret",
+            "designInputs": {
+                "fields": [
+                    {
+                        "name": "api token",
+                        "description": "secret value",
+                    }
+                ]
+            },
+            "options": {"llmProfileId": "openai_fast_test"},
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    serialized = str(payload).lower()
+    assert "redacted_review_required" in serialized
+    for forbidden in ("do-not-return", "raw prompt", "api token", "secret value", "select *"):
+        assert forbidden not in serialized
+
+
+def test_metadata_analysis_run_poll_leaves_active_run_for_worker(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, repository = client_and_repository
+    monkeypatch.setenv("METADATA_ANALYSIS_RUN_STALE_SECONDS", "60")
+    created = repository.create_metadata_analysis_run(
+        run_id="metadata_run_stale",
+        request={
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+        },
+    )
+    repository.mark_metadata_analysis_run_running(created.run_id)
+    stored = repository.metadata_analysis_runs[created.run_id]
+    stored.submitted_at = datetime.now(UTC) - timedelta(seconds=180)
+    stored.started_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    response = client.get(f"/api/v1/metadata/analysis-runs/{created.run_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "RUNNING"
+    assert payload["error"] is None
+
+
+def test_metadata_analysis_run_execute_skips_non_stale_running_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("METADATA_ANALYSIS_RUN_STALE_SECONDS", "60")
+    repository = MemoryWorkflowRepository()
+    service = ExplodingMetadataAnalysisService()
+    created = repository.create_metadata_analysis_run(
+        run_id="metadata_run_claimed_elsewhere",
+        request={
+            "dbProfileId": "master",
+            "query": "order",
+            "objectTypes": ["TABLE"],
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+        },
+    )
+    repository.mark_metadata_analysis_run_running(created.run_id)
+
+    claimed = execute_metadata_analysis_run(
+        run_id=created.run_id,
+        request=None,
+        service=service,
+        repository=repository,
+    )
+
+    assert claimed is False
+    assert service.analyze_calls == 0
+    assert repository.get_metadata_analysis_run(created.run_id).status == "RUNNING"
+
+
+def test_recovery_worker_processes_queued_metadata_run(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+) -> None:
+    _client, repository = client_and_repository
+    created = repository.create_metadata_analysis_run(
+        run_id="metadata_run_worker_queued",
+        request={
+            "dbProfileId": "master",
+            "target": {"schema": "dbo", "name": "TB_ORDER", "type": "TABLE"},
+            "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+        },
+    )
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        batch_size=5,
+    )
+    record = repository.get_metadata_analysis_run(created.run_id)
+
+    assert report.metadata_runs_claimed == 1
+    assert report.errors == ()
+    assert record is not None
+    assert record.status == "SUCCEEDED"
+    assert record.analysis
+    assert record.analysis["target"]["name"] == "TB_ORDER"
+
+
+def test_recovery_worker_recovers_stale_sp_workflow_same_job(
+    client_and_repository: tuple[TestClient, MemoryWorkflowRepository],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _client, repository = client_and_repository
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-stale-sp",
+        correlation_id="corr-stale-sp",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.COLLECTING_METADATA,
+        current_step=WorkflowStepType.COLLECT_METADATA,
+    )
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        batch_size=5,
+    )
+    recovered = repository.get_job(job.job_id)
+    artifacts = repository.list_job_artifacts(job.job_id)
+
+    assert report.sp_jobs_recovered == 1
+    assert report.sp_jobs_failed == 0
+    assert recovered is not None
+    assert recovered.job_id == job.job_id
+    assert recovered.status == JobStatus.VALIDATION_COMPLETE
+    assert artifacts is not None
+    assert len(artifacts) == 1
+    assert repository.latest_validation_for(artifacts[0].artifact_id) is not None
+
+
+def test_recovery_worker_reuses_existing_artifact_and_generates_missing_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-generating-recovery",
+        correlation_id="corr-generating-recovery",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.COLLECTING_METADATA,
+        current_step=WorkflowStepType.COLLECT_METADATA,
+    )
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.ANALYZING,
+        current_step=WorkflowStepType.ANALYZE,
+    )
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.GENERATING,
+        current_step=WorkflowStepType.GENERATE,
+    )
+    service = WorkflowService(repository)
+    metadata = service._collect_metadata(job.job_id, request)
+    generated = service._generate_artifacts(job.job_id, request, metadata)
+    existing = next(
+        artifact for artifact in generated if artifact.type == ArtifactType.SP_ANALYSIS_DOC
+    )
+    for artifact in generated:
+        if artifact.type != ArtifactType.SP_ANALYSIS_DOC:
+            del repository.artifacts[artifact.artifact_id]
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        workflow_service=service,
+        batch_size=5,
+    )
+    artifacts = repository.list_job_artifacts(job.job_id)
+
+    assert report.sp_jobs_recovered == 1
+    assert repository.get_job(job.job_id).status == JobStatus.VALIDATION_COMPLETE
+    assert artifacts is not None
+    assert [artifact.type for artifact in artifacts].count(ArtifactType.SP_ANALYSIS_DOC) == 1
+    assert any(artifact.artifact_id == existing.artifact_id for artifact in artifacts)
+    assert any(artifact.type == ArtifactType.DEPENDENCY_REPORT for artifact in artifacts)
+
+
+def test_recovery_worker_reuses_existing_validation_reports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    repository = CountingValidationRepository()
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT", "DEPENDENCY_REPORT"),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-validating-recovery",
+        correlation_id="corr-validating-recovery",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    for status, step in (
+        (JobStatus.COLLECTING_METADATA, WorkflowStepType.COLLECT_METADATA),
+        (JobStatus.ANALYZING, WorkflowStepType.ANALYZE),
+        (JobStatus.GENERATING, WorkflowStepType.GENERATE),
+        (JobStatus.VALIDATING, WorkflowStepType.VALIDATE),
+    ):
+        repository.transition_job(job.job_id, status=status, current_step=step)
+    service = WorkflowService(repository)
+    metadata = service._collect_metadata(job.job_id, request)
+    artifacts = service._generate_artifacts(job.job_id, request, metadata)
+    first = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.SP_ANALYSIS_DOC
+    )
+    second = next(
+        artifact for artifact in artifacts if artifact.type == ArtifactType.DEPENDENCY_REPORT
+    )
+    existing_report = repository.save_validation_report(
+        artifact_id=first.artifact_id,
+        status="PASSED",
+        checks=[{"ruleId": "preseed", "status": "PASSED"}],
+        missing_evidence=[],
+        manual_review_points=[],
+    )
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        workflow_service=service,
+        batch_size=5,
+    )
+
+    assert report.sp_jobs_recovered == 1
+    assert repository.get_job(job.job_id).status == JobStatus.VALIDATION_COMPLETE
+    assert repository.validation_write_count == 2
+    assert repository.latest_validation_for(first.artifact_id) == existing_report
+    assert repository.latest_validation_for(second.artifact_id) is not None
+
+
+def test_recovery_worker_blocks_sp_workflow_when_original_request_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SP_WORKFLOW_STALE_SECONDS", "60")
+    repository = MemoryWorkflowRepository()
+    request = repository.create_request(
+        db_profile_id="master",
+        target={"type": "PROCEDURE", "schema": "dbo", "name": "usp_OrderRequest_Select"},
+        outputs=("SP_ANALYSIS_DOCUMENT",),
+        options={"includeEvidenceRefs": True},
+        request_hash="hash-missing-request",
+        correlation_id="corr-missing-request",
+        idempotency_key=None,
+    )
+    job = repository.create_job(request.request_id, correlation_id=request.correlation_id)
+    repository.transition_job(
+        job.job_id,
+        status=JobStatus.COLLECTING_METADATA,
+        current_step=WorkflowStepType.COLLECT_METADATA,
+    )
+    del repository.requests[request.request_id]
+    repository.jobs[job.job_id].updated_at = datetime.now(UTC) - timedelta(seconds=120)
+
+    report = run_recovery_once(
+        repository=repository,
+        metadata_service=MetadataAnalysisService(),
+        workflow_service=WorkflowService(repository),
+        batch_size=5,
+    )
+    failed = repository.get_job(job.job_id)
+
+    assert report.sp_jobs_failed == 1
+    assert failed is not None
+    assert failed.status == JobStatus.FAILED
+    assert failed.error_code == SP_WORKFLOW_RECOVERY_BLOCKED
+
+
+def test_metadata_analysis_run_preserves_dependency_error_in_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    repository = KnowledgeSchemaRequiredRepository()
+    service = WorkflowService(repository)
+    metadata_service = MetadataAnalysisService()
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_workflow_service] = lambda: service
+    app.dependency_overrides[get_metadata_analysis_service] = lambda: metadata_service
+    try:
+        client = TestClient(app)
+        submit_response = client.post(
+            "/api/v1/metadata/analysis-runs",
+            json={
+                "dbProfileId": "master",
+                "query": "order",
+                "objectTypes": ["TABLE"],
+                "options": {"useLlmAnalysis": False, "useAiToolOrchestration": False},
+            },
+        )
+        poll_response = client.get(
+            f"/api/v1/metadata/analysis-runs/{submit_response.json()['runId']}"
+        )
+    finally:
+        app.dependency_overrides.clear()
+        reset_application_state()
+
+    assert submit_response.status_code == 202
+    assert poll_response.status_code == 200
+    polled = poll_response.json()
+    assert polled["status"] == "FAILED"
+    assert polled["analysis"] is None
+    assert polled["error"]["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert polled["error"]["statusCode"] == 503
 
 
 def test_metadata_analysis_maps_knowledge_schema_required_to_dependency_error(
@@ -1023,7 +1842,7 @@ def test_sp_workflow_preserves_knowledge_schema_required_failure_code(
     assert job.error_code == "KNOWLEDGE_SCHEMA_REQUIRED"
 
 
-def test_knowledge_lifecycle_routes_map_schema_required_to_503(
+def test_knowledge_routes_map_schema_required_to_503_and_review_route_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
@@ -1039,11 +1858,7 @@ def test_knowledge_lifecycle_routes_map_schema_required_to_503(
         facts = client.get("/api/v1/knowledge/facts/search", params={"objectRef": "dbo"})
         review = client.post(
             "/api/v1/knowledge/assets/know_1/versions/knowv_1/review",
-            json={
-                "status": "REVIEWED",
-                "reasonCode": "SCHEMA_REQUIRED",
-                "reviewer": "reviewer@example.com",
-            },
+            json={"status": "REVIEW_REQUIRED"},
         )
     finally:
         app.dependency_overrides.clear()
@@ -1053,8 +1868,7 @@ def test_knowledge_lifecycle_routes_map_schema_required_to_503(
     assert assets.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
     assert facts.status_code == 503
     assert facts.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
-    assert review.status_code == 503
-    assert review.json()["code"] == "KNOWLEDGE_SCHEMA_REQUIRED"
+    assert review.status_code == 404
 
 
 def test_unknown_resources_return_not_found(client: TestClient) -> None:

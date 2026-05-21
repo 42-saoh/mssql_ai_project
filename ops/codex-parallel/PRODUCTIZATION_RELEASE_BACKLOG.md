@@ -8,7 +8,7 @@ Global release rules:
 
 - `PLF` is the platform DB and `PPM` is the pilot analysis target DB.
 - PPM must not fall back to PLF.
-- Generated artifacts are draft-only until validation, human review, approval, and a future publish gate allow them.
+- Generated artifacts are draft-only until validation, validation evidence, and a future publish gate allow them.
 - Row-data reads, procedure execution, automatic DDL/DML, deployment automation, committed secrets, and unapproved publish are forbidden.
 - `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` is read-only after P08A.
 
@@ -18,7 +18,7 @@ Dependencies: P08.
 
 Scope:
 
-- Harden request/job/artifact/validation/approval/audit lifecycle behavior in `apps/api`.
+- Harden request/job/artifact/validation/evidence/audit lifecycle behavior in `apps/api`.
 - Add product-level API fixture examples using the PPM pilot manifest only when `selection_mode: live_metadata`.
 - Keep OpenAPI/domain/DDL changes as coordinator blockers.
 
@@ -112,7 +112,7 @@ Scope:
 
 Acceptance criteria:
 
-- Mapper XML, Mapper interface, service, DTO/VO/model drafts include policy version, template version, evidence refs, assumptions, and manual review checklist.
+- Mapper XML, Mapper interface, service, DTO/VO/model drafts include policy version, template version, evidence refs, assumptions, and quality caveat checklist.
 - Naming/path/namespace behavior is loaded from policy assets or reported as a blocker.
 - Golden samples remain synthetic or metadata-only and contain no secrets or row data.
 
@@ -129,21 +129,21 @@ Blockers:
 - Requested behavior auto-applies generated code.
 - Real data or secrets are needed in fixtures/goldens.
 
-## P13 Validation, Approval & Audit Productization
+## P13 Validation, Evidence & Audit Productization
 
 Dependencies: P09, P11, and P12.
 
 Scope:
 
-- Productize validation result shape, reviewer checklist, deferred approval decision recording, audit event shape, and publish gate checks.
+- Productize validation result shape, quality caveat checklist, deferred approval decision recording, audit event shape, and publish gate checks.
 - Keep schema/spec changes as blockers.
 
 Acceptance criteria:
 
-- Validation reports include severity, pass/fail/review-required result, missing evidence, and manual review points.
+- Validation reports include severity, pass/fail/review-required result, missing evidence, and quality caveats.
 - Approval recording requires current validation context and never deploys, executes DDL, or publishes by itself.
 - Audit events carry correlation/actor/ref context without secrets.
-- Publish gate fails without passed validation and human approval evidence.
+- Publish gate fails without passed validation and draft-quality evidence evidence.
 
 Verification:
 
@@ -164,7 +164,7 @@ Dependencies: P09.
 
 Scope:
 
-- Build product demo UI flows for request creation, metadata search, job status, artifact preview, validation result, and approval/review recording.
+- Build product demo UI flows for request creation, metadata search, job status, artifact preview, validation result, and quality caveat recording.
 - Keep mock-first and API adapter boundaries clear.
 - Use PPM sample selector only when live metadata manifest exists.
 
@@ -232,7 +232,7 @@ Scope:
 
 Acceptance criteria:
 
-- Readiness report includes PPM access, metadata evidence quality, dependency caveats, validation results, approval/audit status, and policy compliance.
+- Readiness report includes PPM access, metadata evidence quality, dependency caveats, validation results, draft-quality/audit status, and policy compliance.
 - `template_only` manifest mode yields blocker-dependent live release readiness.
 - `live_metadata` mode still fails or cautions release if active blockers remain unresolved.
 - Docs distinguish implemented, skeleton, stub, fixture-first, optional-live, and target-only capabilities.
@@ -249,7 +249,7 @@ Blockers:
 
 - PPM representative set is template-only.
 - PPM access, definition, dependency, or read-only metadata evidence is inadequate.
-- Validation/approval/audit evidence does not meet release gate.
+- Validation/draft-quality/audit evidence does not meet release gate.
 - Any requested release path requires automatic DDL, production DB mutation, or unapproved publish.
 
 ## P18A CanonicalAnalysisModel Contract Closure

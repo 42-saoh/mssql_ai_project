@@ -5,7 +5,8 @@
   "profileDatabases": {
     "master": "master",
     "plf": "PLF",
-    "ppm": "PPM"
+    "ppm": "PPM",
+    "other": "OtherDB"
   },
   "procedures": [
     {
@@ -85,6 +86,32 @@
       ]
     },
     {
+      "database": "OtherDB",
+      "schema": "dbo",
+      "name": "usp_CrossDbOrderAudit",
+      "isEncrypted": false,
+      "definition": "CREATE PROCEDURE dbo.usp_CrossDbOrderAudit @BatchId INT AS BEGIN SET NOCOUNT ON; SELECT @BatchId AS BATCH_ID; END",
+      "parameters": [
+        {
+          "name": "@BatchId",
+          "dataType": "INT",
+          "direction": "IN",
+          "ordinal": 1,
+          "isNullable": false,
+          "hasDefault": false
+        }
+      ],
+      "dependencies": [],
+      "extendedProperties": [
+        {
+          "name": "MS_Description",
+          "value": "Synthetic same-server cross-database procedure dependency for child AgentRun coverage.",
+          "level": "OBJECT",
+          "source": "FIXTURE"
+        }
+      ]
+    },
+    {
       "schema": "dbo",
       "name": "usp_ProcessOrderBatch",
       "isEncrypted": false,
@@ -115,6 +142,23 @@
           "dependencyType": "EXECUTE",
           "isAmbiguous": false,
           "reviewStatus": "CONFIRMED"
+        },
+        {
+          "objectType": "PROCEDURE",
+          "database": "OtherDB",
+          "server": null,
+          "schema": "dbo",
+          "name": "usp_CrossDbOrderAudit",
+          "referencedDatabase": "OtherDB",
+          "referencedServer": null,
+          "sourceScope": "SAME_SERVER_CROSS_DATABASE",
+          "dependencyType": "EXECUTE",
+          "isAmbiguous": false,
+          "reviewStatus": "CONFIRMED",
+          "resolutionStatus": "CONFIRMED",
+          "resolutionStrategy": "SAME_SERVER_CROSS_DATABASE_CATALOG",
+          "resolutionConfidence": "HIGH",
+          "resolutionEvidenceKind": "CATALOG_OBJECT_ID"
         },
         {
           "objectType": "UNKNOWN",

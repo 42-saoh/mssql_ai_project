@@ -10,3 +10,5 @@ pytest==8.3.0
 ruff==0.14.8
 mypy==1.15.0
 python-tds==1.17.1
+openai-agents==0.17.2
+langgraph==1.2.0

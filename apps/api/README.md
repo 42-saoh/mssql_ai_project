@@ -9,7 +9,6 @@
 - `api_app/routes/jobs.py`
 - `api_app/routes/requests.py`
 - `api_app/routes/artifacts.py`
-- `api_app/routes/approvals.py`
 - `api_app/routes/metadata.py`
 - `api_app/routes/registry.py`
 - MSSQL platform DB backed request/job/artifact workflow repository
@@ -18,7 +17,7 @@
 
 - `GET /health`
 - `POST /api/v1/requests/sp-analysis`
-- `GET /api/v1/jobs`
+- `GET /api/v1/jobs` (`targetKey` exact filter optional)
 - `GET /api/v1/jobs/{jobId}`
 - `GET /api/v1/jobs/{jobId}/agent-runs`
 - `GET /api/v1/jobs/{jobId}/knowledge-assets`
@@ -26,19 +25,20 @@
 - `GET /api/v1/artifacts/{artifactId}`
 - `GET /api/v1/artifacts/{artifactId}/validation/latest`
 - `POST /api/v1/artifacts/{artifactId}/validation`
-- `POST /api/v1/artifacts/{artifactId}/approval-decisions`
 - `GET /api/v1/metadata/db-profiles`
 - `GET /api/v1/metadata/tools`
 - `POST /api/v1/metadata/tools/{toolName}/invoke`
-- `GET /api/v1/metadata/search`
 - `POST /api/v1/metadata/analyze`
+- `POST /api/v1/metadata/analysis-runs`
+- `GET /api/v1/metadata/analysis-runs/{runId}`
+- `POST /api/v1/metadata/design-runs`
+- `GET /api/v1/metadata/design-runs/{runId}`
+- `GET /api/v1/metadata/design-conversations/{conversationId}`
 - `GET /api/v1/knowledge/assets`
 - `GET /api/v1/knowledge/facts/search`
 - `GET /api/v1/knowledge/assets/{assetId}`
 - `GET /api/v1/knowledge/assets/{assetId}/versions`
-- `GET /api/v1/knowledge/assets/{assetId}/reviews`
 - `GET /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts`
-- `POST /api/v1/knowledge/assets/{assetId}/versions/{versionId}/review`
 - `POST /api/v1/knowledge/exports`
 - `GET /api/v1/registry/versions`
 
@@ -49,6 +49,12 @@ dependency evidence tools (`get_dependency_closure`,
 those two tools only. P29 consumes that route from the Web diagnostic UI and the
 workflow dependency-evidence path. The API still does not expose input schemas,
 secrets, persisted artifact type changes, or DB schema changes.
+
+`sourceDependencyMode=CONFIRMED_PROCEDURES` also allows same-server cross-database
+procedure child analysis when dependency closure has already produced confirmed
+catalog evidence. The workflow fetches those definitions only through the internal
+MCP registry path and keeps raw text out of API responses, traces, artifacts, and
+knowledge payloads.
 
 ## P09 workflow hardening notes
 
@@ -61,23 +67,32 @@ secrets, persisted artifact type changes, or DB schema changes.
   blockers, and workflow/idempotency conflicts.
 - Artifact listing is internally bounded and stable-ordered. A public pagination contract
   remains an OpenAPI coordination item, so no query/body schema was added in P09.
-- P25 default workflow stops at `VALIDATION_COMPLETE` after validation. Artifacts remain
-  draft/validated outputs; review-pending, approved, and rejected states are retained only
-  for deferred approval compatibility. Publish transitions remain blocked.
+- `GET /api/v1/jobs` and `GET /api/v1/jobs/{jobId}` include optional request context
+  (`dbProfileId`, `target`, `targetKey`, `outputs`) so Web history can show previous analyses
+  and exact same-target runs without exposing raw SQL, row data, or new storage tables.
+- `POST /api/v1/requests/sp-analysis?runAsync=true` is a Web opt-in path that returns after
+  request/job creation and runs the SP workflow in a background task. Omitting `runAsync` keeps the
+  existing synchronous behavior and returns after validation completes.
+- `Job.progress` is an estimated status-based progress value for UI visibility, not exact work
+  completion.
+- Default workflow stops at `VALIDATION_COMPLETE` after validation. Artifacts remain
+  draft/validated outputs; human decision gates and publish transitions are not exposed.
 
-## P13 validation / approval / audit notes
+## Canonical Target Keys
 
-- P25 keeps this approval API/server code as a deferred capability, but the default workflow,
-  Web UI, and smoke path do not call it.
-- Approval decisions require the latest artifact validation report. If callers omit
-  `validationReportId`, the workflow binds the latest report internally; stale report ids
-  are rejected.
-- Reviewer checklist and validation summary details are persisted in the existing approval
-  checklist JSON storage and are not added to the public response shape.
+The API derives `targetKey` on the server and never trusts a client-provided key. The public shape is
+`mssql:<dbProfileId>:<database|->:<objectType>:<schema>.<name>`, normalized to lower case with one
+layer of SQL identifier quoting removed. Jobs, agent runs, artifacts, knowledge asset summaries,
+and metadata identities expose `targetKey` when derivable. `GET /api/v1/jobs?targetKey=...` returns
+exact same-target history while preserving the existing `limit` parameter.
+
+## Draft validation / audit notes
+
+- Validation reports expose `qualityCaveats` for evidence and draft-quality caveats.
+- Decision-gate routes and human decision records are not registered in the public API.
 - Audit payloads carry stage, actor, target ref, compact refs, and correlation id. Platform DB
   audit persistence uses the existing `TRC_ID` column and does not require schema changes.
-- Publish/export gate checks continue to fail unless validation is `PASSED` and the human
-  decision is `APPROVE`; no publish/export endpoint is exposed in this API slice.
+- Publish/export endpoints remain absent; generated output is draft-only.
 
 ## P18B Web HTTP adapter smoke
 
@@ -91,8 +106,8 @@ python3 tests/e2e/web_http_adapter_smoke.py
 이 runner 는 FastAPI app 을 local HTTP 서버로 기동하고 `apps/web` 의
 `smoke:http-adapter` command 를 실행해 request/job/artifact/validation/metadata/registry
 경로가 `PortalApi` HTTP client 를 통해 호출되는지 확인한다. Production auth/RBAC source 는
-verified OIDC/JWT identity 와 PLF auth table role lookup 이다. P19 는 `AUTH_RBAC_ENFORCEMENT=1`
-일 때 validation/deferred approval route 에 401/403 enforcement 와 unauthorized negative tests 를
+verified OIDC/JWT identity 와 PLF auth table role lookup 이다. `AUTH_RBAC_ENFORCEMENT=1`
+일 때 validation route 에 401/403 enforcement 와 unauthorized negative tests 를
 추가했다. Live IdP/JWKS 와 운영 PLF role membership 검증은
 `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` future hardening item 으로 deferred 상태이며,
 controlled conditional open 의 active productization blocker 로 취급하지 않는다.
@@ -111,7 +126,7 @@ production-grade enterprise Auth/RBAC 를 주장하기 전 필요한 optional fu
 - `AUTH_RBAC_LIVE_GATE=1`
 - `AUTH_RBAC_ENFORCEMENT=1`
 - `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`
-- `OIDC_REVIEWER_BEARER_TOKEN`, `OIDC_USER_BEARER_TOKEN`
+- `OIDC_USER_BEARER_TOKEN`
 - 기존 `PLATFORM_DB_HOST`, `PLATFORM_DB_PORT`, `PLATFORM_DB_USER`,
   `PLATFORM_DB_PASSWORD`, `PLATFORM_DB_NAME`
 
@@ -128,7 +143,7 @@ AUTH_RBAC_LIVE_GATE=1 AUTH_RBAC_ENFORCEMENT=1 make test PYTEST_ARGS="tests/eval/
 ```
 
 helper 는 `OidcJwtVerifier` 와 `MssqlPlatformRepository.resolve_actor_roles()` 경계만
-사용한다. API validation/deferred approval route 를 호출하지 않고 workflow write, approval write,
+사용한다. API validation route 를 호출하지 않고 workflow write,
 validation write, audit write, publish/export, DDL/DML, procedure execution, row data 조회를
 만들지 않는다. 출력은 pass/fail, role category, blocker code, redacted summary 로 제한한다.
 필수 live env 가 없거나 live 검증이 실패하면 deferred prerequisite failure 로 보고하며,
@@ -187,6 +202,24 @@ PLF fallback for PPM, token/secret/raw claims 저장은 계속 금지다.
 
 Remote LLM execution defaults to official OpenAI. Set `LLM_REMOTE_PROVIDER=pgpt` to use the private P-GPT `/v1/responses` contract; configure `OPENAI_BASE_URL=http://<host>/gpgpta01-gpt` or exact `OPENAI_RESPONSES_URL`, plus optional `PGPT_MODEL_ANALYSIS` / `PGPT_MODEL_FAST_TEST`.
 
+P35 source context behavior: `sourceContextMode` defaults to `RETRIEVED_SPANS`.
+`allowSpDefinitionToModel=true` remains the backward-compatible source text gate, but semantic
+analysis sends bounded retrieved source spans instead of the full procedure definition. Stored
+agent traces expose sanitized `analysisCoverage` and `sourceContextSummary` only; raw prompt text,
+selected span text, full SP definitions, row data, and provider responses are not stored or
+returned. Source selection is bounded by `LLM_SEMANTIC_INPUT_TOKEN_BUDGET` (default `64000`),
+`LLM_SEMANTIC_SOURCE_TOKEN_BUDGET` (default `32000`), and `LLM_SP_MAX_RETRIEVED_SPANS`
+(default `24`). Context-length provider errors retry with reduced spans and then fall back to
+evidence digest only with `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED`.
+
+`sourceDependencyMode` defaults to `CONFIRMED_PROCEDURES`. The workflow analyzes confirmed
+same-profile PROCEDURE dependencies as child `LLM_SEMANTIC_ANALYST_DEPENDENCY` runs, bounded by
+`LLM_SP_DEPENDENCY_DEPTH` (default `2`, hard max `3`) and `LLM_SP_MAX_DEPENDENCY_TASKS` (default
+`8`). Child results are stored as sanitized AgentRuns and reduced into the root run's called
+procedure strategy guidance. Same-job recovery reuses an existing successful dependency child
+AgentRun by canonical `targetKey` first, then exact `targetRef` fallback for older records; failed
+or missing child runs are retried.
+
 `POST /api/v1/requests/sp-analysis` 는 P26 기준 high-quality hybrid LLM semantic analysis 를 기본값으로 사용한다.
 
 - `useLlmAnalysis`: 기본 `true`; deterministic metadata/static analysis 이후 LLM semantic enrichment 실행
@@ -231,8 +264,11 @@ API repository 는 로컬 Platform MSSQL DB를 기준으로 동작한다. `.env`
 - `PLATFORM_DB_REQUESTER_LOGIN`
 
 이 adapter 는 `db/schema/` DDL을 자동 적용하지 않고, source DB 업무 row 조회도 수행하지 않는다.
-수동으로 schema를 적용하고 `AUTH_USERS`, `CORE_DB_PROFILES` 기준 행을 준비한 로컬 DB에서만
-request/job/metadata/artifact/validation/deferred approval/audit 기록을 저장하고 다시 읽는다.
+새 PLF DB는 `db/schema/ai_agent_platform_schema_v11_plf_full_create.sql` 적용 후
+`db/schema/ai_agent_platform_seed_required_v11.sql`로 `AUTH_USERS`, canonical `AUTH_ROLES`,
+`AUTH_USER_ROLES`, `CORE_DB_PROFILES` 기준 행을 준비한 로컬 DB에서만
+request/job/metadata/artifact/validation/audit 기록을 저장하고 다시 읽는다. 기존 PLF DB는 DBA가
+버전별 증분 SQL을 검토해 수동 반영한다.
 
 ## Repository adapter boundary
 
@@ -241,13 +277,14 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
 - `api_app.auth` 는 `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL` 을 사용해 bearer JWT 를
   검증하고, PLF role membership 으로 effective authorization 을 결정한다.
 - `api_app.memory_repository.MemoryWorkflowRepository` 는 fixture-first 테스트와 local demo 용
-  in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation/deferred approval
+  in-memory/stub adapter 다. Platform DB 저장소와 같은 workflow 상태 전이, validation
   mapping, audit payload shape 를 유지하되 production persistence 로 사용하지 않는다.
 
-## Metadata search
+## Metadata search and design
 
-- `GET /api/v1/metadata/search` 는 승인된 OpenAPI contract 에 맞춘 read-only metadata search
-  endpoint 다. MCP tool catalog 와 Web UI 는 이 P09 slice 에서 수정하지 않았다.
+- General metadata search uses the public read-only `GET /api/v1/metadata/search` route and returns sanitized `MetadataSearchResponse` object/column identity evidence plus safe display metadata: table/column descriptions, column data types, parent table summaries, and table field lists.
+- SP Analysis procedure-name autocomplete is implemented by the Web `/api/metadata/search` proxy with `objectTypes=["PROCEDURE"]`; there is no separate public `GET /api/v1/metadata/procedure-search` route.
+- Metadata design uses `POST /api/v1/metadata/design-runs` for table design/refinement only and returns table proposal/DTO preview results rather than search-only runs.
 - API 는 MSSQL MCP registry boundary 를 통해 metadata inventory tool 을 호출한다. 기본 테스트
   모드는 fixture-backed repository 를 사용하고, `MSSQL_ENABLE_LIVE_METADATA=1` 일 때는
   env-gated live metadata repository 를 사용한다.
@@ -264,7 +301,7 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
 - `POST /api/v1/metadata/analyze` 는 bounded AI-MCP metadata analysis endpoint 다.
   요청은 `dbProfileId` 와 `query` 또는 단일 `target` 중 하나를 받으며, `options.useLlmAnalysis=true`,
   `options.useAiToolOrchestration=true`, `options.maxTargets=3` 을 기본값으로 사용한다.
-- 기존 `GET /api/v1/metadata/search` 는 LLM 호출 없이 deterministic search 로 유지한다. Analyze API 는
+- Deterministic search helpers remain internal service code and are reused by analysis/design. Analyze API는
   baseline identity/evidence 를 만든 뒤 LLM planner 가 필요한 active/read-only MCP tool 을 strict JSON
   plan 으로 제안하게 하고, 실제 실행은 내부 registry/policy gate 로만 수행한다.
 - public `/metadata/tools/{toolName}/invoke` allowlist 는 확장하지 않는다. `get_table_schema` 같은 tool 은
@@ -276,6 +313,56 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
   claim support rate 만 담는 sanitized effectiveness summary 다. P34 부터 `persistKnowledge=true`
   기본값에서는 sanitized `knowledgeAssets[]` summary 도 함께 반환한다. persisted artifact 와 workflow
   state transition 은 추가하지 않는다.
+- `POST /api/v1/metadata/analysis-runs` starts the same metadata analysis through durable
+  platform run storage and returns `202` with `runId`, `QUEUED|RUNNING|SUCCEEDED|FAILED`,
+  timestamps, and the sanitized request. `GET /api/v1/metadata/analysis-runs/{runId}` polls
+  that run and returns `analysis` on success or structured `error` on failure.
+- Durable analysis-run storage requires the manual-apply
+  `db/schema/ai_agent_platform_schema_v7_metadata_analysis_runs.sql` draft. The API never
+  auto-applies DDL; if the table, required columns, or indexes are missing, submit/poll returns
+  `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED`. Durable knowledge persistence continues to use
+  the existing `persistKnowledge` path and platform schema readiness checks.
+- The API starts a background recovery worker on application startup. It claims queued
+  metadata analysis runs and reclaims stale running runs using
+  `METADATA_ANALYSIS_RUN_STALE_SECONDS` (default `1800`, minimum `60`). The loop uses
+  `METADATA_ANALYSIS_RUN_WORKER_INTERVAL_SECONDS=10` and
+  `METADATA_ANALYSIS_RUN_WORKER_BATCH_SIZE=5` by default, so interrupted background work is
+  retried instead of leaving a polling client waiting indefinitely.
+- The same worker claims stale active SP workflow jobs after `SP_WORKFLOW_STALE_SECONDS`
+  (default `1800`, minimum `60`) and resumes the same `jobId`. Recovery reuses existing
+  root semantic agent runs, successful dependency child semantic runs by target, artifact rows,
+  knowledge content/version links, and validation reports where present; unsafe/missing request
+  state fails with `SP_WORKFLOW_RECOVERY_BLOCKED`.
+
+## Metadata design chat
+
+- `POST /api/v1/metadata/design-runs` starts a durable metadata design chat run. The request
+  accepts `message`, optional `conversationId`, `designInputs.tableNameHint`,
+  `designInputs.tableDescription`, API-compatible `designInputs.fields[]`, and
+  `options.conversationMode`.
+- `conversationMode=NEW_DESIGN` extracts table and field candidates from natural-language
+  messages. `conversationMode=REFINE_CURRENT` uses the latest `SUCCEEDED` run in the
+  conversation as baseline and applies add/remove/type-change instructions. Missing baselines or
+  ambiguous instructions remain `REVIEW_REQUIRED`.
+- The service uses read-only MCP metadata lookup (`search_columns`, `search_tables`,
+  `find_similar_tables`, and bounded table schema evidence) plus
+  `platform_db_standardization_rules_for_ai.json` to produce `standardizationMappings`,
+  sanitized `interpretedIntent`, `appliedChanges`, `tableProposal.createTableScriptPreview`, and
+  optional `dtoDraft`.
+- Metadata-backed standardization mappings include optional `proposedDescription` from column
+  metadata so table proposal column descriptions and `MS_Description` preview comments use the
+  same matched metadata row as the proposed field name and type, then fall back to source input
+  descriptions when metadata has no description.
+- `GET /api/v1/metadata/design-runs/{runId}` polls one run. `GET
+  /api/v1/metadata/design-conversations/{conversationId}` returns recent runs in that
+  conversation.
+- Durable storage requires manual-apply
+  `db/schema/ai_agent_platform_schema_v10_metadata_design_runs.sql`. Missing v10 objects return
+  `503 METADATA_DESIGN_RUN_SCHEMA_REQUIRED`; the API never applies DDL.
+- Table script output is a non-executable preview inside run JSON. It is not a workflow artifact,
+  does not revive retired artifact outputs, and does not authorize row data, procedure execution,
+  business DB DDL/DML, automatic apply, deploy, publish, raw prompt/provider response storage, or
+  secret storage.
 
 ## Knowledge assetization
 
@@ -290,22 +377,21 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
 - Metadata Analyze 는 별도 workflow state transition 없이 성공 응답에 `knowledgeAssets[]` 를
   포함하고 `METADATA_PROFILE`, `DEPENDENCY_EVIDENCE`, `DTO_READINESS` facts 를 저장한다.
 - Knowledge API 는 asset summary, versions, version facts/edges, asset search, fact search,
-  append-only review history, review transition, `JSONL` / `GRAPH_JSON` export 를 반환한다.
+  `JSONL` / `GRAPH_JSON` export 를 반환한다.
   Export content 는 sanitized facts/edges 로 제한하고, `versionIds` 는 비어 있거나
   `assetIds` 와 같은 길이여야 한다.
-- Asset/version lifecycle 은 `DRAFT`, `REVIEW_REQUIRED`, `REVIEWED`, `ARCHIVED` 이다. 새
+- Asset/version lifecycle 은 `DRAFT`, `REVIEW_REQUIRED`, `ARCHIVED` 이다. 새
   content version 은 항상 `DRAFT` 로 시작하고, 같은 `contentHash` reuse 는 기존 lifecycle 을
   유지한다. `ARCHIVED` 는 terminal 이며 search default 에서는 제외된다.
-- Review API 는 RBAC enforcement 가 켜진 경우 `REVIEWER`/`ADMIN` actor 만 호출할 수 있고
-  verified actor 와 body `reviewer` 가 일치해야 한다. Enforcement 가 꺼진 fixture/local mode 에서는
-  body `reviewer` 를 사용한다.
-- `REVIEWED` knowledge asset 도 draft/reviewable organizational knowledge 이며 production-ready,
-  publish approval, deployment approval, automatic conversion approval 근거가 아니다.
+- Knowledge curation API 와 reviewer identity writes 는 public/product surface 에 없다.
 - Fact graph edge 는 같은 asset version 의 실제 fact id 를 참조한다. edge endpoint 를 fact 로
   확인할 수 없으면 `REVIEW_REQUIRED` endpoint fact 를 만들어 graph integrity 를 유지한다.
-- Platform DB persistence 는 `db/schema/ai_agent_platform_schema_v5_knowledge_assets.sql` 수동 적용을
-  요구한다. `KNOWLEDGE_ASSET_JOB_LINKS`, `KNOWLEDGE_ASSET_REVIEWS`, lifecycle columns, critical
-  indexes 를 포함한 v5 필수 table/column/index 가 없으면 adapter 는
+- Platform DB persistence 는 신규 PLF 기준
+  `db/schema/ai_agent_platform_schema_v11_plf_full_create.sql` 와
+  `db/schema/ai_agent_platform_seed_required_v11.sql` 수동 적용을 요구한다. 기존 DB를 증분 적용하는
+  경우에는 최소 `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql` 이후 knowledge
+  schema가 필요하다. `KNOWLEDGE_ASSET_JOB_LINKS`, lifecycle/archive columns, critical
+  indexes 를 포함한 v6 필수 table/column/index 가 없으면 adapter 는
   `KNOWLEDGE_SCHEMA_REQUIRED` 를 missing 목록과 함께 반환하고 API 는 DDL 을 자동 적용하지 않는다.
 - raw SP definition, raw SQL text, row data, procedure execution, DDL/DML, secret,
   raw prompt/provider trace 와 raw-derived redaction hash/length 는 knowledge payload, response,
@@ -328,7 +414,7 @@ request/job/metadata/artifact/validation/deferred approval/audit 기록을 저�
 - Process-global admission control 기본값은 `WORKFLOW_MAX_ACTIVE_JOBS=4`,
   `MSSQL_METADATA_MAX_CONCURRENCY=4`, `BACKPRESSURE_WAIT_MS=250` 이다. Public API capacity 초과는
   `WORKFLOW_BACKPRESSURE` 또는 `MCP_BACKPRESSURE` code 로 반환하고, internal planner tool backpressure 는
-  review marker/caveat 로 남긴다.
+  evidence caveat 로 남긴다.
 
 ## Metadata tool invocation
 
@@ -356,5 +442,5 @@ artifact type, and no workflow state transition is added for dependency evidence
    의존한다. 테스트 기본값은 fixture-backed repository 이지만 route 는 hardcoded mock 응답을
    반환하지 않는다.
 3. OpenAI key 기반 generation provider wiring 은 P05 API/workflow slice 밖이다.
-4. OpenAPI approval decision 과 DDL approval enum 은 API 내부 mapping helper 로 고정했다.
+4. OpenAPI validation status 와 DDL draft-quality enum 은 API 내부 mapping helper 로 고정했다.
 5. validation status `PASSED/FAILED/REVIEW_REQUIRED` 와 DDL `PASS/FAIL` 은 API 내부 mapping helper 로 고정했다.

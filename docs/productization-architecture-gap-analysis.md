@@ -20,25 +20,25 @@ prerequisites remain required before the no-mock portal gate can pass.
 | Status | Meaning | Release interpretation |
 |---|---|---|
 | `skeleton` | Route, package, UI, or document structure exists, but behavior is incomplete. | Can guide implementation; not demo evidence by itself. |
-| `stub` | Placeholder or mock behavior exists with explicit review markers. | Can support local workflow shape; not product evidence. |
+| `stub` | Placeholder or mock behavior exists with explicit evidence caveats. | Can support local workflow shape; not product evidence. |
 | `fixture-first` | Deterministic tests pass against synthetic or captured fixture metadata. | Acceptable for CI baseline and regression checks. |
 | `optional-live` | Live integration can run only when external DB/profile/secret conditions are provided. | Evidence is conditional and must never fall back from PPM to PLF. |
-| `conditional-live` | Scoped live evidence passed, but only within explicit draft-only and approval-gated boundaries. | Can support a pilot candidate; not a production-ready platform claim. |
-| `production-ready` | Product behavior is contract-backed, validated, approved, documented, monitored, and safe under policy. | Target state only; not claimed by the current baseline. |
+| `conditional-live` | Scoped live evidence passed, but only within explicit draft-only and validation-gated boundaries. | Can support a pilot candidate; not a production-ready platform claim. |
+| `production-ready` | Product behavior is contract-backed, validated, documented, monitored, and safe under policy. | Target state only; not claimed by the current baseline. |
 
 ## Current State Matrix
 
 | Surface | Current status | Evidence | Productization gap |
 |---|---|---|---|
-| API/BFF route surface | `fixture-first` | Request, job, artifact, validation, approval decision, metadata, and registry routes exist and are covered by API/e2e tests. | P09 must harden idempotency, errors, pagination, correlation ids, audit shape, and persistence boundaries. |
-| Workflow lifecycle | `fixture-first` | P25 default workflow reaches `VALIDATION_COMPLETE` at `VALIDATE`; approval decisions remain deferred compatibility and are not part of the default UI/flow. | P25+ must keep publish prevention and audit evidence while avoiding production-ready claims. |
+| API/BFF route surface | `fixture-first` | Request, job, artifact, validation, metadata, knowledge, and registry routes exist and are covered by API/e2e tests. | P09+ must harden idempotency, errors, pagination, correlation ids, audit shape, and persistence boundaries. |
+| Workflow lifecycle | `fixture-first` | Default workflow reaches `VALIDATION_COMPLETE` at `VALIDATE`; publish/deploy/apply actions are not part of the API/UI flow. | Must keep publish prevention and audit evidence while avoiding production-ready claims. |
 | Platform DB repository | `stub` | MSSQL persistence adapter exists, but DB lifecycle and schema apply are explicitly external/manual. | P09/P13 must verify storage behavior against manually prepared PLF and report schema blockers instead of editing DDL. |
 | MSSQL Metadata MCP | `fixture-first` plus `optional-live` | Tool catalog, structured invocation, read-only guard, fixture repository, PPM discovery surface, and live readiness boundary exist. | P10 must productize live read-only metadata queries, timeout/error handling, evidence caveats, and fixture/live separation. |
-| PPM pilot object set | `optional-live` | `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` is `selection_mode: live_metadata` with PPM object identities. | Dependency metadata is incomplete; SP-to-table linkage must stay `REVIEW_REQUIRED` until P10/P11 improve evidence. |
-| Analysis engine | `fixture-first` | Parser/detector helpers map deterministically to `CanonicalAnalysisModel` when snapshot id and registry refs are bound; uncertain findings remain `REVIEW_REQUIRED`. | Broader live analysis coverage still needs PPM evidence and review, especially dynamic SQL and ambiguous dependencies. |
-| CanonicalAnalysisModel | `fixture-first` | Domain package now defines a minimal versioned canonical contract with snapshot id, registry refs, evidence refs, dependencies, patterns, result sets, business rules, and modernization points. | Productization still needs downstream web/auth release evidence; field-level uncertainty is allowed only as explicit `REVIEW_REQUIRED`. |
-| Generation factory | `fixture-first` | SP analysis doc, dependency report, and Java/MyBatis SP wrapper drafts render deterministically with review markers. | P12 must expand template registry, manifest, golden samples, policy-based naming, and draft review checklists. |
-| Validation engine | `fixture-first` | Validation rules load from spec and enforce evidence/review markers; publish gate helper requires passed validation plus approval. | P13 must productize rule taxonomy, reviewer checklist, audit linkage, and storage mappings without changing shared specs directly. |
+| PPM pilot object set | `optional-live` | `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` is `selection_mode: live_metadata` with PPM object identities. | Dependency metadata is incomplete; SP-to-table linkage must stay an evidence caveat until P10/P11 improve evidence. |
+| Analysis engine | `fixture-first` | Parser/detector helpers map deterministically to `CanonicalAnalysisModel` when snapshot id and registry refs are bound; uncertain findings remain evidence caveats. | Broader live analysis coverage still needs stronger PPM evidence, especially dynamic SQL and ambiguous dependencies. |
+| CanonicalAnalysisModel | `fixture-first` | Domain package now defines a minimal versioned canonical contract with snapshot id, registry refs, evidence refs, dependencies, patterns, result sets, business rules, and modernization points. | Productization still needs downstream web/auth release evidence; field-level uncertainty is allowed only as explicit evidence caveats. |
+| Generation factory | `fixture-first` | SP analysis doc, dependency report, and Java/MyBatis SP wrapper drafts render deterministically with evidence caveats. | P12+ must expand template registry, manifest, golden samples, policy-based naming, and draft-quality sections. |
+| Validation engine | `fixture-first` | Validation rules load from spec and enforce evidence/caveat markers; publish/apply routes remain absent. | Must productize rule taxonomy, quality caveats, audit linkage, and storage mappings without changing shared specs directly. |
 | Web portal | `conditional-live` | P21 runtime/default path uses HTTP API only and renders blockers when API/PLF/PPM prerequisites are missing. | Full product readiness still requires PLF/PPM live gate evidence, broader UI smoke, and no production-ready overclaim. |
 | Eval/ops/readiness | `fixture-first` | P06 fixture eval covers one happy path and forbidden operations. | P15/P16 must define product metrics, observability/security checks, PPM scenarios, and go/no-go handoff package. |
 | P17 scoped pilot release | `conditional-live` | P17D records `CONDITIONAL_GO` for the draft-only scoped candidate. | This does not close productization; P18 must resolve canonical contract and web/auth evidence. |
@@ -50,7 +50,6 @@ prerequisites remain required before the no-mock portal gate can pass.
 | Boundary | Observed alignment | Drift or risk | Owner milestone |
 |---|---|---|---|
 | OpenAPI request outputs and domain artifact storage types | User-facing `RequestedOutputType` maps to persisted `ArtifactType`. | Workers must not introduce persisted types such as `JAVA_MYBATIS_DRAFT`; mapping stays in domain/API helpers. | P09/P12 |
-| OpenAPI approval decision and DB approval storage | API accepts `APPROVE`, `REJECT`, `REQUEST_CHANGES`; DDL stores `APPROVED`, `REJECTED`. | Mapping is implemented in API helpers; schema/spec changes require coordinator approval. | P09/P13 |
 | OpenAPI validation status and DB validation result | API exposes `PASSED`, `FAILED`, `REVIEW_REQUIRED`; DDL stores `PASS`, `FAIL`. | `REVIEW_REQUIRED` maps to storage failure semantics and must remain explicit in reports. | P13 |
 | Registry type values | API has `PROMPT`, `TEMPLATE`, `POLICY`, `DB_PROFILE`, `GENERATOR`; DDL uses `PROMPT`, `TEMPLATE`, `MODEL_POLICY`, `DB_PROFILE_POLICY`. | API mapping is documented as an adapter concern; shared contract changes are blockers. | P09/P13 |
 | MCP catalog and MCP registry | Catalog includes P08A minimum metadata discovery tools and read-only error codes. | P10 must harden response shape, live query behavior, caveats, timeout/retry, and fixture/live split. | P10 |
@@ -83,10 +82,10 @@ In both modes, the following remain forbidden: row-data reads, procedure executi
 | P10 | Live metadata tool hardening and PPM profile smoke. | Read-only metadata evidence includes snapshot, source profile, caveats, and no row data. |
 | P11 | Simple/medium/complex SP analysis fixtures. | Dependency confidence remains review-required until table links are confirmed. |
 | P12 | Generation golden candidates and review checklist examples. | Draft-only output with evidence refs and TODO markers; no generated source auto-apply. |
-| P13 | Validation/approval/audit scenarios. | Publish remains blocked without passed validation and human approval evidence. |
+| P13 | Validation/evidence/audit scenarios. | Publish remains absent from the draft-generation product surface. |
 | P14 | Demo object selector and portal sample requests. | UI labels metadata caveats and never exposes row-data/DDL/publish controls. |
 | P15 | Eval, observability, security, and ops metrics. | Metrics separate fixture-first, optional-live, and blocker-dependent evidence. |
-| P16 | Pilot release readiness and handoff package. | Go/no-go includes PPM access, dependency evidence, validation results, approval/audit, and policy compliance. |
+| P16 | Pilot release readiness and handoff package. | Go/no-go includes PPM access, dependency evidence, validation results, draft-quality audit, and policy compliance. |
 | P17 | Live pilot blocker closure. | Scoped draft-only candidate can become `CONDITIONAL_GO`; platform production-ready remains forbidden. |
 | P18/P19 | Canonical contract, web HTTP smoke, and auth/RBAC productization closure. | Conditional open is allowed with live IdP/JWKS and PLF role lookup deferred; production-grade enterprise Auth/RBAC claims require that evidence to pass first. |
 | P21 | No-mock functional portal and Python 3.14 baseline. | Web must use HTTP API, PLF and PPM must be configured for live gate, and missing prerequisites are blockers rather than mock fallback. |

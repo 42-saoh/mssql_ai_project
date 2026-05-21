@@ -13,10 +13,12 @@ info:
     policies:
 
     - metadata access is read-only and routed through the MSSQL Metadata MCP boundary;
-    - generated documentation, Java/MyBatis code, DTO/VO/Model, and DDL are draft artifacts;
-    - default P25 workflows stop at validation-complete draft output without user review UI;
-    - deferred publish-like actions still require validation evidence and retained approval capability;
-    - live row-data queries, automatic DDL execution, and unreviewed code application are out of scope.
+    - generated documentation and Java/MyBatis DTO/Service/Mapper drafts are draft artifacts;
+    - worker-facing analysis text is Korean (ko-KR), while JSON keys, enum/status/code values,
+      artifact types, rule ids, section ids, evidence refs, and SQL/Java identifiers remain the
+      stable English machine contract;
+    - workflows stop at validation-complete draft output without user review or approval flows;
+    - live row-data queries, automatic DDL execution, and unvalidated code application are out of scope.
 servers:
   - url: http://localhost:{port}
     description: Local API/BFF server
@@ -33,8 +35,6 @@ tags:
     description: Workflow job status endpoints.
   - name: artifacts
     description: Draft artifact preview and validation endpoints.
-  - name: approvals
-    description: Deferred human review and approval endpoints retained outside the default P25 UI flow.
   - name: registry
     description: Prompt, template, profile, and policy registry endpoints.
   - name: metadata
@@ -69,6 +69,16 @@ paths:
         Starts a draft-only analysis workflow for one stored procedure. The resulting job is
         expected to collect metadata through the MCP boundary, build a canonical analysis
         model, generate requested artifacts, and stop at the validation-complete draft gate.
+        By default the workflow completes before the response is returned. Web clients can
+        opt into immediate navigation by setting runAsync=true and polling the returned job.
+      parameters:
+        - name: runAsync
+          in: query
+          required: false
+          description: When true, the API returns after job creation and runs the SP workflow in a background task.
+          schema:
+            type: boolean
+            default: false
       requestBody:
         required: true
         content:
@@ -132,7 +142,7 @@ paths:
   /api/v1/jobs:
     get:
       tags: [jobs]
-      summary: List recent workflow jobs.
+      summary: List recent workflow jobs with optional request context for history views.
       operationId: listJobs
       parameters:
         - name: limit
@@ -143,9 +153,15 @@ paths:
             minimum: 1
             maximum: 100
             default: 20
+        - name: targetKey
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Exact canonical target key filter.
       responses:
         "200":
-          description: Recent workflow jobs.
+          description: Recent workflow jobs with target/profile/output context when available.
           content:
             application/json:
               schema:
@@ -159,7 +175,7 @@ paths:
   /api/v1/jobs/{jobId}:
     get:
       tags: [jobs]
-      summary: Read workflow job status.
+      summary: Read workflow job status and request context.
       operationId: getJob
       parameters:
         - $ref: "#/components/parameters/JobId"
@@ -276,7 +292,7 @@ paths:
   /api/v1/artifacts/{artifactId}/validation:
     post:
       tags: [artifacts]
-      summary: Validate a draft artifact before review or approval.
+      summary: Validate a draft artifact quality gate.
       operationId: validateArtifact
       parameters:
         - $ref: "#/components/parameters/ArtifactId"
@@ -303,33 +319,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ValidationReport"
-        "404":
-          $ref: "#/components/responses/NotFound"
-  /api/v1/artifacts/{artifactId}/approval-decisions:
-    post:
-      tags: [approvals]
-      summary: Record a human approval decision for a draft artifact.
-      operationId: createApprovalDecision
-      description: |
-        Records a reviewer decision. This endpoint only records review state; it does not
-        deploy code, execute DDL, or mutate MSSQL business data.
-      parameters:
-        - $ref: "#/components/parameters/ArtifactId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApprovalDecisionRequest"
-      responses:
-        "201":
-          description: Approval decision recorded.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApprovalRecord"
-        "400":
-          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/metadata/db-profiles:
@@ -427,7 +416,7 @@ paths:
       description: |
         Searches metadata object identities through the MSSQL Metadata MCP read-only boundary.
         The response is limited to object identity, profile/database context, snapshot/evidence
-        references, caveats, review-required markers, and blocker codes. It never returns row
+        references, evidence caveats, machine caveat markers, and blocker codes. It never returns row
         data, executes stored procedures, exposes SQL definition text, or performs DDL/DML.
         PPM search must not fall back to PLF when PPM is unavailable.
       parameters:
@@ -457,15 +446,15 @@ paths:
             type: array
             items:
               $ref: "#/components/schemas/MetadataSearchObjectType"
-            default: [PROCEDURE, TABLE, VIEW, FUNCTION]
+            default: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION]
         - name: limit
           in: query
           required: false
           schema:
             type: integer
+            default: 20
             minimum: 1
             maximum: 100
-            default: 20
       responses:
         "200":
           description: Metadata object search results and blocker/caveat context.
@@ -498,7 +487,7 @@ paths:
         active/read-only MCP metadata tool calls. Tool execution stays internal to the API
         registry boundary; the public metadata tool invocation allowlist is not expanded.
         Responses contain sanitized evidence digests, deterministic fact ids, LLM insights,
-        review markers, and caveats. They never include row data, raw SQL definition text,
+        machine caveat markers and caveats. They never include row data, raw SQL definition text,
         procedure execution output, DDL/DML controls, secrets, or raw provider traces.
       requestBody:
         required: true
@@ -527,10 +516,166 @@ paths:
           $ref: "#/components/responses/Backpressure"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/analysis-runs:
+    post:
+      tags: [metadata]
+      summary: Submit an asynchronous metadata analysis run.
+      operationId: submitMetadataAnalysisRun
+      description: |
+        Starts a durable platform metadata analysis run and returns a run id for polling.
+        The run executes the same sanitized, read-only analysis as `POST /api/v1/metadata/analyze`
+        using the manual-apply v7 `METADATA_ANALYSIS_RUNS` storage contract. Submit/poll returns
+        `503 METADATA_ANALYSIS_RUN_SCHEMA_REQUIRED` when that table, required columns, or indexes
+        are missing. Polling results never include row data, raw SQL definition text, procedure
+        execution output, DDL/DML controls, secrets, raw prompts, or raw provider traces.
+        A background recovery worker claims `QUEUED` runs and reclaims stale `RUNNING`
+        runs for retry so interrupted background work does not leave users waiting
+        indefinitely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataAnalysisRequest"
+      responses:
+        "202":
+          description: Metadata analysis run was accepted for asynchronous execution.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataAnalysisRunStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/analysis-runs/{runId}:
+    get:
+      tags: [metadata]
+      summary: Poll an asynchronous metadata analysis run.
+      operationId: getMetadataAnalysisRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current metadata analysis run status, result, or failure payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataAnalysisRunStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/design-runs:
+    post:
+      tags: [metadata]
+      summary: Submit an asynchronous metadata design chat run.
+      operationId: submitMetadataDesignRun
+      description: |
+        Starts a durable metadata design chat run. The run accepts a natural-language
+        message, optional conversation mode, API-compatible field inputs, and table
+        hints, searches related metadata through read-only MCP tools, and returns
+        sanitized interpreted intent, applied changes, evidence-bound table script,
+        and DTO previews.
+        The v10 `METADATA_DESIGN_RUNS` schema is manual-apply only. Results never
+        include row data, raw SQL/SP definitions, procedure execution output,
+        secrets, raw prompts, raw provider traces, apply controls, or workflow
+        artifact persistence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataDesignRunRequest"
+      responses:
+        "202":
+          description: Metadata design run was accepted for asynchronous execution.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataDesignRunStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "424":
+          $ref: "#/components/responses/DependencyBlocked"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/design-runs/{runId}:
+    get:
+      tags: [metadata]
+      summary: Poll an asynchronous metadata design chat run.
+      operationId: getMetadataDesignRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current metadata design run status, result, or failure payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataDesignRunStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
+  /api/v1/metadata/design-conversations/{conversationId}:
+    get:
+      tags: [metadata]
+      summary: List metadata design runs in one conversation.
+      operationId: getMetadataDesignConversation
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Metadata design conversation runs in reverse chronological order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataDesignConversation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/Backpressure"
+        "503":
+          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/assets:
     get:
       tags: [knowledge]
-      summary: Search reviewable knowledge assets.
+      summary: Search draft knowledge assets.
       operationId: listKnowledgeAssets
       parameters:
         - name: assetKind
@@ -582,7 +727,7 @@ paths:
   /api/v1/knowledge/facts/search:
     get:
       tags: [knowledge]
-      summary: Search facts across reviewable knowledge asset versions.
+      summary: Search facts across draft knowledge asset versions.
       operationId: searchKnowledgeFacts
       parameters:
         - name: objectRef
@@ -686,40 +831,6 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
-  /api/v1/knowledge/assets/{assetId}/reviews:
-    get:
-      tags: [knowledge]
-      summary: List append-only knowledge asset review events.
-      operationId: listKnowledgeAssetReviews
-      parameters:
-        - name: assetId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: versionId
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Knowledge review history.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [assetId, reviews]
-                properties:
-                  assetId:
-                    type: string
-                  reviews:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/KnowledgeReview"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "503":
-          $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/assets/{assetId}/versions/{versionId}/facts:
     get:
       tags: [knowledge]
@@ -745,45 +856,6 @@ paths:
                 $ref: "#/components/schemas/KnowledgeFactGraph"
         "404":
           $ref: "#/components/responses/NotFound"
-        "503":
-          $ref: "#/components/responses/DependencyBlocked"
-  /api/v1/knowledge/assets/{assetId}/versions/{versionId}/review:
-    post:
-      tags: [knowledge]
-      summary: Record a reviewable lifecycle transition for a knowledge asset version.
-      operationId: reviewKnowledgeAssetVersion
-      parameters:
-        - name: assetId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: versionId
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/KnowledgeReviewRequest"
-      responses:
-        "200":
-          description: Recorded knowledge review event.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KnowledgeReview"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/ValidationError"
         "503":
           $ref: "#/components/responses/DependencyBlocked"
   /api/v1/knowledge/exports:
@@ -912,9 +984,11 @@ components:
           enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
         schema:
           type: string
+          minLength: 1
           examples: [dbo]
         name:
           type: string
+          minLength: 1
           examples: [usp_OrderRequest_Select]
     SPAnalysisRequest:
       type: object
@@ -922,6 +996,7 @@ components:
       properties:
         dbProfileId:
           type: string
+          minLength: 1
           description: Metadata profile identifier, for example plf or master.
         target:
           $ref: "#/components/schemas/TargetObject"
@@ -938,6 +1013,7 @@ components:
       properties:
         dbProfileId:
           type: string
+          minLength: 1
           description: Metadata profile identifier, for example plf, ppm, or master.
         targets:
           type: array
@@ -972,6 +1048,21 @@ components:
         allowSpDefinitionToModel:
           type: boolean
           default: true
+          description: Backward-compatible gate for transient source context. When true, sourceContextMode defaults to RETRIEVED_SPANS rather than sending the full procedure definition.
+        sourceContextMode:
+          type: string
+          default: RETRIEVED_SPANS
+          enum:
+            - NONE
+            - RETRIEVED_SPANS
+          description: Controls whether bounded retrieved SP spans can be used as transient model input. Stored responses include only sanitized coverage summaries.
+        sourceDependencyMode:
+          type: string
+          default: CONFIRMED_PROCEDURES
+          enum:
+            - NONE
+            - CONFIRMED_PROCEDURES
+          description: Controls whether confirmed same-profile dependency procedures receive bounded transient source-context semantic child analysis.
         useAiToolOrchestration:
           type: boolean
           default: true
@@ -1052,6 +1143,19 @@ components:
           type: string
         status:
           $ref: "#/components/schemas/JobStatus"
+        dbProfileId:
+          type: string
+          description: Metadata profile requested for this analysis job when available.
+        target:
+          $ref: "#/components/schemas/TargetObject"
+        targetKey:
+          type: string
+          description: Server-derived canonical target key for exact same-target history.
+        outputs:
+          type: array
+          description: Requested draft output groups for this analysis job when available.
+          items:
+            $ref: "#/components/schemas/RequestedOutputType"
         currentStep:
           oneOf:
             - $ref: "#/components/schemas/WorkflowStepType"
@@ -1066,6 +1170,7 @@ components:
           type: number
           minimum: 0
           maximum: 1
+          description: Estimated status-based progress for UI visibility; not exact work completion.
         blockers:
           type: array
           items:
@@ -1078,7 +1183,7 @@ components:
           type: string
     JobStatus:
       type: string
-      description: VALIDATION_COMPLETE is the default P25 terminal draft status after validation; review and approval statuses remain for deferred compatibility.
+      description: VALIDATION_COMPLETE is the terminal draft status after validation.
       enum:
         - SUBMITTED
         - COLLECTING_METADATA
@@ -1086,10 +1191,6 @@ components:
         - GENERATING
         - VALIDATING
         - VALIDATION_COMPLETE
-        - REVIEW_PENDING
-        - APPROVED
-        - REJECTED
-        - PUBLISHED
         - FAILED
         - CANCELED
     WorkflowStepType:
@@ -1099,8 +1200,6 @@ components:
         - ANALYZE
         - GENERATE
         - VALIDATE
-        - REVIEW
-        - PUBLISH
     ArtifactSummary:
       type: object
       required: [artifactId, type, status]
@@ -1115,6 +1214,9 @@ components:
           $ref: "#/components/schemas/ArtifactStatus"
         title:
           type: string
+        targetKey:
+          type: string
+          description: Canonical target key inherited from the workflow job.
         evidenceCoverage:
           type: number
           minimum: 0
@@ -1145,6 +1247,7 @@ components:
             reviewRequired:
               type: boolean
               default: true
+              description: Machine uncertainty/evidence caveat flag; not a decision request.
     ArtifactType:
       type: string
       description: Persisted draft artifact type. Request output groups map to one or more of these values.
@@ -1157,11 +1260,7 @@ components:
         - MAPPER_INTERFACE
         - SERVICE_DRAFT
         - DTO_DRAFT
-        - VO_DRAFT
-        - MODEL_DRAFT
-        - DDL_DRAFT
         - VALIDATION_REPORT
-        - APPROVAL_LOG
     RequestedOutputType:
       type: string
       description: User-facing output group requested at submission time.
@@ -1170,17 +1269,11 @@ components:
         - DEPENDENCY_REPORT
         - TABLE_COLUMN_METADATA
         - JAVA_MYBATIS_DRAFT
-        - DTO_MODEL_DRAFT
-        - DDL_DRAFT
     ArtifactStatus:
       type: string
       enum:
         - DRAFT
         - VALIDATED
-        - REVIEW_PENDING
-        - APPROVED
-        - REJECTED
-        - PUBLISHED
         - ARCHIVED
     EvidenceRef:
       type: object
@@ -1215,8 +1308,9 @@ components:
           type: array
           items:
             type: string
-        manualReviewPoints:
+        qualityCaveats:
           type: array
+          description: Evidence and draft-quality caveats surfaced by validation.
           items:
             type: string
     ValidationCheck:
@@ -1275,6 +1369,14 @@ components:
             type: integer
         latencyMs:
           type: integer
+        analysisCoverage:
+          type: object
+          description: Sanitized source-map coverage summary; never includes raw SP text or snippets.
+          additionalProperties: true
+        sourceContextSummary:
+          type: object
+          description: Sanitized retrieved-span context summary; never includes raw SP text, snippets, prompt body, row data, or provider response text.
+          additionalProperties: true
         componentInvocations:
           type: array
           description: Sanitized per-stage model invocation and internal read-only tool summaries.
@@ -1304,6 +1406,9 @@ components:
           enum: [SUCCEEDED, FAILED, SKIPPED]
         targetRef:
           type: string
+        targetKey:
+          type: string
+          description: Canonical target key when the run is bound to a root or dependency target.
         summary:
           type: string
         structuredOutput:
@@ -1312,37 +1417,6 @@ components:
         modelInvocation:
           $ref: "#/components/schemas/ModelInvocationSummary"
         createdAt:
-          type: string
-          format: date-time
-    ApprovalDecisionRequest:
-      type: object
-      required: [decision, reviewer, comment]
-      properties:
-        decision:
-          type: string
-          enum: [APPROVE, REJECT, REQUEST_CHANGES]
-        reviewer:
-          type: string
-        comment:
-          type: string
-        validationReportId:
-          type: string
-    ApprovalRecord:
-      type: object
-      required: [approvalId, artifactId, decision, reviewer, decidedAt]
-      properties:
-        approvalId:
-          type: string
-        artifactId:
-          type: string
-        decision:
-          type: string
-          enum: [APPROVE, REJECT, REQUEST_CHANGES]
-        reviewer:
-          type: string
-        comment:
-          type: string
-        decidedAt:
           type: string
           format: date-time
     MetadataProfile:
@@ -1411,7 +1485,7 @@ components:
           additionalProperties: true
     MetadataSearchObjectType:
       type: string
-      enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+      enum: [PROCEDURE, TABLE, COLUMN, VIEW, FUNCTION]
     MetadataObjectIdentity:
       type: object
       required: [schema, name, type]
@@ -1421,7 +1495,39 @@ components:
         name:
           type: string
         type:
+          type: string
+          enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
+    MetadataSearchObjectIdentity:
+      type: object
+      required: [schema, name, type]
+      properties:
+        schema:
+          type: string
+        name:
+          type: string
+          description: For COLUMN results, this is the owning object and column as table.column.
+        type:
           $ref: "#/components/schemas/MetadataSearchObjectType"
+    MetadataSearchTableSummary:
+      type: object
+      required: [schema, name]
+      properties:
+        schema:
+          type: string
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+    MetadataSearchColumnSummary:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        dataType:
+          type: [string, "null"]
     MetadataSearchBlocker:
       type: object
       required: [code, message]
@@ -1450,13 +1556,34 @@ components:
         - blockers
       properties:
         objectIdentity:
-          $ref: "#/components/schemas/MetadataObjectIdentity"
+          $ref: "#/components/schemas/MetadataSearchObjectIdentity"
+        targetKey:
+          type: string
+          description: Canonical target key for this metadata object identity.
         sourceProfile:
           type: string
         sourceDatabase:
           type: string
         snapshotId:
           type: string
+        description:
+          type: [string, "null"]
+        logicalName:
+          type: [string, "null"]
+        dataType:
+          type: [string, "null"]
+        table:
+          anyOf:
+            - $ref: "#/components/schemas/MetadataSearchTableSummary"
+            - type: "null"
+        column:
+          anyOf:
+            - $ref: "#/components/schemas/MetadataSearchColumnSummary"
+            - type: "null"
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataSearchColumnSummary"
         evidenceRefs:
           type: array
           items:
@@ -1543,6 +1670,9 @@ components:
         persistKnowledge:
           type: boolean
           default: true
+        generateDtoDrafts:
+          type: boolean
+          default: false
     MetadataAnalysisRequest:
       type: object
       required: [dbProfileId]
@@ -1558,10 +1688,466 @@ components:
         objectTypes:
           type: array
           items:
-            $ref: "#/components/schemas/MetadataSearchObjectType"
+            type: string
+            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
           default: [PROCEDURE, TABLE, VIEW, FUNCTION]
         options:
           $ref: "#/components/schemas/MetadataAnalysisOptions"
+    MetadataAnalysisRunError:
+      type: object
+      required: [code, message, statusCode]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        statusCode:
+          type: integer
+    MetadataAnalysisRunStatus:
+      type: object
+      required:
+        - runId
+        - status
+        - submittedAt
+        - request
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+          enum:
+            - QUEUED
+            - RUNNING
+            - SUCCEEDED
+            - FAILED
+        submittedAt:
+          type: string
+          format: date-time
+        startedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        completedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        request:
+          $ref: "#/components/schemas/MetadataAnalysisRequest"
+        analysis:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataAnalysisResponse"
+            - type: "null"
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataAnalysisRunError"
+            - type: "null"
+    MetadataDesignFieldInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        dbType:
+          type: string
+        nullable:
+          type: boolean
+    MetadataDesignInputs:
+      type: object
+      properties:
+        tableNameHint:
+          type: string
+        tableDescription:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDesignFieldInput"
+          default: []
+    MetadataDesignOptions:
+      type: object
+      properties:
+        useLlmAnalysis:
+          type: boolean
+          default: true
+        useAiToolOrchestration:
+          type: boolean
+          default: true
+        llmProfileId:
+          type: string
+          default: openai_sp_semantic_analysis
+          enum:
+            - openai_sp_semantic_analysis
+            - openai_fast_test
+        maxCandidates:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        generateDtoDraft:
+          type: boolean
+          default: true
+        conversationMode:
+          type: string
+          enum:
+            - NEW_DESIGN
+            - REFINE_CURRENT
+          default: NEW_DESIGN
+    MetadataDesignRunRequest:
+      type: object
+      required: [dbProfileId, message]
+      properties:
+        dbProfileId:
+          type: string
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        conversationId:
+          type: string
+        designInputs:
+          $ref: "#/components/schemas/MetadataDesignInputs"
+        options:
+          $ref: "#/components/schemas/MetadataDesignOptions"
+    MetadataRelatedMetadata:
+      type: object
+      required: [kind, objectRef, score, summary, evidenceRefs, payload]
+      properties:
+        kind:
+          type: string
+          enum: [TABLE, COLUMN, SIMILAR_TABLE, TABLE_SCHEMA]
+        objectRef:
+          type: string
+        score:
+          type: integer
+        summary:
+          type: string
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        payload:
+          type: object
+          additionalProperties: true
+    MetadataStandardizationMapping:
+      type: object
+      required:
+        - proposedName
+        - proposedType
+        - source
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        inputName:
+          type: string
+        inputDescription:
+          type: string
+        proposedDescription:
+          type: string
+        proposedName:
+          type: string
+        proposedType:
+          type: string
+        source:
+          type: string
+          enum: [METADATA, STANDARD_POLICY, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataTableProposalColumn:
+      type: object
+      required:
+        - name
+        - dataType
+        - nullable
+        - source
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        name:
+          type: string
+        dataType:
+          type: string
+        nullable:
+          type: boolean
+        description:
+          type: string
+        source:
+          type: string
+          enum: [METADATA, STANDARD_POLICY, USER_INPUT, REVIEW_REQUIRED]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataTableProposal:
+      type: object
+      required:
+        - schema
+        - tableName
+        - columns
+        - createTableScriptPreview
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        schema:
+          type: string
+          default: dbo
+        tableName:
+          type: string
+        tableDescription:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataTableProposalColumn"
+        createTableScriptPreview:
+          type: string
+          description: Non-executable table script preview for manual schema review.
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataDesignIntentChange:
+      type: object
+      required:
+        - action
+        - summary
+        - reviewRequired
+        - reviewReasons
+      properties:
+        action:
+          type: string
+          enum:
+            - ADD_FIELD
+            - REMOVE_FIELD
+            - RENAME_FIELD
+            - CHANGE_TYPE
+            - CHANGE_NULLABILITY
+            - SET_TABLE_NAME
+            - SET_TABLE_DESCRIPTION
+            - REVIEW_REQUIRED
+        target:
+          type: string
+        value:
+          type: string
+        summary:
+          type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataDesignInterpretedIntent:
+      type: object
+      required:
+        - intent
+        - fields
+        - modifications
+        - confidence
+        - reviewRequired
+        - reviewReasons
+      properties:
+        intent:
+          type: string
+          enum:
+            - CREATE_TABLE
+            - REFINE_TABLE
+            - UNKNOWN
+        tableNameCandidate:
+          type: string
+        tableDescription:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDesignFieldInput"
+        modifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDesignIntentChange"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataDesignAppliedChange:
+      type: object
+      required:
+        - action
+        - summary
+        - reviewRequired
+        - reviewReasons
+      properties:
+        action:
+          type: string
+        target:
+          type: string
+        summary:
+          type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
+          type: array
+          items:
+            type: string
+    MetadataDesignResult:
+      type: object
+      required:
+        - assistantMessage
+        - interpretedIntent
+        - appliedChanges
+        - relatedMetadata
+        - standardizationMappings
+        - tableProposal
+        - aiToolEvidence
+        - deterministicFacts
+        - reviewMarkers
+        - caveats
+        - reviewRequired
+        - componentInvocations
+      properties:
+        assistantMessage:
+          type: string
+        interpretedIntent:
+          $ref: "#/components/schemas/MetadataDesignInterpretedIntent"
+        appliedChanges:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDesignAppliedChange"
+        relatedMetadata:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataRelatedMetadata"
+        standardizationMappings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataStandardizationMapping"
+        tableProposal:
+          $ref: "#/components/schemas/MetadataTableProposal"
+        dtoDraft:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataGeneratedDraft"
+            - type: "null"
+        aiToolEvidence:
+          type: object
+          additionalProperties: true
+        deterministicFacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reviewMarkers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataAnalysisReviewMarker"
+        caveats:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        modelInvocation:
+          oneOf:
+            - $ref: "#/components/schemas/ModelInvocationSummary"
+            - type: "null"
+        componentInvocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    MetadataDesignRunError:
+      type: object
+      required: [code, message, statusCode]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        statusCode:
+          type: integer
+    MetadataDesignRunStatus:
+      type: object
+      required:
+        - runId
+        - conversationId
+        - status
+        - submittedAt
+        - request
+      properties:
+        runId:
+          type: string
+        conversationId:
+          type: string
+        status:
+          type: string
+          enum:
+            - QUEUED
+            - RUNNING
+            - SUCCEEDED
+            - FAILED
+        submittedAt:
+          type: string
+          format: date-time
+        startedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        completedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        request:
+          $ref: "#/components/schemas/MetadataDesignRunRequest"
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataDesignResult"
+            - type: "null"
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/MetadataDesignRunError"
+            - type: "null"
+    MetadataDesignConversation:
+      type: object
+      required: [conversationId, runs]
+      properties:
+        conversationId:
+          type: string
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataDesignRunStatus"
     MetadataAnalysisInsight:
       type: object
       required: [code, objectRef, summary, status, evidenceRefs]
@@ -1595,6 +2181,8 @@ components:
         - sourceFactIds
       properties:
         objectRef:
+          type: string
+        targetKey:
           type: string
         objectType:
           type: string
@@ -1653,6 +2241,8 @@ components:
           type: string
         objectRef:
           type: string
+        targetKey:
+          type: string
         objectType:
           type: string
         status:
@@ -1702,6 +2292,8 @@ components:
       properties:
         objectRef:
           type: string
+        targetKey:
+          type: string
         status:
           type: string
           enum: [READY, PARTIAL, REVIEW_REQUIRED]
@@ -1713,6 +2305,43 @@ components:
           items:
             type: string
         evidenceRefs:
+          type: array
+          items:
+            type: string
+    MetadataGeneratedDraft:
+      type: object
+      required:
+        - artifactType
+        - objectRef
+        - fileName
+        - language
+        - content
+        - evidenceRefs
+        - reviewRequired
+        - reviewReasons
+      properties:
+        artifactType:
+          type: string
+          enum: [DTO_DRAFT]
+        objectRef:
+          type: string
+        targetKey:
+          type: string
+        fileName:
+          type: string
+        language:
+          type: string
+          enum: [java]
+        content:
+          type: string
+          description: Non-persisted DTO_DRAFT preview generated from sanitized metadata evidence.
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reviewRequired:
+          type: boolean
+        reviewReasons:
           type: array
           items:
             type: string
@@ -1854,7 +2483,8 @@ components:
         - CANONICAL_ANALYSIS
     KnowledgeLifecycleStatus:
       type: string
-      enum: [DRAFT, REVIEW_REQUIRED, REVIEWED, ARCHIVED]
+      description: REVIEW_REQUIRED is a machine evidence caveat, not a decision workflow state.
+      enum: [DRAFT, REVIEW_REQUIRED, ARCHIVED]
     KnowledgeAssetSummary:
       type: object
       required:
@@ -1879,6 +2509,8 @@ components:
           type: string
         targetName:
           type: string
+        targetKey:
+          type: string
         logicalKey:
           type: string
         currentVersionId:
@@ -1892,13 +2524,6 @@ components:
           type: string
         lifecycleStatus:
           $ref: "#/components/schemas/KnowledgeLifecycleStatus"
-        reviewReasonCode:
-          type: string
-        reviewer:
-          type: string
-        reviewedAt:
-          type: string
-          format: date-time
         archivedAt:
           type: string
           format: date-time
@@ -1934,13 +2559,6 @@ components:
           type: string
         lifecycleStatus:
           $ref: "#/components/schemas/KnowledgeLifecycleStatus"
-        reviewReasonCode:
-          type: string
-        reviewer:
-          type: string
-        reviewedAt:
-          type: string
-          format: date-time
         archivedAt:
           type: string
           format: date-time
@@ -2039,52 +2657,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/KnowledgeEdge"
-    KnowledgeReviewRequest:
-      type: object
-      required: [status, reasonCode, reviewer]
-      properties:
-        status:
-          type: string
-          enum: [REVIEW_REQUIRED, REVIEWED, ARCHIVED]
-        reasonCode:
-          type: string
-        reviewer:
-          type: string
-        comment:
-          type: string
-    KnowledgeReview:
-      type: object
-      required:
-        - reviewId
-        - assetId
-        - versionId
-        - fromStatus
-        - toStatus
-        - reasonCode
-        - note
-        - reviewer
-      properties:
-        reviewId:
-          type: string
-        assetId:
-          type: string
-        versionId:
-          type: string
-        fromStatus:
-          $ref: "#/components/schemas/KnowledgeLifecycleStatus"
-        toStatus:
-          type: string
-          enum: [REVIEW_REQUIRED, REVIEWED, ARCHIVED]
-        reasonCode:
-          type: string
-        note:
-          type: object
-          additionalProperties: true
-        reviewer:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
     KnowledgeFactSearchResult:
       type: object
       required: [assetId, assetKind, versionId, lifecycleStatus, fact]
@@ -2153,6 +2725,7 @@ components:
         - insightGroups
         - dependencyGraph
         - dtoReadiness
+        - generatedDrafts
         - aiToolEvidence
         - deterministicFacts
         - reviewMarkers
@@ -2175,7 +2748,8 @@ components:
         objectTypes:
           type: array
           items:
-            $ref: "#/components/schemas/MetadataSearchObjectType"
+            type: string
+            enum: [PROCEDURE, TABLE, VIEW, FUNCTION]
         sourceProfile:
           type: string
         sourceDatabase:
@@ -2209,6 +2783,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetadataDtoReadiness"
+        generatedDrafts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetadataGeneratedDraft"
         aiToolEvidence:
           $ref: "#/components/schemas/AiToolEvidenceSummary"
         deterministicFacts:

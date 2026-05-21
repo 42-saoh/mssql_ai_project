@@ -5,15 +5,18 @@ from ai_agent_generation.artifact_types import (
 )
 from ai_agent_generation.core import (
     render_artifact,
-    render_java_mybatis_dto_model,
     render_java_mybatis_sp_wrapper,
     render_requested_output,
 )
-from ai_agent_generation.documents import DependencyReportRenderer, SPAnalysisDocumentRenderer
-from ai_agent_generation.java_mybatis import (
-    JavaMyBatisDtoModelRenderer,
-    JavaMyBatisSpWrapperRenderer,
+from ai_agent_generation.documents import (
+    DependencyReportRenderer,
+    SPAnalysisDocumentRenderer,
+    build_evidence_dossier_model,
+    build_migration_guide_model,
+    render_evidence_dossier,
+    render_migration_guide,
 )
+from ai_agent_generation.java_mybatis import JavaMyBatisSpWrapperRenderer
 from ai_agent_generation.migration_guide import (
     P24_REQUIRED_SECTION_IDS,
     evaluate_p24_migration_guide_quality,
@@ -42,15 +45,16 @@ __all__ = [
     "EvidenceSource",
     "GenerationContext",
     "JAVA_MYBATIS_POLICY_ARTIFACT_TYPES",
-    "JavaMyBatisDtoModelRenderer",
     "JavaMyBatisSpWrapperRenderer",
     "P24_REQUIRED_SECTION_IDS",
     "REQUESTED_OUTPUT_ALIASES",
     "RenderedArtifact",
     "RenderedBundle",
     "SPAnalysisDocumentRenderer",
+    "build_evidence_dossier_model",
     "GenerationPolicyAssets",
     "GenerationPolicyError",
+    "build_migration_guide_model",
     "expand_requested_output_type",
     "evaluate_p24_migration_guide_quality",
     "build_migration_guide_payload",
@@ -58,7 +62,8 @@ __all__ = [
     "load_generation_policy",
     "load_template_registry",
     "render_artifact",
-    "render_java_mybatis_dto_model",
+    "render_evidence_dossier",
     "render_java_mybatis_sp_wrapper",
+    "render_migration_guide",
     "render_requested_output",
 ]

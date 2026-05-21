@@ -134,6 +134,7 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     assert search_tool["input"]["properties"]["objectTypes"]["items"]["enum"] == [
         "PROCEDURE",
         "TABLE",
+        "COLUMN",
         "VIEW",
         "FUNCTION",
     ]
@@ -157,6 +158,10 @@ def test_mcp_yaml_catalog_declares_active_read_only_tools() -> None:
     dependency_tool = next(
         tool for tool in payload["tools"] if tool["name"] == "get_procedure_dependencies"
     )
+    definition_tool = next(
+        tool for tool in payload["tools"] if tool["name"] == "get_procedure_definition"
+    )
+    assert "referencedDatabase" in definition_tool["input"]["properties"]
     assert dependency_tool["output"]["properties"]["dependencies"]["items"] == {
         "$ref": "#/response/dependencyItem"
     }

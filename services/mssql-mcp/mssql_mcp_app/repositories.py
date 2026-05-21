@@ -30,6 +30,9 @@ from mssql_mcp_app.profiles import DbProfile, load_db_profiles
 from mssql_mcp_app.settings import LiveMetadataSettings, load_live_metadata_settings
 
 
+EXTERNAL_CATALOG_LOCK_TIMEOUT_MS = 1000
+
+
 @dataclass(frozen=True)
 class MetadataToolResult:
     snapshot_id: str
@@ -293,6 +296,26 @@ class FixtureMetadataRepository:
                     item["score"] = score
                     results.append(_metadata_search_result_item(item, context=context))
 
+        if "COLUMN" in object_types:
+            for table_index, table in enumerate(self.payload.get("tables", [])):
+                for column_index, column in enumerate(table.get("columns", [])):
+                    evidence = self._evidence(
+                        "column-search",
+                        "COLUMN",
+                        table["schema"],
+                        f"{table['name']}.{column['name']}",
+                        f"/tables/{table_index}/columns/{column_index}",
+                    )
+                    item = _metadata_search_column_item(
+                        table,
+                        column,
+                        evidence_refs=[evidence],
+                    )
+                    score = _metadata_search_score(item, query)
+                    if score > 0:
+                        item["score"] = score
+                        results.append(_metadata_search_result_item(item, context=context))
+
         if "VIEW" in object_types:
             for index, view in enumerate(self.payload.get("views", [])):
                 evidence = self._evidence(
@@ -358,7 +381,27 @@ class FixtureMetadataRepository:
         return self._result(data=data, evidence_refs=[evidence])
 
     def _handle_get_procedure_definition(self, arguments: dict[str, Any]) -> MetadataToolResult:
-        procedure, index = self._find_procedure(arguments["schema"], arguments["procedureName"])
+        referenced_database = arguments.get("referencedDatabase")
+        source_database = source_database_for_profile(
+            arguments["dbProfileId"],
+            payload=self.payload,
+        )
+        lookup_database = (
+            referenced_database
+            if referenced_database and not _same(referenced_database, source_database)
+            else None
+        )
+        procedure, index = self._find_procedure(
+            arguments["schema"],
+            arguments["procedureName"],
+            database=lookup_database,
+        )
+        definition_database = procedure.get("database") or referenced_database or source_database
+        source_scope = (
+            "SAME_SERVER_CROSS_DATABASE"
+            if referenced_database and not _same(referenced_database, source_database)
+            else "SAME_DATABASE"
+        )
         definition = procedure.get("definition")
         definition_info = definition_metadata(
             definition,
@@ -373,8 +416,11 @@ class FixtureMetadataRepository:
             f"/procedures/{index}/definition",
         )
         data = {
+            "database": definition_database,
             "schema": procedure["schema"],
             "procedureName": procedure["name"],
+            "referencedDatabase": referenced_database,
+            "sourceScope": source_scope,
             "definition": definition,
             "definitionHash": definition_info["hash"],
             "definitionLength": definition_info["length"],
@@ -744,8 +790,14 @@ class FixtureMetadataRepository:
         }
         return self._result(data=data, evidence_refs=[evidence])
 
-    def _find_procedure(self, schema: str, name: str) -> tuple[dict[str, Any], int]:
-        return self._find_in_collection("procedures", schema, name, "PROCEDURE")
+    def _find_procedure(
+        self,
+        schema: str,
+        name: str,
+        *,
+        database: str | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        return self._find_in_collection("procedures", schema, name, "PROCEDURE", database=database)
 
     def _find_table(self, schema: str, name: str) -> tuple[dict[str, Any], int]:
         return self._find_in_collection("tables", schema, name, "TABLE")
@@ -780,14 +832,23 @@ class FixtureMetadataRepository:
         schema: str,
         name: str,
         object_type: str,
+        *,
+        database: str | None = None,
     ) -> tuple[dict[str, Any], int]:
         for index, item in enumerate(self.payload.get(collection, [])):
+            if database and not _same(item.get("database"), database):
+                continue
             if _same(item.get("schema"), schema) and _same(item.get("name"), name):
                 return item, index
         raise MetadataToolError(
             OBJECT_NOT_FOUND,
             "Requested metadata object was not found in the active repository.",
-            {"objectType": object_type, "schema": schema, "name": name},
+            {
+                "objectType": object_type,
+                "database": database,
+                "schema": schema,
+                "name": name,
+            },
         )
 
     def _find_object_with_extended_properties(
@@ -985,51 +1046,64 @@ class LiveMetadataRepository:
     def _handle_list_procedures(self, arguments: dict[str, Any]) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
         schema_filter, params = _schema_filter(arguments)
+        top_k = int(arguments.get("topK", 100))
+        selected_procedures_cte = f"""
+            WITH selected_procedures AS (
+                SELECT TOP (%s)
+                    s.name AS schema_name,
+                    p.name AS object_name,
+                    p.object_id
+                FROM sys.procedures AS p
+                INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
+                WHERE p.is_ms_shipped = 0{schema_filter}
+                ORDER BY s.name, p.name
+            )
+        """
+        selected_procedure_params = [top_k, *params]
         rows = self._query(
             profile.database,
             f"""
+            {selected_procedures_cte}
             SELECT
-                s.name AS schema_name,
-                p.name AS object_name,
-                p.object_id,
-                CONVERT(int, OBJECTPROPERTY(p.object_id, 'IsEncrypted')) AS is_encrypted,
+                sp.schema_name,
+                sp.object_name,
+                sp.object_id,
+                CONVERT(int, OBJECTPROPERTY(sp.object_id, 'IsEncrypted')) AS is_encrypted,
                 m.definition
-            FROM sys.procedures AS p
-            INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
-            LEFT JOIN sys.sql_modules AS m ON p.object_id = m.object_id
-            WHERE p.is_ms_shipped = 0{schema_filter}
-            ORDER BY s.name, p.name
+            FROM selected_procedures AS sp
+            LEFT JOIN sys.sql_modules AS m ON sp.object_id = m.object_id
+            ORDER BY sp.schema_name, sp.object_name
             """,
-            params,
+            selected_procedure_params,
             tool_name="list_procedures",
             profile=profile,
         )
         parameter_rows = self._query(
             profile.database,
             f"""
+            {selected_procedures_cte}
             SELECT
-                p.object_id,
+                sp.object_id,
                 prm.name,
                 TYPE_NAME(prm.user_type_id) AS data_type,
                 prm.parameter_id AS ordinal,
                 prm.is_output,
                 prm.has_default_value,
                 CONVERT(nvarchar(4000), prm.default_value) AS default_value
-            FROM sys.procedures AS p
-            INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
-            INNER JOIN sys.parameters AS prm ON p.object_id = prm.object_id
-            WHERE p.is_ms_shipped = 0{schema_filter}
-            ORDER BY p.object_id, prm.parameter_id
+            FROM selected_procedures AS sp
+            INNER JOIN sys.parameters AS prm ON sp.object_id = prm.object_id
+            ORDER BY sp.object_id, prm.parameter_id
             """,
-            params,
+            selected_procedure_params,
             tool_name="list_procedures",
             profile=profile,
         )
         dependency_rows = self._query(
             profile.database,
             f"""
+            {selected_procedures_cte}
             SELECT
-                p.object_id,
+                sp.object_id,
                 dep.referenced_id,
                 dep.referenced_server_name,
                 dep.referenced_database_name,
@@ -1048,10 +1122,9 @@ class LiveMetadataRepository:
                 syn_s.name AS synonym_schema_name,
                 syn.name AS synonym_name,
                 syn.base_object_name AS synonym_base_object_name
-            FROM sys.procedures AS p
-            INNER JOIN sys.schemas AS s ON p.schema_id = s.schema_id
+            FROM selected_procedures AS sp
             INNER JOIN sys.sql_expression_dependencies AS dep
-                ON p.object_id = dep.referencing_id
+                ON sp.object_id = dep.referencing_id
             LEFT JOIN sys.objects AS direct_o ON dep.referenced_id = direct_o.object_id
             LEFT JOIN sys.schemas AS direct_s ON direct_o.schema_id = direct_s.schema_id
             OUTER APPLY (
@@ -1081,13 +1154,12 @@ class LiveMetadataRepository:
             LEFT JOIN sys.synonyms AS syn
                 ON syn.object_id = COALESCE(direct_o.object_id, match_o.object_id)
             LEFT JOIN sys.schemas AS syn_s ON syn.schema_id = syn_s.schema_id
-            WHERE p.is_ms_shipped = 0{schema_filter}
             ORDER BY
-                p.object_id,
+                sp.object_id,
                 COALESCE(direct_s.name, match_s.name, dep.referenced_schema_name),
                 COALESCE(direct_o.name, match_o.name, dep.referenced_entity_name)
             """,
-            params,
+            selected_procedure_params,
             tool_name="list_procedures",
             profile=profile,
         )
@@ -1125,7 +1197,7 @@ class LiveMetadataRepository:
             data={
                 **source_context(arguments),
                 "schema": arguments.get("schema"),
-                "procedures": procedures[: arguments.get("topK", 100)],
+                "procedures": procedures,
                 "caveats": [],
                 "reviewRequired": False,
             },
@@ -1253,55 +1325,104 @@ class LiveMetadataRepository:
         profile = self._profile(arguments["dbProfileId"])
         object_types = _search_object_types(arguments)
         limit = _search_limit(arguments)
-        type_codes = _search_sql_type_codes(object_types)
-        type_placeholders = ", ".join(["%s"] * len(type_codes))
         pattern = f"%{arguments['query']}%"
-        rows = self._query(
-            profile.database,
-            f"""
-            SELECT
-                o.object_id,
-                o.type AS object_type,
-                s.name AS schema_name,
-                o.name AS object_name,
-                CONVERT(nvarchar(4000), ep.value) AS description,
-                COALESCE(rs.name, dep_rs.name, dep.referenced_schema_name) AS dep_schema_name,
-                COALESCE(ro.name, dep_ro.name, dep.referenced_entity_name) AS dep_object_name,
-                COALESCE(ro.type, dep_ro.type) AS dep_referenced_type,
-                dep.referenced_class_desc,
-                dep.is_ambiguous
-            FROM sys.objects AS o
-            INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
-            LEFT JOIN sys.extended_properties AS ep
-                ON ep.major_id = o.object_id
-                AND ep.minor_id = 0
-                AND ep.name = 'MS_Description'
-            LEFT JOIN sys.sql_expression_dependencies AS dep
-                ON o.object_id = dep.referencing_id
-            LEFT JOIN sys.objects AS ro ON dep.referenced_id = ro.object_id
-            LEFT JOIN sys.schemas AS rs ON ro.schema_id = rs.schema_id
-            LEFT JOIN sys.schemas AS dep_rs ON dep.referenced_schema_name = dep_rs.name
-            LEFT JOIN sys.objects AS dep_ro
-                ON dep_rs.schema_id = dep_ro.schema_id
-                AND dep.referenced_entity_name = dep_ro.name
-            WHERE o.is_ms_shipped = 0
-                AND o.type IN ({type_placeholders})
-                AND (
-                    s.name LIKE %s
-                    OR o.name LIKE %s
-                    OR CONVERT(nvarchar(4000), ep.value) LIKE %s
-                )
-            ORDER BY s.name, o.name
-            """,
-            [*type_codes, pattern, pattern, pattern],
-            tool_name="search_metadata_objects",
-            profile=profile,
-        )
         context = {"sourceProfile": profile.id, "sourceDatabase": profile.database}
-        results = [
-            _metadata_search_result_item(item, context=context)
-            for item in _metadata_search_items_from_live_rows(self, rows)
+        results: list[dict[str, Any]] = []
+        catalog_object_types = [
+            object_type for object_type in object_types if object_type != "COLUMN"
         ]
+        searchable_tables: list[dict[str, Any]] = []
+        if "TABLE" in object_types or "COLUMN" in object_types:
+            searchable_tables = self._searchable_live_tables(
+                profile,
+                tool_name="search_metadata_objects",
+            )
+        searchable_tables_by_key = {
+            (str(table.get("schema", "")).casefold(), str(table.get("name", "")).casefold()): table
+            for table in searchable_tables
+        }
+        type_codes = _search_sql_type_codes(catalog_object_types)
+        if type_codes:
+            type_placeholders = ", ".join(["%s"] * len(type_codes))
+            rows = self._query(
+                profile.database,
+                f"""
+                SELECT
+                    o.object_id,
+                    o.type AS object_type,
+                    s.name AS schema_name,
+                    o.name AS object_name,
+                    CONVERT(nvarchar(4000), ep.value) AS description,
+                    COALESCE(rs.name, dep_rs.name, dep.referenced_schema_name) AS dep_schema_name,
+                    COALESCE(ro.name, dep_ro.name, dep.referenced_entity_name) AS dep_object_name,
+                    COALESCE(ro.type, dep_ro.type) AS dep_referenced_type,
+                    dep.referenced_class_desc,
+                    dep.is_ambiguous
+                FROM sys.objects AS o
+                INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
+                LEFT JOIN sys.extended_properties AS ep
+                    ON ep.major_id = o.object_id
+                    AND ep.minor_id = 0
+                    AND ep.name = 'MS_Description'
+                LEFT JOIN sys.sql_expression_dependencies AS dep
+                    ON o.object_id = dep.referencing_id
+                LEFT JOIN sys.objects AS ro ON dep.referenced_id = ro.object_id
+                LEFT JOIN sys.schemas AS rs ON ro.schema_id = rs.schema_id
+                LEFT JOIN sys.schemas AS dep_rs ON dep.referenced_schema_name = dep_rs.name
+                LEFT JOIN sys.objects AS dep_ro
+                    ON dep_rs.schema_id = dep_ro.schema_id
+                    AND dep.referenced_entity_name = dep_ro.name
+                WHERE o.is_ms_shipped = 0
+                    AND o.type IN ({type_placeholders})
+                    AND (
+                        s.name LIKE %s
+                        OR o.name LIKE %s
+                        OR CONVERT(nvarchar(4000), ep.value) LIKE %s
+                    )
+                ORDER BY s.name, o.name
+                """,
+                [*type_codes, pattern, pattern, pattern],
+                tool_name="search_metadata_objects",
+                profile=profile,
+            )
+            for item in _metadata_search_items_from_live_rows(self, rows):
+                if item.get("objectType") == "TABLE":
+                    table = searchable_tables_by_key.get(
+                        (
+                            str(item.get("schema", "")).casefold(),
+                            str(item.get("name", "")).casefold(),
+                        )
+                    )
+                    if table:
+                        item["description"] = item.get("description") or table.get("description")
+                        item["logicalName"] = item.get("logicalName") or table.get("logicalName")
+                        item["columns"] = _metadata_search_column_summaries(
+                            table.get("columns", [])
+                        )
+                        item["table"] = _metadata_search_table_summary(
+                            {**table, "description": item.get("description")}
+                        )
+                results.append(_metadata_search_result_item(item, context=context))
+        if "COLUMN" in object_types:
+            for table in searchable_tables:
+                for column in table.get("columns", []):
+                    item = _metadata_search_column_item(
+                        table,
+                        column,
+                        evidence_refs=[
+                            self._live_evidence(
+                                "metadata-column-search",
+                                "COLUMN",
+                                table["schema"],
+                                f"{table['name']}.{column['name']}",
+                                "sys.columns",
+                            )
+                        ],
+                    )
+                    score = _metadata_search_score(item, arguments["query"])
+                    if score > 0:
+                        item["score"] = score
+                        results.append(_metadata_search_result_item(item, context=context))
         results.sort(
             key=lambda item: (
                 item["objectIdentity"]["type"],
@@ -1339,9 +1460,23 @@ class LiveMetadataRepository:
         arguments: dict[str, Any],
     ) -> MetadataToolResult:
         profile = self._profile(arguments["dbProfileId"])
+        referenced_database = arguments.get("referencedDatabase")
+        query_database = profile.database
+        if referenced_database and not _same(referenced_database, profile.database):
+            database_result = self._catalog_database(
+                str(referenced_database),
+                profile=profile,
+                tool_name="get_procedure_definition",
+            )
+            query_database = str(database_result["external_database_name"])
+        source_scope = (
+            "SAME_SERVER_CROSS_DATABASE"
+            if referenced_database and not _same(referenced_database, profile.database)
+            else "SAME_DATABASE"
+        )
         row = self._single_row(
             self._query(
-                profile.database,
+                query_database,
                 """
                 SELECT
                     s.name AS schema_name,
@@ -1379,8 +1514,11 @@ class LiveMetadataRepository:
         return self._live_result(
             arguments,
             data={
+                "database": query_database,
                 "schema": row["schema_name"],
                 "procedureName": row["object_name"],
+                "referencedDatabase": referenced_database,
+                "sourceScope": source_scope,
                 "definition": definition,
                 "definitionHash": definition_info["hash"],
                 "definitionLength": definition_info["length"],
@@ -2451,6 +2589,22 @@ class LiveMetadataRepository:
         *,
         tool_name: str,
     ) -> list[dict[str, Any]]:
+        database_names: list[str] = []
+        seen_database_names: set[str] = set()
+        for row in rows:
+            database_name = row.get("referenced_database_name")
+            if database_name and not row.get("referenced_server_name"):
+                normalized_database_name = str(database_name).lower()
+                if normalized_database_name not in seen_database_names:
+                    seen_database_names.add(normalized_database_name)
+                    database_names.append(str(database_name))
+        for database_name in database_names:
+            self._catalog_database(
+                database_name,
+                profile=profile,
+                tool_name=tool_name,
+            )
+
         resolved = []
         for row in rows:
             item = dict(row)
@@ -2496,15 +2650,12 @@ class LiveMetadataRepository:
             profile=profile,
             tool_name=tool_name,
         )
-        if database_result.get("external_resolution_status") == "REVIEW_REQUIRED":
-            self._external_dependency_cache[cache_key] = database_result
-            return dict(database_result)
 
         catalog_database = str(database_result["external_database_name"])
         quoted_database = _quote_mssql_identifier(catalog_database)
         try:
             rows = self._query(
-                "master",
+                profile.database,
                 f"""
                 SELECT
                     match_info.match_count AS external_catalog_match_count,
@@ -2545,16 +2696,16 @@ class LiveMetadataRepository:
                 [entity, schema, schema],
                 tool_name=tool_name,
                 profile=profile,
+                lock_timeout_ms=EXTERNAL_CATALOG_LOCK_TIMEOUT_MS,
             )
         except MetadataToolError as exc:
-            result = {
-                **database_result,
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_CATALOG_UNAVAILABLE",
-                "external_resolution_error_code": exc.code,
-            }
-            self._external_dependency_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_error(
+                exc,
+                profile=profile,
+                tool_name=tool_name,
+                external_database=catalog_database,
+                stage="object_lookup",
+            ) from exc
 
         row = rows[0] if rows else {}
         result = {
@@ -2582,7 +2733,7 @@ class LiveMetadataRepository:
             return dict(self._catalog_database_cache[cache_key])
         try:
             rows = self._query(
-                "master",
+                profile.database,
                 """
                 SELECT
                     name,
@@ -2593,37 +2744,100 @@ class LiveMetadataRepository:
                 [database_name],
                 tool_name=tool_name,
                 profile=profile,
+                lock_timeout_ms=EXTERNAL_CATALOG_LOCK_TIMEOUT_MS,
             )
         except MetadataToolError as exc:
-            result = {
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_CATALOG_UNAVAILABLE",
-                "external_resolution_error_code": exc.code,
-            }
-            self._catalog_database_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_error(
+                exc,
+                profile=profile,
+                tool_name=tool_name,
+                external_database=database_name,
+                stage="database_lookup",
+            ) from exc
 
         if not rows:
-            result = {
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_NOT_FOUND",
-            }
-            self._catalog_database_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_blocker(
+                profile=profile,
+                tool_name=tool_name,
+                external_database=database_name,
+                stage="database_lookup",
+                reason="not_found",
+            )
 
         row = rows[0]
         if row.get("state_desc") and str(row["state_desc"]).upper() != "ONLINE":
-            result = {
-                "external_database_name": row["name"],
-                "external_resolution_status": "REVIEW_REQUIRED",
-                "external_resolution_strategy": "CROSS_DATABASE_NOT_ONLINE",
-            }
-            self._catalog_database_cache[cache_key] = result
-            return dict(result)
+            raise self._external_catalog_blocker(
+                profile=profile,
+                tool_name=tool_name,
+                external_database=str(row["name"]),
+                stage="database_state",
+                reason="not_online",
+                state_desc=str(row["state_desc"]),
+            )
 
         result = {"external_database_name": row["name"]}
         self._catalog_database_cache[cache_key] = result
         return dict(result)
+
+    def _external_catalog_error(
+        self,
+        exc: MetadataToolError,
+        *,
+        profile: DbProfile,
+        tool_name: str,
+        external_database: str,
+        stage: str,
+    ) -> MetadataToolError:
+        code = (
+            METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+            if exc.code == METADATA_READ_ONLY_PERMISSION_INSUFFICIENT
+            else LIVE_METADATA_UNAVAILABLE
+        )
+        details = {
+            "toolName": tool_name,
+            "dbProfileId": profile.id,
+            "database": profile.database,
+            "externalDatabase": external_database,
+            "externalCatalogStage": stage,
+            "timeoutSeconds": self.settings.connect_timeout_seconds,
+            "attempt": 1,
+            "rootErrorCode": exc.code,
+        }
+        if exc.details.get("errorClass"):
+            details["errorClass"] = str(exc.details["errorClass"])
+        return MetadataToolError(
+            code,
+            "External cross-database catalog metadata could not be confirmed.",
+            details,
+        )
+
+    def _external_catalog_blocker(
+        self,
+        *,
+        profile: DbProfile,
+        tool_name: str,
+        external_database: str,
+        stage: str,
+        reason: str,
+        state_desc: str | None = None,
+    ) -> MetadataToolError:
+        details: dict[str, Any] = {
+            "toolName": tool_name,
+            "dbProfileId": profile.id,
+            "database": profile.database,
+            "externalDatabase": external_database,
+            "externalCatalogStage": stage,
+            "externalCatalogReason": reason,
+            "timeoutSeconds": self.settings.connect_timeout_seconds,
+            "attempt": 1,
+        }
+        if state_desc:
+            details["externalDatabaseState"] = state_desc
+        return MetadataToolError(
+            LIVE_METADATA_UNAVAILABLE,
+            "External cross-database catalog metadata could not be confirmed.",
+            details,
+        )
 
     def _module_dependency_metadata(
         self,
@@ -2891,11 +3105,14 @@ class LiveMetadataRepository:
         *,
         tool_name: str,
         profile: DbProfile,
+        lock_timeout_ms: int | None = None,
     ) -> list[dict[str, Any]]:
         connection = self._connect(database, profile=profile, tool_name=tool_name)
         cursor = None
         try:
             cursor = connection.cursor()
+            if lock_timeout_ms is not None:
+                cursor.execute(f"SET LOCK_TIMEOUT {int(lock_timeout_ms)}", ())
             cursor.execute(sql, self._prepare_query_params(params))
             columns = [column[0] for column in cursor.description or []]
             return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
@@ -3671,6 +3888,8 @@ def _dependency_node(
         "name": source.get("name"),
         "objectType": source.get("objectType"),
         "sourceScope": source.get("sourceScope"),
+        "referencedDatabase": source.get("referencedDatabase"),
+        "referencedServer": source.get("referencedServer"),
         "reviewStatus": review_status,
         "evidenceRefs": evidence_refs,
     }
@@ -4119,9 +4338,9 @@ def _criteria(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def _search_object_types(arguments: dict[str, Any]) -> list[str]:
-    values = arguments.get("objectTypes") or ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+    values = arguments.get("objectTypes") or ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
     object_types = list(dict.fromkeys(str(value).upper() for value in values))
-    return object_types or ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
+    return object_types or ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
 
 
 def _search_limit(arguments: dict[str, Any]) -> int:
@@ -4138,7 +4357,7 @@ def _search_sql_type_codes(object_types: list[str]) -> list[str]:
     }
     for object_type in object_types:
         codes.extend(mapping.get(object_type, []))
-    return codes or ["P", "PC", "U", "V", "FN", "IF", "TF", "FS", "FT"]
+    return codes
 
 
 def _metadata_search_score(item: dict[str, Any], query: str) -> int:
@@ -4170,6 +4389,53 @@ def _metadata_search_score(item: dict[str, Any], query: str) -> int:
     return score
 
 
+def _metadata_search_table_summary(table: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema": table.get("schema"),
+        "name": table.get("name"),
+        "description": table.get("description"),
+    }
+
+
+def _metadata_search_column_summary(column: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": column.get("name"),
+        "description": column.get("description"),
+        "dataType": column.get("dataType"),
+    }
+
+
+def _metadata_search_column_summaries(columns: Any) -> list[dict[str, Any]]:
+    if not isinstance(columns, list):
+        return []
+    return [
+        _metadata_search_column_summary(column)
+        for column in columns
+        if isinstance(column, dict)
+    ]
+
+
+def _metadata_search_column_item(
+    table: dict[str, Any],
+    column: dict[str, Any],
+    *,
+    evidence_refs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "schema": table["schema"],
+        "name": f"{table['name']}.{column['name']}",
+        "objectType": "COLUMN",
+        "logicalName": column.get("logicalName"),
+        "description": column.get("description"),
+        "descriptionStatus": column.get("descriptionStatus", "CONFIRMED"),
+        "dataType": column.get("dataType"),
+        "table": _metadata_search_table_summary(table),
+        "column": _metadata_search_column_summary(column),
+        "columns": _metadata_search_column_summaries(table.get("columns", [])),
+        "evidenceRefs": evidence_refs,
+    }
+
+
 def _metadata_search_result_item(
     item: dict[str, Any],
     *,
@@ -4177,7 +4443,7 @@ def _metadata_search_result_item(
 ) -> dict[str, Any]:
     caveats = _dedupe(item.get("caveats", []))
     blockers = _blockers_for_caveats(caveats)
-    return {
+    result = {
         "objectIdentity": {
             "schema": item.get("schema"),
             "name": item.get("name"),
@@ -4192,6 +4458,12 @@ def _metadata_search_result_item(
         "blockers": blockers,
         "score": int(item.get("score", 0)),
     }
+    for key in ("description", "logicalName", "dataType", "table", "column", "columns"):
+        if key in item:
+            result[key] = item[key]
+    if item.get("objectType") == "TABLE" and "table" not in result:
+        result["table"] = _metadata_search_table_summary(item)
+    return result
 
 
 def _metadata_search_items_from_live_rows(
@@ -4253,7 +4525,7 @@ def _metadata_search_caveats(results: list[dict[str, Any]]) -> list[str]:
 def _blockers_for_caveats(caveats: list[str]) -> list[dict[str, str]]:
     messages = {
         DEPENDENCY_METADATA_INCOMPLETE: (
-            "Dependency metadata is incomplete and requires review before relying on links."
+            "Dependency metadata is incomplete; treat dependency links as evidence caveats until confirmed."
         )
     }
     return [

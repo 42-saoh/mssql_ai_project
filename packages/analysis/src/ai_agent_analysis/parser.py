@@ -54,7 +54,7 @@ def parse_procedure_signature(
             [
                 ReviewMarker(
                     code="PROCEDURE_HEADER_REVIEW",
-                    message="Procedure header could not be parsed deterministically.",
+                    message="procedure header를 결정론적으로 파싱하지 못했습니다.",
                 )
             ],
         )

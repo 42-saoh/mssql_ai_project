@@ -79,7 +79,7 @@ TOOL_INVOCATIONS: dict[str, dict[str, Any]] = {
     "search_metadata_objects": {
         "dbProfileId": "master",
         "query": "order",
-        "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+        "objectTypes": ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"],
         "limit": 4,
     },
     "get_procedure_definition": {
@@ -482,7 +482,7 @@ def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch
             "arguments": {
                 "dbProfileId": "master",
                 "query": "order",
-                "objectTypes": ["PROCEDURE", "TABLE", "VIEW", "FUNCTION"],
+                "objectTypes": ["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"],
                 "limit": 4,
             }
         },
@@ -496,7 +496,13 @@ def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch
     assert payload["data"]["blockers"]
     for result in payload["data"]["results"]:
         assert set(result["objectIdentity"]) == {"schema", "name", "type"}
-        assert result["objectIdentity"]["type"] in {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"}
+        assert result["objectIdentity"]["type"] in {
+            "PROCEDURE",
+            "TABLE",
+            "COLUMN",
+            "VIEW",
+            "FUNCTION",
+        }
         assert result["sourceProfile"] == "master"
         assert result["sourceDatabase"] == "master"
         assert result["snapshotId"] == "mcp-fixture-snapshot-0001"
@@ -507,6 +513,123 @@ def test_fixture_metadata_object_search_contract(monkeypatch: pytest.MonkeyPatch
 
     serialized = str(payload).lower()
     forbidden = ("rowdata", "row_data", "create procedure", "create view", "create function")
+    assert not any(value in serialized for value in forbidden)
+
+
+def test_fixture_metadata_object_search_contract_supports_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/search_metadata_objects/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "query": "ORDER_DATE",
+                "objectTypes": ["COLUMN"],
+                "limit": 5,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    identities = [result["objectIdentity"] for result in payload["data"]["results"]]
+    assert {
+        "schema": "dbo",
+        "name": "TB_ORDER.ORDER_DATE",
+        "type": "COLUMN",
+    } in identities
+    assert all(identity["type"] == "COLUMN" for identity in identities)
+    assert all(result["evidenceRefs"] for result in payload["data"]["results"])
+    order_date = next(
+        result
+        for result in payload["data"]["results"]
+        if result["objectIdentity"]["name"] == "TB_ORDER.ORDER_DATE"
+    )
+    assert order_date["description"] == "Date when the synthetic order was placed."
+    assert order_date["dataType"] == "DATE"
+    assert order_date["column"] == {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    }
+    assert order_date["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
+
+    serialized = str(payload).lower()
+    forbidden = (
+        "rowdata",
+        "row_data",
+        "definition",
+        "sqltext",
+        "create procedure",
+        "create view",
+        "create function",
+    )
+    assert not any(value in serialized for value in forbidden)
+
+
+def test_fixture_metadata_object_search_contract_supports_table_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    client = TestClient(app)
+
+    response = client.post(
+        "/tools/search_metadata_objects/invoke",
+        json={
+            "arguments": {
+                "dbProfileId": "master",
+                "query": "TB_ORDER",
+                "objectTypes": ["TABLE"],
+                "limit": 5,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    table_result = next(
+        result
+        for result in payload["data"]["results"]
+        if result["objectIdentity"] == {
+            "schema": "dbo",
+            "name": "TB_ORDER",
+            "type": "TABLE",
+        }
+    )
+    assert table_result["description"] == (
+        "Synthetic order header table used for metadata-only MCP tests."
+    )
+    assert table_result["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
+    assert {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    } in table_result["columns"]
+
+    serialized = str(payload).lower()
+    forbidden = (
+        "rowdata",
+        "row_data",
+        "definition",
+        "sqltext",
+        "create procedure",
+        "create view",
+        "create function",
+    )
     assert not any(value in serialized for value in forbidden)
 
 

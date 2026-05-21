@@ -7,4 +7,5 @@ developer_instructions = """
 Own the smallest defensible implementation slice.
 Keep unrelated files untouched, add the narrowest useful tests, and preserve policy boundaries.
 Prefer deterministic code paths for parsing, validation, and state transitions.
+For framework adapter work, keep injection internal and do not add public switches, dependency installs, API/schema/UI/MCP/artifact expansion, source apply, deploy, row-data queries, or procedure execution unless an explicit contract permits it.
 """

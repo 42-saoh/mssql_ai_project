@@ -27,7 +27,7 @@ policy_boundaries:
   ddl_dml_allowed: false
   plf_fallback_allowed: false
   generated_artifacts_are_draft_only: true
-  publish_or_export_allowed_without_approval: false
+  publish_or_export_allowed_from_draft: false
   production_ready_claim_allowed: false
 p18a_canonical_analysis_model:
   current_candidate_contract: CanonicalAnalysisModel
@@ -93,9 +93,9 @@ p18b_web_http_auth_rbac:
       - GET /api/v1/jobs/{jobId}/artifacts
       - GET /api/v1/artifacts/{artifactId}
       - POST /api/v1/artifacts/{artifactId}/validation
-      - POST /api/v1/artifacts/{artifactId}/approval-decisions
       - GET /api/v1/metadata/db-profiles
-      - GET /api/v1/metadata/search
+      - POST /api/v1/metadata/design-runs
+      - GET /api/v1/metadata/design-runs/{runId}
       - GET /api/v1/registry/versions
     blocker_if:
       - HTTP_ADAPTER_DIVERGES_FROM_PORTAL_API_INTERFACE
@@ -109,7 +109,6 @@ p18b_web_http_auth_rbac:
       adr: docs/adr/ADR-0006-production-auth-rbac-source.md
       canonical_roles:
         - USER
-        - REVIEWER
         - ADMIN
         - AUDITOR
     enforcement:
@@ -120,7 +119,6 @@ p18b_web_http_auth_rbac:
         - OIDC_JWKS_URL
       implemented_routes:
         - POST /api/v1/artifacts/{artifactId}/validation
-        - POST /api/v1/artifacts/{artifactId}/approval-decisions
       unauthorized_negative_tests: tests/integration/api/test_api_auth_rbac.py
       live_wiring_status: DEFERRED_OPTIONAL_FUTURE_HARDENING
     deferred_item: AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED
@@ -163,5 +161,5 @@ forbidden_evidence:
   - committed_secret
   - auto_ddl_or_dml
   - plf_fallback_for_ppm
-  - unapproved_publish_or_export
+  - publish_or_export_from_draft
   - fake_auth_rbac_with_mock_headers

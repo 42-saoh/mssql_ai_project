@@ -1,0 +1,241 @@
+contract_id: p44_framework_runtime_adoption@0.1.0
+phase: P44
+title: Real Framework Runtime Adoption Contract
+framework_adoption_decision: adopt
+primary_generation_runtime: openai_agents_sdk
+orchestration_runtime: langgraph
+generated_artifacts_production_ready: false
+public_surface_changes_allowed: false
+supersedes:
+  - p43_framework_adoption@0.1.0
+
+purpose:
+  summary: >
+    Adopt OpenAI Agents SDK as the first-class AI Draft Pack generation runtime
+    for the OpenAI provider and LangGraph as the in-process stage orchestrator
+    while preserving P42 schema, inventory, repair, validation, and storage
+    policy gates.
+  p43_status: >
+    P43 is historical readiness evidence. It is not deleted, but active
+    framework direction is now P44 adoption.
+
+dependency_policy:
+  direct_dependencies:
+    openai-agents: 0.17.2
+    langgraph: 1.2.0
+  lock_specs:
+    openai_agents: openai-agents==0.17.2
+    langgraph: langgraph==1.2.0
+  langgraph_db_checkpointer_extras_allowed: false
+  public_runtime_dependency_toggle_allowed: false
+  pypi_evidence:
+    openai_agents_version_observed: 0.17.2
+    openai_agents_release_date_observed: 2026-05-12
+    langgraph_version_observed: 1.2.0
+    langgraph_release_date_observed: 2026-05-12
+
+runtime_config:
+  name: FrameworkRuntimeConfig.v0.1
+  config_contract: FrameworkRuntimeConfig.v0.1
+  env:
+    AI_GENERATION_RUNTIME:
+      default_when_openai_remote: openai_agents
+      allowed_values:
+        - openai_agents
+        - responses_httpx
+      pgpt_default_behavior: responses_httpx
+      pgpt_explicit_openai_agents_allowed: true
+      pgpt_explicit_openai_agents_requires:
+        - AI_GENERATION_RUNTIME=openai_agents
+        - OPENAI_BASE_URL_or_OPENAI_RESPONSES_URL_required_for_pgpt_compatible_agents
+        - OPENAI_AGENTS_COMPATIBLE_API=responses_or_chat_completions
+    AI_DRAFT_PACK_ORCHESTRATOR:
+      default_when_openai_agents: langgraph
+      default_after_p44e: langgraph
+      allowed_values:
+        - langgraph
+        - inline
+  public_request_fields_added: false
+  public_request_flag_added: false
+  public_api_changed: false
+  public_mcp_routes_changed: false
+  db_schema_changed: false
+  ui_changed: false
+  public_artifact_types_changed: false
+  rollback:
+    emergency_runtime: responses_httpx
+    pgpt_default_runtime: responses_httpx
+    pgpt_explicit_sdk_runtime: openai_agents
+    pgpt_explicit_sdk_evidence_status: accepted_when_trace_locked_and_post_validated
+
+internal_interfaces:
+  generation_adapter: OpenAIAgentsFrameworkAdapter
+  orchestrator: LangGraphAiDraftPackOrchestrator
+  summary_contract: FrameworkRuntimeSummary.v0.1
+  retained_rollback:
+    - responses_httpx ModelGateway.draft_ai_java_mybatis_pack
+    - P49 keeps baseline adapter behavior only as a test helper.
+  existing_adapter_contract: AiGenerationFrameworkAdapter.v0.1
+  adapter_contract_upgrade_required: false
+
+openai_agents_policy:
+  tracing_disabled_by_default: true
+  run_config_tracing_disabled: true
+  run_config_trace_include_sensitive_data: false
+  enforced_env:
+    OPENAI_AGENTS_DISABLE_TRACING: "1"
+    OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA: "0"
+    OPENAI_AGENTS_DONT_LOG_MODEL_DATA: "1"
+    OPENAI_AGENTS_DONT_LOG_TOOL_DATA: "1"
+  stored_summary_allowed:
+    - adapter_id
+    - candidate_framework
+    - stage
+    - status
+    - component_ids
+    - counts
+    - hashes
+    - blocker_ids
+    - failure_codes
+    - numeric_policy_safe_metrics
+  stored_summary_forbidden:
+    - raw_prompt
+    - raw_provider_response
+    - raw_sp_definition
+    - raw_guide_body
+    - row_data
+    - secrets
+    - failed_java_or_xml_payload
+    - framework_messages
+    - tool_io
+
+openai_agents_adapter:
+  implementation: OpenAIAgentsFrameworkAdapter
+  replaces_fake_candidate_behavior: true
+  endpoint_policy:
+    official_openai: native_structured_output_then_post_validation
+    pgpt_compatible: sdk_responses_or_chat_transport_with_post_validation
+    custom_compatible: blocked_until_explicit_provider_classification
+    compatible_default_transport: responses
+    compatible_transport_env: OPENAI_AGENTS_COMPATIBLE_API
+    compatible_native_output_type_enabled: false
+  trace_policy:
+    set_tracing_disabled: true
+    run_config:
+      tracing_disabled: true
+      trace_include_sensitive_data: false
+    env_locks:
+      OPENAI_AGENTS_DISABLE_TRACING: "1"
+      OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA: "0"
+      OPENAI_AGENTS_DONT_LOG_MODEL_DATA: "1"
+      OPENAI_AGENTS_DONT_LOG_TOOL_DATA: "1"
+
+langgraph_policy:
+  stage_graph:
+    - file_inventory
+    - file_content
+    - quality_gate
+    - repair
+    - final
+  persistent_checkpointer_allowed_in_p44: false
+  compile_checkpointer: false
+  graph_state_policy: sanitized_context_and_validated_structured_payloads_only
+  platform_db_remains_persistence_boundary: true
+
+langgraph_orchestrator:
+  implementation: LangGraphAiDraftPackOrchestrator
+  persistence_policy:
+    checkpointer: false
+    db_backed_checkpointers_allowed: false
+    platform_db_remains_only_persistent_workflow_store: true
+
+quality_gates:
+  schema_contract: AiJavaMyBatisDraftPack.v0.1
+  deterministic_inventory_contract_required: true
+  p42_static_java_mybatis_validator_required: true
+  required_failures:
+    - two_dto_collapse
+    - missing_operation_coverage
+    - missing_review_required_markers
+    - unsafe_trace
+    - invalid_schema
+  manage_bond_role: benchmark_fixture_only
+  synthetic_complex_sp_guard_required: true
+
+live_gate:
+  phase: P45
+  name: P44_OPENAI_AGENTS_LIVE_GATE
+  default_enabled: false
+  test: tests/eval/test_p45_openai_agents_live_gate.py
+  required_env:
+    - LLM_ENABLE_REMOTE=1
+    - LLM_REMOTE_PROVIDER=openai_or_pgpt
+    - OPENAI_API_KEY
+    - OPENAI_BASE_URL empty_or_https://api.openai.com/v1
+    - OPENAI_BASE_URL_or_OPENAI_RESPONSES_URL_required_for_pgpt_compatible_agents
+    - AI_GENERATION_RUNTIME=openai_agents when LLM_REMOTE_PROVIDER=pgpt
+    - OPENAI_AGENTS_DISABLE_TRACING=1
+    - OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0
+    - OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1
+    - OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1
+  forbidden_live_behavior:
+    - procedure_execution
+    - row_data_query
+    - business_db_ddl_or_dml_apply
+    - generated_source_apply
+    - deploy
+    - raw_prompt_storage
+    - raw_provider_response_storage
+  default_suite_behavior: skipped_without_P44_OPENAI_AGENTS_LIVE_GATE
+  live_ppm_required: false
+  live_ppm_row_data_allowed: false
+  live_procedure_execution_allowed: false
+  persisted_evidence: sanitized_invocation_summary_only
+  compatible_endpoint_policy:
+    official_openai: accepted
+    pgpt_compatible: accepted_when_explicit_openai_agents_runtime_and_endpoint_present
+    custom_compatible: rejected_without_explicit_provider_classification
+
+rollback_decision:
+  phase: P46
+  decision_record: p46_rollback_removal_decision@0.1.0
+  decision_pending: false
+  decision: retain_limited_rollback_not_active_default
+  openai_default_runtime_after_p46: openai_agents_sdk
+  responses_httpx_status_after_p46: emergency_rollback_and_pgpt_default_compatibility_only
+  baseline_adapter_status_after_p46: retained_for_emergency_rollback_tests_only
+  removal_requires:
+    - p44_fixture_regression_passed
+    - p45_live_gate_passed_or_explicitly_deferred
+    - sanitized_trace_policy_passed
+    - p36_p41_p42_regressions_passed
+  deletion_approved: false
+  deletion_revisit_after: separate_post_p46_cleanup
+
+forbidden_behavior:
+  store_raw_sp_definition: true
+  store_raw_guide_body: true
+  store_raw_prompt: true
+  store_raw_provider_response: true
+  query_row_data: true
+  execute_stored_procedure: true
+  apply_business_db_ddl_or_dml: true
+  write_generated_source_to_application: true
+  deploy_generated_source: true
+  automatic_conversion_approval: true
+
+storage_policy:
+  store_raw_prompt: false
+  store_raw_provider_response: false
+  store_raw_sp_definition: false
+  store_raw_guide_body: false
+  store_row_data: false
+  store_failed_java_or_xml_payload: false
+  store_langgraph_checkpoint_state: false
+
+verification:
+  p44_static:
+    - make test PYTEST_ARGS="tests/contract/test_p44_framework_runtime_adoption_assets.py"
+  p44_regression:
+    - make test PYTEST_ARGS="tests/contract/test_p44_framework_runtime_adoption_assets.py tests/unit/agent_runtime/test_openai_agents_framework_adapter.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p44_framework_runtime_replay.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+    - git diff --check

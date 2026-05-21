@@ -106,7 +106,7 @@ def _search_ppm_metadata(client: TestClient) -> dict[str, Any]:
         params={
             "dbProfileId": "ppm",
             "query": os.getenv("P21_METADATA_SEARCH_QUERY", "proc"),
-            "objectTypes": "PROCEDURE",
+            "objectTypes": ["PROCEDURE"],
             "limit": "1",
         },
     )
@@ -116,8 +116,8 @@ def _search_ppm_metadata(client: TestClient) -> dict[str, Any]:
             fallback_blocker="P21_LIVE_PPM_UNAVAILABLE",
             check_name="ppm_metadata_search",
         )
-    payload = response.json()
-    results = payload.get("results") or []
+    search_result = response.json()
+    results = search_result.get("results") or []
     if not results:
         raise ProbeFailure(
             blocker_code="P21_LIVE_PPM_UNAVAILABLE",
@@ -138,7 +138,7 @@ def _search_ppm_metadata(client: TestClient) -> dict[str, Any]:
             "schema": str(identity.get("schema") or ""),
             "name": str(identity.get("name") or ""),
         },
-        "summary": "Read-only PPM metadata search returned a procedure identity.",
+        "summary": "Read-only PPM metadata design search returned a procedure identity.",
     }
 
 

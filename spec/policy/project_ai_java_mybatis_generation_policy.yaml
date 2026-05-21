@@ -12,13 +12,12 @@ priority:
 mode:
   generation: draft_only
   evidence_required: true
-  review_required: true
-  approval_required: true
+  quality_caveats_enabled: true
 
 forbidden:
   - auto_ddl_execution
   - direct_deployment_automation
-  - unreviewed_auto_apply
+  - unvalidated_auto_apply
   - actual_data_read_write
   - unsupported_framework_assumptions
   - inventing_columns_joins_business_rules
@@ -26,7 +25,7 @@ forbidden:
 scope:
   include:
     - java_mybatis_draft_generation
-    - dto_vo_model_draft_generation
+    - dto_service_mapper_mybatis_draft_generation
     - mapper_interface_generation
     - mapper_xml_generation
     - optional_controller_generation
@@ -36,12 +35,12 @@ scope:
   exclude:
     - auto_ddl_execution
     - direct_deployment_automation
-    - unreviewed_auto_apply
+    - unvalidated_auto_apply
     - actual_data_access_execution
 
 generationModes:
   metadataCrud:
-    description: table/column metadata is sufficient for CRUD-style draft generation
+    description: 테이블/컬럼 메타데이터가 CRUD 스타일 초안 생성에 충분한 상태
     defaultOutputs:
       - dto
       - service
@@ -50,7 +49,7 @@ generationModes:
       - evidence_summary
       - todo
   spWrapper:
-    description: SP call is preserved because rebuild evidence is insufficient
+    description: 재구성 근거가 부족해 SP 호출을 유지하는 상태
     defaultOutputs:
       - dto
       - service
@@ -59,7 +58,7 @@ generationModes:
       - evidence_summary
       - todo
   spRebuild:
-    description: SP logic can be rebuilt into SQL based on sufficiently analyzed evidence
+    description: 충분히 분석된 근거를 바탕으로 SP 로직을 SQL로 재구성할 수 있는 상태
     defaultOutputs:
       - dto
       - service
@@ -67,11 +66,14 @@ generationModes:
       - mapper_xml_sql_rebuild
       - evidence_summary
       - todo
-  metadataObject:
-    description: object model generation only
+  evidenceReconstructed:
+    description: 객체 모델만 생성하는 상태
     defaultOutputs:
-      - dto_or_vo_or_model
-      - field_mapping_summary
+      - dto
+      - service
+      - mapper_interface
+      - mapper_xml_sql_rebuild
+      - evidence_summary
       - todo
 
 requiredInput:
@@ -324,7 +326,11 @@ outputStructure:
   - code_draft
   - message_and_config_examples
   - assumptions_and_todo
-  - review_checklist
+  - quality_summary
+  - evidence_map
+  - known_caveats
+  - next_evidence_to_collect
+  - draft_readiness
 
 todoRules:
   mustMarkUnknown:
@@ -334,10 +340,10 @@ todoRules:
     - base_framework_usage
     - exact_exception_message_codes
     - controller_need
-    - dto_vo_model_final_choice
+    - dto_field_result_shape_mapping
     - sp_rebuild_feasibility
 
-reviewChecklist:
+draftQualityChecks:
   - naming_rules_applied
   - package_pattern_applied
   - mapper_xml_namespace_matches_interface

@@ -206,6 +206,14 @@ def procedure_inventory_item(
     }
 
 
+def _metadata_column_summary(column: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": column.get("name"),
+        "description": column.get("description"),
+        "dataType": column.get("dataType"),
+    }
+
+
 def table_inventory_item(
     table: dict[str, Any],
     *,
@@ -230,7 +238,9 @@ def table_inventory_item(
         "name": table["name"],
         "objectType": "TABLE",
         "logicalName": table.get("logicalName"),
+        "description": table.get("description"),
         "descriptionStatus": table.get("descriptionStatus", "CONFIRMED"),
+        "columns": [_metadata_column_summary(column) for column in table.get("columns", [])],
         "columnCount": len(table.get("columns", [])),
         "keyIndexConstraintSummary": {
             "primaryKey": primary_key,

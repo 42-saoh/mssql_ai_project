@@ -54,6 +54,7 @@
 - `platform_worker` : API/BFF, workflow, validation, storage 구현
 - `mcp_engineer` : MSSQL Metadata MCP 서버, 메타데이터 계약, 읽기 전용 경계
 - `template_engineer` : Canonical 모델, 프롬프트/템플릿, 생성기
+- `framework_engineer` : 내부 framework adapter pilot, trace/persistence redaction, baseline-vs-candidate replay
 - `reviewer` : correctness/security/test/docs drift 리뷰
 - `docs_curator` : 문서 동기화, 사용 가이드, 운영 문서
 
@@ -69,6 +70,9 @@
 - `docs-sync` : 문서 동기화
 - `context7-docs` : 최신 프레임워크/라이브러리 문서 확인
 - `browser-automation-smoke` : 비파괴적 로컬 UI smoke 검증
+- `framework-adapter-pilot` : P43F 이후 실제 framework 후보를 내부 adapter 뒤에서 검토
+- `framework-trace-policy-review` : framework tool context, trace, persistence/checkpointer 저장 정책 검토
+- `orchestration-migration-planning` : 대전환을 P44+ 작은 reversible slice로 분해
 
 ## 응답 형식
 
@@ -92,3 +96,32 @@
 - 파이썬 계열 테스트는 `make test` 와 `PYTEST_ARGS` 조합을 기본 인터페이스로 사용한다.
 - 전용 UI 테스트가 아직 없으면 `make test-web-smoke` 또는 승인된 Playwright MCP smoke 로 최소 검증을 수행하고, 테스트 공백을 명시적으로 보고한다.
 - Windows PowerShell 환경에서는 WinGet shim 을 직접 호출하지 않고 `scripts/win_git_bash.ps1` 로 Git Bash 를 경유해 `make`/`pnpm` 계열 명령을 실행한다.
+## P42 Additional Skills
+
+- `ai-draft-pack-authoring` : P42 `AiJavaMyBatisDraftPack.v0.1` file inventory/content/repair 작성
+- `java-mybatis-draft-validator` : DTO/Service/Mapper/MapperXML draft 품질, collapse, fallback blocker 검증
+- `sp-business-logic-migration-eval` : `MIGRATION_GUIDE.md` 대비 SP business branch/DTO/method 품질 평가
+
+## Post-P43 Framework Readiness 추가 규칙
+
+- 실제 framework adoption은 `pilot` 이후에도 내부 adapter, policy gate, rollback evidence 뒤에서만 검토한다.
+- OpenAI Agents SDK, LangGraph, 또는 다른 framework dependency 설치는 별도 dependency proposal과 trace/persistence redaction proof 없이는 진행하지 않는다.
+- ManageBond는 benchmark fixture로만 다루며 production-runtime answer key나 hardcoding으로 쓰지 않는다.
+- framework readiness slice는 public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row-data query, procedure execution을 추가하지 않는다.
+- `production_ready: false`와 필요한 `REVIEW_REQUIRED` 표시를 유지한다.
+
+## P44/P47 Framework Runtime 추가 규칙
+
+- P44 이후 framework work는 OpenAI Agents SDK + LangGraph actual internal runtime adoption으로 다룬다.
+- `framework-adapter-pilot`은 이름을 유지하지만, P44+ 런타임 품질, rollback, live evidence, generic AI Draft Pack uplift 검토에 사용한다.
+- Responses/httpx는 P-GPT compatibility와 emergency rollback 경로로만 유지한다.
+- P47 quality uplift는 prompt, tool evidence, model profile, validation logic을 일반화하고 ManageBond DTO/method 목록을 generic pass/fail answer key로 쓰지 않는다.
+- Public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row-data query, procedure execution은 별도 계약 없이 추가하지 않는다.
+
+## P44/P47 Framework Runtime Rules
+
+- P44+ framework work treats OpenAI Agents SDK + LangGraph as the adopted internal runtime.
+- `framework-adapter-pilot` keeps its name but covers P44+ runtime quality, rollback, live evidence, and generic AI Draft Pack uplift review.
+- Responses/httpx stays only for P-GPT compatibility and emergency rollback.
+- P47 quality uplift generalizes prompt, tool evidence, model profile, and validation logic; ManageBond DTO/method lists must not become generic pass/fail answer keys.
+- Do not add public API, DB schema, UI, public MCP route, public artifact type, source apply, deploy, row-data query, or procedure execution without a separate contract.

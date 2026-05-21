@@ -15,6 +15,9 @@
 | `docs-sync` | `.agents/skills/docs-sync` | 코드/계약/정책 변경 이후 문서를 맞출 때 | 문서 업데이트, changelog 요약 |
 | `context7-docs` | `.agents/skills/context7-docs` | 최신 프레임워크/라이브러리 문서가 필요한 구현/설정 작업일 때 | 좁은 범위의 문서 근거와 구현 가이드 |
 | `browser-automation-smoke` | `.agents/skills/browser-automation-smoke` | 로컬 UI happy-path 확인, 스크린샷, 비파괴적 smoke 검증이 필요할 때 | 검증 로그, 스크린샷, blocker 메모 |
+| `framework-adapter-pilot` | `.agents/skills/framework-adapter-pilot` | P43F `pilot` 이후 실제 framework 후보를 내부 adapter 뒤에서 검토할 때 | pilot slice plan, rollback evidence, A/B replay notes |
+| `framework-trace-policy-review` | `.agents/skills/framework-trace-policy-review` | framework tool context, trace, persistence, checkpointer 저장 정책을 검토할 때 | trace policy findings, blocker report |
+| `orchestration-migration-planning` | `.agents/skills/orchestration-migration-planning` | 대전환을 P44+ 작은 orchestration/framework migration slice로 나눌 때 | reversible migration plan, decision gate checklist |
 
 ## 스킬 작성 원칙
 
@@ -29,3 +32,22 @@
 - 스킬이 너무 커지면 역할별로 분리한다.
 - 동일한 작업을 반복해서 요청하게 되면 스킬로 승격한다.
 - 불필요해진 스킬은 제거하거나 보관 처리한다.
+
+## Post-P43 Framework Readiness Skills
+
+| Skill | Location | When to use | Output |
+|---|---|---|---|
+| `framework-adapter-pilot` | `.agents/skills/framework-adapter-pilot` | OpenAI Agents SDK/LangGraph runtime quality, trace policy, rollback, or generic AI Draft Pack uplift changes are touched | runtime quality plan, replay evidence, rollback notes |
+| `framework-trace-policy-review` | `.agents/skills/framework-trace-policy-review` | Candidate traces, tool context, persistence, or checkpointers could store sensitive payloads | sanitized trace review, blocker ids, residual `REVIEW_REQUIRED` |
+| `orchestration-migration-planning` | `.agents/skills/orchestration-migration-planning` | A large workflow/runtime migration needs to be split into reversible P44+ slices | migration slice order, tests, docs decision gate |
+
+Post-P43/P44 framework work keeps generated artifacts `production_ready: false`, uses `.agents/skills` rather than a new `.agent` directory, treats P44 as actual internal OpenAI Agents SDK plus LangGraph adoption, and keeps Responses/httpx for P-GPT compatibility and emergency rollback. P47 quality work must use generic coverage evidence and benchmark-only ManageBond metrics rather than runtime answer keys.
+## P42 Additional Skills
+
+| Skill | Location | When to use | Output |
+|---|---|---|---|
+| `ai-draft-pack-authoring` | `.agents/skills/ai-draft-pack-authoring` | P42 `AiJavaMyBatisDraftPack.v0.1` file inventory/content/repair 를 작성할 때 | AI Draft Pack inventory, Java/MyBatis draft pack, repair notes |
+| `java-mybatis-draft-validator` | `.agents/skills/java-mybatis-draft-validator` | DTO/Service/Mapper/MapperXML 초안의 blank, fallback, single DTO collapse, forbidden marker 를 검증할 때 | blocker report, review marker report, validation checklist |
+| `sp-business-logic-migration-eval` | `.agents/skills/sp-business-logic-migration-eval` | `MIGRATION_GUIDE.md`와 생성 산출물을 비교해 SP business branch 품질을 평가할 때 | branch coverage report, DTO/method responsibility map, missing `REVIEW_REQUIRED` findings |
+
+P42/P43/P47 domain skills treat ManageBond as benchmark evidence only, not as production-runtime hardcoding.

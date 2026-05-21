@@ -39,7 +39,6 @@ def test_p20_live_probe_reports_missing_env_as_deferred_prerequisite(
         "OIDC_ISSUER",
         "OIDC_AUDIENCE",
         "OIDC_JWKS_URL",
-        "OIDC_REVIEWER_BEARER_TOKEN",
         "OIDC_USER_BEARER_TOKEN",
         "PLATFORM_DB_HOST",
         "PLATFORM_DB_PORT",
@@ -75,13 +74,13 @@ def test_p20_env_sample_and_docker_compose_forward_live_gate_names() -> None:
         "OIDC_ISSUER",
         "OIDC_AUDIENCE",
         "OIDC_JWKS_URL",
-        "OIDC_REVIEWER_BEARER_TOKEN",
         "OIDC_USER_BEARER_TOKEN",
     ):
         assert f"{name}=" in env_text
         assert name in compose_text
 
-    assert "OIDC_REVIEWER_BEARER_TOKEN=\n" in env_text
+    assert "OIDC_REVIEWER_BEARER_TOKEN" not in env_text
+    assert "OIDC_REVIEWER_BEARER_TOKEN" not in compose_text
     assert "OIDC_USER_BEARER_TOKEN=\n" in env_text
 
 

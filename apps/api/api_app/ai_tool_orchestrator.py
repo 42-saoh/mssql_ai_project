@@ -165,7 +165,7 @@ class AgentToolPolicy:
                 tool_name=normalized_tool,
                 arguments={},
                 code="AI_TOOL_NOT_ACTIVE_READ_ONLY",
-                message="Requested tool is not an active read-only MCP metadata tool.",
+                message="요청한 tool은 활성화된 read-only MCP metadata tool이 아닙니다.",
             )
         normalized_arguments = _normalized_arguments(
             arguments,
@@ -177,7 +177,7 @@ class AgentToolPolicy:
                 tool_name=normalized_tool,
                 arguments=normalized_arguments,
                 code="AI_TOOL_PROFILE_SWITCH_BLOCKED",
-                message="AI tool orchestration cannot switch metadata profiles.",
+                message="AI tool orchestration은 metadata profile 전환을 허용하지 않습니다.",
             )
         violation = _argument_policy_violation(normalized_tool, normalized_arguments)
         if violation is not None:
@@ -234,53 +234,53 @@ def deterministic_fallback_tool_requests(
         add(
             "get_table_schema",
             table_args,
-            reason="Fallback needs deterministic table shape evidence.",
-            expected="Anchor column, DTO, and result-shape review claims.",
+            reason="fallback에는 결정론적 table shape 근거가 필요합니다.",
+            expected="column, DTO, result-shape 검토 claim의 근거로 사용합니다.",
         )
         add(
             "get_table_constraints",
             table_args,
-            reason="Fallback needs deterministic key and relationship evidence.",
-            expected="Anchor PK/FK/constraint and relationship claims.",
+            reason="fallback에는 결정론적 key/relationship 근거가 필요합니다.",
+            expected="PK/FK/constraint 및 relationship claim의 근거로 사용합니다.",
         )
         add(
             "get_table_indexes",
             table_args,
-            reason="Fallback needs deterministic index evidence.",
-            expected="Anchor index and access-path review claims.",
+            reason="fallback에는 결정론적 index 근거가 필요합니다.",
+            expected="index 및 access-path 검토 claim의 근거로 사용합니다.",
         )
         object_args = {"schema": schema, "objectName": name, "objectType": object_type}
         add(
             "get_extended_properties",
             object_args,
-            reason="Fallback needs deterministic documentation evidence.",
-            expected="Anchor description coverage and documentation gap claims.",
+            reason="fallback에는 결정론적 documentation 근거가 필요합니다.",
+            expected="description coverage 및 documentation gap claim의 근거로 사용합니다.",
         )
         add(
             "get_related_db_objects",
             object_args,
-            reason="Fallback needs deterministic related-object evidence.",
-            expected="Anchor dependency and relationship review claims.",
+            reason="fallback에는 결정론적 related-object 근거가 필요합니다.",
+            expected="dependency 및 relationship 검토 claim의 근거로 사용합니다.",
         )
     elif object_type in {"PROCEDURE", "VIEW", "FUNCTION"}:
         object_args = {"schema": schema, "objectName": name, "objectType": object_type}
         add(
             "get_dependency_closure",
             {**object_args, "maxDepth": 1, "includeReviewRequired": True},
-            reason="Fallback needs bounded dependency closure evidence.",
-            expected="Anchor dependency, related object, and review marker claims.",
+            reason="fallback에는 제한된 dependency closure 근거가 필요합니다.",
+            expected="dependency, related object, evidence caveat claim의 근거로 사용합니다.",
         )
         add(
             "get_extended_properties",
             object_args,
-            reason="Fallback needs deterministic documentation evidence.",
-            expected="Anchor documentation and migration guide review claims.",
+            reason="fallback에는 결정론적 documentation 근거가 필요합니다.",
+            expected="documentation 및 migration guide 검토 claim의 근거로 사용합니다.",
         )
         add(
             "get_related_db_objects",
             object_args,
-            reason="Fallback needs deterministic related-object evidence.",
-            expected="Anchor relationship and dependency review claims.",
+            reason="fallback에는 결정론적 related-object 근거가 필요합니다.",
+            expected="relationship 및 dependency 검토 claim의 근거로 사용합니다.",
         )
     return requests[:max_tool_calls]
 
@@ -316,8 +316,8 @@ class AiToolOrchestrator:
                     _review_marker(
                         "AI_TOOL_ORCHESTRATION_SKIPPED",
                         (
-                            "AI tool orchestration was skipped because the semantic "
-                            "analysis SP text gate must fail before remote model use."
+                            "remote model 사용 전에 semantic analysis SP text gate가 실패해야 해서 "
+                            "AI tool orchestration을 건너뛰었습니다."
                         ),
                         evidence_refs=_fallback_evidence_refs(metadata, []),
                     )
@@ -338,7 +338,7 @@ class AiToolOrchestrator:
                 review_markers=[
                     _review_marker(
                         "AI_TOOL_ORCHESTRATION_SKIPPED",
-                        "Configured model gateway does not expose metadata tool planning.",
+                        "설정된 model gateway가 metadata tool planning을 제공하지 않습니다.",
                         evidence_refs=_fallback_evidence_refs(metadata, []),
                     )
                 ],
@@ -378,7 +378,7 @@ class AiToolOrchestrator:
             review_markers.append(
                 _review_marker(
                     "AI_TOOL_BUDGET_REDUCED",
-                    "AI tool planning rounds were reduced for live PPM latency and cost control.",
+                    "live PPM latency와 비용 제어를 위해 AI tool planning round를 줄였습니다.",
                     evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                 )
             )
@@ -389,7 +389,7 @@ class AiToolOrchestrator:
             marker = _review_marker(
                 "AI_TOOL_ORCHESTRATION_SKIPPED",
                 (
-                    "Internal MCP registry setup failed for AI tool orchestration: "
+                    "AI tool orchestration용 internal MCP registry 설정이 실패했습니다: "
                     f"{exc.__class__.__name__}."
                 ),
                 evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
@@ -443,8 +443,9 @@ class AiToolOrchestrator:
                     marker = _review_marker(
                         "AI_TOOL_ORCHESTRATION_SKIPPED",
                         (
-                            "Metadata tool planning failed; workflow continued with baseline "
-                            f"metadata. code={getattr(exc, 'code', exc.__class__.__name__)}"
+                            "Metadata tool planning이 실패해 baseline metadata로 "
+                            "workflow를 계속했습니다. "
+                            f"code={getattr(exc, 'code', exc.__class__.__name__)}"
                         ),
                         evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                     )
@@ -504,8 +505,8 @@ class AiToolOrchestrator:
                         _review_marker(
                             "AI_TOOL_CALL_BUDGET_EXHAUSTED",
                             (
-                                "AI metadata tool call budget was exhausted before all "
-                                "planned requests ran."
+                                "계획된 요청을 모두 실행하기 전에 AI metadata tool call budget을 "
+                                "소진했습니다."
                             ),
                             evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                         )
@@ -529,7 +530,7 @@ class AiToolOrchestrator:
                     review_markers.append(
                         _review_marker(
                             "AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED",
-                            str(decision.message or "AI metadata tool request was blocked."),
+                            str(decision.message or "AI metadata tool request가 차단되었습니다."),
                             evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                         )
                     )
@@ -559,8 +560,8 @@ class AiToolOrchestrator:
                         _review_marker(
                             "AI_TOOL_ORCHESTRATION_REVIEW_REQUIRED",
                             (
-                                "AI metadata tool invocation failed with a documented "
-                                f"MCP error: {exc.code}."
+                                "AI metadata tool invocation이 문서화된 MCP error로 실패했습니다: "
+                                f"{exc.code}."
                             ),
                             evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                         )
@@ -667,6 +668,8 @@ def _sp_text_gate_will_block_semantic(options: Mapping[str, Any]) -> bool:
     return (
         os.getenv("LLM_ENABLE_REMOTE", "0").strip() == "1"
         and bool(options.get("allowSpDefinitionToModel", False))
+        and str(options.get("sourceContextMode") or "RETRIEVED_SPANS").strip().upper()
+        == "RETRIEVED_SPANS"
         and os.getenv("LLM_ALLOW_SP_TEXT", "0").strip() != "1"
     )
 
@@ -756,7 +759,7 @@ def _argument_policy_violation(
                 if not (tool_name == "search_metadata_objects" and normalized_key == "query"):
                     return (
                         "AI_TOOL_FORBIDDEN_ARGUMENT",
-                        f"Forbidden argument key blocked at {nested_path}.",
+                        f"금지된 argument key를 {nested_path}에서 차단했습니다.",
                     )
             violation = _argument_policy_violation(tool_name, item, path=nested_path)
             if violation is not None:
@@ -771,7 +774,7 @@ def _argument_policy_violation(
     if isinstance(value, str) and _looks_like_freeform_sql(value):
         return (
             "AI_TOOL_FREEFORM_SQL_BLOCKED",
-            f"Free-form SQL-like argument blocked at {path}.",
+            f"free-form SQL처럼 보이는 argument를 {path}에서 차단했습니다.",
         )
     return None
 
@@ -880,19 +883,21 @@ def _fact_summary(tool_name: str, payload: Mapping[str, Any]) -> str:
         table_name = data.get("tableName") or data.get("name") or "table"
         columns = data.get("columns") if isinstance(data.get("columns"), list) else []
         return (
-            f"Table schema metadata for {data.get('schema', '')}.{table_name} "
-            f"with {len(columns)} columns."
+            f"{data.get('schema', '')}.{table_name} table schema metadata입니다. "
+            f"컬럼 {len(columns)}개를 포함합니다."
         )
     if tool_name == "search_metadata_objects":
         results = data.get("results") if isinstance(data.get("results"), list) else []
-        return f"Metadata object search returned {len(results)} candidate identities."
+        return f"Metadata object search가 candidate identity {len(results)}개를 반환했습니다."
     if tool_name == "get_dependency_closure":
         summary = _safe_dict(data.get("summary"))
+        node_count = summary.get("nodeCount", 0)
+        edge_count = summary.get("edgeCount", 0)
         return (
-            "Dependency closure metadata with "
-            f"{summary.get('nodeCount', 0)} nodes and {summary.get('edgeCount', 0)} edges."
+            "의존성 closure metadata입니다. "
+            f"node {node_count}개와 edge {edge_count}개를 포함합니다."
         )
-    return f"{tool_name} returned sanitized read-only MSSQL metadata evidence."
+    return f"{tool_name}이 sanitized read-only MSSQL metadata evidence를 반환했습니다."
 
 
 def _metadata_with_ai_tool_evidence(
@@ -936,7 +941,8 @@ def _metadata_with_ai_tool_evidence(
             _dedupe_strings(
                 [
                     *metadata.notes,
-                    "AI tool orchestration used internal read-only MSSQL MCP registry boundary.",
+                    "AI tool orchestration은 internal read-only MSSQL MCP registry "
+                    "경계를 사용했습니다.",
                 ]
             )
         ),
@@ -976,7 +982,7 @@ def _blocked_request(decision: PolicyDecision) -> dict[str, Any]:
         "toolName": decision.tool_name,
         "argumentHash": stable_json_hash(decision.arguments),
         "code": str(decision.code or "AI_TOOL_REQUEST_BLOCKED"),
-        "message": str(decision.message or "AI metadata tool request was blocked."),
+        "message": str(decision.message or "AI metadata tool request가 차단되었습니다."),
     }
 
 
@@ -991,16 +997,16 @@ def _fallback_tool_plan(
             "toolRequests": tool_requests,
             "assumptions": [
                 (
-                    "Deterministic read-only fallback metadata requests were used because "
-                    "the model planner was invalid or empty."
+                    "model planner가 invalid 또는 empty 상태라 결정론적 read-only fallback "
+                    "metadata request를 사용했습니다."
                 )
             ],
             "reviewMarkers": [
                 _review_marker(
                     AI_TOOL_PLANNER_DETERMINISTIC_FALLBACK,
                     (
-                        "Metadata tool planner output was invalid or empty; deterministic "
-                        f"read-only fallback tool requests were used. code={detail_code}"
+                        "Metadata tool planner output이 invalid 또는 empty 상태라 결정론적 "
+                        f"read-only fallback tool request를 사용했습니다. code={detail_code}"
                     ),
                     evidence_refs=evidence_refs,
                 )

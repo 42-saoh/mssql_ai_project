@@ -6,7 +6,6 @@ from typing import Annotated, cast
 from fastapi import Depends, Request
 
 from api_app.auth import (
-    ARTIFACT_REVIEW_ROLES,
     Actor,
     AuthConfigurationError,
     AuthenticationRequiredError,
@@ -20,6 +19,7 @@ from api_app.auth import (
 )
 from api_app.errors import api_http_exception
 from api_app.metadata_analysis_service import MetadataAnalysisService
+from api_app.metadata_design_service import MetadataDesignChatService
 from api_app.platform_db import build_platform_repository
 from api_app.repositories import WorkflowRepository
 from api_app.workflow import WorkflowService
@@ -39,6 +39,11 @@ def get_workflow_service() -> WorkflowService:
 @lru_cache(maxsize=1)
 def get_metadata_analysis_service() -> MetadataAnalysisService:
     return MetadataAnalysisService()
+
+
+@lru_cache(maxsize=1)
+def get_metadata_design_service() -> MetadataDesignChatService:
+    return MetadataDesignChatService()
 
 
 @lru_cache(maxsize=1)
@@ -99,12 +104,10 @@ def require_roles(*allowed_roles: str):
     return dependency
 
 
-require_artifact_review_actor = require_roles(*ARTIFACT_REVIEW_ROLES)
-
-
 def reset_application_state() -> None:
     get_workflow_service.cache_clear()
     get_metadata_analysis_service.cache_clear()
+    get_metadata_design_service.cache_clear()
     get_repository.cache_clear()
     get_jwt_verifier.cache_clear()
     get_auth_settings.cache_clear()

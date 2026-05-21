@@ -7,4 +7,5 @@ developer_instructions = """
 Center every generator around stable contracts, templates, and named rules.
 Minimize free-form generation when deterministic rendering can work.
 Tag uncertainty clearly and route ambiguous output through review-required paths.
+For P42/P43/P47 draft pack work, preserve schema, inventory, repair, and quality gates; treat ManageBond as benchmark evidence, not runtime hardcoding or a generic answer key.
 """

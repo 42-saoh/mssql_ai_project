@@ -28,6 +28,7 @@ class WorkRequestRecord:
     request_hash: str
     correlation_id: str
     idempotency_key: str | None = None
+    target_key: str | None = None
     status: JobStatus = JobStatus.SUBMITTED
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -40,6 +41,10 @@ class JobRecord:
     status: JobStatus = JobStatus.SUBMITTED
     current_step: WorkflowStepType | None = None
     correlation_id: str | None = None
+    db_profile_id: str | None = None
+    target: dict[str, Any] | None = None
+    target_key: str | None = None
+    outputs: tuple[str, ...] = ()
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
     error_code: str | None = None
@@ -66,6 +71,7 @@ class AgentRunRecord:
     summary: str
     structured_output: dict[str, Any]
     model_invocation: dict[str, Any]
+    target_key: str | None = None
     created_at: datetime = field(default_factory=utc_now)
 
 
@@ -82,12 +88,12 @@ class ArtifactRecord:
     registry_refs: tuple[str, ...]
     assumptions: tuple[str, ...]
     review_required: bool = True
+    target_key: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
     latest_validation_report_id: str | None = None
     latest_validation_status: str | None = None
-    latest_approval_id: str | None = None
 
     @property
     def evidence_coverage(self) -> float:
@@ -121,21 +127,6 @@ class ValidationReportRecord:
 
 
 @dataclass
-class ApprovalRecordData:
-    approval_id: str
-    artifact_id: str
-    decision: str
-    reviewer: str
-    comment: str
-    validation_report_id: str | None
-    storage_decision: str
-    persistence_note: str
-    reviewer_checklist: list[dict[str, Any]] = field(default_factory=list)
-    validation_summary: dict[str, Any] = field(default_factory=dict)
-    decided_at: datetime = field(default_factory=utc_now)
-
-
-@dataclass
 class AuditEventRecord:
     audit_id: str
     action: str
@@ -160,12 +151,7 @@ class KnowledgePersistenceError(RuntimeError):
         self.status_code = status_code
 
 
-KNOWLEDGE_LIFECYCLE_STATUSES = frozenset(
-    {"DRAFT", "REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"}
-)
-KNOWLEDGE_REVIEW_TARGET_STATUSES = frozenset(
-    {"REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"}
-)
+KNOWLEDGE_LIFECYCLE_STATUSES = frozenset({"DRAFT", "REVIEW_REQUIRED", "ARCHIVED"})
 
 
 @dataclass
@@ -177,14 +163,12 @@ class KnowledgeAssetRecord:
     target_schema: str
     target_name: str
     logical_key: str
+    target_key: str | None = None
     current_version_id: str | None = None
     current_version_no: int = 0
     content_hash: str | None = None
     source_job_id: str | None = None
     lifecycle_status: str = "DRAFT"
-    review_reason_code: str | None = None
-    reviewer: str | None = None
-    reviewed_at: datetime | None = None
     archived_at: datetime | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -229,24 +213,7 @@ class KnowledgeAssetVersionRecord:
     edges: list[KnowledgeEdgeRecord]
     source_job_id: str | None = None
     lifecycle_status: str = "DRAFT"
-    review_reason_code: str | None = None
-    review_note: dict[str, Any] = field(default_factory=dict)
-    reviewer: str | None = None
-    reviewed_at: datetime | None = None
     archived_at: datetime | None = None
-    created_at: datetime = field(default_factory=utc_now)
-
-
-@dataclass
-class KnowledgeReviewRecord:
-    review_id: str
-    asset_id: str
-    version_id: str
-    from_status: str
-    to_status: str
-    reason_code: str
-    note: dict[str, Any]
-    reviewer: str
     created_at: datetime = field(default_factory=utc_now)
 
 
@@ -270,6 +237,57 @@ class KnowledgeExportRecord:
     created_at: datetime = field(default_factory=utc_now)
 
 
+class MetadataAnalysisRunPersistenceError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "METADATA_ANALYSIS_RUN_PERSISTENCE_FAILED",
+        status_code: int = 503,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
+
+
+class MetadataDesignRunPersistenceError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "METADATA_DESIGN_RUN_PERSISTENCE_FAILED",
+        status_code: int = 503,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
+
+
+@dataclass
+class MetadataAnalysisRunRecord:
+    run_id: str
+    status: str
+    request: dict[str, Any]
+    submitted_at: datetime = field(default_factory=utc_now)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    analysis: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+
+
+@dataclass
+class MetadataDesignRunRecord:
+    run_id: str
+    conversation_id: str
+    status: str
+    request: dict[str, Any]
+    submitted_at: datetime = field(default_factory=utc_now)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+
+
 class WorkflowRepository(Protocol):
     def create_request(
         self,
@@ -281,6 +299,7 @@ class WorkflowRepository(Protocol):
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
+        target_key: str | None = None,
     ) -> WorkRequestRecord:
         ...
 
@@ -288,6 +307,9 @@ class WorkflowRepository(Protocol):
         self,
         idempotency_key: str,
     ) -> WorkRequestRecord | None:
+        ...
+
+    def get_request(self, request_id: str) -> WorkRequestRecord | None:
         ...
 
     def update_request_status(self, request_id: str, status: JobStatus) -> None:
@@ -306,6 +328,9 @@ class WorkflowRepository(Protocol):
         status: JobStatus,
         current_step: WorkflowStepType | None,
     ) -> JobRecord:
+        ...
+
+    def claim_submitted_job(self, job_id: str) -> JobRecord | None:
         ...
 
     def fail_job(self, job_id: str, *, code: str, message: str) -> JobRecord:
@@ -333,6 +358,7 @@ class WorkflowRepository(Protocol):
         summary: str,
         structured_output: dict[str, Any],
         model_invocation: dict[str, Any],
+        target_key: str | None = None,
     ) -> AgentRunRecord:
         ...
 
@@ -356,16 +382,45 @@ class WorkflowRepository(Protocol):
         assumptions: tuple[str, ...],
         review_required: bool,
         extra: dict[str, Any] | None = None,
+        target_key: str | None = None,
     ) -> ArtifactRecord:
         ...
 
     def get_job(self, job_id: str) -> JobRecord | None:
         ...
 
-    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+    def list_jobs(
+        self,
+        *,
+        limit: int | None = None,
+        target_key: str | None = None,
+    ) -> list[JobRecord]:
+        ...
+
+    def list_stale_active_jobs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[JobRecord]:
+        ...
+
+    def claim_stale_active_job(
+        self,
+        job_id: str,
+        *,
+        stale_before: datetime,
+    ) -> JobRecord | None:
         ...
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
+        ...
+
+    def find_job_artifact_by_type(
+        self,
+        job_id: str,
+        artifact_type: ArtifactType,
+    ) -> ArtifactRecord | None:
         ...
 
     def list_job_artifacts(
@@ -393,23 +448,6 @@ class WorkflowRepository(Protocol):
         ...
 
     def has_validation_report(self, validation_report_id: str) -> bool:
-        ...
-
-    def add_approval(
-        self,
-        *,
-        artifact_id: str,
-        decision: str,
-        reviewer: str,
-        comment: str,
-        validation_report_id: str | None,
-        reviewer_checklist: list[dict[str, Any]] | None = None,
-        validation_summary: dict[str, Any] | None = None,
-        correlation_id: str | None = None,
-    ) -> ApprovalRecordData:
-        ...
-
-    def latest_approval_for(self, artifact_id: str) -> ApprovalRecordData | None:
         ...
 
     def record_audit_event(
@@ -490,27 +528,6 @@ class WorkflowRepository(Protocol):
     ) -> list[KnowledgeFactSearchRecord]:
         ...
 
-    def review_knowledge_asset_version(
-        self,
-        *,
-        asset_id: str,
-        version_id: str,
-        status: str,
-        reason_code: str,
-        note: dict[str, Any],
-        reviewer: str,
-        actor: str = "api-system",
-    ) -> KnowledgeReviewRecord | None:
-        ...
-
-    def list_knowledge_reviews(
-        self,
-        asset_id: str,
-        *,
-        version_id: str | None = None,
-    ) -> list[KnowledgeReviewRecord] | None:
-        ...
-
     def save_knowledge_export(
         self,
         *,
@@ -520,6 +537,107 @@ class WorkflowRepository(Protocol):
         content_hash: str,
         asset_ids: list[str],
     ) -> KnowledgeExportRecord:
+        ...
+
+    def create_metadata_analysis_run(
+        self,
+        *,
+        run_id: str,
+        request: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        ...
+
+    def get_metadata_analysis_run(self, run_id: str) -> MetadataAnalysisRunRecord | None:
+        ...
+
+    def list_recoverable_metadata_analysis_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataAnalysisRunRecord]:
+        ...
+
+    def claim_metadata_analysis_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataAnalysisRunRecord | None:
+        ...
+
+    def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:
+        ...
+
+    def mark_metadata_analysis_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        analysis: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        ...
+
+    def mark_metadata_analysis_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        ...
+
+    def create_metadata_design_run(
+        self,
+        *,
+        run_id: str,
+        conversation_id: str,
+        request: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        ...
+
+    def get_metadata_design_run(self, run_id: str) -> MetadataDesignRunRecord | None:
+        ...
+
+    def list_metadata_design_runs_for_conversation(
+        self,
+        conversation_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[MetadataDesignRunRecord]:
+        ...
+
+    def list_recoverable_metadata_design_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataDesignRunRecord]:
+        ...
+
+    def claim_metadata_design_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataDesignRunRecord | None:
+        ...
+
+    def mark_metadata_design_run_running(self, run_id: str) -> MetadataDesignRunRecord:
+        ...
+
+    def mark_metadata_design_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        result: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        ...
+
+    def mark_metadata_design_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
         ...
 
 
@@ -548,10 +666,7 @@ AUDIT_STAGE_BY_ACTION: dict[str, str] = {
     "AGENT_RUN_RECORDED": "AGENT_RUNTIME",
     "ARTIFACT_CREATED": "ARTIFACT",
     "ARTIFACT_VALIDATED": "VALIDATION",
-    "APPROVAL_DECISION_RECORDED": "APPROVAL",
-    "PUBLISH_GATE_EVALUATED": "APPROVAL_GATE",
     "KNOWLEDGE_ASSET_VERSIONED": "KNOWLEDGE",
-    "KNOWLEDGE_ASSET_REVIEW_RECORDED": "KNOWLEDGE",
     "KNOWLEDGE_EXPORTED": "KNOWLEDGE",
 }
 
@@ -587,7 +702,6 @@ def standardized_audit_payload(
         "metadataId",
         "artifactId",
         "validationReportId",
-        "approvalId",
     ):
         value = audit_payload.get(key)
         if value is not None:
@@ -595,58 +709,6 @@ def standardized_audit_payload(
     if refs:
         audit_payload["refs"] = refs
     return audit_payload
-
-
-def approval_audit_payload(
-    *,
-    artifact: ArtifactRecord,
-    approval: ApprovalRecordData,
-    validation_report_id: str | None,
-    correlation_id: str | None,
-) -> dict[str, Any]:
-    artifact_version = artifact_version_ref(artifact)
-    selected_object_refs = selected_object_refs_for_artifact(artifact)
-    refs = {
-        "artifactId": artifact.artifact_id,
-        "artifactVersion": artifact_version,
-        "approvalId": approval.approval_id,
-    }
-    if validation_report_id:
-        refs["validationReportId"] = validation_report_id
-    payload: dict[str, Any] = {
-        "decision": approval.decision,
-        "storageDecision": approval.storage_decision,
-        "artifactId": artifact.artifact_id,
-        "artifactVersion": artifact_version,
-        "artifactRef": {
-            "artifactId": artifact.artifact_id,
-            "artifactVersion": artifact_version,
-            "artifactType": artifact.type.value,
-        },
-        "validationReportId": validation_report_id,
-        "validationRef": {
-            "validationReportId": validation_report_id,
-            "artifactId": artifact.artifact_id,
-            "artifactVersion": artifact_version,
-            "validationStatus": approval.validation_summary.get("status"),
-        },
-        "approvalId": approval.approval_id,
-        "approvalRef": {
-            "approvalId": approval.approval_id,
-            "decision": approval.decision,
-            "storageDecision": approval.storage_decision,
-        },
-        "selectedObjectRefs": selected_object_refs,
-        "evidenceRefs": list(artifact.evidence_refs),
-        "timestamp": approval.decided_at.isoformat(),
-        "actor": approval.reviewer,
-        "reviewerChecklist": approval.reviewer_checklist,
-        "refs": refs,
-    }
-    if correlation_id:
-        payload["correlationId"] = correlation_id
-    return payload
-
 
 def artifact_version_ref(artifact: ArtifactRecord) -> str:
     for key in ("artifactVersion", "artifact_version", "version"):

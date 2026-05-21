@@ -1,12 +1,30 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
-from ai_agent_runtime.gateway import ModelGateway, model_profile_from_env
+from ai_agent_analysis.source_map import (
+    context_pack_summary,
+    shrink_context_pack,
+    without_source_text_context_pack,
+)
+
+from ai_agent_runtime.gateway import (
+    ModelGateway,
+    ModelGatewayError,
+    model_profile_from_env,
+)
+from ai_agent_runtime.localization import (
+    append_korean_language_review_marker,
+    contains_korean,
+    human_text_needs_korean,
+    korean_language_review_paths,
+)
 from ai_agent_runtime.models import (
     AgentRunPayload,
     AgentRunStatus,
@@ -47,6 +65,26 @@ KEY_FIELDS = {
     "conversionGuidance": "code",
     "migrationGuideInsights": "section",
 }
+CONTEXT_BUDGET_MARKER_CODE = "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED"
+PROMPT_COMPACTION_MARKER_CODE = "LLM_PROMPT_COMPACTED_FOR_CONTEXT"
+_COMPACTION_NONE = "none"
+_COMPACTION_COMPACT = "compact"
+_COMPACTION_MINIMUM = "minimum"
+
+
+@dataclass(frozen=True)
+class _PromptAttempt:
+    prompt: Any
+    metadata: dict[str, Any]
+    static_analysis: dict[str, Any] | None
+    source_context: dict[str, Any] | None
+    allowed_evidence_refs: tuple[str, ...]
+    compaction_level: str = _COMPACTION_NONE
+    compaction_summary: dict[str, Any] | None = None
+
+    @property
+    def estimated_tokens(self) -> int:
+        return _estimated_prompt_tokens(self.prompt)
 
 
 @dataclass(frozen=True)
@@ -55,6 +93,7 @@ class SemanticAnalysisTask:
     metadata: dict[str, Any]
     static_analysis: dict[str, Any] | None = None
     procedure_definition: str | None = None
+    source_context_packs: dict[str, dict[str, Any]] | None = None
 
 
 def build_semantic_analysis_run(
@@ -63,6 +102,7 @@ def build_semantic_analysis_run(
     metadata: dict[str, Any],
     static_analysis: dict[str, Any] | None,
     procedure_definition: str | None,
+    source_context_packs: dict[str, dict[str, Any]] | None = None,
     model_gateway: ModelGateway,
     profile_id: str | None,
 ) -> AgentRunPayload:
@@ -73,6 +113,7 @@ def build_semantic_analysis_run(
                 metadata=metadata,
                 static_analysis=static_analysis,
                 procedure_definition=procedure_definition,
+                source_context_packs=source_context_packs,
             ),
         ),
         model_gateway=model_gateway,
@@ -134,19 +175,21 @@ def _build_single_semantic_analysis_run(
     )
     invocations: list[tuple[str, ModelInvocationRecord]] = []
     outputs: list[dict[str, Any]] = []
+    source_context_summaries: list[dict[str, Any]] = []
+    context_budget_markers: list[dict[str, Any]] = []
 
     for stage in stages:
-        prompt = render_semantic_analysis_prompt(
-            target_ref=task.target_ref,
-            metadata=task.metadata,
-            static_analysis=task.static_analysis,
-            procedure_definition=task.procedure_definition,
+        invocation, source_summary, budget_markers = _invoke_stage_with_context_fallback(
+            model_gateway=model_gateway,
+            profile=profile,
+            task=task,
             stage=stage,
             allowed_evidence_refs=allowed_evidence_refs,
             required_review_markers=required_review_markers,
         )
-        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
         invocations.append((stage, invocation))
+        source_context_summaries.append(source_summary)
+        context_budget_markers.extend(budget_markers)
         outputs.append(
             LlmSemanticAnalysisOutput.model_validate(
                 invocation.structured_output,
@@ -159,18 +202,18 @@ def _build_single_semantic_analysis_run(
         allowed_evidence_refs=allowed_evidence_refs,
         required_review_markers=required_review_markers,
     ):
-        prompt = render_semantic_analysis_prompt(
-            target_ref=task.target_ref,
-            metadata=task.metadata,
-            static_analysis=task.static_analysis,
-            procedure_definition=task.procedure_definition,
+        invocation, source_summary, budget_markers = _invoke_stage_with_context_fallback(
+            model_gateway=model_gateway,
+            profile=profile,
+            task=task,
             stage="repair",
             allowed_evidence_refs=allowed_evidence_refs,
             required_review_markers=required_review_markers,
             repair_context=_repair_context(combined_output),
         )
-        invocation = model_gateway.invoke_semantic_analysis(prompt=prompt, profile=profile)
         invocations.append(("repair", invocation))
+        source_context_summaries.append(source_summary)
+        context_budget_markers.extend(budget_markers)
         outputs.append(
             LlmSemanticAnalysisOutput.model_validate(
                 invocation.structured_output,
@@ -189,8 +232,41 @@ def _build_single_semantic_analysis_run(
             static_analysis=task.static_analysis,
             allowed_evidence_refs=allowed_evidence_refs,
         )
+    language_paths = korean_language_review_paths(repaired_output)
+    if language_paths:
+        invocation, source_summary, budget_markers = _invoke_stage_with_context_fallback(
+            model_gateway=model_gateway,
+            profile=profile,
+            task=task,
+            stage="language_repair",
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context={
+                "locale": "ko-KR",
+                "languageReviewPaths": language_paths,
+                "structuredOutput": _repair_context(repaired_output),
+            },
+        )
+        invocations.append(("language_repair", invocation))
+        source_context_summaries.append(source_summary)
+        context_budget_markers.extend(budget_markers)
+        language_repair_output = LlmSemanticAnalysisOutput.model_validate(
+            invocation.structured_output,
+        ).to_storage_dict()
+        repaired_output = _repair_evidence_refs(
+            _apply_language_repair_output(repaired_output, language_repair_output),
+            allowed_evidence_refs=allowed_evidence_refs,
+        )
+        if korean_language_review_paths(repaired_output):
+            repaired_output = append_korean_language_review_marker(
+                repaired_output,
+                evidence_refs=_fallback_evidence_refs(
+                    {"code": "LLM_OUTPUT_LANGUAGE_REVIEW_REQUIRED"},
+                    allowed_evidence_refs,
+                ),
+            )
     storage_safe_output = _sanitize_output_for_storage(
-        repaired_output,
+        _append_context_budget_markers(repaired_output, context_budget_markers),
         procedure_definition=task.procedure_definition or "",
         allowed_evidence_refs=allowed_evidence_refs,
     )
@@ -199,6 +275,7 @@ def _build_single_semantic_analysis_run(
         invocations=invocations,
         structured_output=output.to_storage_dict(),
         profile=profile,
+        source_context_summaries=source_context_summaries,
     )
     return AgentRunPayload(
         agent_type=AGENT_TYPE,
@@ -223,14 +300,916 @@ def merge_llm_semantic_analysis(
     return merged
 
 
+def _invoke_stage_with_context_fallback(
+    *,
+    model_gateway: ModelGateway,
+    profile: Any,
+    task: SemanticAnalysisTask,
+    stage: str,
+    allowed_evidence_refs: Sequence[str],
+    required_review_markers: Sequence[Mapping[str, Any]],
+    repair_context: dict[str, Any] | None = None,
+) -> tuple[ModelInvocationRecord, dict[str, Any], list[dict[str, Any]]]:
+    source_context = _source_context_for_stage(task.source_context_packs, stage)
+    attempt = _build_prompt_attempt(
+        task=task,
+        stage=stage,
+        source_context=source_context,
+        allowed_evidence_refs=allowed_evidence_refs,
+        required_review_markers=required_review_markers,
+        repair_context=repair_context,
+    )
+    if attempt.estimated_tokens > _semantic_input_token_budget():
+        shrunk_context = shrink_context_pack(source_context, status="PRE_PROVIDER_SHRINK")
+        attempt = _build_prompt_attempt(
+            task=task,
+            stage=stage,
+            source_context=shrunk_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+        )
+    if attempt.estimated_tokens > _semantic_input_token_budget():
+        attempt = _build_prompt_attempt(
+            task=task,
+            stage=stage,
+            source_context=source_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+            compaction_level=_COMPACTION_COMPACT,
+            source_context_status="COMPACT_NO_SOURCE_TEXT",
+        )
+    if attempt.estimated_tokens > _semantic_input_token_budget():
+        attempt = _build_prompt_attempt(
+            task=task,
+            stage=stage,
+            source_context=source_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+            compaction_level=_COMPACTION_MINIMUM,
+            source_context_status="MINIMUM_EVIDENCE_DIGEST",
+        )
+    try:
+        invocation = model_gateway.invoke_semantic_analysis(
+            prompt=attempt.prompt,
+            profile=profile,
+        )
+        return (
+            invocation,
+            _attempt_source_summary(attempt),
+            _attempt_budget_markers(attempt),
+        )
+    except ModelGatewayError as exc:
+        if not _is_context_length_error(exc):
+            raise
+
+    shrunk_context = shrink_context_pack(source_context, status="SHRUNK_RETRY")
+    attempt = _build_prompt_attempt(
+        task=task,
+        stage=stage,
+        source_context=shrunk_context,
+        allowed_evidence_refs=allowed_evidence_refs,
+        required_review_markers=required_review_markers,
+        repair_context=repair_context,
+    )
+    try:
+        invocation = model_gateway.invoke_semantic_analysis(
+            prompt=attempt.prompt,
+            profile=profile,
+        )
+        markers = _attempt_budget_markers(attempt) or _context_length_review_markers(
+            attempt.allowed_evidence_refs
+        )
+        return invocation, _attempt_source_summary(attempt), markers
+    except ModelGatewayError as exc:
+        if not _is_context_length_error(exc):
+            raise
+
+    fallback_context = without_source_text_context_pack(
+        source_context,
+        status="FALLBACK_NO_SOURCE",
+    )
+    attempt = _build_prompt_attempt(
+        task=task,
+        stage=stage,
+        source_context=fallback_context,
+        allowed_evidence_refs=allowed_evidence_refs,
+        required_review_markers=required_review_markers,
+        repair_context=repair_context,
+    )
+    try:
+        invocation = model_gateway.invoke_semantic_analysis(
+            prompt=attempt.prompt,
+            profile=profile,
+        )
+        markers = _attempt_budget_markers(attempt) or _context_length_review_markers(
+            attempt.allowed_evidence_refs
+        )
+        return invocation, _attempt_source_summary(attempt), markers
+    except ModelGatewayError as exc:
+        if not _is_context_length_error(exc):
+            raise
+
+    for level, status in (
+        (_COMPACTION_COMPACT, "COMPACT_NO_SOURCE_TEXT"),
+        (_COMPACTION_MINIMUM, "MINIMUM_EVIDENCE_DIGEST"),
+    ):
+        attempt = _build_prompt_attempt(
+            task=task,
+            stage=stage,
+            source_context=source_context,
+            allowed_evidence_refs=allowed_evidence_refs,
+            required_review_markers=required_review_markers,
+            repair_context=repair_context,
+            compaction_level=level,
+            source_context_status=status,
+        )
+        try:
+            invocation = model_gateway.invoke_semantic_analysis(
+                prompt=attempt.prompt,
+                profile=profile,
+            )
+            markers = _attempt_budget_markers(attempt) or _context_length_review_markers(
+                attempt.allowed_evidence_refs
+            )
+            return invocation, _attempt_source_summary(attempt), markers
+        except ModelGatewayError as exc:
+            if not _is_context_length_error(exc):
+                raise
+            if level == _COMPACTION_MINIMUM:
+                raise _context_length_error_with_attempt_summary(exc, attempt) from exc
+
+    raise AssertionError("unreachable context fallback path")
+
+
+def _build_prompt_attempt(
+    *,
+    task: SemanticAnalysisTask,
+    stage: str,
+    source_context: dict[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+    required_review_markers: Sequence[Mapping[str, Any]],
+    repair_context: dict[str, Any] | None,
+    compaction_level: str = _COMPACTION_NONE,
+    source_context_status: str | None = None,
+) -> _PromptAttempt:
+    metadata: dict[str, Any] = dict(task.metadata)
+    static_analysis = (
+        dict(task.static_analysis)
+        if isinstance(task.static_analysis, Mapping)
+        else None
+    )
+    attempt_source_context = source_context
+    attempt_allowed_refs = tuple(str(ref) for ref in allowed_evidence_refs if str(ref).strip())
+    compaction_summary: dict[str, Any] | None = None
+    if compaction_level != _COMPACTION_NONE:
+        compacted = _compact_semantic_inputs(
+            metadata=metadata,
+            static_analysis=static_analysis,
+            source_context=source_context,
+            allowed_evidence_refs=attempt_allowed_refs,
+            stage=stage,
+            level=compaction_level,
+            source_context_status=source_context_status or "COMPACT_NO_SOURCE_TEXT",
+        )
+        metadata = compacted["metadata"]
+        static_analysis = compacted["static_analysis"]
+        attempt_source_context = compacted["source_context"]
+        attempt_allowed_refs = compacted["allowed_evidence_refs"]
+        compaction_summary = compacted["summary"]
+    prompt = _render_stage_prompt(
+        task=task,
+        stage=stage,
+        metadata=metadata,
+        static_analysis=static_analysis,
+        source_context=attempt_source_context,
+        allowed_evidence_refs=attempt_allowed_refs,
+        required_review_markers=_markers_for_allowed_refs(
+            required_review_markers,
+            attempt_allowed_refs,
+        ),
+        repair_context=repair_context,
+    )
+    return _PromptAttempt(
+        prompt=prompt,
+        metadata=metadata,
+        static_analysis=static_analysis,
+        source_context=attempt_source_context,
+        allowed_evidence_refs=attempt_allowed_refs,
+        compaction_level=compaction_level,
+        compaction_summary=compaction_summary,
+    )
+
+
+def _render_stage_prompt(
+    *,
+    task: SemanticAnalysisTask,
+    stage: str,
+    metadata: Mapping[str, Any] | None = None,
+    static_analysis: Mapping[str, Any] | None = None,
+    source_context: dict[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+    required_review_markers: Sequence[Mapping[str, Any]],
+    repair_context: dict[str, Any] | None,
+) -> Any:
+    return render_semantic_analysis_prompt(
+        target_ref=task.target_ref,
+        metadata=dict(metadata) if metadata is not None else task.metadata,
+        static_analysis=(
+            dict(static_analysis)
+            if static_analysis is not None
+            else task.static_analysis
+        ),
+        procedure_definition=task.procedure_definition,
+        source_context=source_context,
+        stage=stage,
+        allowed_evidence_refs=list(allowed_evidence_refs),
+        required_review_markers=[dict(marker) for marker in required_review_markers],
+        repair_context=repair_context,
+    )
+
+
+def _source_context_for_stage(
+    source_context_packs: Mapping[str, dict[str, Any]] | None,
+    stage: str,
+) -> dict[str, Any] | None:
+    if not isinstance(source_context_packs, Mapping):
+        return None
+    value = source_context_packs.get(stage)
+    if isinstance(value, Mapping):
+        return dict(value)
+    return None
+
+
+def _compact_semantic_inputs(
+    *,
+    metadata: Mapping[str, Any],
+    static_analysis: Mapping[str, Any] | None,
+    source_context: Mapping[str, Any] | None,
+    allowed_evidence_refs: Sequence[str],
+    stage: str,
+    level: str,
+    source_context_status: str,
+) -> dict[str, Any]:
+    minimum = level == _COMPACTION_MINIMUM
+    fact_limit = _compact_limit("LLM_SEMANTIC_COMPACT_FACT_LIMIT", 80, 24, minimum)
+    ref_limit = _compact_limit("LLM_SEMANTIC_COMPACT_REF_LIMIT", 96, 32, minimum)
+    compact_metadata = _compact_metadata(
+        metadata,
+        stage=stage,
+        fact_limit=fact_limit,
+        minimum=minimum,
+    )
+    compact_static = _compact_static_analysis(static_analysis, minimum=minimum)
+    compact_refs = tuple(
+        _ranked_evidence_refs(
+            _allowed_evidence_refs(
+                metadata=compact_metadata,
+                static_analysis=compact_static,
+            )
+            or [str(ref) for ref in allowed_evidence_refs if str(ref).strip()],
+            stage=stage,
+        )[:ref_limit]
+    )
+    compact_source_context = without_source_text_context_pack(
+        source_context,
+        status=source_context_status,
+    )
+    if minimum and isinstance(compact_source_context, Mapping):
+        compact_source_context = {
+            key: value
+            for key, value in dict(compact_source_context).items()
+            if key
+            in {
+                "version",
+                "targetRef",
+                "stage",
+                "mode",
+                "budgetStatus",
+                "tokenBudget",
+                "estimatedSourceTokens",
+                "skippedSpanCount",
+                "analysisCoverage",
+                "reviewMarkers",
+            }
+        }
+        compact_source_context["selectedSpans"] = []
+    summary = {
+        "applied": True,
+        "level": level,
+        "stage": stage,
+        "reason": "CONTEXT_LENGTH_BUDGET",
+        "allowedEvidenceRefCount": len(compact_refs),
+        "deterministicFactCount": len(_mapping_items(compact_metadata.get("deterministicFacts"))),
+        "dependencyNodeCount": len(
+            _mapping_items(_get_nested(compact_metadata, "dependencyEvidence", "nodes"))
+        ),
+        "dependencyEdgeCount": len(
+            _mapping_items(_get_nested(compact_metadata, "dependencyEvidence", "edges"))
+        ),
+        "tableSchemaCount": len(_mapping_items(compact_metadata.get("tableSchemas"))),
+    }
+    compact_metadata["promptCompaction"] = dict(summary)
+    return {
+        "metadata": compact_metadata,
+        "static_analysis": compact_static,
+        "source_context": compact_source_context,
+        "allowed_evidence_refs": compact_refs,
+        "summary": summary,
+    }
+
+
+def _compact_metadata(
+    metadata: Mapping[str, Any],
+    *,
+    stage: str,
+    fact_limit: int,
+    minimum: bool,
+) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in ("dbProfileId", "objectRef", "snapshotId", "collectedAt", "status"):
+        if metadata.get(key) is not None:
+            compact[key] = metadata.get(key)
+    definition = _mapping(metadata.get("procedureDefinition"))
+    if definition:
+        compact["procedureDefinition"] = {
+            key: _safe_compact_value(value)
+            for key, value in definition.items()
+            if _safe_prompt_key(key)
+        }
+    parameters = _mapping(metadata.get("procedureParameters"))
+    if parameters:
+        compact["procedureParameters"] = _compact_parameters(parameters, minimum=minimum)
+    dependencies = _mapping(metadata.get("procedureDependencies"))
+    if dependencies and not minimum:
+        compact["procedureDependencies"] = _compact_procedure_dependencies(dependencies)
+    dependency_evidence = _mapping(metadata.get("dependencyEvidence"))
+    if dependency_evidence:
+        compact["dependencyEvidence"] = _compact_dependency_evidence(
+            dependency_evidence,
+            stage=stage,
+            minimum=minimum,
+        )
+    facts = _ranked_facts(
+        _mapping_items(metadata.get("deterministicFacts")),
+        stage=stage,
+    )[:fact_limit]
+    if facts:
+        compact["deterministicFacts"] = [_compact_fact(fact) for fact in facts]
+    evidence_refs = _mapping_items(metadata.get("evidenceRefs"))
+    ref_limit = _compact_limit("LLM_SEMANTIC_COMPACT_METADATA_REF_LIMIT", 48, 16, minimum)
+    if evidence_refs:
+        compact["evidenceRefs"] = [_compact_evidence_ref(ref) for ref in evidence_refs[:ref_limit]]
+    tables = _mapping_items(metadata.get("tableSchemas"))
+    if tables:
+        compact["tableSchemas"] = _compact_table_schemas(tables, minimum=minimum)
+    for key in ("aiToolEvidence", "platformToolEvidence"):
+        evidence = _mapping(metadata.get(key))
+        if evidence:
+            compact[key] = _compact_tool_evidence(evidence, stage=stage, minimum=minimum)
+    for key in ("notes", "errors"):
+        values = _sequence(metadata.get(key))
+        if values:
+            compact[key] = [_safe_compact_value(item) for item in values[:6 if not minimum else 3]]
+    return compact
+
+
+def _compact_static_analysis(
+    static_analysis: Mapping[str, Any] | None,
+    *,
+    minimum: bool,
+) -> dict[str, Any] | None:
+    if not isinstance(static_analysis, Mapping):
+        return None
+    compact: dict[str, Any] = {}
+    for key in ("patterns", "analysisCoverage", "migrationGuideStaticMetrics", "fact_ids"):
+        if static_analysis.get(key) is not None:
+            compact[key] = _safe_compact_value(static_analysis.get(key))
+    source_map = _mapping(static_analysis.get("sourceMap"))
+    if source_map:
+        span_limit = _compact_limit("LLM_SEMANTIC_COMPACT_SOURCE_SPAN_LIMIT", 40, 12, minimum)
+        compact["sourceMap"] = {
+            "version": source_map.get("version"),
+            "sourceName": source_map.get("sourceName"),
+            "sourceHashSha256": source_map.get("sourceHashSha256"),
+            "totalLines": source_map.get("totalLines"),
+            "spans": [
+                {
+                    key: _safe_compact_value(span.get(key))
+                    for key in (
+                        "spanId",
+                        "kind",
+                        "startLine",
+                        "endLine",
+                        "referencedObjects",
+                        "riskTags",
+                        "evidenceRefs",
+                    )
+                    if span.get(key) is not None
+                }
+                for span in _mapping_items(source_map.get("spans"))[:span_limit]
+            ],
+        }
+    return compact or None
+
+
+def _compact_parameters(value: Mapping[str, Any], *, minimum: bool) -> dict[str, Any]:
+    params = _mapping_items(value.get("parameters"))
+    limit = _compact_limit("LLM_SEMANTIC_COMPACT_PARAMETER_LIMIT", 40, 12, minimum)
+    return {
+        "parameterCount": len(params),
+        "parameters": [
+            {
+                key: _safe_compact_value(item.get(key))
+                for key in ("name", "dataType", "direction", "isNullable", "hasDefault")
+                if item.get(key) is not None
+            }
+            for item in params[:limit]
+        ],
+    }
+
+
+def _compact_procedure_dependencies(value: Mapping[str, Any]) -> dict[str, Any]:
+    dependencies = _mapping_items(value.get("dependencies"))
+    return {
+        "dependencyCount": len(dependencies),
+        "dependencies": [
+            {
+                key: _safe_compact_value(item.get(key))
+                for key in ("schema", "name", "objectType", "dependencyType")
+                if item.get(key) is not None
+            }
+            for item in dependencies[:24]
+        ],
+    }
+
+
+def _compact_dependency_evidence(
+    value: Mapping[str, Any],
+    *,
+    stage: str,
+    minimum: bool,
+) -> dict[str, Any]:
+    node_limit = _compact_limit("LLM_SEMANTIC_COMPACT_DEP_NODE_LIMIT", 24, 8, minimum)
+    edge_limit = _compact_limit("LLM_SEMANTIC_COMPACT_DEP_EDGE_LIMIT", 32, 12, minimum)
+    unresolved_limit = _compact_limit("LLM_SEMANTIC_COMPACT_DEP_UNRESOLVED_LIMIT", 12, 6, minimum)
+    nodes = _ranked_dependency_items(_mapping_items(value.get("nodes")), stage=stage)[:node_limit]
+    edges = _ranked_dependency_items(_mapping_items(value.get("edges")), stage=stage)[:edge_limit]
+    unresolved = _ranked_dependency_items(
+        _mapping_items(value.get("unresolved")),
+        stage=stage,
+    )[:unresolved_limit]
+    return {
+        "toolName": value.get("toolName") or "get_dependency_closure",
+        "dbProfileId": value.get("dbProfileId"),
+        "snapshotId": value.get("snapshotId"),
+        "rootObject": _safe_compact_value(value.get("rootObject")),
+        "summary": _safe_compact_value(value.get("summary")),
+        "nodes": [_compact_dependency_node(item) for item in nodes],
+        "edges": [_compact_dependency_edge(item) for item in edges],
+        "unresolved": [_compact_dependency_unresolved(item) for item in unresolved],
+        "evidenceRefs": [
+            _compact_evidence_ref(ref)
+            for ref in _mapping_items(value.get("evidenceRefs"))[: 16 if minimum else 48]
+        ],
+        "caveats": [str(item)[:240] for item in _sequence(value.get("caveats"))[:8]],
+        "reviewRequired": bool(value.get("reviewRequired")),
+        "originalCounts": {
+            "nodes": len(_mapping_items(value.get("nodes"))),
+            "edges": len(_mapping_items(value.get("edges"))),
+            "unresolved": len(_mapping_items(value.get("unresolved"))),
+        },
+    }
+
+
+def _compact_dependency_node(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(item.get(key))
+        for key in (
+            "id",
+            "database",
+            "schema",
+            "name",
+            "objectType",
+            "sourceScope",
+            "reviewStatus",
+            "evidenceRefs",
+        )
+        if item.get(key) is not None
+    }
+
+
+def _compact_dependency_edge(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(item.get(key))
+        for key in (
+            "from",
+            "to",
+            "dependencyType",
+            "resolutionStatus",
+            "resolutionStrategy",
+            "resolutionConfidence",
+            "unresolvedReason",
+            "evidenceRefs",
+        )
+        if item.get(key) is not None
+    }
+
+
+def _compact_dependency_unresolved(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(item.get(key))
+        for key in (
+            "database",
+            "schema",
+            "name",
+            "objectType",
+            "dependencyType",
+            "resolutionStatus",
+            "resolutionStrategy",
+            "unresolvedReason",
+            "evidenceRefs",
+        )
+        if item.get(key) is not None
+    }
+
+
+def _compact_table_schemas(
+    tables: Sequence[Mapping[str, Any]],
+    *,
+    minimum: bool,
+) -> list[dict[str, Any]]:
+    table_limit = _compact_limit("LLM_SEMANTIC_COMPACT_TABLE_LIMIT", 8, 3, minimum)
+    column_limit = _compact_limit("LLM_SEMANTIC_COMPACT_COLUMN_LIMIT", 16, 6, minimum)
+    compacted: list[dict[str, Any]] = []
+    for table in tables[:table_limit]:
+        columns = _mapping_items(table.get("columns"))
+        compacted.append(
+            {
+                "schema": table.get("schema"),
+                "tableName": table.get("tableName"),
+                "columnCount": len(columns),
+                "columns": [
+                    {
+                        key: _safe_compact_value(column.get(key))
+                        for key in ("name", "dataType", "isNullable", "logicalName", "description")
+                        if column.get(key) is not None
+                    }
+                    for column in columns[:column_limit]
+                ],
+            }
+        )
+    return compacted
+
+
+def _compact_tool_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    stage: str,
+    minimum: bool,
+) -> dict[str, Any]:
+    result_limit = _compact_limit("LLM_SEMANTIC_COMPACT_TOOL_RESULT_LIMIT", 12, 4, minimum)
+    results = _ranked_dependency_items(_mapping_items(evidence.get("toolResults")), stage=stage)
+    return {
+        "status": evidence.get("status"),
+        "toolCallCount": evidence.get("toolCallCount"),
+        "toolResults": [
+            {
+                key: _safe_compact_value(result.get(key))
+                for key in ("factId", "toolName", "summary", "status", "evidenceRefs")
+                if result.get(key) is not None
+            }
+            for result in results[:result_limit]
+        ],
+        "blockedRequests": [
+            {
+                key: _safe_compact_value(item.get(key))
+                for key in ("toolName", "code", "message", "reason")
+                if item.get(key) is not None
+            }
+            for item in _mapping_items(evidence.get("blockedRequests"))[: 4 if minimum else 8]
+        ],
+        "reviewMarkers": [
+            _compact_review_marker(marker)
+            for marker in _mapping_items(evidence.get("reviewMarkers"))[: 4 if minimum else 12]
+        ],
+        "caveats": [str(item)[:240] for item in _sequence(evidence.get("caveats"))[:8]],
+        "plannerMetrics": _safe_compact_value(evidence.get("plannerMetrics")),
+    }
+
+
+def _compact_fact(fact: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(fact.get(key))
+        for key in ("id", "fact_type", "type", "summary", "status", "evidenceRefs")
+        if fact.get(key) is not None
+    }
+
+
+def _compact_evidence_ref(ref: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(ref.get(key))
+        for key in ("type", "objectRef", "locator", "snapshotId")
+        if ref.get(key) is not None
+    }
+
+
+def _compact_review_marker(marker: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _safe_compact_value(marker.get(key))
+        for key in ("code", "message", "status", "evidenceRefs")
+        if marker.get(key) is not None
+    }
+
+
+def _ranked_facts(items: Sequence[Mapping[str, Any]], *, stage: str) -> list[Mapping[str, Any]]:
+    keywords = _stage_keywords(stage)
+    return sorted(
+        items,
+        key=lambda item: (
+            -_keyword_score(item, keywords),
+            str(item.get("id") or ""),
+        ),
+    )
+
+
+def _ranked_dependency_items(
+    items: Sequence[Mapping[str, Any]],
+    *,
+    stage: str,
+) -> list[Mapping[str, Any]]:
+    keywords = _stage_keywords(stage)
+    return sorted(
+        items,
+        key=lambda item: (
+            -_keyword_score(item, keywords),
+            str(item.get("id") or item.get("to") or item.get("name") or ""),
+        ),
+    )
+
+
+def _ranked_evidence_refs(items: Sequence[str], *, stage: str) -> list[str]:
+    keywords = _stage_keywords(stage)
+    deduped = _dedupe([str(item) for item in items if str(item).strip()])
+    return sorted(deduped, key=lambda item: (-_keyword_score({"ref": item}, keywords), item))
+
+
+def _stage_keywords(stage: str) -> tuple[str, ...]:
+    if stage == "business_rule_extraction":
+        return ("business", "parameter", "result", "select", "insert", "update", "delete", "branch")
+    if stage == "conversion_readiness":
+        return ("dto", "java", "mybatis", "parameter", "result", "transaction", "dml", "dependency")
+    if stage == "migration_guide_insights":
+        return ("migration", "dml", "dependency", "call", "result", "risk", "dynamic", "cross")
+    if stage == "evidence_critic":
+        return ("dynamic", "cross", "unresolved", "ambiguous", "review", "caveat", "dependency")
+    return ("procedure", "parameter", "dependency", "source", "metadata", "result", "dml")
+
+
+def _keyword_score(item: Mapping[str, Any], keywords: Sequence[str]) -> int:
+    text = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str).lower()
+    return sum(1 for keyword in keywords if keyword in text)
+
+
+def _safe_compact_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _safe_compact_value(item)
+            for key, item in value.items()
+            if _safe_prompt_key(str(key))
+        }
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return [_safe_compact_value(item) for item in list(value)[:32]]
+    if isinstance(value, str):
+        return value[:240]
+    return value
+
+
+def _safe_prompt_key(key: str) -> bool:
+    normalized = key.replace("-", "_").lower()
+    return normalized not in {
+        "definition",
+        "raw_definition",
+        "raw_definition_text",
+        "rawsql",
+        "raw_sql",
+        "sqltext",
+        "sql_text",
+        "statement",
+        "command",
+        "rowdata",
+        "row_data",
+        "rows",
+        "records",
+        "password",
+        "secret",
+        "token",
+        "apikey",
+        "api_key",
+        "connectionstring",
+        "connection_string",
+        "prompt",
+        "raw_prompt",
+        "provider_response",
+    }
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _mapping_items(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
+
+def _sequence(value: Any) -> list[Any]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return list(value)
+
+
+def _get_nested(value: Mapping[str, Any], *path: str) -> Any:
+    current: Any = value
+    for key in path:
+        if not isinstance(current, Mapping):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _compact_limit(name: str, compact_default: int, minimum_default: int, minimum: bool) -> int:
+    return max(1, _env_int(name, minimum_default if minimum else compact_default))
+
+
+def _markers_for_allowed_refs(
+    markers: Sequence[Mapping[str, Any]],
+    allowed_evidence_refs: Sequence[str],
+) -> list[dict[str, Any]]:
+    allowed = set(allowed_evidence_refs)
+    repaired = []
+    for marker in markers:
+        item = dict(marker)
+        refs = [ref for ref in _evidence_refs(item) if ref in allowed]
+        if not refs:
+            refs = _fallback_evidence_refs(item, allowed_evidence_refs)
+        item["evidenceRefs"] = refs
+        repaired.append(item)
+    return repaired
+
+
+def _attempt_source_summary(attempt: _PromptAttempt) -> dict[str, Any]:
+    summary = context_pack_summary(attempt.source_context)
+    if attempt.compaction_summary:
+        summary["promptCompaction"] = dict(attempt.compaction_summary)
+    return summary
+
+
+def _attempt_budget_markers(attempt: _PromptAttempt) -> list[dict[str, Any]]:
+    markers = _context_markers(attempt.source_context)
+    if attempt.compaction_summary:
+        markers.append(_prompt_compaction_marker(attempt))
+    return markers
+
+
+def _prompt_compaction_marker(attempt: _PromptAttempt) -> dict[str, Any]:
+    return {
+        "code": PROMPT_COMPACTION_MARKER_CODE,
+        "message": (
+            "Semantic model input was compacted to a bounded evidence digest after "
+            "context budget pressure."
+        ),
+        "status": "REVIEW_REQUIRED",
+        "evidenceRefs": _fallback_evidence_refs(
+            {"code": PROMPT_COMPACTION_MARKER_CODE},
+            attempt.allowed_evidence_refs,
+        ),
+    }
+
+
+def _context_length_error_with_attempt_summary(
+    exc: ModelGatewayError,
+    attempt: _PromptAttempt,
+) -> ModelGatewayError:
+    provider_error = {
+        key: _sanitize_provider_error_text(value)
+        for key, value in exc.provider_error.items()
+        if value is not None
+    }
+    provider_error.update(
+        {
+            "semanticCompactionLevel": attempt.compaction_level,
+            "semanticCompactionApplied": "true",
+            "semanticEstimatedPromptTokens": str(attempt.estimated_tokens),
+            "semanticAllowedEvidenceRefCount": str(len(attempt.allowed_evidence_refs)),
+        }
+    )
+    return ModelGatewayError(str(exc), code=exc.code, provider_error=provider_error)
+
+
+def _sanitize_provider_error_text(value: Any) -> str:
+    text = str(sanitize_value_for_storage(str(value), procedure_definition=""))
+    text = re.sub(r"(?i)\bbearer\s+[^\s,}]+", "Bearer [REDACTED]", text)
+    text = re.sub(
+        r"(?i)\b(access[_-]?token|api[_-]?key|password|secret)\s*=\s*[^\s,}]+",
+        lambda match: f"{match.group(1)}=[REDACTED]",
+        text,
+    )
+    return text[:500]
+
+
+def _is_context_length_error(exc: ModelGatewayError) -> bool:
+    haystack = " ".join(
+        str(value)
+        for value in (
+            exc.code,
+            exc,
+            *exc.provider_error.values(),
+        )
+        if value is not None
+    ).lower()
+    return "context_length" in haystack or "context length" in haystack
+
+
+def _semantic_input_token_budget() -> int:
+    return max(1024, _env_int("LLM_SEMANTIC_INPUT_TOKEN_BUDGET", 64000))
+
+
+def _estimated_prompt_tokens(prompt: Any) -> int:
+    return max(1, (len(prompt.system_prompt) + len(prompt.user_prompt) + 3) // 4)
+
+
+def _context_markers(source_context: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(source_context, Mapping):
+        return []
+    return [
+        dict(item)
+        for item in source_context.get("reviewMarkers", [])
+        if isinstance(item, Mapping)
+    ]
+
+
+def _context_length_review_markers(
+    allowed_evidence_refs: Sequence[str],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "code": CONTEXT_BUDGET_MARKER_CODE,
+            "message": (
+                "Model input exceeded provider context and analysis used reduced evidence context."
+            ),
+            "status": "REVIEW_REQUIRED",
+            "evidenceRefs": _fallback_evidence_refs(
+                {"code": CONTEXT_BUDGET_MARKER_CODE},
+                allowed_evidence_refs,
+            ),
+        }
+    ]
+
+
+def _append_context_budget_markers(
+    output: Mapping[str, Any],
+    markers: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if not markers:
+        return dict(output)
+    repaired = LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
+    existing_codes = {
+        str(item.get("code") or "")
+        for item in repaired["reviewMarkers"]
+        if isinstance(item, Mapping)
+    }
+    for marker in markers:
+        code = str(marker.get("code") or "")
+        if not code or code in existing_codes:
+            continue
+        repaired["reviewMarkers"].append(
+            {
+                "code": code,
+                "message": str(marker.get("message") or ""),
+                "status": "REVIEW_REQUIRED",
+                "evidenceRefs": [
+                    str(ref)
+                    for ref in marker.get("evidenceRefs", [])
+                    if str(ref).strip()
+                ],
+            }
+        )
+        existing_codes.add(code)
+    return repaired
+
+
 def _summary(output: LlmSemanticAnalysisOutput) -> str:
     return (
-        f"{len(output.business_rules)} business rules, "
-        f"{len(output.modernization_points)} modernization points, "
-        f"{len(output.risk_flags)} risk flags, "
-        f"{len(output.review_markers)} review markers, "
-        f"{len(output.conversion_guidance)} conversion guidance items, "
-        f"{len(output.migration_guide_insights)} migration guide insights"
+        f"비즈니스 규칙 {len(output.business_rules)}개, "
+        f"현대화 포인트 {len(output.modernization_points)}개, "
+        f"위험 플래그 {len(output.risk_flags)}개, "
+        f"근거 caveat {len(output.review_markers)}개, "
+        f"전환 가이드 {len(output.conversion_guidance)}개, "
+        f"마이그레이션 가이드 인사이트 {len(output.migration_guide_insights)}개"
     )
 
 
@@ -367,8 +1346,8 @@ def _required_review_markers(
         {
             "code": "UNSUPPORTED_TABLE_CLAIM_REVIEW",
             "message": (
-                "Any inferred concrete table dependency from dynamic or cross-database SQL "
-                "must remain REVIEW_REQUIRED until deterministic metadata confirms it."
+                "동적 SQL 또는 cross-database SQL에서 추론한 구체 테이블 의존성은 "
+                "결정론적 메타데이터가 확인하기 전까지 REVIEW_REQUIRED로 유지해야 합니다."
             ),
             "status": "REVIEW_REQUIRED",
             "evidenceRefs": dynamic_refs,
@@ -376,8 +1355,8 @@ def _required_review_markers(
         {
             "code": "UNSUPPORTED_FUNCTION_CLAIM_REVIEW",
             "message": (
-                "Any inferred helper function dependency must remain REVIEW_REQUIRED until "
-                "deterministic metadata confirms it."
+                "추론된 helper function 의존성은 결정론적 메타데이터가 확인하기 전까지 "
+                "REVIEW_REQUIRED로 유지해야 합니다."
             ),
             "status": "REVIEW_REQUIRED",
             "evidenceRefs": function_refs or dynamic_refs,
@@ -385,8 +1364,8 @@ def _required_review_markers(
         {
             "code": "UNSUPPORTED_PROCEDURE_CLAIM_REVIEW",
             "message": (
-                "Only deterministic procedure-call facts may be treated as confirmed; "
-                "additional procedure dependencies require review."
+                "결정론적 procedure-call fact만 확인된 호출로 취급할 수 있으며, "
+                "추가 procedure 의존성은 검토가 필요합니다."
             ),
             "status": "REVIEW_REQUIRED",
             "evidenceRefs": procedure_refs or dynamic_refs,
@@ -434,6 +1413,36 @@ def _merge_item(items: list[dict[str, Any]], item: Mapping[str, Any], *, key_fie
                 existing[text_field] = item[text_field]
         return
     items.append(dict(item))
+
+
+def _apply_language_repair_output(
+    output: Mapping[str, Any],
+    repair_output: Mapping[str, Any],
+) -> dict[str, Any]:
+    repaired = LlmSemanticAnalysisOutput.model_validate(output).to_storage_dict()
+    candidate = LlmSemanticAnalysisOutput.model_validate(repair_output).to_storage_dict()
+    for field_name in OUTPUT_FIELDS:
+        key_field = KEY_FIELDS[field_name]
+        candidate_by_key = {
+            str(item.get(key_field) or ""): item
+            for item in candidate[field_name]
+            if isinstance(item, Mapping)
+        }
+        for item in repaired[field_name]:
+            candidate_item = candidate_by_key.get(str(item.get(key_field) or ""))
+            if not candidate_item:
+                continue
+            for text_field in ("summary", "message", "whatToExtractNext"):
+                if text_field not in item or text_field not in candidate_item:
+                    continue
+                candidate_text = str(candidate_item.get(text_field) or "")
+                if human_text_needs_korean(item.get(text_field)) and contains_korean(
+                    candidate_text
+                ):
+                    item[text_field] = candidate_text
+    if any(contains_korean(item) for item in candidate["assumptions"]):
+        repaired["assumptions"] = list(candidate["assumptions"])
+    return repaired
 
 
 def _needs_repair(
@@ -577,8 +1586,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "category": "DETERMINISTIC_SAFETY_NET_READ_ONLY_LOOKUP",
                 "summary": (
-                    "Deterministic facts indicate read-only lookup behavior that should "
-                    "be reviewed as draft business context."
+                    "결정론적 fact가 읽기 전용 조회 동작을 보여 주며, 초안 비즈니스 "
+                    "맥락으로 검토해야 합니다."
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": read_refs,
@@ -591,8 +1600,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_LOOKUP_DTO_SHAPE",
                 "summary": (
-                    "Lookup input and result-shape facts should be mapped to explicit "
-                    "DTO fields before Java/MyBatis conversion."
+                    "조회 입력과 result-shape fact는 Java/MyBatis 전환 전에 명시적인 "
+                    "DTO 필드로 매핑해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": read_refs,
@@ -605,8 +1614,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_LOOKUP_CONVERSION_GUIDANCE",
                 "summary": (
-                    "Keep lookup parameter binding and result mapping review-required "
-                    "until deterministic DTO contracts are validated."
+                    "결정론적 DTO 계약이 검증될 때까지 조회 parameter binding과 결과 "
+                    "매핑은 REVIEW_REQUIRED로 유지합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": read_refs,
@@ -619,8 +1628,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "section": "DETERMINISTIC_SAFETY_NET_LOOKUP_GUIDE",
                 "summary": (
-                    "Migration guide should include lookup inputs, read dependencies, "
-                    "and result-shape review notes."
+                    "마이그레이션 가이드는 조회 입력, 읽기 의존성, result-shape 검토 "
+                    "메모를 포함해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": read_refs,
@@ -636,8 +1645,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "category": "DETERMINISTIC_SAFETY_NET_BRANCH_RULE",
                 "summary": (
-                    "Deterministic branch facts indicate conditional business outcomes "
-                    "that require review in the migration guide."
+                    "결정론적 branch fact가 조건별 비즈니스 결과를 나타내며, "
+                    "마이그레이션 가이드에서 검토해야 합니다."
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": branch_refs,
@@ -654,8 +1663,8 @@ def _apply_deterministic_safety_net(
                 "code": "DETERMINISTIC_SAFETY_NET_TRANSACTION_DML_REVIEW",
                 "severity": "WARNING",
                 "summary": (
-                    "Transaction, DML, branch, or error-handling facts need human review "
-                    "before Java/MyBatis transaction boundaries are drafted."
+                    "Transaction, DML, branch, error-handling fact는 Java/MyBatis "
+                    "transaction boundary 초안 작성 전에 사람 검토가 필요합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dml_refs,
@@ -668,8 +1677,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_TRANSACTION_CONVERSION_GUIDANCE",
                 "summary": (
-                    "Preserve transaction boundaries, branch outcomes, and error handling "
-                    "as review-required conversion guidance."
+                    "Transaction boundary, branch 결과, error handling은 REVIEW_REQUIRED "
+                    "전환 가이드로 보존합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dml_refs,
@@ -682,8 +1691,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "section": "DETERMINISTIC_SAFETY_NET_DML_MATRIX",
                 "summary": (
-                    "Migration guide should include a DML/transaction matrix and "
-                    "review-required branch outcomes."
+                    "마이그레이션 가이드는 DML/transaction matrix와 REVIEW_REQUIRED "
+                    "branch 결과를 포함해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dml_refs,
@@ -699,8 +1708,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "category": "DETERMINISTIC_SAFETY_NET_AUDIT_SIDE_EFFECT",
                 "summary": (
-                    "Deterministic write facts indicate audit or reporting side effects "
-                    "that remain draft business context."
+                    "결정론적 write fact가 audit 또는 reporting side effect를 나타내며, "
+                    "초안 비즈니스 맥락으로 유지합니다."
                 ),
                 "status": "INFERRED_DESCRIPTION",
                 "evidenceRefs": audit_refs,
@@ -713,15 +1722,21 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_AUDIT_MODERNIZATION_REVIEW",
                 "summary": (
-                    "Audit/reporting side effects should be separated from service logic "
-                    "only after deterministic review."
+                    "Audit/reporting side effect는 결정론적 검토 후에만 service logic과 "
+                    "분리합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": audit_refs,
             },
         )
 
-    dynamic_refs = refs("dynamic_sql", "cross_database", "procedure_call", "result_uncertain", limit=4)
+    dynamic_refs = refs(
+        "dynamic_sql",
+        "cross_database",
+        "procedure_call",
+        "result_uncertain",
+        limit=4,
+    )
     if dynamic_refs:
         _append_claim(
             repaired["modernizationPoints"],
@@ -730,8 +1745,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_REVIEW",
                 "summary": (
-                    "Dynamic SQL or cross-database evidence should be isolated as "
-                    "review-required modernization work."
+                    "Dynamic SQL 또는 cross-database evidence는 REVIEW_REQUIRED 현대화 "
+                    "작업으로 분리해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -744,8 +1759,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_SQL_CONVERSION_GUIDANCE",
                 "summary": (
-                    "Do not confirm dynamic SQL dependencies or result shape without "
-                    "deterministic metadata; keep conversion guidance review-required."
+                    "결정론적 메타데이터 없이는 dynamic SQL 의존성이나 result shape를 "
+                    "확정하지 말고 전환 가이드는 REVIEW_REQUIRED로 유지합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -758,8 +1773,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "section": "DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_GUIDE",
                 "summary": (
-                    "Migration guide should list dynamic SQL, cross-database, and "
-                    "uncertain result-shape caveats as review-required."
+                    "마이그레이션 가이드는 dynamic SQL, cross-database, 불확실한 "
+                    "result-shape caveat를 REVIEW_REQUIRED로 나열해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -773,8 +1788,8 @@ def _apply_deterministic_safety_net(
                 "code": "DETERMINISTIC_SAFETY_NET_DYNAMIC_DEPENDENCY_RISK",
                 "severity": "WARNING",
                 "summary": (
-                    "Dynamic SQL, cross-database references, or uncertain result shape "
-                    "can hide dependencies and must remain REVIEW_REQUIRED."
+                    "Dynamic SQL, cross-database reference, 불확실한 result shape는 "
+                    "의존성을 숨길 수 있으므로 REVIEW_REQUIRED로 유지해야 합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -787,8 +1802,8 @@ def _apply_deterministic_safety_net(
             payload={
                 "code": "DETERMINISTIC_SAFETY_NET_UNSUPPORTED_DEPENDENCY_REVIEW",
                 "message": (
-                    "Unsupported dependency/table/function/procedure claims from dynamic "
-                    "or cross-database evidence remain review markers only."
+                    "Dynamic 또는 cross-database evidence에서 나온 미지원 dependency/table/"
+                    "function/procedure claim은 evidence caveat로만 유지합니다."
                 ),
                 "status": "REVIEW_REQUIRED",
                 "evidenceRefs": dynamic_refs,
@@ -799,11 +1814,11 @@ def _apply_deterministic_safety_net(
         repaired["assumptions"]
     ):
         repaired["assumptions"].append(
-            "DETERMINISTIC_SAFETY_NET added draft claims from allowed deterministic fact ids only."
+            "DETERMINISTIC_SAFETY_NET은 허용된 결정론적 fact id만 사용해 초안 claim을 추가했습니다."
         )
     elif not repaired["assumptions"]:
         repaired["assumptions"].append(
-            "DETERMINISTIC_SAFETY_NET added draft claims from allowed deterministic fact ids only."
+            "DETERMINISTIC_SAFETY_NET은 허용된 결정론적 fact id만 사용해 초안 claim을 추가했습니다."
         )
     return repaired
 
@@ -921,8 +1936,8 @@ def _append_storage_safety_marker(
     marker = {
         "code": marker_code,
         "message": (
-            "Unsafe SQL, provider trace, row-data, or secret-like content was removed "
-            "from LLM output before storage."
+            "저장 전에 LLM 출력에서 안전하지 않은 SQL, provider trace, row-data 또는 "
+            "secret-like 내용을 제거했습니다."
         ),
         "status": "REVIEW_REQUIRED",
         "evidenceRefs": evidence_refs,
@@ -943,6 +1958,7 @@ def _aggregate_invocations(
     invocations: Sequence[tuple[str, ModelInvocationRecord]],
     structured_output: dict[str, Any],
     profile: Any,
+    source_context_summaries: Sequence[Mapping[str, Any]] = (),
 ) -> ModelInvocationRecord:
     if not invocations:
         raise ValueError("At least one model invocation is required.")
@@ -963,10 +1979,15 @@ def _aggregate_invocations(
                 "status": invocation.status.value,
                 "tokenUsage": dict(invocation.token_usage),
                 "latencyMs": invocation.latency_ms,
+                "sourceContextSummary": (
+                    dict(source_context_summaries[index])
+                    if index < len(source_context_summaries)
+                    else {}
+                ),
             },
             nested=invocation.component_invocations,
         )
-        for stage, invocation in invocations
+        for index, (stage, invocation) in enumerate(invocations)
     )
     token_usage = {
         "inputTokens": sum(

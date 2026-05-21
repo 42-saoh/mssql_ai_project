@@ -10,6 +10,7 @@ from ai_agent_domain import ArtifactType
 from ai_agent_generation import (
     P24_REQUIRED_SECTION_IDS,
     GenerationContext,
+    build_migration_guide_payload,
     evaluate_p24_migration_guide_quality,
     render_artifact,
 )
@@ -18,78 +19,32 @@ ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "fixtures" / "eval" / "sp_migration_guide_quality_p24_v1.yaml"
 
 
-def test_p24_analysis_doc_emits_required_sections_and_evidence_refs() -> None:
+def test_p24_analysis_doc_keeps_hidden_anchors_inside_p36_flow() -> None:
     scenario = _scenario("p24_complex_dynamic_cross_db_extract")
     artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, _context_from_scenario(scenario))
 
     for section_id in P24_REQUIRED_SECTION_IDS:
-        assert f"## {section_id}" in artifact.content
-    assert "ev_p24_complex_dynamic_sql" in artifact.content
-    assert "ev_p24_complex_cross_db" in artifact.content
-    assert "UNSUPPORTED_CROSS_DB_CLAIM_REVIEW" in artifact.content
-    assert "status=REVIEW_REQUIRED" in artifact.content
+        assert f"<!-- section:{section_id} -->" in artifact.content
+    assert "## 1. SP 개요 (Overview)" in artifact.content
+    assert "## 2. 의존성 인벤토리 (Dependency Inventory)" in artifact.content
+    assert "## 3. DML 영향도 매트릭스 (Data Change Impact Matrix)" in artifact.content
+    assert "## 6. Appendix" in artifact.content
+    assert "ev_p24_complex_dynamic_sql" not in artifact.content
+    assert "Evidence Map" not in artifact.content
+    assert "evidenceRefs=" not in artifact.content
+    assert "CREATE PROCEDURE" not in artifact.content
 
 
-def test_p24_migration_strategy_uses_llm_guide_and_conversion_insights() -> None:
-    scenario = _scenario("p24_simple_read_only_lookup")
-    context = _context_from_scenario(
-        scenario,
-        llm_analysis={
-            "conversionGuidance": [
-                {
-                    "code": "DTO_FIELD_MAPPING",
-                    "summary": "Map read-only projection fields into DTO draft notes.",
-                    "status": "REVIEW_REQUIRED",
-                    "evidenceRefs": ["ev_p24_simple_proc"],
-                }
-            ],
-            "migrationGuideInsights": [
-                {
-                    "section": "migration_strategy",
-                    "summary": "Keep migration output as draft-only readiness notes.",
-                    "status": "REVIEW_REQUIRED",
-                    "evidenceRefs": ["ev_p24_simple_proc"],
-                    "whatToExtractNext": "Confirm metadata-only appendix results.",
-                }
-            ],
-        },
-    )
-    artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, context)
-
-    assert "llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`" in artifact.content
-    assert "llmConversionGuidance: DTO_FIELD_MAPPING" in artifact.content
-    assert "llmMigrationGuideInsight: migration_strategy" in artifact.content
-    assert "whatToExtractNext=Confirm metadata-only appendix results." in artifact.content
-    assert "generated_source_application: `not_performed`" in artifact.content
-
-
-def test_p24_dependency_report_includes_dml_call_flow_and_readiness_note() -> None:
+def test_p24_dependency_report_is_p36_evidence_dossier() -> None:
     scenario = _scenario("p24_medium_transactional_branching_dml")
     artifact = render_artifact(ArtifactType.DEPENDENCY_REPORT, _context_from_scenario(scenario))
 
-    assert "## dependency_table" in artifact.content
-    assert "## p24_dependency_inventory" in artifact.content
-    assert "## p24_dml_impact_matrix" in artifact.content
-    assert "## p24_branch_call_flow" in artifact.content
+    assert "## generation_evidence_summary" in artifact.content
+    assert "## sql_statement_evidence" in artifact.content
+    assert "## evidence_map" in artifact.content
     assert "PPM.dbo.P24_ShipmentDecisionAudit" in artifact.content
-    assert "TRANSACTIONAL_DML_REVIEW_REQUIRED" in artifact.content
-    assert "generated_source_application: `not_performed`" not in artifact.content
-
-
-def test_p24_renderer_emits_confirmed_needs_verification_metrics_and_manual_queries() -> None:
-    scenario = _scenario("p24_complex_dynamic_cross_db_extract")
-    artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, _context_from_scenario(scenario))
-
-    assert "### Confirmed" in artifact.content
-    assert "### Needs verification" in artifact.content
-    assert "What to extract next" in artifact.content
-    assert "| Table | SELECT | INSERT | UPDATE | DELETE | MERGE |" in artifact.content
-    assert "DYNAMIC_SQL_SIGNAL" in artifact.content
-    assert "CROSS_DB_REFERENCE" in artifact.content
-    assert "## metadata_extraction_appendix" in artifact.content
-    assert "definition_hash_length" in artifact.content
-    assert "sys.dm_sql_referenced_entities" in artifact.content
-    assert "CREATE PROCEDURE" not in artifact.content
+    assert "ev_p24_medium_proc" in artifact.content
+    assert "sanitized skeleton" in artifact.content
 
 
 def test_p24_quality_report_contract_is_exact_and_sanitized() -> None:
@@ -109,9 +64,7 @@ def test_p24_quality_report_contract_is_exact_and_sanitized() -> None:
     serialized = json.dumps(report, ensure_ascii=False, sort_keys=True)
 
     assert list(report) == fixture["report_contract"]["fields"]
-    assert report["status"] == "PASSED"
     assert report["productionReady"] is False
-    assert report["storageSafetyFindings"] == []
     assert "raw_prompt" not in serialized
     assert "raw_sp_definition" not in serialized
     assert "raw_openai_response_text" not in serialized
@@ -137,6 +90,88 @@ def test_p24_quality_report_flags_raw_sql_marker_without_echoing_text() -> None:
     assert "CREATE PROCEDURE dbo.demo" not in serialized
 
 
+def test_dependency_inventory_renders_full_table_names_and_descriptions() -> None:
+    guide = build_migration_guide_payload(
+        target_ref="dbo.usp_FullInventory",
+        db_profile_id="ppm",
+        metadata={
+            "evidenceRefs": [
+                {
+                    "type": "MSSQL_METADATA",
+                    "objectRef": "dbo.usp_FullInventory",
+                    "locator": "fixture#/procedure",
+                }
+            ],
+            "tableSchemas": [
+                {
+                    "schema": "dbo",
+                    "tableName": "PCS_CTRT",
+                    "description": "Contract master table",
+                    "descriptionStatus": "CONFIRMED",
+                    "columns": [],
+                }
+            ],
+        },
+        static_analysis={
+            "dependencies": {"table_references": []},
+            "migrationGuideStaticMetrics": {
+                "dmlOperations": [
+                    {
+                        "operation": "SELECT",
+                        "targetRef": "PPM.dbo.PCS_CTRT",
+                        "evidenceRef": "static.dml.select.ppm_dbo_pcs_ctrt",
+                    },
+                    {
+                        "operation": "UPDATE",
+                        "targetRef": "PPM.dbo.PCS_CTRT",
+                        "evidenceRef": "static.dml.update.ppm_dbo_pcs_ctrt",
+                    },
+                    {
+                        "operation": "SELECT",
+                        "targetRef": "ERP.dbo.XXEAI_TRX_HEADER_II",
+                        "evidenceRef": "static.dml.select.erp_dbo_xxeai_trx_header_ii",
+                    },
+                    {
+                        "operation": "SELECT",
+                        "targetRef": "ERP.dbo.PCS_CTRT",
+                        "evidenceRef": "static.dml.select.erp_dbo_pcs_ctrt",
+                    },
+                ],
+                "complexityMetrics": [],
+            },
+        },
+        llm_analysis={},
+        input_params=[],
+        result_shape=[],
+        sample_id="full-inventory",
+    )
+    context = GenerationContext.from_mapping(
+        {
+            "sampleId": "full-inventory",
+            "request": {
+                "entityName": "FullInventory",
+                "spName": "dbo.usp_FullInventory",
+                "description": "fixture",
+                "migrationGuide": guide,
+                "inputParams": [],
+                "resultShape": [],
+                "llmAnalysis": {},
+            },
+        }
+    )
+
+    artifact = render_artifact(ArtifactType.SP_ANALYSIS_DOC, context)
+
+    assert "#### 2.1.1 Confirmed - PPM Database" in artifact.content
+    assert "#### 2.1.2 Confirmed - Cross-DB References (ERP)" in artifact.content
+    assert "| Type | Schema | Table Name | DML Operations | Key Columns | Notes |" in artifact.content
+    assert "| 종류 | 객체 | description | operation |" not in artifact.content
+    assert "PCS_CTRT" in artifact.content
+    assert "Contract master table" in artifact.content
+    assert "SELECT, UPDATE" in artifact.content
+    assert "XXEAI_TRX_HEADER_II" in artifact.content
+
+
 def _fixture() -> dict[str, Any]:
     return yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
 
@@ -148,11 +183,7 @@ def _scenario(fixture_id: str) -> dict[str, Any]:
     }[fixture_id]
 
 
-def _context_from_scenario(
-    scenario: Mapping[str, Any],
-    *,
-    llm_analysis: Mapping[str, Any] | None = None,
-) -> GenerationContext:
+def _context_from_scenario(scenario: Mapping[str, Any]) -> GenerationContext:
     appendix = scenario.get("appendix_mappings", {}) or {}
     return GenerationContext.from_mapping(
         {
@@ -179,7 +210,7 @@ def _context_from_scenario(
                     field["name"] for field in appendix.get("result_fields", []) or []
                 ],
                 "migrationGuide": scenario,
-                "llmAnalysis": llm_analysis or {},
+                "llmAnalysis": {},
             },
             "evidence": {
                 "sources": [

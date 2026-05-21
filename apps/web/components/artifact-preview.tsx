@@ -1,14 +1,37 @@
 import Link from "next/link";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { ArtifactActions } from "@/components/artifact-actions";
 import { StatusPill } from "@/components/status-pill";
 import type { AgentRunSummary, Artifact, ValidationReport } from "@/lib/api/types";
+import {
+  displayCaveatText,
+  displayArtifactContent,
+  displayRuleId,
+  passedCheckLabel,
+  ruleLevelLabel,
+} from "@/lib/display-caveats";
 import {
   artifactStatusLabels,
   artifactTypeLabels,
   formatCoverage,
+  validationResultLabels,
   validationStatusLabels,
 } from "@/lib/presentation";
 
 const listItemKey = (scope: string, index: number) => `${scope}-${index}`;
+const markdownArtifactTypes = new Set<Artifact["type"]>([
+  "SP_ANALYSIS_DOC",
+  "DEPENDENCY_REPORT",
+]);
+
+function sameTargetHref(targetKey: string): string {
+  return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
+}
+
+function isMarkdownArtifactType(type: Artifact["type"]): boolean {
+  return markdownArtifactTypes.has(type);
+}
 
 export function ArtifactPreview({
   artifact,
@@ -21,6 +44,8 @@ export function ArtifactPreview({
   agentRuns?: AgentRunSummary[];
   validateAction?: (formData: FormData) => Promise<void>;
 }>) {
+  const displayedContent = displayArtifactContent(artifact.content);
+
   return (
     <div className="stack">
       <section className="panel">
@@ -49,16 +74,25 @@ export function ArtifactPreview({
             <dt>Generator</dt>
             <dd>{artifact.generatorVersion}</dd>
           </div>
+          {artifact.targetKey ? (
+            <div>
+              <dt>targetKey</dt>
+              <dd>
+                <code>{artifact.targetKey}</code>
+              </dd>
+            </div>
+          ) : null}
         </dl>
 
         <div className="callout callout--warning">
           <strong>Draft-only boundary</strong>
           <p>
-            This preview is not published or deployed. Validation remains required, while the
-            default P25 UI exposes no review decision, SQL execution, DDL apply, source write, or
-            publish action.
+            This preview is draft-only. The default UI exposes no publish, deploy, SQL execution,
+            DDL/DML apply, or source write action.
           </p>
         </div>
+
+        <ArtifactActions artifactId={artifact.artifactId} content={displayedContent} />
 
         {artifact.blockers?.length ? (
           <div className="blocker-list">
@@ -76,15 +110,25 @@ export function ArtifactPreview({
             <strong>Caveats</strong>
             <ul>
               {artifact.caveats.map((caveat, index) => (
-                <li key={listItemKey("artifact-caveat", index)}>{caveat}</li>
+                <li key={listItemKey("artifact-caveat", index)}>
+                  {displayCaveatText(caveat)}
+                </li>
               ))}
             </ul>
           </div>
         ) : null}
 
-        <div className="content-preview" aria-label="Draft artifact content">
-          <pre>{artifact.content}</pre>
-        </div>
+        {isMarkdownArtifactType(artifact.type) ? (
+          <div className="markdown-preview" aria-label="Draft artifact content">
+            <Markdown skipHtml remarkPlugins={[remarkGfm]}>
+              {displayedContent}
+            </Markdown>
+          </div>
+        ) : (
+          <div className="content-preview" aria-label="Draft artifact content">
+            <pre>{displayedContent}</pre>
+          </div>
+        )}
       </section>
 
       <section className="panel">
@@ -104,12 +148,16 @@ export function ArtifactPreview({
             {validation.checks.map((check) => (
               <article className="validation-row" key={check.ruleId}>
                 <div>
-                  <h3>{check.ruleId}</h3>
-                  <p>{check.message ?? "No message provided."}</p>
+                  <h3>{displayRuleId(check.ruleId)}</h3>
+                  <p>{displayCaveatText(check.message ?? "No message provided.")}</p>
                 </div>
                 <div className="status-cluster">
-                  <StatusPill value={check.severity} label={check.severity} />
-                  <StatusPill value={check.result} label={check.result.replace("_", " ")} />
+                  <StatusPill value={check.result} label={validationResultLabels[check.result]} />
+                  {check.result === "PASS" ? (
+                    <small>{passedCheckLabel(check.severity)}</small>
+                  ) : (
+                    <StatusPill value={check.severity} label={ruleLevelLabel(check.severity)} />
+                  )}
                 </div>
               </article>
             ))}
@@ -126,7 +174,7 @@ export function ArtifactPreview({
             <strong>Missing evidence</strong>
             <ul>
               {validation?.missingEvidence?.map((item, index) => (
-                <li key={listItemKey("missing-evidence", index)}>{item}</li>
+                <li key={listItemKey("missing-evidence", index)}>{displayCaveatText(item)}</li>
               ))}
             </ul>
           </div>
@@ -156,8 +204,8 @@ export function ArtifactPreview({
                   <span>{run.modelInvocation.promptVersion}</span>
                   <code>{run.modelInvocation.outputHash}</code>
                   <small>
-                    {run.status} · input {run.modelInvocation.inputHash} · tokens{" "}
-                    {run.modelInvocation.tokenUsage?.totalTokens ?? 0} · latency{" "}
+                    {run.status} - input {run.modelInvocation.inputHash} - tokens{" "}
+                    {run.modelInvocation.tokenUsage?.totalTokens ?? 0} - latency{" "}
                     {run.modelInvocation.latencyMs ?? 0}ms
                   </small>
                 </article>
@@ -179,8 +227,11 @@ export function ArtifactPreview({
             </div>
           </div>
           <div className="evidence-list">
-            {artifact.evidenceRefs.map((evidence) => (
-              <article className="evidence-row" key={`${evidence.type}-${evidence.locator}`}>
+            {artifact.evidenceRefs.map((evidence, index) => (
+              <article
+                className="evidence-row"
+                key={`${evidence.type}-${evidence.locator}-${index}`}
+              >
                 <strong>{evidence.type}</strong>
                 <span>{evidence.objectRef}</span>
                 <code>{evidence.locator}</code>
@@ -198,12 +249,14 @@ export function ArtifactPreview({
             </div>
           </div>
 
-          {(validation?.manualReviewPoints?.length ?? 0) > 0 ? (
+          {(validation?.qualityCaveats?.length ?? 0) > 0 ? (
             <div className="callout">
-              <strong>Validation caveats</strong>
+              <strong>Quality caveats</strong>
               <ul>
-                {validation?.manualReviewPoints?.map((item, index) => (
-                  <li key={listItemKey("manual-review-point", index)}>{item}</li>
+                {validation?.qualityCaveats?.map((item, index) => (
+                  <li key={listItemKey("quality-caveat", index)}>
+                    {displayCaveatText(item)}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -214,7 +267,9 @@ export function ArtifactPreview({
               <strong>Assumptions</strong>
               <ul>
                 {artifact.assumptions?.map((item, index) => (
-                  <li key={listItemKey("artifact-assumption", index)}>{item}</li>
+                  <li key={listItemKey("artifact-assumption", index)}>
+                    {displayCaveatText(item)}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -222,10 +277,10 @@ export function ArtifactPreview({
 
           {(artifact.todos?.length ?? 0) > 0 ? (
             <div className="callout callout--warning">
-              <strong>TODO / REVIEW_REQUIRED caveats</strong>
+              <strong>근거 보강 필요</strong>
               <ul>
                 {artifact.todos?.map((item, index) => (
-                  <li key={listItemKey("artifact-todo", index)}>{item}</li>
+                  <li key={listItemKey("artifact-todo", index)}>{displayCaveatText(item)}</li>
                 ))}
               </ul>
             </div>
@@ -235,6 +290,9 @@ export function ArtifactPreview({
 
       <div className="page-actions">
         {artifact.jobId ? <Link href={`/jobs/${artifact.jobId}`}>Back to job</Link> : null}
+        {artifact.targetKey ? (
+          <Link href={sameTargetHref(artifact.targetKey)}>Same target history</Link>
+        ) : null}
       </div>
     </div>
   );

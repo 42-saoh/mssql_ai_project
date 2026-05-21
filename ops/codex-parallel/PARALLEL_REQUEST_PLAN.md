@@ -175,7 +175,7 @@
   - `spec/validation/**`
   - `db/schema/**`
 - 산출물:
-  - request/job/artifact/validation/approval endpoints
+  - request/job/artifact/validation/validation endpoints
   - metadata profile/tools and registry version stub endpoints
   - workflow state machine
   - in-memory 또는 stub repository adapters
@@ -264,7 +264,7 @@
 
 ## P07 이후 Productization Wave
 
-P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이다. P08A~P16은 같은 병렬 worktree 방식과 Docker 테스트 격리, read-only metadata, draft-only generation, validation/approval/audit 원칙을 유지하면서 productization target으로 전환한다.
+P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이다. P08A~P16은 같은 병렬 worktree 방식과 Docker 테스트 격리, read-only metadata, draft-only generation, validation/evidence/audit 원칙을 유지하면서 productization target으로 전환한다.
 
 ### Productization 고정 DB 역할
 
@@ -290,7 +290,7 @@ P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이�
 
 ### P09 — API & Workflow Productization
 
-- request/job/artifact/validation/approval/audit lifecycle을 product API 흐름으로 정리한다.
+- request/job/artifact/validation/evidence/audit lifecycle을 product API 흐름으로 정리한다.
 - idempotency, error model, pagination, status model, API consistency를 점검한다.
 - PPM pilot object set 기반 request/job/artifact fixture를 설계한다.
 
@@ -314,13 +314,13 @@ P00~P07은 starter/MVP의 큰 틀과 운영 철학을 유지하는 기준선이�
 
 ### P13 — Validation, Approval & Audit Productization
 
-- validation result, reviewer checklist, approval decision log, audit event model을 제품 workflow로 정리한다.
+- validation result, quality caveat checklist, quality evidence log, audit event model을 제품 workflow로 정리한다.
 - 재현 가능한 실행 기록과 evidence coverage를 강화한다.
 - PPM pilot artifacts 기준 validation/review scenario를 설계한다.
 
 ### P14 — Web Product UI
 
-- 중앙 통합형 단일 플랫폼 UI로 request, metadata search, job status, artifact preview, validation result, approval/review 화면을 정리한다.
+- 중앙 통합형 단일 플랫폼 UI로 request, metadata search, job status, artifact preview, validation result, quality caveat 화면을 정리한다.
 - mock-first + API adapter 구조를 유지한다.
 - PPM pilot object set을 demo/search/sample request fixture로 활용한다.
 
@@ -361,7 +361,7 @@ P16 결과가 `NO_GO`이면 P17을 실행한다. P17은 P16을 뒤집기 위한 
 2. `P17B` — live pilot artifact validation closure
    - P17A가 확인한 pilot object set으로 draft-only artifact와 validation evidence를 만든다.
    - live release candidate는 `PASSED` validation과 release-critical `REVIEW_REQUIRED` 없음이 필요하다.
-3. `P17C` — manual approval and audit evidence binding
+3. `P17C` — draft quality and audit evidence binding
    - human `APPROVE`를 같은 artifact/version 및 validation report에 바인딩한다.
    - worker가 approval을 합성하거나 대리 생성하면 안 된다.
 4. `P17D` — final GO/NO-GO decision update

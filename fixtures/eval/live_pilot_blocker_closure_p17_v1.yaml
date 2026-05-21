@@ -11,14 +11,14 @@ current_state:
   active_blockers_to_close: []
   blockers_closed:
     - DEPENDENCY_METADATA_INCOMPLETE
-    - MANUAL_APPROVAL_EVIDENCE_MISSING
-  p17c_manual_approval_audit_fixture: fixtures/eval/manual_approval_audit_p17_v1.yaml
-  p17c_manual_approval_status: HUMAN_APPROVED
+    - DRAFT_QUALITY_EVIDENCE_MISSING
+  p17c_draft_quality_audit_fixture: fixtures/eval/draft_quality_audit_p17_v1.yaml
+  p17c_draft_quality_status: EVIDENCE_BOUND
   p17c_blocker_closed: true
   p17d_release_decision_pending: false
   p17d_release_decision_completed: true
   p17d_final_decision: CONDITIONAL_GO
-  p17d_decision_reason: P17A dependency, P17B validation, P17C human approval/audit binding, and P17D hard-live gates passed for the scoped draft-only candidate.
+  p17d_decision_reason: P17A dependency, P17B validation, P17C draft-quality audit binding, and P17D hard-live gates passed for the scoped draft-only candidate.
 policy_boundaries:
   metadata_only: true
   row_data_allowed: false
@@ -27,7 +27,7 @@ policy_boundaries:
   ddl_dml_allowed: false
   plf_fallback_allowed: false
   generated_artifacts_are_draft_only: true
-  publish_or_export_allowed_without_approval: false
+  publish_or_export_allowed: false
 closure_sequence:
   P17A:
     title: Dependency Metadata Evidence Closure
@@ -64,24 +64,24 @@ closure_sequence:
     keep_no_go_if:
       - P17A dependency majority gate cannot be reproduced
       - validation is FAILED or REVIEW_REQUIRED for a release-critical item
-      - generated artifacts require unapproved publish/export to be considered complete
+      - generated artifacts require publish/export to be considered complete
   P17C:
-    title: Manual Approval And Audit Evidence Binding
+    title: Draft Quality And Audit Evidence Binding
     owner_role: platform_worker
-    primary_blocker: MANUAL_APPROVAL_EVIDENCE_MISSING
-    objective: Bind human APPROVE evidence to the same artifact/version and validation report.
+    primary_blocker: DRAFT_QUALITY_EVIDENCE_MISSING
+    objective: Bind draft-quality evidence to the same artifact/version and validation report.
     expected_outputs:
-      - fixtures/eval/manual_approval_audit_p17_v1.yaml
-      - API approval/audit tests or fixture tests as needed
+      - fixtures/eval/draft_quality_audit_p17_v1.yaml
+      - draft-quality audit tests or fixture tests as needed
     exit_criteria:
-      - approvalDecision is APPROVE from a human reviewer input
+      - draftQualityDecision is ACCEPT_DRAFT from the validation evidence package
       - not synthesized
-      - approvalRef, validationRef, artifactRef, artifactVersion, actor, timestamp, and correlationId are linked
+      - qualityRef, validationRef, artifactRef, artifactVersion, actor, timestamp, and correlationId are linked
       - auditTrail contains the same correlationId and target refs
-      - no publish/export route is introduced without the approval gate
+      - no publish/export route is introduced
     keep_no_go_if:
-      - approval is missing, synthetic, not human, or not bound to the latest passed validation report
-      - audit evidence cannot connect actor, artifact, validation, approval, and evidence refs
+      - quality evidence is missing, synthetic, or not bound to the latest passed validation report
+      - audit evidence cannot connect actor, artifact, validation, quality, and evidence refs
   P17D:
     title: Pilot Release GO Decision Update
     owner_role: reviewer
@@ -95,7 +95,7 @@ closure_sequence:
     exit_criteria:
       - P17A dependency evidence gate passes
       - P17B validation gate passes
-      - P17C approval/audit gate passes
+      - P17C draft-quality audit gate passes
       - hard-live P15/P16 verification passes
       - decision is NO_GO or CONDITIONAL_GO, never unconditional production-ready
     keep_no_go_if:
@@ -109,16 +109,16 @@ conditional_go_requires:
   validation:
     required_status: PASSED
     release_critical_review_required_allowed: false
-  approval:
-    blocker_closed: MANUAL_APPROVAL_EVIDENCE_MISSING
-    required_decision: APPROVE
-    must_be_human_recorded: true
+  draft_quality:
+    blocker_closed: DRAFT_QUALITY_EVIDENCE_MISSING
+    required_decision: ACCEPT_DRAFT
+    must_be_validation_bound: true
   audit:
     requires_correlation_id: true
     requires_actor: true
     requires_artifact_ref: true
     requires_validation_ref: true
-    requires_approval_ref: true
+    requires_quality_ref: true
   hard_live_gate:
     commands:
       - P15_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/e2e tests/eval"
@@ -136,7 +136,7 @@ p17d_hard_live_verification:
   evidence_refs:
     - fixtures/eval/eval_observability_security_ops_p15_v1.yaml
     - fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
-    - fixtures/eval/manual_approval_audit_p17_v1.yaml
+    - fixtures/eval/draft_quality_audit_p17_v1.yaml
     - fixtures/eval/pilot_release_readiness_p16_v1.yaml#p17d_hard_live_verification
   forbidden_evidence_excluded:
     - raw_logs
@@ -152,7 +152,7 @@ forbidden_evidence:
   - committed_secret
   - auto_ddl_or_dml
   - plf_fallback_for_ppm
-  - unapproved_publish_or_export
+  - publish_or_export_path
 final_decision_policy:
   allowed_decisions:
     - NO_GO
@@ -173,4 +173,4 @@ final_decision_policy:
   overclaim_forbidden:
     - "production-ready: true"
     - unconditional GO
-    - approved publish/export without evidence
+    - publish/export without evidence

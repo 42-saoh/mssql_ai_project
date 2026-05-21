@@ -50,22 +50,6 @@ class ValidationCheck:
 
 
 @dataclass(frozen=True)
-class ReviewerChecklistItem:
-    item_id: str
-    label: str
-    satisfied: bool
-    detail: str
-
-    def as_dict(self) -> dict[str, str | bool]:
-        return {
-            "itemId": self.item_id,
-            "label": self.label,
-            "satisfied": self.satisfied,
-            "detail": self.detail,
-        }
-
-
-@dataclass(frozen=True)
 class ValidationReport:
     artifact_id: str
     status: ValidationStatus
@@ -88,6 +72,6 @@ class ValidationReport:
             "status": self.status.value,
             "checks": [check.as_dict() for check in self.checks],
             "missingEvidence": list(self.missing_evidence),
-            "manualReviewPoints": list(self.manual_review_points),
+            "qualityCaveats": list(self.manual_review_points),
             "metadata": dict(self.metadata),
         }

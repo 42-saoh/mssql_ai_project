@@ -1,5 +1,291 @@
 # TOOLS.md
 
+Note: `scripts/run_pytest_selection.py` accepts pytest passthrough options after `--`,
+for example `PYTEST_ARGS="@live-confidence -- -vv -s -x"`.
+
+## P36 Verification Notes
+
+P36 uses the normal dockerized test interface when available. The key targeted suites are:
+
+- `tests/contract/test_p36_output_renewal_contract_prompt_assets.py`
+- `tests/eval/test_p36_output_renewal_quality.py`
+- `tests/unit/generation`
+- `tests/contract/test_openapi_and_env_sample_assets.py`
+- `tests/unit/api/test_workflow_service.py`
+- `tests/integration/api/test_api_workflow_routes.py`
+- `tests/unit/web/test_p14_product_ui_static.py`
+
+The v9 DB SQL is manual-review/manual-apply only. It is non-destructive for existing
+FK-linked retired artifact rows and blocks only new retired artifact inserts/type changes.
+Tooling must not apply it automatically.
+
+## P41 Verification Notes
+
+P41 validates the SP operation model renewal with fixture-first tests plus workflow
+wiring tests for `JAVA_MYBATIS_DRAFT`. The baseline P41A contract/fixture gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"
+```
+
+The full P41A-F targeted quality gate adds the schema, deterministic extractor,
+structured planner, workflow `operationModel` injection, multi-DTO artifact storage,
+multi-DTO Java/MyBatis renderer, and P36 generation regression:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/contract/test_p41_sp_operation_model_prompt_assets.py"
+```
+
+The fixture uses sanitized expectations from the external `MIGRATION_GUIDE.md` reference
+for `PCO_GU_ManageBond_PRC`; it does not store raw SP text and does not require live DB,
+row-data access, procedure execution, OpenAI network calls, public API expansion, DB schema
+changes, or a new public MCP invoke tool. `DTO_DRAFT` may be a multi-file bundle only inside
+the unchanged `JAVA_MYBATIS_DRAFT` artifact contract. Workflow tests verify that a new
+manage-bond job stores DTO bundle files individually and preserves a review-required fallback
+operation model when planning is disabled or unavailable.
+For complex SPs, the same gate now also covers internal branch-plan and validator-repair
+sidecar AgentRuns. These are persisted only as sanitized workflow evidence and do not add
+public API, DB schema, or artifact-type surface.
+
+## P42 Verification Notes
+
+P42 validates the AI Draft Pack path with fixture-first contract tests, static quality gates,
+workflow wiring tests, and a route-level ManageBond replay. The P42A groundwork gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"
+```
+
+P42B-E implement schema/gateway, deterministic code-draft validation, workflow artifact
+persistence, and ManageBond replay. P42F synchronizes docs and runs the final targeted gate,
+including P41 and P36 regression:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/unit/agent_runtime/test_ai_draft_pack_schema.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/validation/test_ai_draft_pack_validator.py tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime/test_sp_operation_model_schema.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/analysis/test_sp_statement_evidence_extractor.py tests/unit/generation tests/eval/test_p36_output_renewal_quality.py"
+```
+
+The P42 fixture uses sanitized expectations from the external `MIGRATION_GUIDE.md` reference
+for `PCO_GU_ManageBond_PRC`; it does not store raw guide body, raw SP text, row data, raw
+prompts, or provider responses and does not require live DB, procedure execution, OpenAI network
+calls, public API expansion, DB schema changes, or a new public MCP invoke tool. The P42E replay
+uses `FakeModelGateway` and `tests/helpers/p42_manage_bond.py`, and acceptance requires non-empty
+multi-DTO artifacts plus preserved `REVIEW_REQUIRED` uncertainty markers.
+
+P42H keeps that ManageBond fixture as a benchmark only. Runtime workflow inventory is derived
+from sanitized operation contracts and DTO blueprints. Collapsed complex-SP inventories or missing
+write/call DTO responsibilities fail as `P42_INVENTORY_CONTRACT_INCOMPLETE` before any Java/MyBatis
+draft artifacts are persisted.
+
+P42G is an optional live confidence replay for the residual P42E risk. It is not part of the
+default fixture gate and must be enabled explicitly:
+
+```powershell
+$env:P42_LIVE_REPLAY_GATE="1"
+$env:P42_LIVE_REPLAY_MODE="sanitized_fixture"
+$env:LLM_LIVE_GATE="1"
+$env:LLM_ENABLE_REMOTE="1"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
+```
+
+`P42_LIVE_REPLAY_MODE=sanitized_fixture` uses sanitized fixture facts and the
+same deterministic P42 validator without live PPM metadata or raw SP external
+export. The legacy `live_ppm` mode remains available only when raw-SP-to-remote
+model preconditions are explicitly approved:
+
+```powershell
+$env:P42_LIVE_REPLAY_GATE="1"
+$env:P42_LIVE_REPLAY_MODE="live_ppm"
+$env:LLM_LIVE_GATE="1"
+$env:LLM_ENABLE_REMOTE="1"
+$env:LLM_ALLOW_SP_TEXT="1"
+$env:MSSQL_ENABLE_LIVE_METADATA="1"
+$env:MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS="20"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
+```
+
+The probe uses an in-memory repository and does not execute the stored procedure,
+query row data, write platform DB rows, apply generated source, or claim
+production readiness. ManageBond DTO names are reported as benchmark metrics,
+not generic pass/fail answer keys.
+
+## P43 Framework Adoption Verification Notes
+
+P43 evaluates whether a new agent/orchestration framework should be adopted. It
+does not install a framework in P43A and does not switch runtime behavior. After
+P49, P43 is historical evidence only. The historical asset gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
+```
+
+The final P43 decision gate records a historical `pilot` recommendation. P49
+removes the old broad P43 replay gate from active suites; equivalent fake
+adapters now live under test helpers. Optional live replay remains a separate
+confidence signal and must not
+execute stored procedures, query row data, store raw prompts/provider responses,
+or apply generated source.
+
+P43D framework policy checks are part of the static gate. Candidate adapters must
+pass `P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED` checks before stage execution and
+`P43_FRAMEWORK_RAW_TRACE_BLOCKED` checks before storing trace summaries. Stored
+framework trace components are limited to adapter ids, candidate framework,
+stage/status, component ids, counts, hashes, blocker/failure codes, and numeric
+policy-safe metrics. OpenAI Agents SDK tracing must be disabled or configured to
+exclude sensitive inputs/outputs before adoption; LangGraph persistence must use
+a redacted serializer/checkpointer boundary before adoption.
+
+The P43F decision report is `docs/framework-adoption-decision-p43.md`. P49
+supersedes the production-exported baseline adapter scaffold, while the current
+Responses/httpx gateway remains retained for P-GPT default compatibility and
+emergency rollback. P43 does not authorize framework dependency installation or
+a production runtime switch.
+
+## P44 Framework Runtime Adoption Verification Notes
+
+P44 is the active real framework runtime adoption track. It installs
+`openai-agents==0.17.2` and `langgraph==1.2.0`, adds
+`FrameworkRuntimeConfig.v0.1`, routes OpenAI remote AI Draft Pack generation
+through OpenAI Agents SDK, and runs the draft-pack stages through LangGraph.
+P-GPT AI Draft Pack generation defaults to `responses_httpx`, but explicit
+internal compatible-endpoint live evidence may use OpenAI Agents SDK plus
+LangGraph. Emergency rollback remains `responses_httpx`.
+
+The default P44 static gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p44_framework_runtime_adoption_assets.py"
+```
+
+The targeted P44 regression gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p44_framework_runtime_adoption_assets.py tests/unit/agent_runtime/test_openai_agents_framework_adapter.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p44_framework_runtime_replay.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+```
+
+P44 keeps generated artifacts draft-only with `production_ready: false` /
+`productionReady=false`. Tests must not execute stored procedures, query row
+data, apply source, deploy, store raw prompts/provider responses, store raw SP
+definitions, or store LangGraph checkpointer state.
+
+The optional P45 live evidence gate is disabled by default:
+
+```powershell
+P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=openai OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+```
+
+Approved P-GPT-compatible SDK evidence uses the same sanitized gate with explicit
+runtime selection:
+
+```powershell
+P44_OPENAI_AGENTS_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_REMOTE_PROVIDER=pgpt AI_GENERATION_RUNTIME=openai_agents AI_DRAFT_PACK_ORCHESTRATOR=langgraph OPENAI_AGENTS_COMPATIBLE_API=responses OPENAI_BASE_URL=<compatible-base> OPENAI_API_KEY=<secret> OPENAI_AGENTS_DISABLE_TRACING=1 OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0 OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1 OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1 powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+```
+
+P45 must use sanitized fixture inputs and store sanitized invocation summaries
+only. It must not require live PPM, row data, procedure execution, source apply,
+or deploy. Unknown custom OpenAI-compatible endpoints are blocked until
+explicitly classified; approved P-GPT-compatible endpoints count as SDK evidence
+only through the explicit runtime path above and immediate P42/P44 validation.
+P46 records that the OpenAI default path has moved to OpenAI Agents SDK plus
+LangGraph; `responses_httpx` remains for P-GPT default compatibility and
+emergency rollback only, not as the active OpenAI default.
+
+## P47 Generic AI Draft Quality Uplift Verification Notes
+
+P47 keeps P44-P46 actual framework adoption and improves quality generically.
+`prompt:ai_java_mybatis_draft_pack@0.2.0` renders
+`DraftPackEvidenceBundle.v0.1`, operation coverage, DTO responsibility, review
+marker, and mapper coverage matrices. ManageBond DTO names are benchmark metrics,
+not generic pass/fail requirements.
+
+AI Draft Pack live runs should use the high-quality profile:
+
+```powershell
+OPENAI_MODEL_AI_DRAFT_PACK=gpt-5.5 OPENAI_REASONING_EFFORT_AI_DRAFT_PACK=high powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/eval/test_p45_openai_agents_live_gate.py"
+```
+
+If `.env` has a trace-lock mismatch, use command-scoped overrides such as
+`OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA=0`; do not commit local secret values.
+The safer P42 live replay mode is `P42_LIVE_REPLAY_MODE=sanitized_fixture`;
+`live_ppm` remains confidence evidence only and requires explicit raw-SP-to-remote
+model approval. Fixture-first P47 checks use:
+
+The P47 fixture command remains:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/eval/test_p42_live_ai_draft_pack_replay_gate.py"
+```
+
+## P50 Java/MyBatis Draft Quality Split Verification Notes
+
+P50 verifies the internal AI Draft Pack composer split, the dedicated
+`openai_ai_draft_pack` profile route, the branch-heavy operation adequacy gate,
+and stronger DTO/Service/Mapper/XML validation. The gate remains draft-only:
+no public API, DB schema, UI, public MCP route, public artifact type, source
+apply, deploy, row-data query, procedure execution, or production readiness
+change is introduced.
+
+Use the Windows Git Bash wrapper for the focused P50 gate:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-fixture PYTEST_ARGS="tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py tests/unit/api/test_workflow_service.py tests/unit/validation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p44_framework_runtime_replay.py tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py"
+```
+
+## P48 Unified Structured Framework Runtime Verification Notes
+
+P48 routes all internal structured LLM paths through the adopted OpenAI Agents
+runtime for OpenAI remote execution. `FrameworkModelGateway` delegates semantic
+analysis, metadata tool planning, metadata analysis, platform tool planning, and
+SP operation-model planning to `OpenAIAgentsStructuredAdapter` under
+`AiStructuredFrameworkAdapter.v0.1`. AI Draft Pack stays on the existing P44
+OpenAI Agents plus LangGraph workflow path.
+
+For the `sp_operation_model` stage, complex SPs use `branch_plan`, `final_model`,
+and at most one validator-guided `repair` task through the same structured runtime.
+Repair prompts contain sanitized validation findings and branch summaries only; they
+do not include raw failed payloads or call the `responses_httpx` rollback path.
+
+Remote structured calls default to `openai_agents` for both official OpenAI and
+P-GPT-compatible endpoints. `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` is the
+explicit emergency rollback check:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py"
+```
+
+The targeted P48 gate is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/contract/test_p48_unified_framework_runtime_assets.py tests/unit/agent_runtime/test_openai_agents_structured_adapter.py tests/unit/agent_runtime/test_semantic_runtime.py tests/unit/agent_runtime/test_sp_operation_planner.py tests/unit/api/test_metadata_analysis_service.py tests/unit/api/test_metadata_design_service.py tests/unit/api/test_ai_tool_orchestrator.py tests/unit/api/test_platform_tool_orchestrator.py tests/unit/api/test_workflow_service.py tests/eval/test_p30_metadata_ai_mcp_analysis.py tests/eval/test_p31_metadata_object_insight_depth.py tests/eval/test_p38_metadata_design_chat.py tests/eval/test_p40_metadata_design_natural_language_chat.py tests/eval/test_p44_framework_runtime_replay.py"
+```
+
+Follow with `git diff --check`. P48 tests must not execute stored procedures,
+query row data, apply source, deploy, store raw prompts/provider responses, store
+raw SP definitions, add a public API, change DB schema, add UI, add a public MCP
+route, or claim production readiness.
+
+## P49 Framework Runtime Cleanup Verification Notes
+
+P49 consolidates scattered P43-P48 framework runtime checks. Use
+`@framework-contracts` for contract/docs/static coverage and `@framework-runtime`
+for the active runtime regression bundle. P43 is historical evidence only; the
+old broad P43 replay gate is replaced by a small historical asset contract check.
+
+The default cleanup gates are:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="@framework-runtime"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/api/test_workflow_service.py tests/contract"
+powershell -ExecutionPolicy Bypass -File scripts/win_git_bash.ps1 make test-quality
+git diff --check
+```
+
+Approved live confidence gates remain command-scoped. Run P22/P23, P45 with
+`AI_GENERATION_RUNTIME=openai_agents`, and P42 sanitized fixture replay with
+`P42_LIVE_REPLAY_MODE=sanitized_fixture AI_GENERATION_RUNTIME=openai_agents`
+before the full `@live-confidence -- -vv -s -x` selection. P49 does not authorize
+public surface changes, row-data access, procedure execution, source apply,
+deploy, raw prompt/provider/SP/guide storage, or production readiness.
+
 ## 목적
 
 이 문서는 로컬 개발에서 사용할 도구, 명령 규약, MCP 구성을 정의한다.  
@@ -83,6 +369,9 @@
   - 범위: procedure/table/column/index/constraint/function/view/extended property
   - 제약: 읽기 전용, 자유 SQL 금지, 실제 데이터 접근 금지
   - P27 fixture-first tools: `get_dependency_closure`, `resolve_dependency_reference`
+    Same-server cross-database dependency catalog checks run only from the PPM profile context.
+    There is no PLF fallback. External catalog timeout/permission/connect/query failures are
+    retryable tool failures, not hangs or partial deterministic dependency evidence.
     는 active/read-only MCP tool 이며 fixture/live repository handler 를 가진다. P28 기준
     `/api/v1/metadata/tools/{toolName}/invoke` 는 이 두 tool 만 public allowlist 로 호출한다.
     P29 기준 `/metadata/dependencies` Web diagnostic UI 와 workflow `get_dependency_closure`
@@ -92,8 +381,7 @@
   - AI tool orchestration 은 public invocation route 를 넓히지 않는다. Workflow 내부 bounded
     planner 만 active/read-only catalog 전체를 후보로 보고, deterministic policy gate 통과 후
     내부 registry 로 실행한다.
-  - `POST /api/v1/metadata/analyze` 도 같은 bounded planner 경계를 사용한다. 기존
-    `GET /api/v1/metadata/search` 는 deterministic search 로 유지하고, analyze API 응답에만
+  - `POST /api/v1/metadata/analyze` 같은 bounded planner 경계는 유지한다. Metadata search는 공개 `GET` route 없이 `POST /api/v1/metadata/design-runs` search-mode 결과로 통합하며,
     sanitized `aiToolEvidence`, `deterministicFacts`, object profiles, category insight groups,
     dependency graph, DTO readiness, metadata insights, review markers 를 반환한다.
 
@@ -151,21 +439,41 @@
   Responses API 입력으로 보낼 수 있다.
 - Knowledge assetization 은 기본 `KNOWLEDGE_ASSETIZATION_ENABLED=1` 이며, SP workflow 와
   metadata analyze 의 `persistKnowledge=true` 기본값으로 sanitized versioned knowledge asset 을
-  축적한다. rollout 중 꺼야 하면 env 를 `0` 으로 두고 skip marker 를 확인한다. v5 schema 는
+  축적한다. rollout 중 꺼야 하면 env 를 `0` 으로 두고 skip marker 를 확인한다. v6 schema 는
   manual-apply only 이며, 필수 table 누락은 `KNOWLEDGE_SCHEMA_REQUIRED` 로 반환된다.
-- P35 knowledge lifecycle/search/review uses the same v5 manual-apply DDL. Readiness checks
-  require lifecycle columns, `KNOWLEDGE_ASSET_REVIEWS`, and critical search/review indexes in
-  addition to the P34 tables. Missing objects return `KNOWLEDGE_SCHEMA_REQUIRED`; Codex/API do
-  not auto-apply DDL. `REVIEWED` remains draft/reviewable knowledge, not production-ready or
-  automatic conversion approval evidence.
+- Knowledge lifecycle/search uses `db/schema/ai_agent_platform_schema_v6_draft_quality_no_review.sql`.
+  Readiness checks require lifecycle/archive columns and critical search indexes in addition to the
+  P34 tables. Missing objects return `KNOWLEDGE_SCHEMA_REQUIRED`; Codex/API do not auto-apply DDL.
+  `REVIEW_REQUIRED` remains an evidence caveat, not a human review or conversion approval.
 - `P35_KNOWLEDGE_LIVE_GATE=1` is an explicit confidence-only live gate for recent P34/P35
   knowledge behavior. It requires live OpenAI, read-only `ppm`/`PPM` metadata, and a manually
-  prepared PLF v5 schema. It writes normal PLF workflow/knowledge/export/audit/review records and
-  records one non-terminal `REVIEWED` event on a real PPM knowledge version, but never reads row
-  data, executes procedures, applies DDL, or treats `REVIEWED` as production approval.
-  For external PLF/PPM targets that complete TCP open but need a longer TDS handshake, run live
-  confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
-  `PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20`.
+  prepared PLF v6 schema. It writes normal PLF workflow/knowledge/export/audit records, but never
+  writes review records, reads row data, executes procedures, applies DDL, or treats caveats as
+  production approval.
+For external PLF/PPM targets that complete TCP open but need a longer TDS handshake, run live
+confidence gates with `MSSQL_METADATA_CONNECT_TIMEOUT_SECONDS=20` and
+`PLATFORM_DB_CONNECT_TIMEOUT_SECONDS=20`.
+
+## P35 Source Context Runtime
+
+- `sourceContextMode=RETRIEVED_SPANS` is the default SP semantic analysis mode.
+  The workflow builds a sanitized `ProcedureSourceMap`, selects bounded source spans for each
+  semantic stage, and sends only those transient spans to the model when
+  `allowSpDefinitionToModel=true` and `LLM_ALLOW_SP_TEXT=1`.
+- `sourceContextMode=NONE` disables raw source span prompt input and leaves the model with
+  metadata/static evidence digest only.
+- Runtime budget knobs:
+  `LLM_SEMANTIC_INPUT_TOKEN_BUDGET=64000`,
+  `LLM_SEMANTIC_SOURCE_TOKEN_BUDGET=32000`,
+  `LLM_SP_MAX_RETRIEVED_SPANS=24`.
+- Confirmed dependency procedure fan-out is controlled by
+  `sourceDependencyMode=CONFIRMED_PROCEDURES`, `LLM_SP_DEPENDENCY_DEPTH=2`, and
+  `LLM_SP_MAX_DEPENDENCY_TASKS=8`. Same-server cross-database procedures are eligible only when
+  dependency closure already confirmed them with catalog-backed `SAME_SERVER_CROSS_DATABASE_CATALOG`
+  evidence; their definitions are fetched internally through `get_procedure_definition` with
+  `referencedDatabase`. Public MCP/API raw definition access is not expanded.
+- Agent run traces may expose sanitized `analysisCoverage` and `sourceContextSummary`, but never
+  raw prompt text, selected span text, full SP definitions, row data, or raw provider responses.
 
 ### OpenAI / LLM runtime
 
@@ -188,7 +496,7 @@
 ## 로그와 추적
 
 - 모든 장시간 작업은 `request_id`, `job_id`, `artifact_id` 를 로그 문맥에 포함한다.
-- validation / approval / publish 이벤트는 감사 로그 대상이다.
+- request / job / validation / knowledge export 이벤트는 감사 로그 대상이다.
 - 생성 결과에는 `snapshot_id`, `registry_version_refs`, `generator_version` 을 남긴다.
 - LLM trace 에는 raw prompt, raw SP definition, raw provider response text 를 남기지 않는다.
 - LLM trace summary 는 hash/token/latency/status 중심으로 노출한다. AI MCP/platform tool orchestration

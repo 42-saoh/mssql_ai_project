@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { JobAutoRefresh } from "@/components/job-auto-refresh";
 import { StatusPill } from "@/components/status-pill";
 import type {
   AgentRunSummary,
@@ -21,12 +22,84 @@ const workflowSteps = [
   "VALIDATE",
 ] as const;
 
+const dependencyAgentType = "LLM_SEMANTIC_ANALYST_DEPENDENCY";
+const skippedDependencyDisplayLimit = 8;
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordsFrom(value: unknown): UnknownRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function textValue(value: unknown, fallback = "n/a") {
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return fallback;
+}
+
+function countValue(value: unknown) {
+  return textValue(value, "0");
+}
+
+function dependencyAnalysisFromRun(run: AgentRunSummary): UnknownRecord | null {
+  const sourceContextSummary = run.modelInvocation.sourceContextSummary;
+  if (!isRecord(sourceContextSummary)) {
+    return null;
+  }
+  const dependencyAnalysis = sourceContextSummary.dependencyAnalysis;
+  return isRecord(dependencyAnalysis) ? dependencyAnalysis : null;
+}
+
+function rootDependencyAnalysis(agentRuns: AgentRunSummary[]): UnknownRecord | null {
+  const rootRun = agentRuns.find(
+    (run) => run.agentType !== dependencyAgentType && dependencyAnalysisFromRun(run),
+  );
+  return rootRun ? dependencyAnalysisFromRun(rootRun) : null;
+}
+
+function sourceContextDigest(value: unknown) {
+  if (!isRecord(value)) {
+    return "source context n/a";
+  }
+  return [
+    `mode ${textValue(value.mode)}`,
+    `budget ${textValue(value.budgetStatus)}`,
+    `selected spans ${countValue(value.selectedSpanCount)}`,
+    `skipped spans ${countValue(value.skippedSpanCount)}`,
+  ].join(" - ");
+}
+
+function dependencyTargetKey(item: UnknownRecord, index: number) {
+  return `${textValue(item.targetKey, textValue(item.targetRef, "dependency"))}-${textValue(
+    item.agentRunId,
+    String(index),
+  )}`;
+}
+
+function sameTargetHref(targetKey: string): string {
+  return `/jobs?targetKey=${encodeURIComponent(targetKey)}`;
+}
+
+function knowledgeAssetHref(assetId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}`;
+}
+
+function knowledgeFactsHref(assetId: string, versionId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(
+    versionId,
+  )}/facts`;
+}
+
 function stepState(job: Job, step: (typeof workflowSteps)[number]) {
-  if (
-    job.status === "VALIDATION_COMPLETE" ||
-    job.status === "APPROVED" ||
-    job.status === "REJECTED"
-  ) {
+  if (job.status === "VALIDATION_COMPLETE") {
     return "done";
   }
 
@@ -59,6 +132,13 @@ export function JobStatusView({
   agentRuns: AgentRunSummary[];
   knowledgeAssets: KnowledgeAssetSummary[];
 }>) {
+  const dependencyAnalysis = rootDependencyAnalysis(agentRuns);
+  const analyzedTargets = recordsFrom(dependencyAnalysis?.analyzedTargets);
+  const skippedTargets = recordsFrom(dependencyAnalysis?.skippedTargets);
+  const visibleSkippedTargets = skippedTargets.slice(0, skippedDependencyDisplayLimit);
+  const hiddenSkippedCount = Math.max(skippedTargets.length - visibleSkippedTargets.length, 0);
+  const progressPercent = Math.round((job.progress ?? 0) * 100);
+
   return (
     <div className="stack">
       <section className="panel">
@@ -89,7 +169,42 @@ export function JobStatusView({
             <dt>Progress</dt>
             <dd>{job.progress !== undefined ? `${Math.round(job.progress * 100)}%` : "Unknown"}</dd>
           </div>
+          {job.targetKey ? (
+            <div>
+              <dt>targetKey</dt>
+              <dd>
+                <code>{job.targetKey}</code>
+              </dd>
+            </div>
+          ) : null}
         </dl>
+
+        <div className="progress-block">
+          <div className="progress-label">
+            <strong>Estimated progress</strong>
+            <span>{progressPercent}%</span>
+          </div>
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="Estimated progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressPercent}
+          >
+            <span className="progress-fill" style={{ width: `${progressPercent}%` }} />
+          </div>
+          <p>Status-based estimate for visibility while the draft workflow runs.</p>
+          <JobAutoRefresh status={job.status} />
+        </div>
+
+        {job.targetKey ? (
+          <div className="form-actions">
+            <Link className="secondary-action" href={sameTargetHref(job.targetKey)}>
+              Same target history
+            </Link>
+          </div>
+        ) : null}
 
         {job.failureReason ? (
           <div className="callout callout--warning">
@@ -147,11 +262,94 @@ export function JobStatusView({
         </div>
 
         {agentRuns.length > 0 ? (
-          <div className="validation-list">
+          <>
+            {dependencyAnalysis ? (
+              <div className="dependency-summary">
+                <dl className="metric-grid metric-grid--dense">
+                  <div>
+                    <dt>Mode</dt>
+                    <dd>{textValue(dependencyAnalysis.mode)}</dd>
+                  </div>
+                  <div>
+                    <dt>Requested depth</dt>
+                    <dd>{countValue(dependencyAnalysis.requestedDepth)}</dd>
+                  </div>
+                  <div>
+                    <dt>Selected</dt>
+                    <dd>{countValue(dependencyAnalysis.selectedCount)}</dd>
+                  </div>
+                  <div>
+                    <dt>Analyzed</dt>
+                    <dd>{countValue(dependencyAnalysis.analyzedCount)}</dd>
+                  </div>
+                  <div>
+                    <dt>Skipped</dt>
+                    <dd>{countValue(dependencyAnalysis.skippedCount)}</dd>
+                  </div>
+                  <div>
+                    <dt>Child runs</dt>
+                    <dd>{countValue(dependencyAnalysis.childRunCount)}</dd>
+                  </div>
+                </dl>
+
+                {analyzedTargets.length > 0 ? (
+                  <div className="dependency-target-list">
+                    {analyzedTargets.map((target, index) => (
+                      <article
+                        className="dependency-target-row"
+                        key={dependencyTargetKey(target, index)}
+                      >
+                        <div>
+                          <strong>{textValue(target.targetRef, "dependency target")}</strong>
+                          <span>depth {textValue(target.depth)}</span>
+                        </div>
+                        <div className="dependency-target-meta">
+                          <code>{textValue(target.agentRunId, "child run pending")}</code>
+                          {target.targetKey ? <code>{textValue(target.targetKey)}</code> : null}
+                          <span>{sourceContextDigest(target.sourceContextSummary)}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+
+                {skippedTargets.length > 0 ? (
+                  <div className="callout callout--warning">
+                    <strong>근거 보강 필요 dependencies</strong>
+                    <p>
+                      {countValue(dependencyAnalysis.skippedCount)} dependency targets need
+                      stronger evidence. Showing {visibleSkippedTargets.length} of{" "}
+                      {skippedTargets.length}
+                      {hiddenSkippedCount > 0 ? `; ${hiddenSkippedCount} more are hidden.` : "."}
+                    </p>
+                    <ul>
+                      {visibleSkippedTargets.map((target, index) => (
+                        <li key={dependencyTargetKey(target, index)}>
+                          {textValue(target.targetRef, "dependency target")} -{" "}
+                          {textValue(target.reason, "근거 보강 필요")}
+                          {target.targetKey ? ` - ${textValue(target.targetKey)}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="validation-list">
             {agentRuns.map((run) => (
               <article className="validation-row" key={run.agentRunId}>
                 <div>
-                  <h3>{run.agentType}</h3>
+                  <div className="run-title-row">
+                    <h3>{run.agentType}</h3>
+                    <span className="quiet-label">
+                      {run.agentType === dependencyAgentType ? "Dependency child" : "Root run"}
+                    </span>
+                  </div>
+                  <small>
+                    target {run.targetRef}
+                    {run.targetKey ? ` - ${run.targetKey}` : ""}
+                  </small>
                   <p>
                     {run.modelInvocation.model} · {run.modelInvocation.promptVersion} ·{" "}
                     {run.summary}
@@ -172,7 +370,8 @@ export function JobStatusView({
                 </div>
               </article>
             ))}
-          </div>
+            </div>
+          </>
         ) : (
           <div className="callout">
             <strong>No LLM run recorded</strong>
@@ -201,13 +400,15 @@ export function JobStatusView({
                     {asset.currentVersionNo}
                   </p>
                   <small>content {asset.contentHash ?? "pending"}</small>
+                  {asset.targetKey ? <small>targetKey {asset.targetKey}</small> : null}
                 </div>
                 <div className="row-actions">
-                  <Link href={`/api/v1/knowledge/assets/${asset.assetId}`}>Open</Link>
+                  <Link href={knowledgeAssetHref(asset.assetId)}>Open</Link>
+                  {asset.targetKey ? (
+                    <Link href={sameTargetHref(asset.targetKey)}>Same target history</Link>
+                  ) : null}
                   {asset.currentVersionId ? (
-                    <Link
-                      href={`/api/v1/knowledge/assets/${asset.assetId}/versions/${asset.currentVersionId}/facts`}
-                    >
+                    <Link href={knowledgeFactsHref(asset.assetId, asset.currentVersionId)}>
                       Facts
                     </Link>
                   ) : null}
@@ -229,7 +430,12 @@ export function JobStatusView({
             <p className="eyebrow">Draft artifacts</p>
             <h2>Preview outputs</h2>
           </div>
-          <span className="quiet-label">HTTP API</span>
+          <Link
+            className="secondary-action"
+            href={`/jobs/${encodeURIComponent(job.jobId)}/artifacts/download`}
+          >
+            Download all draft artifacts
+          </Link>
         </div>
 
         <div className="artifact-list">
@@ -240,15 +446,22 @@ export function JobStatusView({
                 <p>
                   {artifactTypeLabels[artifact.type]} · evidence coverage{" "}
                   {formatCoverage(artifact.evidenceCoverage)}
-                  {artifact.reviewRequired ? " · REVIEW_REQUIRED" : ""}
+                  {artifact.reviewRequired ? " · 근거 보강 필요" : ""}
                 </p>
                 {artifact.caveats?.length ? <small>{artifact.caveats.join(", ")}</small> : null}
+                {artifact.targetKey ? <small>targetKey {artifact.targetKey}</small> : null}
               </div>
               <div className="row-actions">
                 <StatusPill
                   value={artifact.status}
                   label={artifactStatusLabels[artifact.status]}
                 />
+                {artifact.targetKey ? (
+                  <Link href={sameTargetHref(artifact.targetKey)}>Same target history</Link>
+                ) : null}
+                <Link href={`/artifacts/${encodeURIComponent(artifact.artifactId)}/download`}>
+                  Download
+                </Link>
                 <Link href={`/artifacts/${artifact.artifactId}`}>Preview</Link>
               </div>
             </article>

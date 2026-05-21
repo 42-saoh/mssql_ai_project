@@ -15,8 +15,14 @@ router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 def list_jobs(
     repository: Annotated[WorkflowRepository, Depends(get_repository)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    targetKey: Annotated[str | None, Query(alias="targetKey")] = None,
 ) -> dict[str, list[Job]]:
-    return {"jobs": [present_job(job) for job in repository.list_jobs(limit=limit)]}
+    return {
+        "jobs": [
+            present_job(job)
+            for job in repository.list_jobs(limit=limit, target_key=targetKey)
+        ]
+    }
 
 
 @router.get("/{jobId}", response_model=Job)

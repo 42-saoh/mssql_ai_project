@@ -1,6 +1,22 @@
 # Integration Eval Status
 
+P36 update: output renewal is implemented as a breaking draft contract. New public
+generation exposes `SP_ANALYSIS_DOC`, `DEPENDENCY_REPORT`, `DTO_DRAFT`,
+`SERVICE_DRAFT`, `MAPPER_INTERFACE`, and `MAPPER_XML`. `SP_ANALYSIS_DOC` now follows
+the `MIGRATION_GUIDE.md` flow, while `DEPENDENCY_REPORT` is an evidence dossier.
+`DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, and `DDL_DRAFT` are retired from new
+public request/API/UI/validation/generation contracts. v9 DB SQL is manual-apply only
+and preserves FK-linked historical retired artifact rows as historical-only storage
+values while blocking new retired artifact inserts/type changes. The platform remains
+`production_ready: false`.
+
 ## Summary
+
+P38/P40 metadata design `DTO_DRAFT` previews now use the deterministic internal
+package `com.pec.metadata.design.dto` instead of placeholder `com.example`
+packages. The preview remains a non-executable, non-workflow artifact with
+`REVIEW_REQUIRED` source-adoption package caveats; it is separate from P42/P47
+AI Draft Pack `javaPackageContext` for Java/MyBatis SP conversion drafts.
 
 P24C update: the generation package now renders the P24 migration guide section
 taxonomy and scores the rendered `SP_ANALYSIS_DOC` plus `DEPENDENCY_REPORT`
@@ -10,16 +26,38 @@ access, raw prompt/SP/provider-response storage, or PPM-to-PLF fallback.
 
 P27 adds fixture-first hardened dependency evidence tooling: `get_procedure_dependencies` now declares optional resolution confidence/evidence fields, while `get_dependency_closure` and `resolve_dependency_reference` are active read-only MCP tools with fixture/live repository handlers and safe API tool-summary exposure. P28 adds the safe API invocation endpoint for those two tools only. P29 adds the read-only Web diagnostic UI and workflow `get_dependency_closure` evidence wiring. P29B confirms the deferred boundary: no DB migration, persisted artifact type, or workflow state transition is introduced; dependency evidence remains a sanitized digest plus existing draft artifact evidence refs. An explicit `P27_HARD_LIVE_GATE=1` validates selected PPM dependency evidence when enabled. No default live gate, row-data access, raw definition storage, procedure execution, DDL/DML, or PLF fallback is introduced.
 
-P06 adds fixture-first coverage for the implemented request → job → artifact → validation path. P25 changes the default workflow terminal state to `VALIDATION_COMPLETE` and disables the review decision UI while retaining the approval API/server code as a deferred capability. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` after P17A dependency evidence, P17B passed validation, P17C human approval/audit binding, and P17D hard-live gates passed. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; P19 adds fixture-backed validation/deferred approval enforcement with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24 now has contract assets, sanitized guide-quality fixtures, and P24C renderer/evaluator scoring over existing draft artifact types. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
+P41 connects the SP operation model renewal into the actual `JAVA_MYBATIS_DRAFT` workflow. For complex procedures such as `PPM.dbo.PCO_GU_ManageBond_PRC`, the workflow can extract sanitized statement evidence, store a validated `LLM_SP_OPERATION_PLANNER` AgentRun, inject `SpOperationModel.v0.1` into generation, and persist multiple `DTO_DRAFT` rows keyed by bundle file path while keeping service, mapper interface, and mapper XML single-file drafts. Fallbacks carry `P41_OPERATION_MODEL_REVIEW_REQUIRED` and do not silently present the legacy single DTO path as sufficient. This adds no public API, UI, DB schema, live MCP route, row-data, procedure execution, DDL/DML, or generated-source apply path.
+
+P06 adds fixture-first coverage for the implemented request → job → artifact → validation path. The default workflow terminal state is `VALIDATION_COMPLETE`; the product surface exposes only draft and validation endpoints, not publish/deploy/apply actions. P15 adds a hard-live eval/ops gate for PPM metadata readiness, observability, security, and reproducibility. P16/P17D now record the scoped live pilot candidate as `CONDITIONAL_GO` from dependency evidence, validation, and hard-live evidence without publish/deploy/apply flow. P18A adds the minimal versioned `CanonicalAnalysisModel` contract and deterministic analysis mapping; P18B records local web HTTP adapter smoke evidence and documents production auth/RBAC source of truth; current enforcement is validation-focused with 401/403 negative tests. P21 adds the Python 3.14 baseline and no-mock portal contract where Web calls HTTP API and live use requires PLF plus read-only PPM. P22 adds the OpenAI LLM Agent Runtime behind a model gateway and no-raw-trace policy. P23 now has a split contract/prompt pack, simple/medium/complex synthetic fixtures, and a fixture-first `FakeModelGateway` scoring runner; the optional OpenAI live quality gate is confidence-only evidence, not a production readiness requirement. P24 now has contract assets, sanitized guide-quality fixtures, and P24C renderer/evaluator scoring over existing draft artifact types. The suite separates fixture-first baselines, optional-live evidence, hard-live blockers, conditional pilot evidence, deferred future hardening, and follow-up slices.
+
+P43 completes framework-adoption readiness with a `pilot` decision, not adoption. P49 marks P43 as historical evidence only and removes the production-exported baseline/fake adapter scaffolding; equivalent fakes live under test helpers. The Responses/httpx gateway remains retained for P-GPT default compatibility and emergency rollback. P43 remains `production_ready: false`.
+
+P44 supersedes P43 as the active framework runtime adoption direction. OpenAI remote AI Draft Pack generation now routes through OpenAI Agents SDK behind `OpenAIAgentsFrameworkAdapter`, and LangGraph runs the in-process stage graph with no persistent checkpointer. `FrameworkRuntimeConfig.v0.1` is internal only; P-GPT defaults to `responses_httpx` but can produce explicit compatible-endpoint SDK evidence through the internal runtime selector. Emergency rollback remains `responses_httpx`. Generated Java/MyBatis artifacts remain draft-only with `production_ready: false`.
+
+P45 adds optional live OpenAI Agents confidence evidence behind `P44_OPENAI_AGENTS_LIVE_GATE=1`; it uses sanitized fixtures and does not require live PPM row data or procedure execution. The gate accepts official OpenAI evidence and approved P-GPT-compatible SDK evidence when the runtime is explicit, trace locks are set, and P42/P44 validation passes. P46 records the rollback decision: `responses_httpx` is retained for P-GPT default compatibility and emergency rollback only, not as the active OpenAI default, and deletion is deferred to a separate cleanup gate.
+
+P47 adds a generic AI Draft Pack quality uplift over the adopted P44 runtime. The prompt is now `prompt:ai_java_mybatis_draft_pack@0.2.0` and receives `DraftPackEvidenceBundle.v0.1` with operation coverage, DTO responsibility, review marker, and mapper coverage matrices. ManageBond DTO names are benchmark metrics only; generic pass/fail remains schema validation, operation coverage, DTO separation, mapper wiring, and required `REVIEW_REQUIRED` markers.
+
+2026-05-19 live audit note: the P42 live replay now has a safer
+`P42_LIVE_REPLAY_MODE=sanitized_fixture` path that avoids live PPM metadata and
+raw SP external export, and that safer path is the current accepted live replay
+gate. The earlier explicit `live_ppm` confidence result is historical evidence;
+it is not rerun without explicit raw-SP-to-remote-model approval.
+The P45 OpenAI Agents + LangGraph live gate passed through the approved
+P-GPT-compatible SDK path with explicit `AI_GENERATION_RUNTIME=openai_agents`,
+trace locks, and sanitized fixture inputs. Earlier official OpenAI override
+evidence reached `file_inventory` but failed with sanitized
+`P44_OPENAI_AGENTS_ADAPTER_FAILED` / `AuthenticationError`. Generated artifacts
+remain `production_ready: false`.
 
 ## Current Boundaries
 
 | Area | Status | Notes |
 |---|---|---|
-| API workflow | implemented | FastAPI routes submit the request, create a job, generate draft artifacts, validate, and stop at `VALIDATION_COMPLETE`. Approval decision routes remain implemented as deferred compatibility but are outside the default P25 flow. |
+| API workflow | implemented | FastAPI routes submit the request, create a job, generate draft artifacts, validate, and stop at `VALIDATION_COMPLETE`. Decision-gate routes are not registered. |
 | Metadata collection | fixture-first | Default path uses `fixtures/mcp/metadata_snapshot.json` through the MSSQL MCP registry boundary. |
 | Metadata profile | implemented | `master` is the default metadata profile; `plf` remains available for the platform DB profile. |
-| Web portal | no-mock HTTP runtime | P21 default runtime requires explicit `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL`; missing API/PLF/PPM prerequisites render API `{code, detail}` blockers instead of mock adapter or demo ids. P25 removes the review decision page and approval CTA from the default UI. |
+| Web portal | no-mock HTTP runtime | P21 default runtime requires explicit `PORTAL_API_MODE=http` and `PORTAL_API_BASE_URL`; missing API/PLF/PPM prerequisites render API `{code, detail}` blockers instead of mock adapter or demo ids. P25 keeps the default UI draft-only with no publish/deploy/apply CTA. |
 | Live MSSQL | explicit hard-live for P15 eval | Default eval is fixture-first. P15 live metadata checks run only with `P15_HARD_LIVE_GATE=1`; then `MSSQL_ENABLE_LIVE_METADATA=1`, `dbProfileId=ppm`, source database `PPM`, and read-only metadata permissions are required. Missing live PPM access is a blocker, not a skip. |
 | Pilot release readiness | conditional scoped candidate | P17D records live pilot release as `CONDITIONAL_GO` only for the draft-only scoped candidate. This does not make the platform production-ready and does not authorize publish/export, DDL/DML, row-data access, procedure execution, deployment, or PLF fallback. |
 | P18/P19 productization readiness | conditional open | P18A canonical contract closure, P18B local HTTP adapter smoke, production auth/RBAC source documentation, and P19 fixture-backed enforcement are covered. Live IdP/JWKS and PLF role lookup wiring remain deferred future hardening before any production-grade enterprise Auth/RBAC claim. |
@@ -30,11 +68,14 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 | P30/P31 metadata analysis | fixture-first analysis response | Metadata Analyze keeps search deterministic and runs bounded internal-only AI-MCP orchestration only inside `POST /api/v1/metadata/analyze`. P31 adds object profiles, grouped insights, dependency graph, DTO readiness, and `metadata.profile.*` facts without persisted artifacts or workflow state transition. P34 adds sanitized knowledge asset persistence on top. |
 | P32 planner effectiveness | fixture-first plus optional live confidence | `aiToolEvidence.plannerMetrics` records sanitized planned/executed/blocked/failed/deduped counts, evidence utilization, and claim support rate. P-GPT planner aliases are normalized strict-first, and invalid/empty live planner output triggers deterministic read-only fallback requests for TABLE or PROCEDURE/VIEW/FUNCTION targets through the existing policy, budget, dedupe, and sanitizer path. `tests/eval/test_p32_live_confidence_planner_effectiveness.py` is fixture-first by default; `P32_LIVE_CONFIDENCE_GATE=1` adds remote LLM plus live PPM metadata confidence only and does not imply `production_ready: true`. |
 | P33 performance/scale | fixture-first process-local | Metadata MCP tool success responses are cached in a TTL/LRU process-local cache, tool evidence includes stable `contentHash`, planner metrics include cache hit/miss counts, and `POST /api/v1/requests/sp-analysis/batch` creates normal per-target jobs with duplicate/limit rejection. Workflow/MCP backpressure uses `WORKFLOW_BACKPRESSURE` and `MCP_BACKPRESSURE`; no DB migration, queue infra, row data, DDL/DML, or public MCP allowlist expansion is added. |
-| P34/P35 knowledge assetization | fixture-first versioned knowledge | SP workflow and Metadata Analyze default `persistKnowledge=true` materialize sanitized `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`, and `CANONICAL_ANALYSIS` assets where applicable. v5 DDL is manual-apply only and now includes job-link rows, fact-edge FK integrity, lifecycle columns, `KNOWLEDGE_ASSET_REVIEWS`, and search/review indexes. Same `contentHash` reuses the current version while preserving lifecycle and each job's asset lookup. APIs expose summaries, asset/fact search, version facts, append-only review history, review transition, JSONL/GRAPH_JSON export, and `KNOWLEDGE_SCHEMA_REQUIRED` when v5 tables/columns/indexes are missing. `REVIEWED` remains draft/reviewable curation only, not production-ready or automatic conversion approval evidence. No raw SP definition, SQL text, row data, secrets, raw prompt/provider trace, raw-derived redaction hash/length/snippet, or production-ready claim is introduced. |
-| P35 knowledge live confidence | explicit optional live | `P35_KNOWLEDGE_LIVE_GATE=1` runs one bounded live PPM SP workflow with OpenAI semantic analysis and live PLF v5 knowledge persistence, then verifies job-linked assets, fact-edge integrity, search, GRAPH_JSON export, and one real non-terminal `REVIEWED` curation event. PPM remains metadata-only/read-only; PLF receives normal test workflow/knowledge/export/audit/review writes. Success is confidence evidence only and does not imply production readiness or conversion approval. |
+| P34/P35 knowledge assetization | fixture-first versioned knowledge | SP workflow and Metadata Analyze default `persistKnowledge=true` materialize sanitized `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`, and `CANONICAL_ANALYSIS` assets where applicable. v6 DDL is manual-apply only and includes job-link rows, fact-edge FK integrity, lifecycle/archive columns, and search indexes without review tables. Same `contentHash` reuses the current version while preserving lifecycle and each job's asset lookup. APIs expose summaries, asset/fact search, version facts, JSONL/GRAPH_JSON export, and `KNOWLEDGE_SCHEMA_REQUIRED` when v6 tables/columns/indexes are missing. `REVIEW_REQUIRED` remains an evidence caveat only, not production-ready or automatic conversion approval evidence. No raw SP definition, SQL text, row data, secrets, raw prompt/provider trace, raw-derived redaction hash/length/snippet, or production-ready claim is introduced. |
+| P35 knowledge live confidence | explicit optional live | `P35_KNOWLEDGE_LIVE_GATE=1` runs one bounded live PPM SP workflow with OpenAI semantic analysis and live PLF v6 knowledge persistence, then verifies job-linked assets, fact-edge integrity, search, and GRAPH_JSON export. PPM remains metadata-only/read-only; PLF receives normal test workflow/knowledge/export/audit writes without review records. Success is confidence evidence only and does not imply production readiness or conversion approval. |
+| P43 framework adoption | pilot, fixture-first | `AiGenerationFrameworkAdapter.v0.1` is internal-only. Fake adapters compare candidate behavior against the Responses/httpx baseline, while P42 schema/inventory/static quality gates remain authoritative. Real framework dependencies, live evidence, OpenAI Agents SDK trace redaction, and LangGraph persistence redaction remain `REVIEW_REQUIRED`. |
+| P44-P46 framework runtime adoption | adopted internally, fixture-first plus optional live gate | OpenAI Agents SDK is the OpenAI remote AI Draft Pack runtime and LangGraph is the in-process stage orchestrator. P45 live evidence is optional with `P44_OPENAI_AGENTS_LIVE_GATE=1` and accepts official OpenAI or approved P-GPT-compatible SDK evidence under trace locks and post-validation. P46 keeps `responses_httpx` for P-GPT default compatibility and emergency rollback only. LangGraph checkpointer persistence is disabled, and generated artifacts stay `production_ready: false`. No public API, DB schema, UI, public MCP route, artifact type, source apply, deploy, procedure execution, row data, raw prompt/provider response, raw SP/guide storage, or production conversion approval is introduced. |
+| P47 generic AI Draft Pack quality | fixture-first plus optional live audit | `DraftPackEvidenceBundle.v0.1` and `prompt:ai_java_mybatis_draft_pack@0.2.0` add coverage matrices and high-quality `openai_ai_draft_pack` model selection. ManageBond remains a benchmark signal only; hardcoded DTO/method answer keys are not generic pass/fail gates. P42 sanitized fixture replay avoids raw SP external export and is the accepted live replay gate; `live_ppm` requires explicit raw-SP export approval. P45 official live evidence remains blocked on sanitized authentication diagnostics. |
 | P27 dependency evidence tooling | fixture-first hardened | `spec/eval/p27_dependency_evidence_tooling_contract.yaml` and the MCP catalog define active read-only dependency closure/resolution tools plus optional dependency resolution evidence fields. P28 safe API invocation, P29 Web diagnostics, and workflow closure evidence wiring are fixture-first enabled; persisted artifact type and DB schema changes remain deferred. Ambiguous/dynamic/unresolved/cross-server/caller-dependent references stay `REVIEW_REQUIRED`. Explicit hard-live evidence runs only with `P27_HARD_LIVE_GATE=1`. |
 | Publish | follow-up | Publish gate helper exists, but no publish endpoint or automatic publish flow is implemented. |
-| DDL | follow-up | DDL draft type exists; automatic DDL execution is forbidden and not implemented. |
+| DDL | manual only | P36 retires DDL draft output from new public generation. v9 schema SQL is a manual review/apply asset only, preserves historical FK-linked retired artifacts, and blocks new retired artifact inserts/type changes. Automatic DDL execution remains forbidden. |
 | Row data | out of scope | No row-data read/write path is implemented or documented as supported. |
 
 ## Eval Assets
@@ -44,9 +85,9 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/artifact_payloads.json`: expected stable workflow/artifact summary.
 - `fixtures/eval/rubric.yaml`: thresholds for fixture parsing, review-required markers, evidence, forbidden states, and secret-like values.
 - `fixtures/eval/eval_observability_security_ops_p15_v1.yaml`: P15 hard-live gate for PPM metadata smoke, quality metrics, latency budgets, correlation id, audit stage, redaction, and read-only DB permission checks.
-- `fixtures/eval/pilot_release_readiness_p16_v1.yaml`: P16/P17D pilot release checklist, quality report, selected object evidence summary, P17B validation binding, P17C approval/audit status, P17D hard-live evidence, and go/no-go recommendation.
+- `fixtures/eval/pilot_release_readiness_p16_v1.yaml`: P16/P17D pilot release checklist, quality report, selected object evidence summary, validation binding, hard-live evidence, and go/no-go recommendation.
 - `fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml`: P17B draft-only live pilot artifact validation package with passed release-critical checks.
-- `fixtures/eval/manual_approval_audit_p17_v1.yaml`: P17C human approval and audit binding for the P17B artifact set/version and validation report.
+- `fixtures/eval/draft_quality_audit_p17_v1.yaml`: P17C draft-quality audit fixture; it is not a decision-gate flow.
 - `fixtures/eval/productization_gap_closure_p18_v1.yaml`: P18/P19 productization fixture recording P18A canonical closure, P18B HTTP adapter smoke evidence, production auth/RBAC source documentation, fixture-backed enforcement, and the deferred live wiring hardening item.
 - `fixtures/eval/live_portal_no_mock_p21_v1.yaml`: P21 no-mock portal and Python 3.14 contract fixture recording required pages, HTTP-only Web boundary, PLF/PPM prerequisites, live gate blocker behavior, and `production_ready: false`.
 - `fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml`: P23B/P26 simple/medium/complex synthetic LLM-assisted SP semantic analysis quality fixtures, including deterministic facts, transient model input, golden semantic/guide/conversion outputs, high-quality semantic default posture with `OPENAI_MODEL_ANALYSIS` live override, `gpt-5-nano` fast/test default with `OPENAI_MODEL_FAST_TEST` manual override, `LLM_INFERENCE`, `REVIEW_REQUIRED`, no-raw-trace storage expectations, and `production_ready: false`.
@@ -54,8 +95,15 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - `fixtures/eval/live_confidence_planner_effectiveness_p32_v1.yaml`: P32 planner effectiveness and live confidence fixture, including duplicate/deduped planner requests, blocked unsafe args, under-utilized evidence, optional OpenAI+PPM live confidence, and `production_ready: false`.
 - `fixtures/eval/performance_scale_p33_v1.yaml`: P33 performance/scale fixture, including cache hit reuse, stable fact hashes, batch duplicate/limit handling, live round reduction, backpressure signaling, no raw leakage, and `production_ready: false`.
 - `fixtures/eval/knowledge_assetization_p34_v1.yaml`: P34/P35 knowledge assetization fixture, including SP/metadata asset kinds, job-linked version reuse, lifecycle/search/review behavior, fact graph export/integrity, v5 manual schema boundary, no raw leakage, and `production_ready: false`.
+- `fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml`: P43 framework-adoption fixture, including ManageBond benchmark-only scope, fake adapter replay, synthetic complex-SP collapse guard, P43F `pilot` decision evidence, rollback path, and residual `REVIEW_REQUIRED` items.
+- `spec/eval/p44_framework_runtime_adoption_contract.yaml`: P44 active runtime adoption contract for OpenAI Agents SDK plus LangGraph, including `FrameworkRuntimeConfig.v0.1`, trace/persistence policy, rollback/P-GPT-compatible SDK evidence boundary, and `generated_artifacts_production_ready: false`.
+- `spec/eval/p46_rollback_removal_decision.yaml`: P46 rollback decision, retaining `responses_httpx` for P-GPT default compatibility and emergency rollback only while keeping deletion unapproved.
+- `spec/eval/p47_generic_ai_draft_quality_uplift_contract.yaml`: P47 generic quality uplift contract, including `DraftPackEvidenceBundle.v0.1`, prompt `@0.2.0`, `openai_ai_draft_pack`, and benchmark-not-answer-key evaluation policy.
 - `spec/eval/p23_llm_sp_analysis_quality_contract.yaml`: P23 quality contract that separates P23A contract assets, P23B fixture authoring, P23C fixture-first eval runner/scoring, and P23D readiness documentation.
 - `spec/eval/p27_dependency_evidence_tooling_contract.yaml`: P27 fixture-first hardening contract for dependency evidence fields, active read-only MCP tools, P28 safe API invocation, P29 Web diagnostics and workflow evidence wiring, explicit hard-live gate, no-raw/no-row/no-fallback policy, and deferred persisted artifact/DB schema boundaries.
+- `spec/eval/p43_framework_adoption_contract.yaml`: P43 adapter-first framework adoption contract, including tool/trace policy gates, P43E replay criteria, P43F `pilot` decision, and rollback evidence.
+- `tests/eval/test_p44_framework_runtime_replay.py`: P44 replay gate with mocked OpenAI Agents SDK output through actual LangGraph orchestration for ManageBond benchmark and a synthetic complex-SP guard.
+- `tests/eval/test_p45_openai_agents_live_gate.py`: Optional P45 live gate for OpenAI Agents SDK plus LangGraph with sanitized fixture inputs and trace redaction env locks.
 
 ## Verification Scope
 
@@ -66,16 +114,16 @@ P06 adds fixture-first coverage for the implemented request → job → artifact
 - persisted artifact types are generated instead of returning `JAVA_MYBATIS_DRAFT` as a storage type
 - evidence and registry refs are present where implemented
 - validation reports keep `REVIEW_REQUIRED` as an evidence caveat without turning default artifacts into review-pending UI work
-- approval decision recording is retained in server compatibility tests only, not default e2e/Web smoke
+- human approval recording is absent from API/Web/e2e smoke
 - eval fixtures parse and match generated workflow summaries
 - P15 hard-live fixture contract, metrics, redaction, permission-check schema, and blocker policy are valid
 - P15 fixture-first workflow smoke remains deterministic and draft artifacts stay complete without publishing
 - P16/P17D readiness fixtures and docs preserve P17A/P17B/P17C/P17D evidence, P18A canonical contract checks stay fixture-first, and the live release remains limited to scoped `CONDITIONAL_GO`
 - P18B HTTP adapter smoke can be run with `python3.14 tests/e2e/web_http_adapter_smoke.py`; the dockerized python test suite may skip this smoke when node/pnpm are unavailable.
-- P19 auth/RBAC enforcement is covered by `tests/integration/api/test_api_auth_rbac.py`, including 401, 403, reviewer success, and reviewer spoofing cases.
+- Auth/RBAC enforcement is covered by `tests/integration/api/test_api_auth_rbac.py`, including 401/403 cases and validation access without reviewer semantics.
 - P21 prompt/fixture/no-mock/Python 3.14 contracts are covered by `tests/contract/test_p21_no_mock_prompt_assets.py` and `tests/unit/web`; default `tests/eval/test_p21_live_portal_no_mock_gate.py` skips unless the live gate is explicitly enabled.
 - P23/P26 LLM quality fixtures and scoring are covered by `tests/eval/test_p23_llm_sp_analysis_quality.py`; default test execution uses `FakeModelGateway`, while API/Web defaults now select high-quality semantic analysis, transient SP definition input, and the `openai_sp_semantic_analysis` profile for live execution. Optional live confidence uses `OPENAI_MODEL_ANALYSIS`; `openai_fast_test` still defaults to `gpt-5-nano` and may be overridden with `OPENAI_MODEL_FAST_TEST` for manual fast/test runs. P-GPT live confidence also validates prompt quality hints, strict-first normalization, and deterministic safety net recall without raw storage. A passing fixture-first report requires `semantic_recall >= 0.75`, `guide_conversion_recall >= 0.8`, `evidence_discipline >= 0.9`, `unreviewed_overclaims <= 0`, and `storage_safety_findings <= 0`.
-- P24 migration guide quality is covered by `tests/eval/test_p24_sp_migration_guide_quality.py`; default execution renders fixture-first `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifacts, then scores them without live OpenAI, PPM, PLF, web/API, or schema access. A passing fixture-first report requires complete section coverage, evidence-linked claim coverage, DML matrix coverage, branch/call-flow coverage, unsupported claim review markers, and zero storage safety findings.
+- P24 migration guide quality is covered by `tests/eval/test_p24_sp_migration_guide_quality.py`; default execution renders fixture-first `SP_ANALYSIS_DOC` and `DEPENDENCY_REPORT` artifacts, then scores them without live OpenAI, PPM, PLF, web/API, or schema access. A passing fixture-first report requires complete section coverage, evidence-linked claim coverage, DML matrix coverage, branch/call-flow coverage, unsupported claim evidence caveats, and zero storage safety findings.
 - P27 dependency evidence tooling is covered by `tests/contract/test_p27_dependency_evidence_tooling_prompt_assets.py`, `tests/unit/test_mcp_catalog.py`, `tests/unit/mcp/test_tool_registry.py`, `tests/contract/mcp/test_tool_invocation_contract.py`, `tests/unit/api/test_metadata_service.py`, and `tests/integration/api/test_api_workflow_routes.py`; the checks keep the tools active/read-only/structured-only, verify fixture/mocked-live handler behavior, expose them only through metadata tool summary, and avoid default live PPM or OpenAI gates. `tests/eval/test_p27_dependency_evidence_hard_live_gate.py` is explicit hard-live coverage for approved PPM environments.
 
 For P15 hard-live validation, run the same suite with `P15_HARD_LIVE_GATE=1` and live PPM read-only metadata access configured:
@@ -162,9 +210,21 @@ P35_KNOWLEDGE_LIVE_GATE=1 LLM_LIVE_GATE=1 LLM_ENABLE_REMOTE=1 LLM_ALLOW_SP_TEXT=
 ```
 
 This requires `OPENAI_API_KEY`, PLF `PLATFORM_DB_*`, read-only PPM metadata env, `ppm -> PPM`
-profile mapping, and manually applied v5 DDL. The gate writes PLF workflow/knowledge/export/audit
-and review records, but it does not read row data, execute procedures, apply DDL, archive real PPM
-knowledge, or treat `REVIEWED` as production approval.
+profile mapping, and manually applied v6 DDL. The gate writes PLF workflow/knowledge/export/audit
+records, but it does not write review records, read row data, execute procedures, apply DDL,
+archive real PPM knowledge, or treat `REVIEW_REQUIRED` as production authorization.
+
+For P43 framework-adoption decision validation, run:
+
+```bash
+make test PYTEST_ARGS="@framework-contracts"
+```
+
+This historical gate records a `pilot` decision only. P49 removes the old broad
+P43 replay gate from active eval collection and keeps fake adapter behavior under
+test helpers. It does not change public API, UI, DB schema, public MCP routes,
+public artifact types, procedure execution, row-data access, generated-source
+apply, or deploy behavior.
 
 P24 status interpretation:
 
@@ -217,16 +277,16 @@ P27 status interpretation:
 
 1. Implement real read-only live metadata adapter queries behind the MCP boundary.
 2. Broaden CanonicalAnalysisModel coverage beyond the minimal P18A fixture-first contract.
-3. Add publish API only after future approval semantics are explicitly reintroduced and fully enforced.
+3. Add publish API only after separate future product policy explicitly reintroduces and fully enforces it.
 4. Verify auth/RBAC live wiring against an approved IdP/JWKS endpoint and PLF role membership source before claiming production-grade enterprise Auth/RBAC.
 5. Expand eval fixtures beyond the single happy path to dynamic SQL, temp tables, transaction/TRY-CATCH, DDL drafts, and failure paths.
-6. Mature DDL draft renderer while keeping schema apply/manual review outside automation.
-7. Keep future live pilot reruns evidence-based: if P17B validation, P17C approval/audit binding, or hard-live PPM verification cannot be reproduced, return the scoped candidate to `NO_GO`.
+6. Mature DDL draft renderer while keeping schema apply outside automation.
+7. Keep future live pilot reruns evidence-based: if validation or hard-live PPM verification cannot be reproduced, return the scoped candidate to `NO_GO`.
 8. Keep `AUTH_RBAC_LIVE_IDP_PLF_WIRING_UNVERIFIED` as deferred future hardening until live auth/RBAC wiring closes without mock headers, hardcoded actors, fixture tokens, or committed secrets.
 9. Keep P21 no-mock portal evidence conditional on PLF/PPM prerequisites; do not claim full production readiness from a local controlled live gate.
 10. Keep optional P23 live quality gate evidence separate from default fixture-first scoring.
 11. Broaden P24 guide fixtures only after additional sanitized deterministic facts exist; keep current renderer/evaluator fixture-first and draft-only.
 12. Use explicit P27 hard-live results to reduce residual `REVIEW_REQUIRED` dependency evidence where catalog metadata can uniquely confirm targets, without introducing persisted artifact type changes, DB schema changes, or PLF fallback.
-13. Keep knowledge assets reviewable after P35 lifecycle curation; future work may add shared
-    indexing and richer curation policy, but must not reinterpret `REVIEWED` as production-ready
-    or automatic conversion approval evidence.
+13. Keep knowledge assets draft/evidence-caveated; future work may add shared indexing and richer
+    curation policy, but must not reinterpret `REVIEW_REQUIRED` as a decision request, production-ready,
+    or automatic conversion authorization evidence.

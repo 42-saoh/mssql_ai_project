@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from ai_agent_domain import (
     ArtifactStatus,
@@ -10,7 +10,9 @@ from ai_agent_domain import (
     RequestedOutputType,
     WorkflowStepType,
 )
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class ApiModel(BaseModel):
@@ -22,8 +24,8 @@ class ApiModel(BaseModel):
 
 class TargetObject(ApiModel):
     type: Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
-    schema_name: str = Field(alias="schema")
-    name: str
+    schema_name: NonBlankString = Field(alias="schema")
+    name: NonBlankString
 
     @property
     def full_name(self) -> str:
@@ -45,6 +47,14 @@ class SPAnalysisOptions(ApiModel):
         default=True,
         alias="allowSpDefinitionToModel",
     )
+    source_context_mode: Literal["NONE", "RETRIEVED_SPANS"] = Field(
+        default="RETRIEVED_SPANS",
+        alias="sourceContextMode",
+    )
+    source_dependency_mode: Literal["NONE", "CONFIRMED_PROCEDURES"] = Field(
+        default="CONFIRMED_PROCEDURES",
+        alias="sourceDependencyMode",
+    )
     use_ai_tool_orchestration: bool = Field(
         default=True,
         alias="useAiToolOrchestration",
@@ -57,14 +67,14 @@ class SPAnalysisOptions(ApiModel):
 
 
 class SPAnalysisRequest(ApiModel):
-    db_profile_id: str = Field(alias="dbProfileId")
+    db_profile_id: NonBlankString = Field(alias="dbProfileId")
     target: TargetObject
     outputs: list[RequestedOutputType] = Field(min_length=1)
     options: SPAnalysisOptions = Field(default_factory=SPAnalysisOptions)
 
 
 class SPAnalysisBatchRequest(ApiModel):
-    db_profile_id: str = Field(alias="dbProfileId")
+    db_profile_id: NonBlankString = Field(alias="dbProfileId")
     targets: list[TargetObject] = Field(min_length=1)
     outputs: list[RequestedOutputType] = Field(min_length=1)
     options: SPAnalysisOptions = Field(default_factory=SPAnalysisOptions)
@@ -102,6 +112,10 @@ class Job(ApiModel):
     job_id: str = Field(alias="jobId")
     request_id: str = Field(alias="requestId")
     status: JobStatus
+    db_profile_id: str | None = Field(default=None, alias="dbProfileId")
+    target: TargetObject | None = None
+    target_key: str | None = Field(default=None, alias="targetKey")
+    outputs: list[RequestedOutputType] = Field(default_factory=list)
     current_step: WorkflowStepType | None = Field(default=None, alias="currentStep")
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
@@ -131,6 +145,7 @@ class ArtifactSummary(ApiModel):
     type: ArtifactType
     status: ArtifactStatus
     title: str | None = None
+    target_key: str | None = Field(default=None, alias="targetKey")
     evidence_coverage: float | None = Field(default=None, alias="evidenceCoverage")
 
 
@@ -156,9 +171,9 @@ class ValidationReport(ApiModel):
     status: Literal["PASSED", "FAILED", "REVIEW_REQUIRED"]
     checks: list[ValidationCheck]
     missing_evidence: list[str] = Field(default_factory=list, alias="missingEvidence")
-    manual_review_points: list[str] = Field(
+    quality_caveats: list[str] = Field(
         default_factory=list,
-        alias="manualReviewPoints",
+        alias="qualityCaveats",
     )
 
 
@@ -176,6 +191,11 @@ class ModelInvocationSummary(ApiModel):
     status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
     token_usage: dict[str, int] = Field(default_factory=dict, alias="tokenUsage")
     latency_ms: int | None = Field(default=None, alias="latencyMs")
+    analysis_coverage: dict[str, Any] = Field(default_factory=dict, alias="analysisCoverage")
+    source_context_summary: dict[str, Any] = Field(
+        default_factory=dict,
+        alias="sourceContextSummary",
+    )
     component_invocations: list[dict[str, Any]] = Field(
         default_factory=list,
         alias="componentInvocations",
@@ -188,26 +208,11 @@ class AgentRunSummary(ApiModel):
     agent_type: str = Field(alias="agentType")
     status: Literal["SUCCEEDED", "FAILED", "SKIPPED"]
     target_ref: str = Field(alias="targetRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     summary: str
     structured_output: dict[str, Any] = Field(alias="structuredOutput")
     model_invocation: ModelInvocationSummary = Field(alias="modelInvocation")
     created_at: datetime | None = Field(default=None, alias="createdAt")
-
-
-class ApprovalDecisionRequest(ApiModel):
-    decision: Literal["APPROVE", "REJECT", "REQUEST_CHANGES"]
-    reviewer: str
-    comment: str
-    validation_report_id: str | None = Field(default=None, alias="validationReportId")
-
-
-class ApprovalRecord(ApiModel):
-    approval_id: str = Field(alias="approvalId")
-    artifact_id: str = Field(alias="artifactId")
-    decision: Literal["APPROVE", "REJECT", "REQUEST_CHANGES"]
-    reviewer: str
-    comment: str | None = None
-    decided_at: datetime = Field(alias="decidedAt")
 
 
 class MetadataProfile(ApiModel):
@@ -251,11 +256,36 @@ class MetadataObjectIdentity(ApiModel):
     type: Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]
 
 
+class MetadataSearchObjectIdentity(ApiModel):
+    schema_name: str = Field(alias="schema")
+    name: str
+    type: Literal["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]
+
+
+class MetadataSearchTableSummary(ApiModel):
+    schema_name: str = Field(alias="schema")
+    name: str
+    description: str | None = None
+
+
+class MetadataSearchColumnSummary(ApiModel):
+    name: str
+    description: str | None = None
+    data_type: str | None = Field(default=None, alias="dataType")
+
+
 class MetadataSearchResult(ApiModel):
-    object_identity: MetadataObjectIdentity = Field(alias="objectIdentity")
+    object_identity: MetadataSearchObjectIdentity = Field(alias="objectIdentity")
+    target_key: str | None = Field(default=None, alias="targetKey")
     source_profile: str = Field(alias="sourceProfile")
     source_database: str = Field(alias="sourceDatabase")
     snapshot_id: str | None = Field(default=None, alias="snapshotId")
+    description: str | None = None
+    logical_name: str | None = Field(default=None, alias="logicalName")
+    data_type: str | None = Field(default=None, alias="dataType")
+    table: MetadataSearchTableSummary | None = None
+    column: MetadataSearchColumnSummary | None = None
+    columns: list[MetadataSearchColumnSummary] | None = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list, alias="evidenceRefs")
     caveats: list[str] = Field(default_factory=list)
     review_required: bool = Field(default=False, alias="reviewRequired")
@@ -265,7 +295,7 @@ class MetadataSearchResult(ApiModel):
 class MetadataSearchResponse(ApiModel):
     db_profile_id: str = Field(alias="dbProfileId")
     query: str
-    object_types: list[Literal["PROCEDURE", "TABLE", "VIEW", "FUNCTION"]] = Field(
+    object_types: list[Literal["PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION"]] = Field(
         alias="objectTypes"
     )
     limit: int
@@ -291,6 +321,7 @@ class MetadataAnalysisOptions(ApiModel):
     ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
     max_targets: int = Field(default=3, ge=1, le=5, alias="maxTargets")
     persist_knowledge: bool = Field(default=True, alias="persistKnowledge")
+    generate_dto_drafts: bool = Field(default=False, alias="generateDtoDrafts")
 
 
 class MetadataAnalysisRequest(ApiModel):
@@ -335,6 +366,7 @@ MetadataInsightCategory = Literal[
 
 class MetadataObjectProfile(ApiModel):
     object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     object_type: str = Field(alias="objectType")
     column_count: int = Field(default=0, alias="columnCount")
     primary_key_count: int = Field(default=0, alias="primaryKeyCount")
@@ -355,6 +387,7 @@ class MetadataInsightGroup(ApiModel):
 class MetadataDependencyGraphNode(ApiModel):
     id: str
     object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     object_type: str = Field(alias="objectType")
     status: Literal["CONFIRMED", "REVIEW_REQUIRED"] = "CONFIRMED"
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
@@ -376,10 +409,23 @@ class MetadataDependencyGraph(ApiModel):
 
 class MetadataDtoReadiness(ApiModel):
     object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
     status: Literal["READY", "PARTIAL", "REVIEW_REQUIRED"] = "REVIEW_REQUIRED"
     field_count: int = Field(default=0, alias="fieldCount")
     review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
     evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+
+
+class MetadataGeneratedDraft(ApiModel):
+    artifact_type: Literal["DTO_DRAFT"] = Field(default="DTO_DRAFT", alias="artifactType")
+    object_ref: str = Field(alias="objectRef")
+    target_key: str | None = Field(default=None, alias="targetKey")
+    file_name: str = Field(alias="fileName")
+    language: Literal["java"] = "java"
+    content: str
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
 
 
 class MetadataAnalysisReviewMarker(ApiModel):
@@ -402,6 +448,7 @@ class KnowledgeAssetSummary(ApiModel):
     target_type: str = Field(alias="targetType")
     target_schema: str = Field(alias="targetSchema")
     target_name: str = Field(alias="targetName")
+    target_key: str | None = Field(default=None, alias="targetKey")
     logical_key: str = Field(alias="logicalKey")
     current_version_id: str | None = Field(default=None, alias="currentVersionId")
     current_version_no: int = Field(default=0, alias="currentVersionNo")
@@ -410,12 +457,8 @@ class KnowledgeAssetSummary(ApiModel):
     lifecycle_status: Literal[
         "DRAFT",
         "REVIEW_REQUIRED",
-        "REVIEWED",
         "ARCHIVED",
     ] = Field(default="DRAFT", alias="lifecycleStatus")
-    review_reason_code: str | None = Field(default=None, alias="reviewReasonCode")
-    reviewer: str | None = None
-    reviewed_at: datetime | None = Field(default=None, alias="reviewedAt")
     archived_at: datetime | None = Field(default=None, alias="archivedAt")
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
@@ -470,12 +513,8 @@ class KnowledgeAssetVersion(ApiModel):
     lifecycle_status: Literal[
         "DRAFT",
         "REVIEW_REQUIRED",
-        "REVIEWED",
         "ARCHIVED",
     ] = Field(default="DRAFT", alias="lifecycleStatus")
-    review_reason_code: str | None = Field(default=None, alias="reviewReasonCode")
-    reviewer: str | None = None
-    reviewed_at: datetime | None = Field(default=None, alias="reviewedAt")
     archived_at: datetime | None = Field(default=None, alias="archivedAt")
     created_at: datetime | None = Field(default=None, alias="createdAt")
 
@@ -487,25 +526,6 @@ class KnowledgeFactGraph(ApiModel):
     edges: list[KnowledgeEdge] = Field(default_factory=list)
 
 
-class KnowledgeReviewRequest(ApiModel):
-    status: Literal["REVIEW_REQUIRED", "REVIEWED", "ARCHIVED"]
-    reason_code: str = Field(alias="reasonCode", min_length=1, max_length=80)
-    reviewer: str = Field(min_length=1, max_length=200)
-    comment: str | None = Field(default=None, max_length=2000)
-
-
-class KnowledgeReview(ApiModel):
-    review_id: str = Field(alias="reviewId")
-    asset_id: str = Field(alias="assetId")
-    version_id: str = Field(alias="versionId")
-    from_status: str = Field(alias="fromStatus")
-    to_status: str = Field(alias="toStatus")
-    reason_code: str = Field(alias="reasonCode")
-    note: dict[str, Any] = Field(default_factory=dict)
-    reviewer: str
-    created_at: datetime | None = Field(default=None, alias="createdAt")
-
-
 class KnowledgeFactSearchResult(ApiModel):
     asset_id: str = Field(alias="assetId")
     asset_kind: str = Field(alias="assetKind")
@@ -513,7 +533,6 @@ class KnowledgeFactSearchResult(ApiModel):
     lifecycle_status: Literal[
         "DRAFT",
         "REVIEW_REQUIRED",
-        "REVIEWED",
         "ARCHIVED",
     ] = Field(alias="lifecycleStatus")
     fact: KnowledgeFact
@@ -570,6 +589,10 @@ class MetadataAnalysisResponse(ApiModel):
         default_factory=list,
         alias="dtoReadiness",
     )
+    generated_drafts: list[MetadataGeneratedDraft] = Field(
+        default_factory=list,
+        alias="generatedDrafts",
+    )
     ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
     deterministic_facts: list[dict[str, Any]] = Field(
         default_factory=list,
@@ -595,6 +618,228 @@ class MetadataAnalysisResponse(ApiModel):
         default_factory=list,
         alias="knowledgeAssets",
     )
+
+
+MetadataAnalysisRunStatusValue = Literal["QUEUED", "RUNNING", "SUCCEEDED", "FAILED"]
+
+
+class MetadataAnalysisRunError(ApiModel):
+    code: str
+    message: str
+    status_code: int = Field(alias="statusCode")
+
+
+class MetadataAnalysisRunStatus(ApiModel):
+    run_id: str = Field(alias="runId")
+    status: MetadataAnalysisRunStatusValue
+    submitted_at: datetime = Field(alias="submittedAt")
+    started_at: datetime | None = Field(default=None, alias="startedAt")
+    completed_at: datetime | None = Field(default=None, alias="completedAt")
+    request: MetadataAnalysisRequest
+    analysis: MetadataAnalysisResponse | None = None
+    error: MetadataAnalysisRunError | None = None
+
+
+class MetadataDesignFieldInput(ApiModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = Field(default=None, min_length=1)
+    db_type: str | None = Field(default=None, alias="dbType", min_length=1)
+    nullable: bool | None = None
+
+
+class MetadataDesignInputs(ApiModel):
+    table_name_hint: str | None = Field(default=None, alias="tableNameHint", min_length=1)
+    table_description: str | None = Field(
+        default=None,
+        alias="tableDescription",
+        min_length=1,
+    )
+    fields: list[MetadataDesignFieldInput] = Field(default_factory=list)
+
+
+class MetadataDesignOptions(ApiModel):
+    use_llm_analysis: bool = Field(default=True, alias="useLlmAnalysis")
+    use_ai_tool_orchestration: bool = Field(default=True, alias="useAiToolOrchestration")
+    llm_profile_id: Literal[
+        "openai_sp_semantic_analysis",
+        "openai_fast_test",
+    ] = Field(default="openai_sp_semantic_analysis", alias="llmProfileId")
+    max_candidates: int = Field(default=5, ge=1, le=10, alias="maxCandidates")
+    generate_dto_draft: bool = Field(default=True, alias="generateDtoDraft")
+    conversation_mode: Literal["NEW_DESIGN", "REFINE_CURRENT"] = Field(
+        default="NEW_DESIGN",
+        alias="conversationMode",
+    )
+
+
+class MetadataDesignRunRequest(ApiModel):
+    db_profile_id: str = Field(alias="dbProfileId", min_length=1)
+    message: str = Field(min_length=1, max_length=4000)
+    conversation_id: str | None = Field(default=None, alias="conversationId", min_length=1)
+    design_inputs: MetadataDesignInputs = Field(
+        default_factory=MetadataDesignInputs,
+        alias="designInputs",
+    )
+    options: MetadataDesignOptions = Field(default_factory=MetadataDesignOptions)
+
+    @model_validator(mode="after")
+    def validate_design_input(self) -> MetadataDesignRunRequest:
+        has_field = any(
+            (field.name or field.description or field.db_type)
+            for field in self.design_inputs.fields
+        )
+        if not (
+            self.message.strip()
+            or self.design_inputs.table_name_hint
+            or self.design_inputs.table_description
+            or has_field
+        ):
+            raise ValueError("metadata design request must include message or designInputs.")
+        return self
+
+
+class MetadataRelatedMetadata(ApiModel):
+    kind: Literal["TABLE", "COLUMN", "SIMILAR_TABLE", "TABLE_SCHEMA"]
+    object_ref: str = Field(alias="objectRef")
+    score: int = 0
+    summary: str
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class MetadataStandardizationMapping(ApiModel):
+    input_name: str | None = Field(default=None, alias="inputName")
+    input_description: str | None = Field(default=None, alias="inputDescription")
+    proposed_description: str | None = Field(default=None, alias="proposedDescription")
+    proposed_name: str = Field(alias="proposedName")
+    proposed_type: str = Field(alias="proposedType")
+    source: Literal["METADATA", "STANDARD_POLICY", "REVIEW_REQUIRED"]
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataTableProposalColumn(ApiModel):
+    name: str
+    data_type: str = Field(alias="dataType")
+    nullable: bool = True
+    description: str | None = None
+    source: Literal["METADATA", "STANDARD_POLICY", "USER_INPUT", "REVIEW_REQUIRED"]
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataTableProposal(ApiModel):
+    schema_name: str = Field(default="dbo", alias="schema")
+    table_name: str = Field(alias="tableName")
+    table_description: str | None = Field(default=None, alias="tableDescription")
+    columns: list[MetadataTableProposalColumn] = Field(default_factory=list)
+    create_table_script_preview: str = Field(alias="createTableScriptPreview")
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataDesignIntentChange(ApiModel):
+    action: Literal[
+        "ADD_FIELD",
+        "REMOVE_FIELD",
+        "RENAME_FIELD",
+        "CHANGE_TYPE",
+        "CHANGE_NULLABILITY",
+        "SET_TABLE_NAME",
+        "SET_TABLE_DESCRIPTION",
+        "REVIEW_REQUIRED",
+    ]
+    target: str | None = None
+    value: str | None = None
+    summary: str
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataDesignInterpretedIntent(ApiModel):
+    intent: Literal["CREATE_TABLE", "REFINE_TABLE", "UNKNOWN"] = "UNKNOWN"
+    table_name_candidate: str | None = Field(default=None, alias="tableNameCandidate")
+    table_description: str | None = Field(default=None, alias="tableDescription")
+    fields: list[MetadataDesignFieldInput] = Field(default_factory=list)
+    modifications: list[MetadataDesignIntentChange] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0, le=1)
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataDesignAppliedChange(ApiModel):
+    action: str
+    target: str | None = None
+    summary: str
+    review_required: bool = Field(default=False, alias="reviewRequired")
+    review_reasons: list[str] = Field(default_factory=list, alias="reviewReasons")
+
+
+class MetadataDesignResult(ApiModel):
+    assistant_message: str = Field(alias="assistantMessage")
+    interpreted_intent: MetadataDesignInterpretedIntent = Field(
+        default_factory=MetadataDesignInterpretedIntent,
+        alias="interpretedIntent",
+    )
+    applied_changes: list[MetadataDesignAppliedChange] = Field(
+        default_factory=list,
+        alias="appliedChanges",
+    )
+    related_metadata: list[MetadataRelatedMetadata] = Field(
+        default_factory=list,
+        alias="relatedMetadata",
+    )
+    standardization_mappings: list[MetadataStandardizationMapping] = Field(
+        default_factory=list,
+        alias="standardizationMappings",
+    )
+    table_proposal: MetadataTableProposal = Field(alias="tableProposal")
+    dto_draft: MetadataGeneratedDraft | None = Field(default=None, alias="dtoDraft")
+    ai_tool_evidence: dict[str, Any] = Field(default_factory=dict, alias="aiToolEvidence")
+    deterministic_facts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="deterministicFacts",
+    )
+    review_markers: list[MetadataAnalysisReviewMarker] = Field(
+        default_factory=list,
+        alias="reviewMarkers",
+    )
+    caveats: list[str] = Field(default_factory=list)
+    review_required: bool = Field(default=True, alias="reviewRequired")
+    model_invocation: ModelInvocationSummary | None = Field(
+        default=None,
+        alias="modelInvocation",
+    )
+    component_invocations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        alias="componentInvocations",
+    )
+
+
+class MetadataDesignRunError(ApiModel):
+    code: str
+    message: str
+    status_code: int = Field(alias="statusCode")
+
+
+class MetadataDesignRunStatus(ApiModel):
+    run_id: str = Field(alias="runId")
+    conversation_id: str = Field(alias="conversationId")
+    status: MetadataAnalysisRunStatusValue
+    submitted_at: datetime = Field(alias="submittedAt")
+    started_at: datetime | None = Field(default=None, alias="startedAt")
+    completed_at: datetime | None = Field(default=None, alias="completedAt")
+    request: MetadataDesignRunRequest
+    result: MetadataDesignResult | None = None
+    error: MetadataDesignRunError | None = None
+
+
+class MetadataDesignConversation(ApiModel):
+    conversation_id: str = Field(alias="conversationId")
+    runs: list[MetadataDesignRunStatus] = Field(default_factory=list)
 
 
 class RegistryVersion(ApiModel):

@@ -1,0 +1,169 @@
+version: draft_quality_audit_p17_v1
+track: P17C
+source_p17b_validation_package: fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml
+source_p17_blocker_closure: fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
+source_pilot_manifest: fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
+source_generation_manifest: fixtures/generation/live_pilot_artifacts_p17_v1/manifest.yaml
+source_db: PPM
+platform_db_context: PLF
+selection_mode: live_metadata
+generated_at: '2026-05-10T13:15:00+09:00'
+draftQualityDecision: ACCEPT_DRAFT
+draft_quality_status: EVIDENCE_BOUND
+active_blockers_after_p17c: []
+closed_blockers_after_p17c:
+  - DEPENDENCY_METADATA_INCOMPLETE
+  - DRAFT_QUALITY_EVIDENCE_MISSING
+live_release_decision_after_p17c:
+  decision: NO_GO
+  reason: P17C draft-quality audit evidence is bound, but P17D hard-live verification and final release decision have not run.
+policy_boundaries:
+  metadata_only: true
+  row_data_allowed: false
+  procedure_execution_allowed: false
+  raw_definition_text_allowed_in_evidence: false
+  ddl_dml_allowed: false
+  plf_fallback_allowed: false
+  publish_or_export_allowed: false
+  generated_artifacts_are_draft_only: true
+  public_api_contract_changed: false
+  db_schema_changed: false
+validation_package_binding:
+  validation_status: PASSED
+  artifact_set_ref:
+    artifact_set_id: p17b-live-pilot-artifact-set
+    artifact_set_version: 2026-05-06.p17b.v1
+    artifact_status: DRAFT
+  validation_ref:
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    validation_status: PASSED
+    source_ref: fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml#validation_results
+binding_targets:
+  - artifact_id: p17b-selected-procedure-analysis
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: SP_ANALYSIS_DOC
+    artifact_ref: p17b-selected-procedure-analysis@2026-05-06.p17b.v1
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    selected_object_refs:
+      - PROCEDURE:dbo.GetInspItemsCd
+      - PROCEDURE:dbo.PAD_GET_BAT_LIST_PRC
+      - PROCEDURE:dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+      - PROCEDURE:dbo.PAD_REG_BAT_HIS_PRC
+      - PROCEDURE:dbo.PAD_SAVE_COM_CD_DTL_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallSendMail_PRC
+    evidence_refs:
+      - p17a-procedure-suite-majority-gate
+      - p17b-selected-sp-evidence
+  - artifact_id: p17b-selected-procedure-dependency-report
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: DEPENDENCY_REPORT
+    artifact_ref: p17b-selected-procedure-dependency-report@2026-05-06.p17b.v1
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    selected_object_refs:
+      - PROCEDURE:dbo.GetInspItemsCd
+      - PROCEDURE:dbo.PAD_GET_BAT_LIST_PRC
+      - PROCEDURE:dbo.PCS_PY_ManageInvoiceFldSchd_PRC
+      - PROCEDURE:dbo.PAD_REG_BAT_HIS_PRC
+      - PROCEDURE:dbo.PAD_SAVE_COM_CD_DTL_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallDlvgPayAdjCyMail_PRC
+      - PROCEDURE:dbo.PCO_BAT_CallSendMail_PRC
+    evidence_refs:
+      - p17a-dependency-evidence-closure
+      - p17b-selected-sp-dependency-summary
+  - artifact_id: p17b-selected-object-metadata-coverage
+    artifact_version: 2026-05-06.p17b.v1
+    artifact_type: METADATA_QUERY_RESULT
+    artifact_ref: p17b-selected-object-metadata-coverage@2026-05-06.p17b.v1
+    validation_report_id: p17b-live-pilot-artifact-validation-report
+    selected_object_refs:
+      - TABLE:dbo.PCS_FAIR_TRD_SCTRT_VIOL_PAY_RMD_AMT_CONF
+      - TABLE:dbo.PEM_PRV
+      - TABLE:dbo.PEM_CTRT
+      - VIEW:dbo.PCO_COM_CD_DTL_V
+      - FUNCTION:dbo.GetInitCap
+    evidence_refs:
+      - p17b-selected-table-view-function-metadata
+      - p17b-selected-object-manifest
+draft_quality_record:
+  current_status: BOUND
+  quality_ref: p17c-draft-quality-saoh-20260510
+  decision: ACCEPT_DRAFT
+  storage_decision: VALIDATION_EVIDENCE_BOUND
+  actor: saoh
+  timestamp: '2026-05-10T13:15:00+09:00'
+  correlation_id: corr-p17c-draft-quality-20260510
+  not_synthesized: true
+  source: validation_quality_gate
+  comment: P17B passed validation package is accepted as a draft-quality evidence package. This does not authorize publish, export, DDL/DML execution, production deployment, row data access, or PLF fallback.
+  bound_artifact_set:
+    artifactSetId: p17b-live-pilot-artifact-set
+    artifactSetVersion: 2026-05-06.p17b.v1
+    validationReportId: p17b-live-pilot-artifact-validation-report
+  required_quality_fields:
+    - actor
+    - decision
+    - evidenceSummary
+    - timestamp
+    - correlationId
+  bound_to:
+    - artifactRef
+    - artifactVersion
+    - validationRef
+    - selectedObjectRefs
+    - evidenceRefs
+audit_event_binding:
+  current_status: BOUND
+  action: DRAFT_QUALITY_EVIDENCE_RECORDED
+  actor: saoh
+  timestamp: '2026-05-10T13:15:00+09:00'
+  correlation_id: corr-p17c-draft-quality-20260510
+  quality_ref: p17c-draft-quality-saoh-20260510
+  validation_ref: p17b-live-pilot-artifact-validation-report
+  artifact_set_ref: p17b-live-pilot-artifact-set@2026-05-06.p17b.v1
+  artifact_refs:
+    - p17b-selected-procedure-analysis@2026-05-06.p17b.v1
+    - p17b-selected-procedure-dependency-report@2026-05-06.p17b.v1
+    - p17b-selected-object-metadata-coverage@2026-05-06.p17b.v1
+  selected_object_refs_source: binding_targets.selected_object_refs
+  evidence_refs_source: binding_targets.evidence_refs
+  audit_trail:
+    - audit_id: p17c-audit-draft-quality-saoh-20260510
+      action: DRAFT_QUALITY_EVIDENCE_RECORDED
+      actor: saoh
+      quality_ref: p17c-draft-quality-saoh-20260510
+      validation_ref: p17b-live-pilot-artifact-validation-report
+      artifact_set_ref: p17b-live-pilot-artifact-set@2026-05-06.p17b.v1
+      correlation_id: corr-p17c-draft-quality-20260510
+      timestamp: '2026-05-10T13:15:00+09:00'
+      selected_object_refs_source: binding_targets.selected_object_refs
+      evidence_refs_source: binding_targets.evidence_refs
+  required_fields:
+    - actor
+    - action
+    - artifactRef
+    - artifactVersion
+    - validationRef
+    - qualityRef
+    - selectedObjectRefs
+    - evidenceRefs
+    - timestamp
+    - correlationId
+completion_status:
+  p17c_status: PASSED_DRAFT_QUALITY_BOUND
+  blocker_closed: true
+  no_go_preserved: true
+  publish_or_export_endpoint_added: false
+  schema_change_required: false
+forbidden_evidence:
+  - row_data
+  - sample_rows
+  - procedure_execution
+  - sql_definition_text
+  - committed_secret
+  - auto_ddl_or_dml
+  - plf_fallback_for_ppm
+  - publish_or_export_path
+known_limitations:
+  - code: P17D_RELEASE_DECISION_PENDING
+    impact: P17C draft-quality audit evidence is bound, but final live release decision still requires P17D hard-live verification.

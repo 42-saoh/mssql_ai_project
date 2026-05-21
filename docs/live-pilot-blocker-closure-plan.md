@@ -3,19 +3,19 @@
 ## Summary
 
 P17D has updated the scoped live pilot release candidate to `CONDITIONAL_GO`. This is a
-conditional reviewer-facing decision, not a production-ready platform claim. The decision is
-based on P17A dependency evidence, P17B passed artifact validation, P17C human approval/audit
-binding, and P17D hard-live verification, while preserving the metadata-only, draft-only,
-approval-gated boundary.
+conditional draft-quality decision, not a production-ready platform claim. The decision is
+based on P17A dependency evidence, P17B passed artifact validation, P17C draft-quality audit
+binding, and P17D hard-live verification, while preserving the metadata-only, draft-only
+boundary.
 
 Current live pilot decision is `CONDITIONAL_GO` for the scoped draft-only candidate.
 
 ## Current Blocker Status
 
-There are no remaining P17C manual approval blockers. The human approval evidence from
-`saoh` is bound in `fixtures/eval/manual_approval_audit_p17_v1.yaml` with
-`approvalDecision: APPROVE`, timestamp `2026-05-10T13:15:00+09:00`, and correlation id
-`corr-p17c-human-approval-20260510`.
+There are no remaining P17C draft-quality evidence blockers. The quality evidence from
+`saoh` is bound in `fixtures/eval/draft_quality_audit_p17_v1.yaml` with
+`draftQualityDecision: ACCEPT_DRAFT`, timestamp `2026-05-10T13:15:00+09:00`, and correlation id
+`corr-p17c-draft-quality-20260510`.
 
 There are no remaining P17D hard-live blockers. P17D reran both hard-live gates and recorded
 passed command-level evidence in `fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml` and
@@ -23,13 +23,13 @@ passed command-level evidence in `fixtures/eval/live_pilot_blocker_closure_p17_v
 
 | Closed blocker | Evidence | Owner |
 |---|---|---|
-| `MANUAL_APPROVAL_EVIDENCE_MISSING` | Human `APPROVE` decision is bound to the P17B artifact set/version and passed validation report. | P17C |
+| `DRAFT_QUALITY_EVIDENCE_MISSING` | Draft-quality evidence is bound to the P17B artifact set/version and passed validation report. | P17C |
 
 Closed evidence gates:
 
 | Closed item | Evidence | Owner |
 |---|---|---|
-| `DEPENDENCY_METADATA_INCOMPLETE` | P17A selected stored procedure suite majority dependency metadata gate passed; `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` remains as complex sentinel residual review. | P17A |
+| `DEPENDENCY_METADATA_INCOMPLETE` | P17A selected stored procedure suite majority dependency metadata gate passed; `dbo.PCS_PY_ManageInvoiceFldSchd_PRC` remains as complex sentinel residual caveat. | P17A |
 | Live pilot artifact validation | Draft-only live pilot artifacts for the selected PPM objects have `PASSED` validation and no release-critical `REVIEW_REQUIRED` result. | P17B |
 | P17D hard-live verification | Both required hard-live commands passed against `ppm`/`PPM` with no PLF fallback. | P17D |
 
@@ -46,11 +46,11 @@ Closed evidence gates:
    - Bind validation results to artifact id, artifact version, selected object refs, and evidence refs.
    - A live release candidate needs `PASSED` validation with no release-critical `REVIEW_REQUIRED` item.
 
-3. **P17C Manual Approval & Audit Evidence Binding**
-   - Record a human `APPROVE` decision only after P17B has a passed validation package.
-   - Bind approval, validation, artifact version, actor, timestamp, correlation id, and audit event refs.
-   - Do not synthesize reviewer approval. If no reviewer approval is provided, keep the blocker active.
-   - Current P17C status is `HUMAN_APPROVED`; it closes the manual approval blocker but does not authorize publish/export or production deployment.
+3. **P17C Draft Quality & Audit Evidence Binding**
+   - Record draft-quality evidence only after P17B has a passed validation package.
+   - Bind quality, validation, artifact version, actor, timestamp, correlation id, and audit event refs.
+   - Do not synthesize evidence. If validation-bound quality evidence is unavailable, keep the blocker active.
+   - Current P17C status is `EVIDENCE_BOUND`; it closes the draft-quality blocker but does not authorize publish/export or production deployment.
 
 4. **P17D Pilot Release GO Decision Update**
    - Re-run the hard-live gates.
@@ -67,8 +67,8 @@ Closed evidence gates:
 - Selected stored procedure suite majority dependency metadata evidence is reproducible.
 - The live pilot artifact validation package has `PASSED` status.
 - No release-critical validation item remains `REVIEW_REQUIRED`.
-- A human `APPROVE` decision is bound to the same artifact/version and validation report.
-- Audit evidence links correlation id, actor, artifact ref, validation ref, approval ref, selected object refs, and evidence refs.
+- Draft-quality evidence is bound to the same artifact/version and validation report.
+- Audit evidence links correlation id, actor, artifact ref, validation ref, quality ref, selected object refs, and evidence refs.
 - Hard-live P15/P16 verification commands pass in the target environment.
 
 ## Mandatory Hard-Live Verification
@@ -91,7 +91,7 @@ If PPM access, metadata permissions, or live configuration fail in a future reru
 - Automatic DDL/DML
 - Credential, password, token, or secret values
 - PLF fallback for PPM
-- Publish/export/live release claim without passed validation and human approval
+- Publish/export/live release claim without passed validation and draft-quality evidence
 
 ## Status Taxonomy
 
@@ -100,4 +100,4 @@ P17 can produce one of two final outcomes:
 - `NO_GO`: at least one release-critical blocker remains active, or P17D hard-live verification cannot be reproduced.
 - `CONDITIONAL_GO`: all evidence gates pass, but generated Java/MyBatis artifacts remain draft-only and still require human ownership for any downstream deployment.
 
-P17 must not label the whole platform as `production-ready`. It can only state that the scoped live pilot release candidate has enough evidence for conditional reviewer approval.
+P17 must not label the whole platform as `production-ready`. It can only state that the scoped live pilot release candidate has enough evidence for conditional draft use.

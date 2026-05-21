@@ -1,10 +1,10 @@
-# P13 Validation, Approval & Audit Productization
+# P13 Validation, Evidence & Audit Productization
 
 
 ## 공통 운영 철학
 
 - 현재 대화 요청과 첨부 ZIP의 실제 파일 구조를 최우선 기준으로 삼는다.
-- P00~P07의 worktree 병렬 개발, Docker 테스트 격리, read-only metadata, draft-only generation, validation/approval/audit 원칙을 유지한다.
+- P00~P07의 worktree 병렬 개발, Docker 테스트 격리, read-only metadata, draft-only generation, validation/evidence/audit 원칙을 유지한다.
 - `PLF` 는 platform DB, `PPM` 은 pilot analysis target DB 이다. PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않고 blocker 로 보고한다.
 - 실제 row data 조회, procedure 실행, 자동 DDL/DML, 운영 DB 직접 변경, 승인 없는 배포 자동화는 금지한다.
 - 비밀값, 실제 비밀번호, 토큰, 실데이터는 코드/문서/fixture/test snapshot 에 넣지 않는다.
@@ -15,7 +15,7 @@
 
 ## 목표
 
-validation rule engine, artifact validation result, reviewer checklist, approval decision log, audit event model을 product workflow로 정리한다. 사람이 최종 승인하는 구조와 재현 가능한 실행 기록을 강화한다.
+validation rule engine, artifact validation result, quality caveat checklist, quality evidence log, audit event model을 product workflow로 정리한다. 사람이 최종 승인하는 구조와 재현 가능한 실행 기록을 강화한다.
 
 ## 읽어야 할 기준 파일
 
@@ -56,10 +56,10 @@ validation rule engine, artifact validation result, reviewer checklist, approval
 
 ## 구현 범위
 
-- validation rule engine 결과 shape를 severity/pass/fail/missing evidence/manual review points로 표준화한다.
-- reviewer checklist와 approval decision log를 API workflow와 연결한다.
+- validation rule engine 결과 shape를 severity/pass/fail/missing evidence/quality caveats로 표준화한다.
+- quality caveat checklist와 quality evidence log를 API workflow와 연결한다.
 - audit event model은 request/job/artifact/validation/approval 단계별로 correlation id와 actor/ref를 남긴다.
-- approval gate 없는 publish나 export를 금지하는 검증을 유지한다.
+- validation gate 없는 publish나 export를 금지하는 검증을 유지한다.
 - PPM pilot artifact scenario는 selected object manifest가 live_metadata일 때만 실제 object id를 사용한다.
 - DB schema 변경이 필요하면 직접 수정하지 말고 blocker로 보고한다.
 

@@ -94,10 +94,102 @@ class MetadataGateway:
     ) -> MetadataCollectionResult:
         raise NotImplementedError
 
+    def collect_procedure_definition(
+        self,
+        *,
+        db_profile_id: str,
+        schema: str,
+        procedure_name: str,
+        referenced_database: str | None = None,
+    ) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    def collect_table_schema(
+        self,
+        *,
+        db_profile_id: str,
+        schema: str,
+        table_name: str,
+        referenced_database: str | None = None,
+    ) -> dict[str, Any] | None:
+        raise NotImplementedError
+
 
 @dataclass
 class McpMetadataGateway(MetadataGateway):
     fixture_repository: FixtureMetadataRepository = field(default_factory=FixtureMetadataRepository)
+
+    def collect_procedure_definition(
+        self,
+        *,
+        db_profile_id: str,
+        schema: str,
+        procedure_name: str,
+        referenced_database: str | None = None,
+    ) -> dict[str, Any] | None:
+        settings = load_live_metadata_settings()
+        try:
+            profiles = load_profiles_for_metadata_request(settings, db_profile_id=db_profile_id)
+        except MetadataSearchDependencyError:
+            return None
+        repository = (
+            LiveMetadataRepository(settings=settings, profiles=profiles)
+            if settings.live_metadata_enabled
+            else self.fixture_repository
+        )
+        registry = build_tool_registry(repository=repository, profiles=profiles)
+        evidence_refs: list[dict[str, Any]] = []
+        errors: list[dict[str, str]] = []
+        arguments: dict[str, Any] = {
+            "dbProfileId": db_profile_id,
+            "schema": schema,
+            "procedureName": procedure_name,
+        }
+        if referenced_database:
+            arguments["referencedDatabase"] = referenced_database
+        return self._invoke(
+            registry,
+            "get_procedure_definition",
+            arguments,
+            evidence_refs,
+            errors,
+        )
+
+    def collect_table_schema(
+        self,
+        *,
+        db_profile_id: str,
+        schema: str,
+        table_name: str,
+        referenced_database: str | None = None,
+    ) -> dict[str, Any] | None:
+        settings = load_live_metadata_settings()
+        try:
+            profiles = load_profiles_for_metadata_request(settings, db_profile_id=db_profile_id)
+        except MetadataSearchDependencyError:
+            return None
+        repository = (
+            LiveMetadataRepository(settings=settings, profiles=profiles)
+            if settings.live_metadata_enabled
+            else self.fixture_repository
+        )
+        registry = build_tool_registry(repository=repository, profiles=profiles)
+        evidence_refs: list[dict[str, Any]] = []
+        errors: list[dict[str, str]] = []
+        arguments: dict[str, Any] = {
+            "dbProfileId": db_profile_id,
+            "schema": schema,
+            "tableName": table_name,
+        }
+        if referenced_database:
+            arguments["referencedDatabase"] = referenced_database
+        return self._invoke(
+            registry,
+            "get_table_schema",
+            arguments,
+            evidence_refs,
+            errors,
+        )
 
     def collect_procedure_metadata(
         self,
@@ -243,7 +335,7 @@ class McpMetadataGateway(MetadataGateway):
         if errors:
             notes.append(
                 "Some metadata tool calls returned documented errors; "
-                "manual review remains required."
+                "draft quality caveats remain."
             )
 
         return MetadataCollectionResult(

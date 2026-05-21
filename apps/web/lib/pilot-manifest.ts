@@ -148,7 +148,7 @@ function readActiveBlockers(text: string): MetadataSearchBlocker[] {
             code,
             message:
               message ||
-              "Pilot metadata dependency is incomplete and must stay review-required.",
+              "Pilot metadata dependency is incomplete and must stay evidence-caveated.",
           }
         : null;
     })

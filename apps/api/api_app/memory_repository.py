@@ -6,9 +6,8 @@ from typing import Any
 from ai_agent_domain import ArtifactStatus, ArtifactType, JobStatus, WorkflowStepType
 
 from api_app.auth import Actor, VerifiedIdentity, canonical_role_set
-from api_app.contracts import approval_decision_mapping, validation_storage_result
+from api_app.contracts import validation_storage_result
 from api_app.lifecycle import (
-    artifact_status_after_approval,
     artifact_status_after_validation,
     bounded_artifact_records,
     ensure_artifact_can_change,
@@ -16,7 +15,6 @@ from api_app.lifecycle import (
 )
 from api_app.repositories import (
     AgentRunRecord,
-    ApprovalRecordData,
     ArtifactRecord,
     AuditEventRecord,
     JobRecord,
@@ -24,19 +22,19 @@ from api_app.repositories import (
     KnowledgeAssetVersionRecord,
     KnowledgeEdgeRecord,
     KnowledgeExportRecord,
-    KnowledgeFactSearchRecord,
     KnowledgeFactRecord,
+    KnowledgeFactSearchRecord,
     KnowledgePersistenceError,
-    KnowledgeReviewRecord,
-    KNOWLEDGE_REVIEW_TARGET_STATUSES,
+    MetadataAnalysisRunRecord,
+    MetadataDesignRunRecord,
     MetadataCollectionRecord,
     ValidationReportRecord,
     WorkRequestRecord,
-    approval_audit_payload,
     prefixed_id,
     standardized_audit_payload,
     utc_now,
 )
+from api_app.target_keys import target_key_for_target
 
 
 class MemoryWorkflowRepository:
@@ -49,12 +47,12 @@ class MemoryWorkflowRepository:
         self.agent_runs: dict[str, AgentRunRecord] = {}
         self.artifacts: dict[str, ArtifactRecord] = {}
         self.validation_reports: dict[str, ValidationReportRecord] = {}
-        self.approvals: dict[str, ApprovalRecordData] = {}
         self.knowledge_assets: dict[str, KnowledgeAssetRecord] = {}
         self.knowledge_versions: dict[str, KnowledgeAssetVersionRecord] = {}
-        self.knowledge_reviews: dict[str, KnowledgeReviewRecord] = {}
         self.knowledge_exports: dict[str, KnowledgeExportRecord] = {}
         self.knowledge_job_links: set[tuple[str, str, str]] = set()
+        self.metadata_analysis_runs: dict[str, MetadataAnalysisRunRecord] = {}
+        self.metadata_design_runs: dict[str, MetadataDesignRunRecord] = {}
         self.audit_events: list[AuditEventRecord] = []
         self.auth_actors: dict[str, Actor] = {}
 
@@ -96,7 +94,9 @@ class MemoryWorkflowRepository:
         request_hash: str,
         correlation_id: str,
         idempotency_key: str | None,
+        target_key: str | None = None,
     ) -> WorkRequestRecord:
+        canonical_key = target_key or target_key_for_target(db_profile_id, target)
         record = WorkRequestRecord(
             request_id=prefixed_id("req"),
             db_profile_id=db_profile_id,
@@ -106,6 +106,7 @@ class MemoryWorkflowRepository:
             request_hash=request_hash,
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
+            target_key=canonical_key,
         )
         self.requests[record.request_id] = record
         self.record_audit_event(
@@ -114,6 +115,7 @@ class MemoryWorkflowRepository:
             target_ref_id=record.request_id,
             payload={
                 "dbProfileId": db_profile_id,
+                "targetKey": canonical_key,
                 "outputs": list(outputs),
                 "tracking": {
                     "correlationId": correlation_id,
@@ -134,16 +136,27 @@ class MemoryWorkflowRepository:
                 return replace(request)
         return None
 
+    def get_request(self, request_id: str) -> WorkRequestRecord | None:
+        request = self.requests.get(request_id)
+        return replace(request) if request else None
+
     def update_request_status(self, request_id: str, status: JobStatus) -> None:
-        request = self.requests[request_id]
+        request = self.requests.get(request_id)
+        if request is None:
+            return
         request.status = status
         request.updated_at = utc_now()
 
     def create_job(self, request_id: str, *, correlation_id: str | None = None) -> JobRecord:
+        request = self.requests.get(request_id)
         record = JobRecord(
             job_id=prefixed_id("job"),
             request_id=request_id,
             correlation_id=correlation_id,
+            db_profile_id=request.db_profile_id if request else None,
+            target=dict(request.target) if request else None,
+            target_key=request.target_key if request else None,
+            outputs=tuple(request.outputs) if request else (),
         )
         self.jobs[record.job_id] = record
         return replace(record)
@@ -179,6 +192,16 @@ class MemoryWorkflowRepository:
             correlation_id=job.correlation_id,
         )
         return replace(job)
+
+    def claim_submitted_job(self, job_id: str) -> JobRecord | None:
+        job = self.jobs.get(job_id)
+        if job is None or job.status != JobStatus.SUBMITTED:
+            return None
+        return self.transition_job(
+            job_id,
+            status=JobStatus.COLLECTING_METADATA,
+            current_step=WorkflowStepType.COLLECT_METADATA,
+        )
 
     def fail_job(self, job_id: str, *, code: str, message: str) -> JobRecord:
         job = self.jobs[job_id]
@@ -238,6 +261,7 @@ class MemoryWorkflowRepository:
         summary: str,
         structured_output: dict[str, Any],
         model_invocation: dict[str, Any],
+        target_key: str | None = None,
     ) -> AgentRunRecord:
         record = AgentRunRecord(
             agent_run_id=prefixed_id("agent"),
@@ -248,6 +272,7 @@ class MemoryWorkflowRepository:
             summary=summary,
             structured_output=structured_output,
             model_invocation=model_invocation,
+            target_key=target_key,
         )
         self.agent_runs[record.agent_run_id] = record
         job = self.jobs.get(job_id)
@@ -260,6 +285,7 @@ class MemoryWorkflowRepository:
                 "agentType": agent_type,
                 "status": status,
                 "targetRef": target_ref,
+                "targetKey": target_key,
                 "modelInvocation": _public_model_invocation(model_invocation),
             },
             correlation_id=job.correlation_id if job else None,
@@ -296,7 +322,9 @@ class MemoryWorkflowRepository:
         assumptions: tuple[str, ...],
         review_required: bool,
         extra: dict[str, Any] | None = None,
+        target_key: str | None = None,
     ) -> ArtifactRecord:
+        job = self.jobs.get(job_id)
         record = ArtifactRecord(
             artifact_id=prefixed_id("art"),
             job_id=job_id,
@@ -309,10 +337,10 @@ class MemoryWorkflowRepository:
             registry_refs=registry_refs,
             assumptions=assumptions,
             review_required=review_required,
+            target_key=target_key or (job.target_key if job else None),
             extra=extra or {},
         )
         self.artifacts[record.artifact_id] = record
-        job = self.jobs.get(job_id)
         self.record_audit_event(
             action="ARTIFACT_CREATED",
             target_type="ARTIFACT",
@@ -321,6 +349,7 @@ class MemoryWorkflowRepository:
                 "artifactId": record.artifact_id,
                 "jobId": job_id,
                 "artifactType": artifact_type.value,
+                "targetKey": record.target_key,
                 "status": record.status.value,
             },
             correlation_id=job.correlation_id if job else None,
@@ -330,18 +359,86 @@ class MemoryWorkflowRepository:
     def get_job(self, job_id: str) -> JobRecord | None:
         return self.jobs.get(job_id)
 
-    def list_jobs(self, *, limit: int | None = None) -> list[JobRecord]:
+    def list_jobs(
+        self,
+        *,
+        limit: int | None = None,
+        target_key: str | None = None,
+    ) -> list[JobRecord]:
         jobs = sorted(
             self.jobs.values(),
             key=lambda job: (job.created_at, job.job_id),
             reverse=True,
         )
+        if target_key:
+            jobs = [job for job in jobs if job.target_key == target_key]
         if limit is not None:
             jobs = jobs[: max(min(int(limit), 100), 1)]
         return [replace(job) for job in jobs]
 
+    def list_stale_active_jobs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[JobRecord]:
+        active_statuses = {
+            JobStatus.SUBMITTED,
+            JobStatus.COLLECTING_METADATA,
+            JobStatus.ANALYZING,
+            JobStatus.GENERATING,
+            JobStatus.VALIDATING,
+        }
+        jobs = sorted(
+            (
+                job
+                for job in self.jobs.values()
+                if job.status in active_statuses and job.updated_at <= stale_before
+            ),
+            key=lambda job: (job.updated_at, job.job_id),
+        )
+        if limit is not None:
+            jobs = jobs[: max(min(int(limit), 100), 1)]
+        return [replace(job) for job in jobs]
+
+    def claim_stale_active_job(
+        self,
+        job_id: str,
+        *,
+        stale_before: datetime,
+    ) -> JobRecord | None:
+        job = self.jobs.get(job_id)
+        if job is None:
+            return None
+        active_statuses = {
+            JobStatus.SUBMITTED,
+            JobStatus.COLLECTING_METADATA,
+            JobStatus.ANALYZING,
+            JobStatus.GENERATING,
+            JobStatus.VALIDATING,
+        }
+        if job.status not in active_statuses or job.updated_at > stale_before:
+            return None
+        job.updated_at = utc_now()
+        return replace(job)
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         return self.artifacts.get(artifact_id)
+
+    def find_job_artifact_by_type(
+        self,
+        job_id: str,
+        artifact_type: ArtifactType,
+    ) -> ArtifactRecord | None:
+        artifacts = sorted(
+            (
+                artifact
+                for artifact in self.artifacts.values()
+                if artifact.job_id == job_id and artifact.type == artifact_type
+            ),
+            key=lambda artifact: (artifact.created_at, artifact.artifact_id),
+        )
+        return replace(artifacts[0]) if artifacts else None
 
     def list_job_artifacts(
         self,
@@ -407,67 +504,6 @@ class MemoryWorkflowRepository:
     def has_validation_report(self, validation_report_id: str) -> bool:
         return validation_report_id in self.validation_reports
 
-    def add_approval(
-        self,
-        *,
-        artifact_id: str,
-        decision: str,
-        reviewer: str,
-        comment: str,
-        validation_report_id: str | None,
-        reviewer_checklist: list[dict[str, Any]] | None = None,
-        validation_summary: dict[str, Any] | None = None,
-        correlation_id: str | None = None,
-    ) -> ApprovalRecordData:
-        mapping = approval_decision_mapping(decision)
-        artifact = self.artifacts[artifact_id]
-        next_status = artifact_status_after_approval(decision)
-        ensure_artifact_can_change(artifact.status, next_status)
-        record = ApprovalRecordData(
-            approval_id=prefixed_id("aprv"),
-            artifact_id=artifact_id,
-            decision=decision,
-            reviewer=reviewer,
-            comment=comment,
-            validation_report_id=validation_report_id,
-            storage_decision=mapping.storage_decision,
-            persistence_note=mapping.persistence_note,
-            reviewer_checklist=reviewer_checklist or [],
-            validation_summary=validation_summary or {},
-        )
-        self.approvals[record.approval_id] = record
-        artifact.latest_approval_id = record.approval_id
-        artifact.updated_at = utc_now()
-        artifact.status = next_status
-        resolved_correlation_id = (
-            correlation_id
-            or (
-                self.jobs[artifact.job_id].correlation_id
-                if artifact.job_id in self.jobs
-                else None
-            )
-        )
-        self.record_audit_event(
-            action="APPROVAL_DECISION_RECORDED",
-            target_type="ARTIFACT",
-            target_ref_id=artifact_id,
-            payload=approval_audit_payload(
-                artifact=artifact,
-                approval=record,
-                validation_report_id=validation_report_id,
-                correlation_id=resolved_correlation_id,
-            ),
-            actor=reviewer,
-            correlation_id=resolved_correlation_id,
-        )
-        return record
-
-    def latest_approval_for(self, artifact_id: str) -> ApprovalRecordData | None:
-        artifact = self.artifacts.get(artifact_id)
-        if artifact is None or artifact.latest_approval_id is None:
-            return None
-        return self.approvals.get(artifact.latest_approval_id)
-
     def record_audit_event(
         self,
         *,
@@ -513,6 +549,7 @@ class MemoryWorkflowRepository:
         target_type = str(target.get("type") or "OBJECT")
         target_schema = str(target.get("schema") or "")
         target_name = str(target.get("name") or "")
+        target_key = target_key_for_target(db_profile_id, target)
         logical_key = "|".join(
             [db_profile_id, asset_kind, target_type, target_schema, target_name]
         ).lower()
@@ -533,9 +570,12 @@ class MemoryWorkflowRepository:
                 target_schema=target_schema,
                 target_name=target_name,
                 logical_key=logical_key,
+                target_key=target_key,
                 source_job_id=job_id,
             )
             self.knowledge_assets[asset.asset_id] = asset
+        elif not asset.target_key:
+            asset.target_key = target_key
         if asset.content_hash == content_hash and asset.current_version_id:
             version = self.knowledge_versions[asset.current_version_id]
             if job_id and not asset.source_job_id:
@@ -603,6 +643,7 @@ class MemoryWorkflowRepository:
                 "versionNo": version_no,
                 "contentHash": content_hash,
                 "sourceJobId": job_id,
+                "targetKey": target_key,
             },
             correlation_id=self.jobs[job_id].correlation_id if job_id in self.jobs else None,
         )
@@ -759,75 +800,6 @@ class MemoryWorkflowRepository:
                 )
         return results[: max(1, min(int(limit), 200))]
 
-    def review_knowledge_asset_version(
-        self,
-        *,
-        asset_id: str,
-        version_id: str,
-        status: str,
-        reason_code: str,
-        note: dict[str, Any],
-        reviewer: str,
-        actor: str = "api-system",
-    ) -> KnowledgeReviewRecord | None:
-        version = self.knowledge_versions.get(version_id)
-        if version is None or version.asset_id != asset_id:
-            return None
-        if version.lifecycle_status == "ARCHIVED" or status not in KNOWLEDGE_REVIEW_TARGET_STATUSES:
-            raise KnowledgePersistenceError(
-                "Knowledge asset lifecycle transition is not allowed.",
-                code="KNOWLEDGE_LIFECYCLE_TRANSITION_INVALID",
-                status_code=409,
-            )
-        now = utc_now()
-        review = KnowledgeReviewRecord(
-            review_id=prefixed_id("krvw"),
-            asset_id=asset_id,
-            version_id=version_id,
-            from_status=version.lifecycle_status,
-            to_status=status,
-            reason_code=reason_code,
-            note=dict(note),
-            reviewer=reviewer,
-            created_at=now,
-        )
-        self.knowledge_reviews[review.review_id] = review
-        version.lifecycle_status = status
-        version.review_reason_code = reason_code
-        version.review_note = dict(note)
-        version.reviewer = reviewer
-        version.reviewed_at = now
-        version.archived_at = now if status == "ARCHIVED" else None
-        self.record_audit_event(
-            action="KNOWLEDGE_ASSET_REVIEW_RECORDED",
-            target_type="KNOWLEDGE_ASSET_VERSION",
-            target_ref_id=version_id,
-            payload={
-                "assetId": asset_id,
-                "fromStatus": review.from_status,
-                "toStatus": status,
-                "reasonCode": reason_code,
-            },
-            actor=actor,
-        )
-        return replace(review)
-
-    def list_knowledge_reviews(
-        self,
-        asset_id: str,
-        *,
-        version_id: str | None = None,
-    ) -> list[KnowledgeReviewRecord] | None:
-        if asset_id not in self.knowledge_assets:
-            return None
-        reviews = [
-            replace(review)
-            for review in self.knowledge_reviews.values()
-            if review.asset_id == asset_id
-            and (version_id is None or review.version_id == version_id)
-        ]
-        return sorted(reviews, key=lambda review: review.created_at, reverse=True)
-
     def save_knowledge_export(
         self,
         *,
@@ -858,6 +830,196 @@ class MemoryWorkflowRepository:
         )
         return record
 
+    def create_metadata_analysis_run(
+        self,
+        *,
+        run_id: str,
+        request: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        record = MetadataAnalysisRunRecord(
+            run_id=run_id,
+            status="QUEUED",
+            request=dict(request),
+        )
+        self.metadata_analysis_runs[run_id] = record
+        return replace(record)
+
+    def get_metadata_analysis_run(self, run_id: str) -> MetadataAnalysisRunRecord | None:
+        record = self.metadata_analysis_runs.get(run_id)
+        return replace(record) if record else None
+
+    def list_recoverable_metadata_analysis_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataAnalysisRunRecord]:
+        records = sorted(
+            (
+                record
+                for record in self.metadata_analysis_runs.values()
+                if _metadata_analysis_run_is_recoverable(record, stale_before=stale_before)
+            ),
+            key=lambda record: (record.submitted_at, record.run_id),
+        )
+        if limit is not None:
+            records = records[: max(min(int(limit), 100), 1)]
+        return [replace(record) for record in records]
+
+    def claim_metadata_analysis_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataAnalysisRunRecord | None:
+        record = self.metadata_analysis_runs.get(run_id)
+        if record is None or not _metadata_analysis_run_is_recoverable(
+            record,
+            stale_before=stale_before,
+        ):
+            return None
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        record.completed_at = None
+        record.error = None
+        return replace(record)
+
+    def mark_metadata_analysis_run_running(self, run_id: str) -> MetadataAnalysisRunRecord:
+        record = self.metadata_analysis_runs[run_id]
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        return replace(record)
+
+    def mark_metadata_analysis_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        analysis: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        record = self.metadata_analysis_runs[run_id]
+        record.status = "SUCCEEDED"
+        record.completed_at = utc_now()
+        record.analysis = dict(analysis)
+        record.error = None
+        return replace(record)
+
+    def mark_metadata_analysis_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataAnalysisRunRecord:
+        record = self.metadata_analysis_runs[run_id]
+        record.status = "FAILED"
+        record.completed_at = utc_now()
+        record.error = dict(error)
+        return replace(record)
+
+    def create_metadata_design_run(
+        self,
+        *,
+        run_id: str,
+        conversation_id: str,
+        request: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        record = MetadataDesignRunRecord(
+            run_id=run_id,
+            conversation_id=conversation_id,
+            status="QUEUED",
+            request=dict(request),
+        )
+        self.metadata_design_runs[run_id] = record
+        return replace(record)
+
+    def get_metadata_design_run(self, run_id: str) -> MetadataDesignRunRecord | None:
+        record = self.metadata_design_runs.get(run_id)
+        return replace(record) if record else None
+
+    def list_metadata_design_runs_for_conversation(
+        self,
+        conversation_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[MetadataDesignRunRecord]:
+        records = sorted(
+            (
+                record
+                for record in self.metadata_design_runs.values()
+                if record.conversation_id == conversation_id
+            ),
+            key=lambda record: (record.submitted_at, record.run_id),
+            reverse=True,
+        )
+        return [replace(record) for record in records[: max(min(int(limit), 100), 1)]]
+
+    def list_recoverable_metadata_design_runs(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int | None = None,
+    ) -> list[MetadataDesignRunRecord]:
+        records = sorted(
+            (
+                record
+                for record in self.metadata_design_runs.values()
+                if _metadata_design_run_is_recoverable(record, stale_before=stale_before)
+            ),
+            key=lambda record: (record.submitted_at, record.run_id),
+        )
+        if limit is not None:
+            records = records[: max(min(int(limit), 100), 1)]
+        return [replace(record) for record in records]
+
+    def claim_metadata_design_run(
+        self,
+        run_id: str,
+        *,
+        stale_before: datetime,
+    ) -> MetadataDesignRunRecord | None:
+        record = self.metadata_design_runs.get(run_id)
+        if record is None or not _metadata_design_run_is_recoverable(
+            record,
+            stale_before=stale_before,
+        ):
+            return None
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        record.completed_at = None
+        record.result = None
+        record.error = None
+        return replace(record)
+
+    def mark_metadata_design_run_running(self, run_id: str) -> MetadataDesignRunRecord:
+        record = self.metadata_design_runs[run_id]
+        record.status = "RUNNING"
+        record.started_at = utc_now()
+        return replace(record)
+
+    def mark_metadata_design_run_succeeded(
+        self,
+        run_id: str,
+        *,
+        result: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        record = self.metadata_design_runs[run_id]
+        record.status = "SUCCEEDED"
+        record.completed_at = utc_now()
+        record.result = dict(result)
+        record.error = None
+        return replace(record)
+
+    def mark_metadata_design_run_failed(
+        self,
+        run_id: str,
+        *,
+        error: dict[str, Any],
+    ) -> MetadataDesignRunRecord:
+        record = self.metadata_design_runs[run_id]
+        record.status = "FAILED"
+        record.completed_at = utc_now()
+        record.error = dict(error)
+        return replace(record)
+
     def _link_knowledge_asset_to_job(
         self,
         job_id: str | None,
@@ -881,9 +1043,6 @@ class MemoryWorkflowRepository:
             current_version_no=version.version_no,
             content_hash=version.content_hash,
             lifecycle_status=version.lifecycle_status,
-            review_reason_code=version.review_reason_code,
-            reviewer=version.reviewer,
-            reviewed_at=version.reviewed_at,
             archived_at=version.archived_at,
         )
 
@@ -930,6 +1089,34 @@ def _public_model_invocation(payload: dict[str, Any]) -> dict[str, Any]:
             "status",
             "tokenUsage",
             "latencyMs",
+            "analysisCoverage",
+            "sourceContextSummary",
             "componentInvocations",
         }
     }
+
+
+def _metadata_analysis_run_is_recoverable(
+    record: MetadataAnalysisRunRecord,
+    *,
+    stale_before: datetime,
+) -> bool:
+    if record.status == "QUEUED":
+        return True
+    if record.status != "RUNNING":
+        return False
+    reference_time = record.started_at or record.submitted_at
+    return reference_time <= stale_before
+
+
+def _metadata_design_run_is_recoverable(
+    record: MetadataDesignRunRecord,
+    *,
+    stale_before: datetime,
+) -> bool:
+    if record.status == "QUEUED":
+        return True
+    if record.status != "RUNNING":
+        return False
+    reference_time = record.started_at or record.submitted_at
+    return reference_time <= stale_before

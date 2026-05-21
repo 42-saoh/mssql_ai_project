@@ -8,8 +8,7 @@ from fastapi import HTTPException, status
 
 from api_app.errors import api_http_exception
 
-CANONICAL_ROLES = frozenset({"USER", "REVIEWER", "ADMIN", "AUDITOR"})
-ARTIFACT_REVIEW_ROLES = frozenset({"REVIEWER", "ADMIN"})
+CANONICAL_ROLES = frozenset({"USER", "ADMIN", "AUDITOR"})
 JWT_ALGORITHMS = ("RS256", "PS256", "ES256")
 
 
@@ -62,19 +61,6 @@ class Actor:
     email: str | None
     roles: frozenset[str]
     display_name: str | None = None
-
-    def matches_reviewer(self, reviewer: str) -> bool:
-        requested = reviewer.strip().lower()
-        allowed = {
-            value.strip().lower()
-            for value in (self.actor_id, self.login, self.email)
-            if value and value.strip()
-        }
-        return requested in allowed
-
-    @property
-    def reviewer_id(self) -> str:
-        return self.login or self.email or self.actor_id
 
 
 class AuthRoleRepository(Protocol):

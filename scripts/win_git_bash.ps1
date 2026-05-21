@@ -45,6 +45,26 @@ function Find-WinGetPackagePath {
     return $null
 }
 
+function Find-CommandDirectory {
+    param([string]$CommandName)
+
+    $command = Get-Command $CommandName -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($command -and $command.Source -and (Test-Path -LiteralPath $command.Source)) {
+        return (Split-Path -Parent (Resolve-Path -LiteralPath $command.Source).Path)
+    }
+
+    return $null
+}
+
+function Find-NodePath {
+    return Find-FirstExistingPath @(
+        (Join-Path $env:LOCALAPPDATA "OpenAI\Codex\bin\node.exe"),
+        "C:\Program Files\nodejs\node.exe",
+        "C:\Program Files (x86)\nodejs\node.exe"
+    )
+}
+
 function Convert-ToBashPath {
     param([string]$Path)
 
@@ -72,6 +92,24 @@ function Test-EnvAssignmentArg {
     return $Value -match "^[A-Za-z_][A-Za-z0-9_]*=.*$"
 }
 
+function Add-ToolPath {
+    param([string]$Path)
+
+    if (-not $Path) {
+        return
+    }
+
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    if (-not $windowsPathEntries.Contains($resolved)) {
+        $windowsPathEntries.Add($resolved)
+    }
+
+    $bashPath = Convert-ToBashPath $resolved
+    if ($bashPath -and -not $pathEntries.Contains($bashPath)) {
+        $pathEntries.Add($bashPath)
+    }
+}
+
 $gitBash = Find-FirstExistingPath @(
     $env:GIT_BASH,
     "C:\Program Files\Git\bin\bash.exe",
@@ -83,15 +121,28 @@ if (-not $gitBash) {
 }
 
 $pathEntries = New-Object System.Collections.Generic.List[string]
+$windowsPathEntries = New-Object System.Collections.Generic.List[string]
 
 $makePath = Find-WinGetPackagePath "ezwinports.make_*" "bin\make.exe"
-if ($makePath) {
-    $pathEntries.Add((Convert-ToBashPath $makePath))
-}
+Add-ToolPath $makePath
 
 $pnpmPath = Find-WinGetPackagePath "pnpm.pnpm_*" "pnpm.exe"
-if ($pnpmPath) {
-    $pathEntries.Add((Convert-ToBashPath $pnpmPath))
+Add-ToolPath $pnpmPath
+
+$nodePath = Find-WinGetPackagePath "OpenJS.NodeJS*" "node.exe"
+if (-not $nodePath) {
+    $nodePath = Find-CommandDirectory "node.exe"
+}
+if (-not $nodePath) {
+    $nodeExecutable = Find-NodePath
+    if ($nodeExecutable) {
+        $nodePath = Split-Path -Parent $nodeExecutable
+    }
+}
+Add-ToolPath $nodePath
+
+if ($windowsPathEntries.Count -gt 0) {
+    $env:Path = (($windowsPathEntries.ToArray() + @($env:Path)) -join ";")
 }
 
 $pathPrefix = ($pathEntries | Where-Object { $_ }) -join ":"

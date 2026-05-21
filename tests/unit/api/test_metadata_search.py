@@ -81,6 +81,20 @@ class RecordingSearchRegistry:
                             "name": "TB_ORDER",
                             "type": "TABLE",
                         },
+                        "description": "Synthetic order table.",
+                        "logicalName": "Order",
+                        "table": {
+                            "schema": "dbo",
+                            "name": "TB_ORDER",
+                            "description": "Synthetic order table.",
+                        },
+                        "columns": [
+                            {
+                                "name": "ORDER_ID",
+                                "description": "Synthetic order id.",
+                                "dataType": "INT",
+                            }
+                        ],
                         "sourceProfile": "master",
                         "sourceDatabase": "master",
                         "evidenceRefs": [
@@ -96,8 +110,8 @@ class RecordingSearchRegistry:
                             {
                                 "code": "DEPENDENCY_METADATA_INCOMPLETE",
                                 "message": (
-                                    "Dependency metadata is incomplete and requires review "
-                                    "before relying on links."
+                                    "Dependency metadata is incomplete; treat dependency links "
+                                    "as evidence caveats until confirmed."
                                 ),
                             }
                         ],
@@ -109,8 +123,8 @@ class RecordingSearchRegistry:
                     {
                         "code": "DEPENDENCY_METADATA_INCOMPLETE",
                         "message": (
-                            "Dependency metadata is incomplete and requires review "
-                            "before relying on links."
+                            "Dependency metadata is incomplete; treat dependency links "
+                            "as evidence caveats until confirmed."
                         ),
                     }
                 ],
@@ -137,9 +151,58 @@ def test_metadata_search_returns_read_only_fixture_identities() -> None:
     assert all(item["sourceProfile"] == "master" for item in payload["results"])
     assert all(item["sourceDatabase"] == "master" for item in payload["results"])
     assert all(item["evidenceRefs"] for item in payload["results"])
+    table_results = [
+        item for item in payload["results"] if item["objectIdentity"]["type"] == "TABLE"
+    ]
+    assert table_results
+    assert any(item.get("description") for item in table_results)
+    assert all(item.get("columns") for item in table_results)
 
     serialized = str(payload).lower()
     for forbidden in ("rowdata", "row_data", "definition", "sqltext", "ddl", "dml"):
+        assert forbidden not in serialized
+
+
+def test_metadata_search_can_return_column_identities() -> None:
+    response = search_metadata_objects(
+        db_profile_id="master",
+        query="ORDER_DATE",
+        object_types=("COLUMN",),
+        limit=5,
+    )
+    payload = response.to_response()
+
+    assert payload["objectTypes"] == ["COLUMN"]
+    assert payload["results"]
+    identities = [item["objectIdentity"] for item in payload["results"]]
+    assert {
+        "schema": "dbo",
+        "name": "TB_ORDER.ORDER_DATE",
+        "type": "COLUMN",
+    } in identities
+    assert all(item["objectIdentity"]["type"] == "COLUMN" for item in payload["results"])
+    assert all(item["targetKey"] for item in payload["results"])
+    assert all(item["evidenceRefs"] for item in payload["results"])
+    order_date = next(
+        item
+        for item in payload["results"]
+        if item["objectIdentity"]["name"] == "TB_ORDER.ORDER_DATE"
+    )
+    assert order_date["description"] == "Date when the synthetic order was placed."
+    assert order_date["dataType"] == "DATE"
+    assert order_date["column"] == {
+        "name": "ORDER_DATE",
+        "description": "Date when the synthetic order was placed.",
+        "dataType": "DATE",
+    }
+    assert order_date["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order header table used for metadata-only MCP tests.",
+    }
+
+    serialized = str(payload).lower()
+    for forbidden in ("rowdata", "row_data", "definition", "sqltext", "execute", "deploy"):
         assert forbidden not in serialized
 
 
@@ -199,6 +262,20 @@ def test_metadata_search_invokes_single_mcp_search_tool_and_maps_shape(
         "name": "TB_ORDER",
         "type": "TABLE",
     }
+    assert payload["results"][0]["description"] == "Synthetic order table."
+    assert payload["results"][0]["logicalName"] == "Order"
+    assert payload["results"][0]["table"] == {
+        "schema": "dbo",
+        "name": "TB_ORDER",
+        "description": "Synthetic order table.",
+    }
+    assert payload["results"][0]["columns"] == [
+        {
+            "name": "ORDER_ID",
+            "description": "Synthetic order id.",
+            "dataType": "INT",
+        }
+    ]
     assert payload["results"][0]["evidenceRefs"] == [
         {
             "type": "MSSQL_METADATA",
@@ -215,6 +292,7 @@ def test_metadata_search_rejects_invalid_object_type_and_normalizes_limit() -> N
     assert normalize_metadata_search_object_types(()) == (
         "PROCEDURE",
         "TABLE",
+        "COLUMN",
         "VIEW",
         "FUNCTION",
     )

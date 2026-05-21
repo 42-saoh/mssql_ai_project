@@ -5,8 +5,8 @@ status: contract_ready
 production_ready: false
 depends_on:
   - P22 OpenAI LLM Agent Runtime
-  - prompt:sp_semantic_analysis@0.4.0
-  - schema:llm_semantic_analysis@0.4.0
+  - prompt:sp_semantic_analysis@0.4.1
+  - schema:llm_semantic_analysis@0.4.1
   - model:openai_sp_semantic_analysis@0.1.0
   - model:openai_fast_test@gpt-5-nano@0.1.0
 objective:
@@ -121,7 +121,7 @@ quality_dimensions:
     description: Expected migration guide and Java/MyBatis conversion guidance is present.
     minimum_score: 0.8
   evidence_discipline:
-    description: Claims are tied to existing deterministic facts or review markers.
+    description: Claims are tied to existing deterministic facts or evidence caveat markers.
     minimum_score: 0.9
   overclaim_control:
     description: Unsupported dependency, table, or function claims are flagged.
@@ -143,7 +143,7 @@ scenario_matrix:
     expected_focus:
       - branching business rules
       - transaction and error handling
-      - review markers for side effects
+      - evidence caveat markers for side effects
   - scenario_id: complex_dynamic_sql_cross_db
     complexity: complex
     minimum_cases: 1

@@ -91,7 +91,7 @@ scenarios:
             schema: dbo
             tableName: TB_ORDER
             sql: SELECT * FROM dbo.TB_ORDER
-            secret: do-not-return
+            unsafeArgument: do-not-return
           reason: Unsafe adversarial table profile request.
           expectedEvidenceUse: Should be blocked by policy.
       assumptions: []

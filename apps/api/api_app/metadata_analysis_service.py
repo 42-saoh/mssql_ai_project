@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
 
+from ai_agent_generation.utils import (
+    ensure_trailing_newline,
+    java_imports_for_types,
+    java_type_for_db_type,
+    snake_to_lower_camel,
+    upper_first,
+)
 from ai_agent_runtime.gateway import (
     ModelGateway,
     ModelGatewayError,
@@ -43,7 +51,6 @@ from api_app.ai_tool_orchestrator import (
 )
 from api_app.knowledge_service import persist_metadata_analysis_knowledge
 from api_app.metadata_service import (
-    DEFAULT_METADATA_SEARCH_OBJECT_TYPES,
     MetadataSearchDependencyError,
     list_safe_metadata_profiles,
     search_metadata_objects,
@@ -57,6 +64,7 @@ from api_app.schemas import (
     MetadataAnalysisReviewMarker,
     MetadataDependencyGraph,
     MetadataDtoReadiness,
+    MetadataGeneratedDraft,
     MetadataInsightGroup,
     MetadataObjectIdentity,
     MetadataObjectProfile,
@@ -64,10 +72,68 @@ from api_app.schemas import (
     MetadataSearchResult,
     ModelInvocationSummary,
 )
+from api_app.target_keys import target_key_for_ref, target_key_for_target
 from api_app.repositories import WorkflowRepository
 
 AI_METADATA_ANALYSIS_SKIPPED = "AI_METADATA_ANALYSIS_SKIPPED"
 AI_METADATA_ANALYSIS_REVIEW_REQUIRED = "AI_METADATA_ANALYSIS_REVIEW_REQUIRED"
+METADATA_DTO_DRAFT_REVIEW_REQUIRED = "METADATA_DTO_DRAFT_REVIEW_REQUIRED"
+DEFAULT_METADATA_ANALYSIS_OBJECT_TYPES = ("PROCEDURE", "TABLE", "VIEW", "FUNCTION")
+_JAVA_IDENTIFIER_CLEANUP = re.compile(r"[^0-9A-Za-z_]+")
+_JAVA_RESERVED_WORDS = frozenset(
+    {
+        "abstract",
+        "assert",
+        "boolean",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "class",
+        "const",
+        "continue",
+        "default",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "extends",
+        "final",
+        "finally",
+        "float",
+        "for",
+        "goto",
+        "if",
+        "implements",
+        "import",
+        "instanceof",
+        "int",
+        "interface",
+        "long",
+        "native",
+        "new",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "return",
+        "short",
+        "static",
+        "strictfp",
+        "super",
+        "switch",
+        "synchronized",
+        "this",
+        "throw",
+        "throws",
+        "transient",
+        "try",
+        "void",
+        "volatile",
+        "while",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -85,6 +151,7 @@ class MetadataObjectDepth:
     insight_groups: tuple[dict[str, Any], ...]
     dependency_graph: dict[str, Any]
     dto_readiness: tuple[dict[str, Any], ...]
+    table_columns: dict[str, tuple[dict[str, Any], ...]]
     deterministic_facts: tuple[dict[str, Any], ...]
 
 
@@ -131,6 +198,11 @@ class MetadataAnalysisService:
             baseline_facts=baseline_facts,
             tool_evidence=tool_run.evidence,
         )
+        _attach_metadata_target_keys(
+            object_depth,
+            db_profile_id=request.db_profile_id,
+            source_database=source_database,
+        )
         deterministic_facts = [*deterministic_facts, *object_depth.deterministic_facts]
         metadata_payload["objectProfiles"] = list(object_depth.object_profiles)
         metadata_payload["insightGroups"] = list(object_depth.insight_groups)
@@ -149,19 +221,20 @@ class MetadataAnalysisService:
             MetadataDtoReadiness.model_validate(item)
             for item in object_depth.dto_readiness
         ]
+        generated_drafts: list[MetadataGeneratedDraft] = []
         assumptions: list[str] = []
-        summary = "Metadata analysis did not run because no deterministic evidence was available."
+        summary = "결정론적 근거가 없어 metadata analysis를 실행하지 않았습니다."
 
         if not options.use_llm_analysis:
             review_markers.append(
                 _review_marker(
                     AI_METADATA_ANALYSIS_SKIPPED,
-                    "Metadata LLM analysis was skipped because useLlmAnalysis=false.",
+                    "useLlmAnalysis=false 요청 옵션으로 Metadata LLM analysis를 건너뛰었습니다.",
                     evidence_refs=_fallback_fact_refs(deterministic_facts),
                 )
             )
             all_caveats = _dedupe_strings([*all_caveats, AI_METADATA_ANALYSIS_SKIPPED])
-            summary = "Metadata LLM analysis skipped by request option."
+            summary = "요청 옵션에 따라 Metadata LLM analysis를 건너뛰었습니다."
         elif deterministic_facts:
             try:
                 run = build_metadata_analysis_run(
@@ -216,23 +289,47 @@ class MetadataAnalysisService:
                     _review_marker(
                         AI_METADATA_ANALYSIS_SKIPPED,
                         (
-                            "Metadata LLM analysis failed; response contains deterministic "
-                            f"metadata only. code={getattr(exc, 'code', exc.__class__.__name__)}"
+                            "Metadata LLM analysis가 실패해 응답에는 결정론적 metadata만 포함합니다. "
+                            f"code={getattr(exc, 'code', exc.__class__.__name__)}"
                         ),
                         evidence_refs=_fallback_fact_refs(deterministic_facts),
                     )
                 )
                 all_caveats = _dedupe_strings([*all_caveats, AI_METADATA_ANALYSIS_SKIPPED])
-                summary = "Metadata LLM analysis skipped after model gateway failure."
+                summary = "model gateway 실패 후 Metadata LLM analysis를 건너뛰었습니다."
         else:
             review_markers.append(
                 _review_marker(
                     AI_METADATA_ANALYSIS_SKIPPED,
-                    "Metadata LLM analysis was skipped because no deterministic fact ids exist.",
+                    "deterministic fact id가 없어 Metadata LLM analysis를 건너뛰었습니다.",
                     evidence_refs=["metadata.analysis.no_fact"],
                 )
             )
             all_caveats = _dedupe_strings([*all_caveats, AI_METADATA_ANALYSIS_SKIPPED])
+
+        if options.generate_dto_drafts:
+            generated_drafts = _build_metadata_generated_drafts(
+                object_profiles=[
+                    dict(profile) for profile in object_depth.object_profiles
+                ],
+                table_columns=object_depth.table_columns,
+                dto_readiness=[item.to_response() for item in dto_readiness],
+            )
+            if not generated_drafts:
+                review_markers.append(
+                    _review_marker(
+                        METADATA_DTO_DRAFT_REVIEW_REQUIRED,
+                        (
+                            "generateDtoDrafts=true request could not produce a "
+                            "DTO_DRAFT preview because TABLE/VIEW column metadata "
+                            "was unavailable."
+                        ),
+                        evidence_refs=_fallback_fact_refs(deterministic_facts),
+                    )
+                )
+                all_caveats = _dedupe_strings(
+                    [*all_caveats, METADATA_DTO_DRAFT_REVIEW_REQUIRED]
+                )
 
         marker_models = [
             MetadataAnalysisReviewMarker.model_validate(marker)
@@ -260,7 +357,7 @@ class MetadataAnalysisService:
             query=request.query,
             target=request.target,
             objectTypes=list(
-                request.object_types or DEFAULT_METADATA_SEARCH_OBJECT_TYPES
+                request.object_types or DEFAULT_METADATA_ANALYSIS_OBJECT_TYPES
             ),
             sourceProfile=source_profile,
             sourceDatabase=source_database,
@@ -276,6 +373,7 @@ class MetadataAnalysisService:
             insightGroups=insight_groups,
             dependencyGraph=dependency_graph_model,
             dtoReadiness=dto_readiness,
+            generatedDrafts=generated_drafts,
             aiToolEvidence=ai_tool_evidence,
             deterministicFacts=deterministic_facts,
             reviewMarkers=marker_models,
@@ -285,6 +383,7 @@ class MetadataAnalysisService:
                 blockers
                 or all_caveats
                 or marker_models
+                or any(draft.review_required for draft in generated_drafts)
                 or any(target.review_required for target in targets)
             ),
             blockers=blockers,
@@ -355,7 +454,11 @@ def _build_metadata_object_depth(
             if not object_ref:
                 continue
             columns = _safe_dict_list(data.get("columns"))
-            profile = _profile_for(profiles, object_ref, "TABLE")
+            profile = _profile_for(
+                profiles,
+                object_ref,
+                str(data.get("objectType") or "TABLE"),
+            )
             table_columns[object_ref] = columns
             profile["columnCount"] = len(columns)
             profile["descriptionCoverage"] = _description_coverage(data, columns)
@@ -544,6 +647,10 @@ def _build_metadata_object_depth(
         insight_groups=tuple(insight_groups),
         dependency_graph=dependency_graph,
         dto_readiness=tuple(dto_readiness),
+        table_columns={
+            object_ref: tuple(columns)
+            for object_ref, columns in table_columns.items()
+        },
         deterministic_facts=tuple([*profile_facts, *graph_facts]),
     )
 
@@ -618,7 +725,7 @@ def _baseline_targets(
         search = search_metadata_objects(
             db_profile_id=request.db_profile_id,
             query=request.query,
-            object_types=tuple(request.object_types or DEFAULT_METADATA_SEARCH_OBJECT_TYPES),
+            object_types=tuple(request.object_types or DEFAULT_METADATA_ANALYSIS_OBJECT_TYPES),
             limit=request.options.max_targets,
         )
         return (
@@ -692,7 +799,7 @@ def _run_ai_metadata_tools(
     if not options.use_llm_analysis or not options.use_ai_tool_orchestration:
         marker = _review_marker(
             AI_METADATA_ANALYSIS_SKIPPED,
-            "AI metadata tool orchestration was skipped by request options.",
+            "요청 옵션으로 AI metadata tool orchestration을 건너뛰었습니다.",
             evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
         )
         return _tool_run_result(
@@ -709,7 +816,7 @@ def _run_ai_metadata_tools(
     if not callable(planner):
         marker = _review_marker(
             AI_METADATA_ANALYSIS_SKIPPED,
-            "Configured model gateway does not expose metadata tool planning.",
+            "설정된 model gateway가 metadata tool planning을 제공하지 않습니다.",
             evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
         )
         return _tool_run_result(
@@ -743,8 +850,8 @@ def _run_ai_metadata_tools(
             _review_marker(
                 "AI_TOOL_BUDGET_REDUCED",
                 (
-                    "AI metadata analysis planning rounds were reduced for live PPM "
-                    "latency and cost control."
+                    "live PPM latency와 비용 제어를 위해 AI metadata analysis planning round를 "
+                    "줄였습니다."
                 ),
                 evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
             )
@@ -756,7 +863,7 @@ def _run_ai_metadata_tools(
     except Exception as exc:
         marker = _review_marker(
             AI_METADATA_ANALYSIS_SKIPPED,
-            f"Internal MCP registry setup failed for metadata analysis: {exc.__class__.__name__}.",
+            f"metadata analysis용 internal MCP registry 설정이 실패했습니다: {exc.__class__.__name__}.",
             evidence_refs=_fallback_fact_refs(metadata.get("deterministicFacts", [])),
         )
         return _tool_run_result(
@@ -818,8 +925,8 @@ def _run_ai_metadata_tools(
                     _review_marker(
                         AI_METADATA_ANALYSIS_SKIPPED,
                         (
-                            "Metadata tool planning failed; analysis continued with baseline "
-                            f"metadata. code={getattr(exc, 'code', exc.__class__.__name__)}"
+                            "Metadata tool planning이 실패해 baseline metadata로 분석을 계속했습니다. "
+                            f"code={getattr(exc, 'code', exc.__class__.__name__)}"
                         ),
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
@@ -884,8 +991,8 @@ def _run_ai_metadata_tools(
                     _review_marker(
                         "AI_TOOL_CALL_BUDGET_EXHAUSTED",
                         (
-                            "AI metadata analysis tool call budget was exhausted before "
-                            "all planned requests ran."
+                            "계획된 요청을 모두 실행하기 전에 AI metadata analysis tool call budget을 "
+                            "소진했습니다."
                         ),
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
@@ -905,7 +1012,7 @@ def _run_ai_metadata_tools(
                 review_markers.append(
                     _review_marker(
                         AI_METADATA_ANALYSIS_REVIEW_REQUIRED,
-                        str(decision.message or "AI metadata tool request was blocked."),
+                        str(decision.message or "AI metadata tool request가 차단되었습니다."),
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
                         ),
@@ -936,7 +1043,7 @@ def _run_ai_metadata_tools(
                 review_markers.append(
                     _review_marker(
                         AI_METADATA_ANALYSIS_REVIEW_REQUIRED,
-                        f"AI metadata tool invocation failed with MCP error: {exc.code}.",
+                        f"AI metadata tool invocation이 MCP error {exc.code}로 실패했습니다.",
                         evidence_refs=_fallback_fact_refs(
                             [*metadata.get("deterministicFacts", []), *deterministic_facts]
                         ),
@@ -1092,8 +1199,8 @@ def _baseline_facts(targets: list[MetadataSearchResult]) -> list[dict[str, Any]]
                 "type": "MSSQL_METADATA_SEARCH_RESULT",
                 "fact_type": "MSSQL_METADATA_SEARCH_RESULT",
                 "summary": (
-                    f"Metadata search identified {identity.type} "
-                    f"{identity.schema_name}.{identity.name}."
+                    f"Metadata search로 {identity.type} "
+                    f"{identity.schema_name}.{identity.name}을 확인했습니다."
                 ),
                 "evidenceRefs": [ref.to_response() for ref in target.evidence_refs],
             }
@@ -1122,6 +1229,11 @@ def _target_result(
     object_ref = f"{source_database}.{target.schema_name}.{target.name}"
     return MetadataSearchResult(
         objectIdentity=target,
+        targetKey=target_key_for_target(
+            source_profile or db_profile_id,
+            {"type": target.type, "schema": target.schema_name, "name": target.name},
+            database=source_database or db_profile_id,
+        ),
         sourceProfile=source_profile or db_profile_id,
         sourceDatabase=source_database or db_profile_id,
         evidenceRefs=[
@@ -1146,6 +1258,38 @@ def _source_database(db_profile_id: str) -> str:
         if profile.id == db_profile_id:
             return profile.database
     return db_profile_id
+
+
+def _attach_metadata_target_keys(
+    object_depth: MetadataObjectDepth,
+    *,
+    db_profile_id: str,
+    source_database: str,
+) -> None:
+    for profile in object_depth.object_profiles:
+        profile["targetKey"] = target_key_for_ref(
+            db_profile_id=db_profile_id,
+            database=source_database,
+            object_type=str(profile.get("objectType") or "OBJECT"),
+            target_ref=str(profile.get("objectRef") or ""),
+        )
+    graph = object_depth.dependency_graph
+    for node in graph.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        node["targetKey"] = target_key_for_ref(
+            db_profile_id=db_profile_id,
+            database=source_database,
+            object_type=str(node.get("objectType") or "OBJECT"),
+            target_ref=str(node.get("objectRef") or ""),
+        )
+    for item in object_depth.dto_readiness:
+        item["targetKey"] = target_key_for_ref(
+            db_profile_id=db_profile_id,
+            database=source_database,
+            object_type="TABLE",
+            target_ref=str(item.get("objectRef") or ""),
+        )
 
 
 def _safe_tool_results(tool_evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1353,10 +1497,10 @@ def _merge_dependency_closure(
                 code="DEPENDENCY_GRAPH_SUMMARY",
                 object_ref=object_ref,
                 summary=(
-                    "Dependency closure contains "
-                    f"{summary.get('nodeCount', 0)} nodes, "
-                    f"{summary.get('edgeCount', 0)} edges, and "
-                    f"{summary.get('reviewRequiredCount', 0)} review-required items."
+                    "의존성 closure에 "
+                    f"노드 {summary.get('nodeCount', 0)}개, "
+                    f"엣지 {summary.get('edgeCount', 0)}개, "
+                    f"근거 보강 필요 항목 {summary.get('reviewRequiredCount', 0)}개가 있습니다."
                 ),
                 status=(
                     "REVIEW_REQUIRED"
@@ -1380,9 +1524,9 @@ def _profile_fact(profile: dict[str, Any]) -> dict[str, Any]:
         "type": "MSSQL_METADATA_OBJECT_PROFILE",
         "fact_type": "MSSQL_METADATA_OBJECT_PROFILE",
         "summary": (
-            f"Object profile for {profile['objectType']} {profile['objectRef']} "
-            f"with {profile['columnCount']} columns, {profile['constraintCount']} "
-            f"constraints, and {profile['indexCount']} indexes."
+            f"{profile['objectType']} {profile['objectRef']} 오브젝트 프로파일입니다. "
+            f"컬럼 {profile['columnCount']}개, constraint {profile['constraintCount']}개, "
+            f"index {profile['indexCount']}개를 포함합니다."
         ),
         "evidenceRefs": [],
     }
@@ -1395,10 +1539,10 @@ def _graph_fact(dependency_graph: dict[str, Any]) -> dict[str, Any]:
         "type": "MSSQL_METADATA_DEPENDENCY_GRAPH_PROFILE",
         "fact_type": "MSSQL_METADATA_DEPENDENCY_GRAPH_PROFILE",
         "summary": (
-            "Metadata dependency graph profile with "
-            f"{len(dependency_graph.get('nodes', []))} nodes, "
-            f"{len(dependency_graph.get('edges', []))} edges, and "
-            f"{len(dependency_graph.get('unresolved', []))} unresolved items."
+            "Metadata dependency graph 프로파일입니다. "
+            f"노드 {len(dependency_graph.get('nodes', []))}개, "
+            f"엣지 {len(dependency_graph.get('edges', []))}개, "
+            f"미해결 항목 {len(dependency_graph.get('unresolved', []))}개를 포함합니다."
         ),
         "evidenceRefs": [],
     }
@@ -1459,8 +1603,8 @@ def _build_insight_groups(
                         code="COLUMN_DESCRIPTION_GAP",
                         object_ref=object_ref,
                         summary=(
-                            f"{len(missing_descriptions)} columns need confirmed "
-                            "descriptions or logical names."
+                            f"컬럼 {len(missing_descriptions)}개에 확정된 description 또는 "
+                            "logical name이 필요합니다."
                         ),
                         status="REVIEW_REQUIRED",
                         evidence_refs=refs,
@@ -1472,9 +1616,9 @@ def _build_insight_groups(
                         code="COLUMN_NULLABILITY_OR_DOMAIN_REVIEW",
                         object_ref=object_ref,
                         summary=(
-                            f"{len(nullable_columns)} nullable columns and "
-                            f"{len(missing_descriptions)} review-required descriptions "
-                            "need DTO field review."
+                            f"nullable column {len(nullable_columns)}개와 "
+                            f"review-required description {len(missing_descriptions)}개는 "
+                            "DTO field 검토가 필요합니다."
                         ),
                         status="REVIEW_REQUIRED",
                         evidence_refs=refs,
@@ -1486,9 +1630,9 @@ def _build_insight_groups(
                     code="TABLE_CONSTRAINT_SUMMARY",
                     object_ref=object_ref,
                     summary=(
-                        f"Table has {profile['primaryKeyCount']} PK, "
-                        f"{profile['foreignKeyCount']} FK, and "
-                        f"{profile['constraintCount']} total constraints."
+                        f"테이블에 PK {profile['primaryKeyCount']}개, "
+                        f"FK {profile['foreignKeyCount']}개, "
+                        f"constraint 총 {profile['constraintCount']}개가 있습니다."
                     ),
                     status="INFERRED_DESCRIPTION",
                     evidence_refs=refs,
@@ -1506,8 +1650,8 @@ def _build_insight_groups(
                             code="FOREIGN_KEY_RELATIONSHIP",
                             object_ref=object_ref,
                             summary=(
-                                f"{constraint.get('name')} references "
-                                f"{ref_schema}.{ref_table}."
+                                f"{constraint.get('name')} constraint가 "
+                                f"{ref_schema}.{ref_table}을 참조합니다."
                             ),
                             status="INFERRED_DESCRIPTION",
                             evidence_refs=refs,
@@ -1518,7 +1662,7 @@ def _build_insight_groups(
                 _insight(
                     code="CONSTRAINT_METADATA_MISSING",
                     object_ref=object_ref,
-                    summary="Constraint metadata was not available for this table profile.",
+                    summary="이 table 프로파일에는 constraint metadata가 없습니다.",
                     status="REVIEW_REQUIRED",
                     evidence_refs=refs,
                 )
@@ -1528,7 +1672,7 @@ def _build_insight_groups(
                 _insight(
                     code="TABLE_INDEX_SUMMARY",
                     object_ref=object_ref,
-                    summary=f"Table has {len(indexes)} indexes in metadata evidence.",
+                    summary=f"metadata evidence 기준 index {len(indexes)}개가 있습니다.",
                     status="INFERRED_DESCRIPTION",
                     evidence_refs=refs,
                 )
@@ -1538,7 +1682,7 @@ def _build_insight_groups(
                 _insight(
                     code="INDEX_METADATA_MISSING",
                     object_ref=object_ref,
-                    summary="Index metadata was not available for this table profile.",
+                    summary="이 table 프로파일에는 index metadata가 없습니다.",
                     status="REVIEW_REQUIRED",
                     evidence_refs=refs,
                 )
@@ -1564,13 +1708,13 @@ def _build_dto_readiness(
         columns = table_columns.get(object_ref, [])
         reasons = []
         if profile["objectType"] != "TABLE":
-            reasons.append("DTO readiness v1 is deepest for TABLE objects.")
+            reasons.append("DTO readiness v1은 TABLE object를 가장 깊게 평가합니다.")
         if not columns:
-            reasons.append("Column metadata was not available.")
+            reasons.append("Column metadata를 사용할 수 없습니다.")
         if profile["primaryKeyCount"] == 0 and profile["objectType"] == "TABLE":
-            reasons.append("Primary key metadata was not confirmed.")
+            reasons.append("Primary key metadata가 확정되지 않았습니다.")
         if float(profile["descriptionCoverage"]) < 1 and columns:
-            reasons.append("Column or table descriptions need review.")
+            reasons.append("Column 또는 table description 검토가 필요합니다.")
         if profile["objectType"] == "TABLE" and columns and not reasons:
             status = "READY"
         elif columns:
@@ -1587,6 +1731,270 @@ def _build_dto_readiness(
             }
         )
     return readiness
+
+
+def _build_metadata_generated_drafts(
+    *,
+    object_profiles: list[dict[str, Any]],
+    table_columns: dict[str, tuple[dict[str, Any], ...]],
+    dto_readiness: list[dict[str, Any]],
+) -> list[MetadataGeneratedDraft]:
+    readiness_by_ref = {
+        str(item.get("objectRef") or ""): item
+        for item in dto_readiness
+        if str(item.get("objectRef") or "").strip()
+    }
+    drafts: list[MetadataGeneratedDraft] = []
+    for profile in object_profiles:
+        object_ref = str(profile.get("objectRef") or "").strip()
+        object_type = str(profile.get("objectType") or "").strip()
+        if object_type not in {"TABLE", "VIEW"}:
+            continue
+        columns = [dict(column) for column in table_columns.get(object_ref, ())]
+        if not object_ref or not columns:
+            continue
+        readiness = readiness_by_ref.get(object_ref, {})
+        evidence_refs = _dedupe_strings(
+            [
+                *[str(ref) for ref in profile.get("sourceFactIds", [])],
+                *[str(ref) for ref in profile.get("evidenceRefs", [])],
+                *[str(ref) for ref in readiness.get("evidenceRefs", [])],
+            ]
+        )
+        review_reasons = _metadata_dto_review_reasons(
+            profile=profile,
+            columns=columns,
+            readiness=readiness,
+        )
+        class_name = _metadata_dto_class_name(object_ref)
+        drafts.append(
+            MetadataGeneratedDraft.model_validate(
+                {
+                    "artifactType": "DTO_DRAFT",
+                    "objectRef": object_ref,
+                    "targetKey": profile.get("targetKey"),
+                    "fileName": f"{class_name}.java",
+                    "language": "java",
+                    "content": _render_metadata_dto_draft(
+                        object_ref=object_ref,
+                        target_key=str(profile.get("targetKey") or ""),
+                        object_type=object_type,
+                        class_name=class_name,
+                        columns=columns,
+                        evidence_refs=evidence_refs,
+                        review_reasons=review_reasons,
+                    ),
+                    "evidenceRefs": evidence_refs,
+                    "reviewRequired": bool(review_reasons or profile.get("reviewRequired")),
+                    "reviewReasons": review_reasons,
+                }
+            )
+        )
+    return drafts
+
+
+def _metadata_dto_review_reasons(
+    *,
+    profile: dict[str, Any],
+    columns: list[dict[str, Any]],
+    readiness: dict[str, Any],
+) -> list[str]:
+    reasons = [str(reason) for reason in readiness.get("reviewReasons", [])]
+    object_type = str(profile.get("objectType") or "")
+    if object_type == "VIEW":
+        reasons.append("VIEW DTO draft requires SELECT shape and updateability review.")
+    if object_type == "TABLE" and int(profile.get("primaryKeyCount") or 0) == 0:
+        reasons.append("Primary key metadata is not confirmed.")
+    for column in columns:
+        name = str(column.get("name") or "UNKNOWN_COLUMN")
+        db_type = str(column.get("dataType") or column.get("typeName") or "").strip()
+        if not db_type:
+            reasons.append(f"{name} has no DB type evidence.")
+        elif not _known_metadata_db_type(db_type):
+            reasons.append(f"{name} uses DB type {db_type}; Java type mapping needs review.")
+        if _metadata_bool(column.get("isNullable")):
+            reasons.append(f"{name} is nullable; business null handling needs review.")
+        if not str(column.get("description") or "").strip() and str(
+            column.get("descriptionStatus") or ""
+        ) != "CONFIRMED":
+            reasons.append(f"{name} has no confirmed description.")
+    return _dedupe_strings(reasons)
+
+
+def _render_metadata_dto_draft(
+    *,
+    object_ref: str,
+    target_key: str,
+    object_type: str,
+    class_name: str,
+    columns: list[dict[str, Any]],
+    evidence_refs: list[str],
+    review_reasons: list[str],
+) -> str:
+    field_specs = _metadata_dto_field_specs(columns)
+    java_types = {str(field["javaType"]) for field in field_specs}
+    lines = [
+        "/**",
+        " * Metadata DTO draft generated from sanitized MSSQL metadata.",
+        " * artifactType=DTO_DRAFT",
+        f" * objectRef={_java_comment_text(object_ref)}",
+        f" * objectType={_java_comment_text(object_type)}",
+    ]
+    if target_key:
+        lines.append(f" * targetKey={_java_comment_text(target_key)}")
+    lines.extend(
+        [
+            f" * evidenceRefs={_java_comment_text(', '.join(evidence_refs[:5]) or 'none')}",
+            " * REVIEW_REQUIRED: validate package, naming, domain semantics, "
+            "and null handling before use.",
+            " */",
+        ]
+    )
+    imports = java_imports_for_types(java_types)
+    for import_name in imports:
+        lines.append(f"import {import_name};")
+    if imports:
+        lines.append("")
+    lines.append(f"public class {class_name} {{")
+    if review_reasons:
+        lines.append("")
+        lines.append("    /**")
+        lines.append("     * REVIEW_REQUIRED:")
+        for reason in review_reasons[:8]:
+            lines.append(f"     * - {_java_comment_text(reason)}")
+        lines.append("     */")
+    for field in field_specs:
+        lines.append("")
+        lines.append(
+            "    /** "
+            f"DB column={_java_comment_text(str(field['physicalName']))}; "
+            f"dbType={_java_comment_text(str(field['dbType']))}; "
+            f"nullable={str(field['nullable']).lower()}; "
+            f"primaryKey={str(field['primaryKey']).lower()}; "
+            f"evidence={_java_comment_text(', '.join(evidence_refs[:3]) or 'none')}; "
+            f"{_java_comment_text(str(field['review']))} */"
+        )
+        lines.append(f"    private {field['javaType']} {field['fieldName']};")
+    for field in field_specs:
+        field_name = str(field["fieldName"])
+        java_type = str(field["javaType"])
+        method_suffix = upper_first(field_name)
+        lines.extend(
+            [
+                "",
+                f"    public {java_type} get{method_suffix}() {{",
+                f"        return {field_name};",
+                "    }",
+                "",
+                f"    public void set{method_suffix}({java_type} {field_name}) {{",
+                f"        this.{field_name} = {field_name};",
+                "    }",
+            ]
+        )
+    lines.append("}")
+    return ensure_trailing_newline("\n".join(lines))
+
+
+def _metadata_dto_field_specs(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    specs: list[dict[str, Any]] = []
+    seen_fields: set[str] = set()
+    for index, column in enumerate(columns, start=1):
+        physical_name = str(column.get("name") or f"COLUMN_{index}").strip()
+        field_name = _metadata_java_field_name(physical_name)
+        if field_name in seen_fields:
+            field_name = f"{field_name}{index}"
+        seen_fields.add(field_name)
+        raw_db_type = str(column.get("dataType") or column.get("typeName") or "").strip()
+        db_type = raw_db_type or "nvarchar"
+        review_notes = []
+        if _metadata_bool(column.get("isNullable")):
+            review_notes.append("REVIEW_REQUIRED nullable")
+        if not str(column.get("description") or "").strip() and str(
+            column.get("descriptionStatus") or ""
+        ) != "CONFIRMED":
+            review_notes.append("REVIEW_REQUIRED description")
+        if not raw_db_type:
+            review_notes.append("REVIEW_REQUIRED type missing")
+        elif not _known_metadata_db_type(db_type):
+            review_notes.append("REVIEW_REQUIRED type mapping")
+        specs.append(
+            {
+                "physicalName": physical_name,
+                "fieldName": field_name,
+                "dbType": db_type,
+                "javaType": java_type_for_db_type(db_type),
+                "nullable": _metadata_bool(column.get("isNullable")),
+                "primaryKey": _metadata_bool(column.get("isPrimaryKey")),
+                "review": "; ".join(review_notes) or "metadata-backed candidate",
+            }
+        )
+    return specs
+
+
+def _metadata_dto_class_name(object_ref: str) -> str:
+    object_name = object_ref.rsplit(".", 1)[-1]
+    cleaned = _JAVA_IDENTIFIER_CLEANUP.sub("_", object_name.strip("[]"))
+    parts = [part for part in cleaned.split("_") if part]
+    if not parts:
+        return "MetadataDto"
+    return "".join(part[:1].upper() + part[1:].lower() for part in parts) + "Dto"
+
+
+def _metadata_java_field_name(physical_name: str) -> str:
+    cleaned = _JAVA_IDENTIFIER_CLEANUP.sub("_", physical_name.strip().strip("[]"))
+    if "_" in cleaned or cleaned.isupper():
+        field_name = snake_to_lower_camel(cleaned)
+    else:
+        field_name = cleaned[:1].lower() + cleaned[1:]
+    if not field_name:
+        field_name = "reviewRequiredField"
+    if field_name[0].isdigit():
+        field_name = f"field{field_name}"
+    if field_name in _JAVA_RESERVED_WORDS:
+        field_name = f"{field_name}Value"
+    return field_name
+
+
+def _known_metadata_db_type(db_type: str) -> bool:
+    normalized = db_type.strip().lower().split("(", 1)[0]
+    return normalized in {
+        "bigint",
+        "binary",
+        "bit",
+        "char",
+        "date",
+        "datetime",
+        "datetime2",
+        "decimal",
+        "image",
+        "int",
+        "money",
+        "nchar",
+        "ntext",
+        "numeric",
+        "nvarchar",
+        "smallint",
+        "smallmoney",
+        "smalldatetime",
+        "text",
+        "time",
+        "tinyint",
+        "uniqueidentifier",
+        "varbinary",
+        "varchar",
+    }
+
+
+def _metadata_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
+
+
+def _java_comment_text(value: str) -> str:
+    return value.replace("*/", "* /").replace("\r", " ").replace("\n", " ").strip()
 
 
 def _insight(

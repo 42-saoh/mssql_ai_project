@@ -198,7 +198,7 @@ def extract_procedure_calls(sql_text: str, *, source_name: str = "<memory>") -> 
                     )
                 ],
                 review_notes=[
-                    "Dynamic SQL executor; inner object dependencies require manual review."
+                    "Dynamic SQL executor입니다. 내부 객체 의존성은 근거 보강이 필요합니다."
                 ]
                 if is_dynamic_executor
                 else [],

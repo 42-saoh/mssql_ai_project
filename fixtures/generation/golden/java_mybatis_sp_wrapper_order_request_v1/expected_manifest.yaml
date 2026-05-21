@@ -1,6 +1,6 @@
 sampleId: golden-java-mybatis-sp-wrapper-order-request-v1
 generationMode: spWrapper
-templateVersion: 0.2.0
+templateVersion: 0.3.0
 inputSnapshotHash: 9a64f54f70ebdb4a7bfd17b80da9388827abb111e358a0433d20a61433af92f5
 expectedFiles:
 - src/main/java/com/pec/pem/order/request/model/OrderRequestDTO.java
@@ -14,6 +14,10 @@ checks:
 - input_snapshot_hash_present
 - evidence_summary_present
 - assumptions_and_todo_present
-- review_checklist_present
+- quality_summary_present
+- evidence_map_present
+- known_caveats_present
+- next_evidence_to_collect_present
+- draft_readiness_present
 - sql_risk_markers_present
-- diff_review_summary_present
+- draft_change_summary_present

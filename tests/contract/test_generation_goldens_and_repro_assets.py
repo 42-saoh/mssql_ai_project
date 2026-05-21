@@ -9,7 +9,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 GENERATION_GOLDENS = (
     ("java_mybatis_sp_wrapper_order_request_v1", "spWrapper", "OrderRequest"),
-    ("java_mybatis_dto_model_order_metadata_v1", "metadataObject", "OrderMetadata"),
 )
 
 
@@ -57,7 +56,11 @@ def test_generation_golden_samples_exist_and_are_consistent() -> None:
         assert "## generator_metadata" in expected_output
         assert "## evidence_summary" in expected_output
         assert "## assumptions_and_todo" in expected_output
-        assert "## review_checklist" in expected_output
+        assert "## quality_summary" in expected_output
+        assert "## evidence_map" in expected_output
+        assert "## known_caveats" in expected_output
+        assert "## next_evidence_to_collect" in expected_output
+        assert "## draft_readiness" in expected_output
 
         for relative_path in manifest["expectedFiles"]:
             assert (sample_dir / relative_path).exists(), relative_path

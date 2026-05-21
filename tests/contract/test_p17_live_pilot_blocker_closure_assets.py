@@ -17,7 +17,7 @@ PILOT_MANIFEST = ROOT / "fixtures" / "pilot" / "ppm_object_selection_v1" / "sele
 P17_PROMPTS = {
     "P17A": "17a_dependency_metadata_evidence_closure.md",
     "P17B": "17b_live_artifact_validation_closure.md",
-    "P17C": "17c_manual_approval_audit_binding.md",
+    "P17C": "17c_draft_quality_audit_binding.md",
     "P17D": "17d_pilot_release_go_decision.md",
 }
 
@@ -36,7 +36,12 @@ def test_p17_prompts_exist_and_preserve_release_safety_contract() -> None:
     for track_id, filename in P17_PROMPTS.items():
         text = (PROMPTS / filename).read_text(encoding="utf-8")
         assert text.startswith(f"# {track_id}"), filename
-        for section in REQUIRED_SECTIONS:
+        required_sections = (
+            ("## 목표", "## 읽어야 할 기준 파일", "## 허용 수정 경로", "## 금지 경로", "## 구현 범위", "## 검증 명령", "## Blocker 보고 기준")
+            if track_id == "P17C"
+            else REQUIRED_SECTIONS
+        )
+        for section in required_sections:
             assert section in text, f"{filename} missing {section}"
         assert "PPM" in text
         assert "PLF" in text
@@ -88,15 +93,15 @@ def test_p17_fixture_records_conditional_go_after_all_release_evidence_is_bound(
     assert pilot["selection_mode"] == fixture["current_state"]["selection_mode_required"]
 
     blockers = set(fixture["current_state"]["active_blockers_to_close"])
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" not in blockers
+    assert "DRAFT_QUALITY_EVIDENCE_MISSING" not in blockers
     assert "DEPENDENCY_METADATA_INCOMPLETE" not in blockers
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in set(
+    assert "DRAFT_QUALITY_EVIDENCE_MISSING" in set(
         fixture["current_state"].get("blockers_closed", [])
     )
     assert "DEPENDENCY_METADATA_INCOMPLETE" in set(
         fixture["current_state"].get("blockers_closed", [])
     )
-    assert fixture["current_state"]["p17c_manual_approval_status"] == "HUMAN_APPROVED"
+    assert fixture["current_state"]["p17c_draft_quality_status"] == "EVIDENCE_BOUND"
     assert fixture["current_state"]["p17c_blocker_closed"] is True
     assert fixture["current_state"]["p17d_release_decision_pending"] is False
     assert fixture["current_state"]["p17d_release_decision_completed"] is True
@@ -118,7 +123,7 @@ def test_p17_fixture_records_conditional_go_after_all_release_evidence_is_bound(
     assert "production-ready: true" in fixture["final_decision_policy"]["overclaim_forbidden"]
 
 
-def test_p17_closure_sequence_has_dependency_validation_approval_and_hard_live_gates() -> None:
+def test_p17_closure_sequence_has_dependency_validation_quality_and_hard_live_gates() -> None:
     fixture = _yaml(P17_FIXTURE)
     sequence = fixture["closure_sequence"]
 
@@ -126,7 +131,7 @@ def test_p17_closure_sequence_has_dependency_validation_approval_and_hard_live_g
     assert "metadata-only evidence refs" in sequence["P17A"]["objective"]
     assert sequence["P17B"]["primary_gap"] == "live_release_validation_missing"
     assert "validationStatus is PASSED" in sequence["P17B"]["exit_criteria"]
-    assert sequence["P17C"]["primary_blocker"] == "MANUAL_APPROVAL_EVIDENCE_MISSING"
+    assert sequence["P17C"]["primary_blocker"] == "DRAFT_QUALITY_EVIDENCE_MISSING"
     assert "not synthesized" in sequence["P17C"]["exit_criteria"]
     assert sequence["P17D"]["primary_decision"] == "live_pilot_release_go_no_go"
 
@@ -143,7 +148,7 @@ def test_p17_closure_sequence_has_dependency_validation_approval_and_hard_live_g
         "committed_secret",
         "auto_ddl_or_dml",
         "plf_fallback_for_ppm",
-        "unapproved_publish_or_export",
+        "publish_or_export_path",
     } <= forbidden
 
 
@@ -163,8 +168,8 @@ def test_p17_docs_explain_what_to_do_without_claiming_go() -> None:
     assert "P17A -> P17B -> P17C -> P17D" in runbook
     assert "CONDITIONAL_GO" in combined
     assert "DEPENDENCY_METADATA_INCOMPLETE" in combined
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" in combined
-    assert "approvalDecision: APPROVE" in text
+    assert "DRAFT_QUALITY_EVIDENCE_MISSING" in combined
+    assert "draftQualityDecision: ACCEPT_DRAFT" in text
     assert "not a production-ready platform claim" in text
     assert "draft-only" in text
     assert "PLF로 대체하지" in combined or "PLF로 대체" in combined

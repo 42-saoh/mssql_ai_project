@@ -13,21 +13,24 @@ from mssql_mcp_app.settings import load_live_metadata_settings
 from api_app.live_gate import P21_LIVE_PPM_REQUIRED, p21_live_portal_enabled
 from api_app.schemas import (
     EvidenceRef,
-    MetadataObjectIdentity,
     MetadataProfile,
     MetadataSearchBlocker,
+    MetadataSearchColumnSummary,
+    MetadataSearchObjectIdentity,
     MetadataSearchResponse,
     MetadataSearchResult,
+    MetadataSearchTableSummary,
     MetadataToolInvokeResponse,
     MetadataToolSummary,
 )
+from api_app.target_keys import target_key_for_target
 
 METADATA_SEARCH_MCP_TOOL_MISSING = "METADATA_SEARCH_MCP_TOOL_MISSING"
 METADATA_TOOL_INVOCATION_NOT_ALLOWED = "METADATA_TOOL_INVOCATION_NOT_ALLOWED"
 PPM_MANIFEST_TEMPLATE_ONLY = "PPM_MANIFEST_TEMPLATE_ONLY"
 DEPENDENCY_METADATA_INCOMPLETE = "DEPENDENCY_METADATA_INCOMPLETE"
 
-DEFAULT_METADATA_SEARCH_OBJECT_TYPES = ("PROCEDURE", "TABLE", "VIEW", "FUNCTION")
+DEFAULT_METADATA_SEARCH_OBJECT_TYPES = ("PROCEDURE", "TABLE", "COLUMN", "VIEW", "FUNCTION")
 METADATA_SEARCH_TOOL_NAME = "search_metadata_objects"
 PUBLIC_METADATA_TOOL_INVOCATION_ALLOWLIST = frozenset(
     {
@@ -46,7 +49,7 @@ METADATA_BLOCKER_MESSAGES = {
         "PPM pilot manifest is template_only, so real object names must not be returned."
     ),
     DEPENDENCY_METADATA_INCOMPLETE: (
-        "Dependency metadata is incomplete and requires review before relying on links."
+        "Dependency metadata is incomplete; treat dependency links as evidence caveats until confirmed."
     ),
     P21_LIVE_PPM_REQUIRED: (
         "P21 live portal gate requires live read-only PPM metadata access; fixture "
@@ -343,6 +346,59 @@ def _source_database_for_profile(db_profile_id: str, profiles: list[Any]) -> str
     return db_profile_id
 
 
+def _metadata_search_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _metadata_search_table_summary(value: Any) -> MetadataSearchTableSummary | None:
+    if not isinstance(value, dict):
+        return None
+    schema = _metadata_search_text(value.get("schema"))
+    name = _metadata_search_text(value.get("name"))
+    if not schema or not name:
+        return None
+    return MetadataSearchTableSummary(
+        schema=schema,
+        name=name,
+        description=_metadata_search_text(value.get("description")),
+    )
+
+
+def _metadata_search_column_summary(value: Any) -> MetadataSearchColumnSummary | None:
+    if not isinstance(value, dict):
+        return None
+    name = _metadata_search_text(value.get("name"))
+    if not name:
+        return None
+    return MetadataSearchColumnSummary(
+        name=name,
+        description=_metadata_search_text(value.get("description")),
+        dataType=_metadata_search_text(value.get("dataType")),
+    )
+
+
+def _metadata_search_column_summaries(value: Any) -> list[MetadataSearchColumnSummary] | None:
+    if not isinstance(value, list):
+        return None
+    columns = [
+        column
+        for column in (_metadata_search_column_summary(item) for item in value)
+        if column is not None
+    ]
+    return columns or None
+
+
+def _metadata_search_column_name(identity_name: str) -> str:
+    return identity_name.rsplit(".", 1)[-1] if identity_name else ""
+
+
+def _metadata_search_parent_table_name(identity_name: str) -> str:
+    return identity_name.rsplit(".", 1)[0] if "." in identity_name else identity_name
+
+
 def _metadata_search_result(
     *,
     item: dict[str, Any],
@@ -358,6 +414,38 @@ def _metadata_search_result(
     result_source_profile = str(item.get("sourceProfile") or source_profile)
     result_source_database = str(item.get("sourceDatabase") or source_database)
     result_snapshot_id = str(item.get("snapshotId") or payload_snapshot_id or "") or None
+    description = _metadata_search_text(item.get("description"))
+    logical_name = _metadata_search_text(item.get("logicalName"))
+    data_type = _metadata_search_text(item.get("dataType"))
+    table_summary = _metadata_search_table_summary(item.get("table"))
+    column_summary = _metadata_search_column_summary(item.get("column"))
+    columns = _metadata_search_column_summaries(item.get("columns"))
+    if object_type == "TABLE" and table_summary is None:
+        table_summary = MetadataSearchTableSummary(
+            schema=schema,
+            name=name,
+            description=description,
+        )
+    if object_type == "COLUMN" and column_summary is None:
+        column_summary = MetadataSearchColumnSummary(
+            name=_metadata_search_column_name(name),
+            description=description,
+            dataType=data_type,
+        )
+    if object_type == "COLUMN" and table_summary is None:
+        table_name = _metadata_search_parent_table_name(name)
+        table_summary = MetadataSearchTableSummary(
+            schema=schema,
+            name=table_name,
+            description=None,
+        )
+    if description is None:
+        if object_type == "TABLE" and table_summary is not None:
+            description = table_summary.description
+        if object_type == "COLUMN" and column_summary is not None:
+            description = column_summary.description
+    if data_type is None and column_summary is not None:
+        data_type = column_summary.data_type
     caveats = _dedupe(str(value) for value in item.get("caveats", []) if value)
     blockers = _dedupe_blockers(
         [
@@ -375,14 +463,25 @@ def _metadata_search_result(
         default_object_ref=f"{result_source_database}.{schema}.{name}",
     )
     return MetadataSearchResult(
-        objectIdentity=MetadataObjectIdentity(
+        objectIdentity=MetadataSearchObjectIdentity(
             schema=schema,
             name=name,
             type=object_type,
         ),
+        targetKey=target_key_for_target(
+            result_source_profile,
+            {"type": object_type, "schema": schema, "name": name},
+            database=result_source_database,
+        ),
         sourceProfile=result_source_profile,
         sourceDatabase=result_source_database,
         snapshotId=result_snapshot_id,
+        description=description,
+        logicalName=logical_name,
+        dataType=data_type,
+        table=table_summary,
+        column=column_summary,
+        columns=columns,
         evidenceRefs=evidence_refs,
         caveats=caveats,
         reviewRequired=bool(item.get("reviewRequired") or caveats or blockers),

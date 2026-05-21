@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 /**
  * 주문 요청 DTO 초안.
  * evidence: dbo.USP_ORDER_REQUEST_LIST, dbo.ORD_REQ
- * REVIEW_REQUIRED: 필드/타입은 metadata evidence 기준 초안이다.
+ * 근거 보강 필요: 필드/타입은 metadata evidence 기준 초안이다.
  */
 public class OrderRequestDTO {
 

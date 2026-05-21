@@ -1,28 +1,86 @@
-이 디렉터리는 fixture/rubric 기반 eval 검증을 둔다. active 진입점은 P번호별 명령이 아니라 consolidated gate 다.
+# tests/eval
 
-## Active Gate
+Fixture/rubric-based eval tests live here. The consolidated quality gate is still `make test-quality`
+when the dockerized test interface is available.
 
-```bash
-make test-quality
-```
+P36 adds `test_p36_output_renewal_quality.py` for the output-renewal contract. It checks the six
+final artifact types, migration-guide SP analysis document, evidence dossier dependency report,
+bounded sanitized SQL statement evidence, and evidence-backed Java/MyBatis drafts.
 
-`make test-quality` 는 `tests/suites.yaml` 의 `@quality` alias 를 실행한다. 명령 레벨에서 `P15_HARD_LIVE_GATE`, `P21_LIVE_PORTAL_GATE`, `P27_HARD_LIVE_GATE`, `P32_LIVE_CONFIDENCE_GATE`, `P35_KNOWLEDGE_LIVE_GATE`, `AUTH_RBAC_LIVE_GATE`, `LLM_LIVE_GATE`, `LLM_ENABLE_REMOTE`, `LLM_ALLOW_SP_TEXT`, `MSSQL_ENABLE_LIVE_METADATA` 를 모두 0 으로 고정하므로 live DB, OpenAI, P-GPT, IdP/JWKS 를 호출하지 않는다.
+P40 adds `test_p40_metadata_design_natural_language_chat.py` for the natural-language metadata
+design chat contract. It checks sanitized interpreted intent, applied changes, new-design and
+refine flows, metadata evidence, table script previews, DTO previews, and no retired artifact
+revival.
 
-## Explicit Live Confidence
+P41 adds `test_p41_sp_operation_model.py` for the SP operation-model renewal groundwork. It checks
+the `PCO_GU_ManageBond_PRC` fixture, branch-level operation coverage, multi-DTO blueprint
+expectations, `REVIEW_REQUIRED` markers, storage safety, and the current single-DTO renderer gap.
 
-```bash
-make test-live-confidence
-```
+P42 adds `test_p42_manage_bond_ai_draft_quality.py` for AI Draft Pack quality and pairs it with
+workflow/API replay tests. Fixture-first tests check the required ManageBond DTO inventory, while
+live replay treats that inventory as a benchmark minimum and allows additional split DTOs. Both
+paths enforce single Service/Mapper/XML file expectations, fallback skeleton blockers,
+DTO-collapse blockers, `REVIEW_REQUIRED` uncertainty markers, storage safety, and that persisted
+artifacts can be reconstructed into a valid `AiJavaMyBatisDraftPack.v0.1` payload.
 
-이 명령은 `@live-confidence` alias 를 실행하는 명시적 live confidence 진입점이다. 승인된 환경에서 필요한 gate flag, `OPENAI_API_KEY`, PLF `PLATFORM_DB_*`, read-only PPM metadata, 수동 적용된 DDL, 선택적으로 approved test IdP/JWKS token 을 준비한 경우에만 실행한다. 성공해도 confidence evidence 일 뿐 production readiness, publish/deploy approval, automatic conversion approval 로 해석하지 않는다.
+P42H keeps ManageBond as the benchmark fixture while requiring workflow inventory derivation to
+stay generic. The runtime contract computes expected DTO and method inventory from operation
+contracts, DTO blueprints, statement evidence, and branch responsibilities. Complex SPs that
+collapse to two DTOs or leave write/call responsibilities without command-style DTOs fail with
+`P42_INVENTORY_CONTRACT_INCOMPLETE` instead of accepting a weak draft.
 
-## History
+P42G adds `test_p42_live_ai_draft_pack_replay_gate.py` as an optional live confidence gate.
+It is disabled by default, fails before live access when required env is missing, and only
+replays `PCO_GU_ManageBond_PRC` when `P42_LIVE_REPLAY_GATE=1`.
+`P42_LIVE_REPLAY_MODE=sanitized_fixture` uses sanitized fixture facts without live
+PPM metadata or raw SP external export. `P42_LIVE_REPLAY_MODE=live_ppm` uses live
+read-only PPM metadata and remains explicit confidence evidence only. The live
+gate treats the ManageBond DTO list as benchmark metrics, not exact runtime
+answer keys: additional split DTOs are allowed when the generated
+Service/Mapper/XML wiring and P42 validator pass.
 
-P15~P35 세부 명령과 해석 이력은 `docs/test-gate-history.md` 에 보존한다. 개별 eval 파일과 fixture 는 evidence asset 이므로 삭제하지 않는다.
+P43 historical framework-adoption readiness is now checked by
+`tests/contract/test_p43_framework_adoption_prompt_assets.py`. P43F recorded the decision as
+`pilot` with `production_ready: false`; P44/P48 supersede it for active runtime behavior.
+The old broad P43 replay gate was removed in P49, and any baseline/fake adapters needed for
+historical fixtures live under test helpers only.
 
-## Boundaries
+P44 adds `test_p44_framework_runtime_replay.py` for actual framework runtime adoption. It runs
+mocked OpenAI Agents SDK output through the real `OpenAIAgentsFrameworkAdapter` and actual
+LangGraph stage graph, then reruns the same P42 static validator on ManageBond and a synthetic
+complex SP. P44 keeps generated artifacts `production_ready: false`, uses ManageBond as a
+benchmark only, and still forbids procedure execution, row data access, source apply, deploy, raw
+prompt/provider response storage, raw SP/guide storage, and LangGraph checkpoint persistence.
 
-- PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않는다.
-- eval fixture 는 synthetic/sanitized 데이터만 포함한다.
-- raw prompt, raw SP definition, raw provider response, row data, secret 은 test output/report/storage payload 에 저장하지 않는다.
-- DB lifecycle, DDL apply, procedure execution, row-data query 는 테스트 명령이 수행하지 않는다.
+P45 adds `test_p45_openai_agents_live_gate.py` as an optional live confidence gate. It skips by
+default and runs only with `P44_OPENAI_AGENTS_LIVE_GATE=1`, OpenAI remote env, and OpenAI Agents
+trace redaction locks. The live gate accepts official OpenAI evidence
+(`OPENAI_BASE_URL` empty or `https://api.openai.com/v1`) and approved
+P-GPT-compatible SDK evidence when `AI_GENERATION_RUNTIME=openai_agents`,
+`OPENAI_BASE_URL` or `OPENAI_RESPONSES_URL`, sanitized fixture inputs, and P42/P44
+post-validation are present. Unknown custom endpoints remain blocked. P46 records
+the rollback decision: OpenAI stays on OpenAI Agents SDK plus LangGraph, while
+`responses_httpx` remains only for P-GPT default compatibility and emergency
+rollback.
+
+P47 adds `test_p47_generic_ai_draft_quality_uplift_assets.py` as the contract/static evidence gate
+for generic AI Draft Pack quality. It checks `DraftPackEvidenceBundle.v0.1`, coverage matrices,
+the `openai_ai_draft_pack` model profile, and live-probe reporting that treats ManageBond DTO names
+as benchmark metrics rather than generic pass/fail gates. P47 also verifies the
+generic DTO reference guard for successful draft outputs, so Service/Mapper/XML
+DTO responsibility wiring is enforced without ManageBond-specific hardcoding.
+
+P49 adds `@framework-contracts` and `@framework-runtime` suite aliases to consolidate active
+framework checks. P48 remains the active structured LLM runtime, P44 remains the active AI Draft
+Pack OpenAI Agents plus LangGraph runtime, and `responses_httpx` remains retained for P-GPT
+default compatibility and explicit emergency rollback.
+
+P50 raises the Java/MyBatis draft quality gate without changing public artifacts. It verifies the
+internal composer split for DTO inventory/content, Service content, Mapper interface content,
+Mapper XML content, integration quality, and repair; enforces the dedicated
+`openai_ai_draft_pack` route for draft generation; blocks branch-heavy SPs with shallow operation
+evidence before artifact storage; and rejects mojibake identifiers, empty Service methods,
+Mapper/XML mismatches, and wrapper-only calls to the original target SP.
+
+Passing fixture-first evals does not imply production readiness, publish/deploy approval,
+automatic conversion approval, DDL apply, row-data access, or procedure execution.

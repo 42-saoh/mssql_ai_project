@@ -164,11 +164,11 @@ make test-web-smoke
 
 ## 13. P07 이후 Productization Wave 운영
 
-P00~P07은 starter/MVP 통합을 위한 기존 기준선으로 유지한다. P08A~P16은 같은 worktree/Docker/read-only metadata/draft-only/approval-gated 철학을 유지하면서 productization target으로 전환하는 후속 wave다.
+P00~P07은 starter/MVP 통합을 위한 기존 기준선으로 유지한다. P08A~P16은 같은 worktree/Docker/read-only metadata/draft-only/validation-gated 철학을 유지하면서 productization target으로 전환하는 후속 wave다.
 
 ### DB 역할 기준
 
-- `PLF`: platform DB. workflow/artifact/approval/audit 저장소 기준이다.
+- `PLF`: platform DB. workflow/artifact/quality/audit 저장소 기준이다.
 - `PPM`: pilot analysis target DB. 대표 SP/Table/View/Function 후보 선정 및 이후 eval/demo/golden 후보 기준이다.
 - `PPM`이 같은 로컬 MSSQL 인스턴스에 없거나 접근 권한이 없으면 PLF로 대체하지 않는다. `PPM_DB_NOT_FOUND`, `PPM_DB_ACCESS_DENIED`, `LIVE_METADATA_UNAVAILABLE` 등 blocker로 보고한다.
 - `config/mssql/local_docker_profiles.yaml` 의 `ppm -> PPM`, `plf -> PLF`, `master -> master` profile 구분을 사용한다.
@@ -182,7 +182,7 @@ git worktree add ../wt/p09-api-workflow-productization -b feat/p09-api-workflow-
 git worktree add ../wt/p10-mssql-mcp-productization -b feat/p10-mssql-mcp-productization
 git worktree add ../wt/p11-sp-analysis-evidence -b feat/p11-sp-analysis-evidence
 git worktree add ../wt/p12-java-mybatis-generation-factory -b feat/p12-java-mybatis-generation-factory
-git worktree add ../wt/p13-validation-approval-audit -b feat/p13-validation-approval-audit
+git worktree add ../wt/p13-validation-evidence-audit -b feat/p13-validation-evidence-audit
 git worktree add ../wt/p14-web-product-ui -b feat/p14-web-product-ui
 git worktree add ../wt/p15-eval-observability-security-ops -b feat/p15-eval-observability-security-ops
 git worktree add ../wt/p16-pilot-release-readiness -b feat/p16-pilot-release-readiness
@@ -193,7 +193,7 @@ git worktree add ../wt/p16-pilot-release-readiness -b feat/p16-pilot-release-rea
 1. `P08A` — PPM pilot object selection. live metadata에 필요한 surface가 부족하면 P10 전체가 아니라 P08A 내부에서 최소 metadata discovery surface만 선행 보강한 뒤 선정한다. 그래도 불가하면 template-only와 blocker 기록.
 2. `P08` — product architecture, release backlog, acceptance criteria.
 3. `P09`~`P12` — API/MCP/analysis/generation productization 병렬 또는 의존성 순차 구현. P10은 P08A의 최소 discovery surface를 product-level MCP로 확장·경화한다.
-4. `P13`~`P15` — validation/approval/audit, Web UI, eval/observability/security/ops 고도화.
+4. `P13`~`P15` — validation/evidence/audit, Web UI, eval/observability/security/ops 고도화.
 5. `P16` — pilot release readiness, handoff package, go/no-go 판정.
 
 P08 이후 worker는 `docs/productization-architecture-gap-analysis.md`, `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`, `fixtures/eval/productization_readiness_v1.yaml` 을 먼저 읽고, 자기 prompt 의 scope/verification/blocker 기준과 충돌하지 않는지 확인한다.
@@ -213,11 +213,11 @@ P16이 `NO_GO`이면 다음 순서로 별도 worktree를 만든다.
 ```bash
 git worktree add ../wt/p17a-dependency-metadata-evidence -b feat/p17a-dependency-metadata-evidence
 git worktree add ../wt/p17b-live-artifact-validation -b feat/p17b-live-artifact-validation
-git worktree add ../wt/p17c-approval-audit-binding -b feat/p17c-approval-audit-binding
+git worktree add ../wt/p17c-draft-quality-audit-binding -b feat/p17c-draft-quality-audit-binding
 git worktree add ../wt/p17d-pilot-release-go-decision -b feat/p17d-pilot-release-go-decision
 ```
 
-실행 순서는 `P17A -> P17B -> P17C -> P17D`다. `P17A`가 dependency evidence를 닫지 못하면 `P17B`는 live release validation을 `BLOCKED`로 유지한다. `P17B`가 passed validation package를 만들지 못하면 `P17C`는 approval blocker를 닫을 수 없다. `P17C`가 human approval/audit binding을 확보하지 못하면 `P17D`는 `NO_GO`를 유지한다.
+실행 순서는 `P17A -> P17B -> P17C -> P17D`다. `P17A`가 dependency evidence를 닫지 못하면 `P17B`는 live release validation을 `BLOCKED`로 유지한다. `P17B`가 passed validation package를 만들지 못하면 `P17C`는 draft-quality blocker를 닫을 수 없다. `P17C`가 human draft-quality/audit binding을 확보하지 못하면 `P17D`는 `NO_GO`를 유지한다.
 
 P17에서 live readiness claim을 하려면 아래 hard-live gate를 다시 통과해야 한다.
 

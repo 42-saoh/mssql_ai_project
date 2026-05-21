@@ -2,6 +2,7 @@ import { readPortalApiError } from "./errors.ts";
 import type { PortalApi } from "./portal-api.ts";
 import type {
   MetadataAnalysisRequest,
+  MetadataDesignRunRequest,
   KnowledgeExportRequest,
   MetadataSearchRequest,
   MetadataToolInvokeRequest,
@@ -45,8 +46,13 @@ async function readJson<T>(
 
 export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiOptions): PortalApi {
   return {
-    createSPAnalysisRequest(request: SPAnalysisRequest) {
-      return readJson(fetcher, baseUrl, "/api/v1/requests/sp-analysis", {
+    createSPAnalysisRequest(request: SPAnalysisRequest, options?: { runAsync?: boolean }) {
+      const params = new URLSearchParams();
+      if (options?.runAsync) {
+        params.set("runAsync", "true");
+      }
+      const suffix = params.size > 0 ? `?${params.toString()}` : "";
+      return readJson(fetcher, baseUrl, `/api/v1/requests/sp-analysis${suffix}`, {
         method: "POST",
         json: request,
       });
@@ -59,10 +65,13 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       });
     },
 
-    listJobs(limit?: number) {
+    listJobs(limit?: number, targetKey?: string) {
       const params = new URLSearchParams();
       if (limit !== undefined) {
         params.set("limit", String(limit));
+      }
+      if (targetKey) {
+        params.set("targetKey", targetKey);
       }
       const suffix = params.size > 0 ? `?${params.toString()}` : "";
       return readJson(fetcher, baseUrl, `/api/v1/jobs${suffix}`);
@@ -173,28 +182,62 @@ export function createHttpPortalApi({ baseUrl, fetcher = fetch }: HttpPortalApiO
       );
     },
 
-    searchMetadataObjects(request: MetadataSearchRequest) {
-      const params = new URLSearchParams({
-        dbProfileId: request.dbProfileId,
-        query: request.query,
-      });
-
-      if (request.limit !== undefined) {
-        params.set("limit", String(request.limit));
-      }
-
-      for (const objectType of request.objectTypes ?? []) {
-        params.append("objectTypes", objectType);
-      }
-
-      return readJson(fetcher, baseUrl, `/api/v1/metadata/search?${params.toString()}`);
-    },
-
     analyzeMetadata(request: MetadataAnalysisRequest) {
       return readJson(fetcher, baseUrl, "/api/v1/metadata/analyze", {
         method: "POST",
         json: request,
       });
+    },
+
+    searchMetadataObjects(request: MetadataSearchRequest) {
+      const params = new URLSearchParams();
+      params.set("dbProfileId", request.dbProfileId);
+      params.set("query", request.query);
+      if (request.limit !== undefined) {
+        params.set("limit", String(request.limit));
+      }
+      for (const objectType of request.objectTypes ?? []) {
+        params.append("objectTypes", objectType);
+      }
+      return readJson(fetcher, baseUrl, `/api/v1/metadata/search?${params.toString()}`);
+    },
+
+    submitMetadataAnalysisRun(request: MetadataAnalysisRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/analysis-runs", {
+        method: "POST",
+        json: request,
+      });
+    },
+
+    getMetadataAnalysisRun(runId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/metadata/analysis-runs/${encodeURIComponent(runId)}`,
+      );
+    },
+
+    submitMetadataDesignRun(request: MetadataDesignRunRequest) {
+      return readJson(fetcher, baseUrl, "/api/v1/metadata/design-runs", {
+        method: "POST",
+        json: request,
+      });
+    },
+
+    getMetadataDesignRun(runId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/metadata/design-runs/${encodeURIComponent(runId)}`,
+      );
+    },
+
+    getMetadataDesignConversation(conversationId: string) {
+      return readJson(
+        fetcher,
+        baseUrl,
+        `/api/v1/metadata/design-conversations/${encodeURIComponent(conversationId)}`,
+      );
     },
 
     listRegistryVersions() {

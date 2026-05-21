@@ -21,17 +21,22 @@ P24_REQUIRED_SECTION_IDS = (
 )
 
 P24_SECTION_TITLES = {
-    "sp_overview": "SP overview and basic information",
-    "feature_branch_taxonomy": "Main features and branch/flag taxonomy",
-    "dependency_inventory": "Dependency inventory",
-    "dml_impact_matrix": "DML impact matrix",
-    "call_flow": "Branch-level call flow",
-    "critical_phase_analysis": "Critical phase analysis",
-    "complexity_risk_metrics": "Complexity and risk metrics",
-    "migration_strategy": "Migration strategy and Java/MyBatis draft readiness",
-    "appendix_mappings": "Parameter and code mapping appendix",
-    "metadata_extraction_appendix": "Manual metadata extraction appendix",
-    "evidence_assumptions_review": "Evidence refs, assumptions, and REVIEW_REQUIRED markers",
+    "sp_overview": "SP 개요 및 기본 정보",
+    "feature_branch_taxonomy": "주요 기능과 분기/플래그 분류",
+    "dependency_inventory": "의존성 목록",
+    "dml_impact_matrix": "DML 영향 매트릭스",
+    "call_flow": "분기 단위 호출 흐름",
+    "critical_phase_analysis": "핵심 단계 분석",
+    "complexity_risk_metrics": "복잡도 및 위험 지표",
+    "migration_strategy": "전환 전략 및 Java/MyBatis 초안 준비도",
+    "appendix_mappings": "파라미터 및 코드 매핑 부록",
+    "metadata_extraction_appendix": "수동 메타데이터 추출 부록",
+    "evidence_assumptions_review": "근거, 가정, 품질 caveat",
+}
+
+P24_SECTION_NUMBERS = {
+    section_id: index
+    for index, section_id in enumerate(P24_REQUIRED_SECTION_IDS, start=1)
 }
 
 _THRESHOLD_FIELD_MAP = {
@@ -59,6 +64,12 @@ _FORBIDDEN_TEXT_MARKERS = (
     "CREATE PROCEDURE",
     "CREATE PROC",
     "ALTER PROCEDURE",
+)
+_EVIDENCE_CAVEAT_TEXT_MARKERS = (
+    "REVIEW_REQUIRED",
+    "근거 보강 필요",
+    "evidence caveat",
+    "품질 caveat",
 )
 
 
@@ -103,6 +114,7 @@ def render_p24_migration_guide_sections(context: GenerationContext) -> list[str]
             _append_metadata_extraction_appendix(lines, guide)
         elif section_id == "evidence_assumptions_review":
             _append_evidence_and_review(lines, context, guide)
+        _append_section_llm_insights(lines, context, section_id)
         lines.append("")
     return lines
 
@@ -111,22 +123,44 @@ def render_p24_dependency_report_sections(context: GenerationContext) -> list[st
     guide = migration_guide_payload(context)
     if not guide:
         return [
-            "## p24_dependency_report_contract",
-            "- REVIEW_REQUIRED: migrationGuide sanitized facts not supplied.",
+            "<!-- section:dependency_inventory -->",
+            "## 의존성 보고서 품질 경계",
+            "- REVIEW_REQUIRED: migrationGuide sanitized fact가 제공되지 않았습니다.",
             "- generated_source_application: `not_performed`",
             "",
         ]
 
     lines = [
-        "## p24_dependency_inventory",
+        "<!-- section:dependency_inventory -->",
+        "## 의존성 상세 목록",
         "- source: migrationGuide.dependency_inventory",
     ]
     _append_dependency_inventory(lines, guide)
-    lines.extend(["", "## p24_dml_impact_matrix", "- source: migrationGuide.dml_matrix"])
+    lines.extend(
+        [
+            "",
+            "<!-- section:dml_impact_matrix -->",
+            "## 테이블별 DML 영향",
+            "- source: migrationGuide.dml_matrix",
+        ]
+    )
     _append_dml_matrix(lines, guide)
-    lines.extend(["", "## p24_branch_call_flow", "- source: migrationGuide.call_flow"])
+    lines.extend(
+        [
+            "",
+            "<!-- section:call_flow -->",
+            "## 분기별 호출 흐름",
+            "- source: migrationGuide.call_flow",
+        ]
+    )
     _append_call_flow(lines, guide)
-    lines.extend(["", "## p24_review_required_claims"])
+    lines.extend(
+        [
+            "",
+            "<!-- section:evidence_assumptions_review -->",
+            "## 근거 및 품질 caveat",
+        ]
+    )
     _append_evidence_and_review(lines, context, guide)
     lines.append("")
     return lines
@@ -192,26 +226,37 @@ def _append_required_section(
     section_id: str,
     section: Mapping[str, Any],
 ) -> None:
+    section_number = P24_SECTION_NUMBERS[section_id]
+    section_title = P24_SECTION_TITLES[section_id]
+    source_title = section.get("title")
     lines.extend(
         [
-            f"## {section_id}",
-            f"- title: {section.get('title') or P24_SECTION_TITLES[section_id]}",
-            f"- evidenceRefs: {_refs_text(_evidence_refs(section))}",
+            f"<!-- section:{section_id} -->",
+            f"## {section_number}. {section_title}",
+            f"<!-- section-title:{section_title} -->",
+            f"<!-- contract-title:{source_title or section_title} -->",
+            f"- 근거: {_refs_text(_evidence_refs(section))}",
         ]
     )
     claims = _sequence(section.get("claims"))
     if not claims:
-        lines.append("- REVIEW_REQUIRED: section claim coverage must be reviewed.")
+        lines.append("- REVIEW_REQUIRED: section claim coverage를 검토해야 합니다.")
         return
     for claim in claims:
         if not isinstance(claim, Mapping):
             continue
         lines.append(
-            "- claim: "
-            f"{claim.get('id', 'unnamed_claim')} "
+            "<!-- "
+            f"claim:{claim.get('id', 'unnamed_claim')} "
             f"status={claim.get('status', 'REVIEW_REQUIRED')} "
             f"evidenceRefs={_refs_text(_evidence_refs(claim))} "
-            f"summary={claim.get('summary', '')}"
+            "-->"
+        )
+        lines.append(
+            "- 판단: "
+            f"{claim.get('summary', '')} "
+            f"상태={claim.get('status', 'REVIEW_REQUIRED')} "
+            f"근거={_refs_text(_evidence_refs(claim))}"
         )
 
 
@@ -221,6 +266,28 @@ def _append_overview(
     guide: Mapping[str, Any],
 ) -> None:
     db_context = _mapping(guide.get("db_context"))
+    overview_rows = _sequence(guide.get("overview_rows")) or _fallback_overview_rows(
+        context,
+        guide,
+    )
+    if overview_rows:
+        lines.extend(
+            [
+                "| 항목 | 값 | 상태 | 근거 |",
+                "|---|---|---|---|",
+            ]
+        )
+        for row in overview_rows:
+            if not isinstance(row, Mapping):
+                continue
+            lines.append(
+                "| "
+                f"{row.get('label', 'REVIEW_REQUIRED')} | "
+                f"{row.get('value', 'REVIEW_REQUIRED')} | "
+                f"{row.get('status', 'REVIEW_REQUIRED')} | "
+                f"{_refs_text(_evidence_refs(row))} |"
+            )
+        lines.append("")
     lines.extend(
         [
             f"- targetRef: `{guide.get('target_ref', context.sp_name)}`",
@@ -236,27 +303,130 @@ def _append_overview(
     )
 
 
+def _fallback_overview_rows(
+    context: GenerationContext,
+    guide: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    db_context = _mapping(guide.get("db_context"))
+    appendix = _mapping(guide.get("appendix_mappings"))
+    parameters = _sequence(appendix.get("parameters")) or context.input_params
+    result_fields = _sequence(appendix.get("result_fields")) or context.result_shape
+    primary_ref = _primary_evidence_id(context, guide)
+    static_ref = _static_evidence_id(context, guide)
+    target_ref = str(guide.get("target_ref") or context.sp_name or "REVIEW_REQUIRED")
+    profile_id = str(db_context.get("metadata_profile_id") or "REVIEW_REQUIRED")
+    return [
+        {
+            "label": "대상 SP",
+            "value": target_ref,
+            "status": _confirmed_or_review_required(target_ref),
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "메타데이터 프로필",
+            "value": profile_id,
+            "status": _confirmed_or_review_required(profile_id),
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "입력 파라미터 수",
+            "value": str(len(parameters)),
+            "status": "Confirmed" if parameters else "REVIEW_REQUIRED",
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "결과 필드 후보 수",
+            "value": str(len(result_fields)),
+            "status": "REVIEW_REQUIRED",
+            "evidence_refs": [static_ref],
+        },
+    ]
+
+
 def _append_sanitized_facts(lines: list[str], guide: Mapping[str, Any]) -> None:
+    feature_rows = _sequence(guide.get("feature_branch_rows")) or (
+        _fallback_feature_branch_rows(guide)
+    )
+    if feature_rows:
+        lines.extend(
+            [
+                "| 기능/분기 | 조건/트리거 | 상태 | 요약 | 근거 |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for row in feature_rows:
+            if not isinstance(row, Mapping):
+                continue
+            lines.append(
+                "| "
+                f"{row.get('feature', 'REVIEW_REQUIRED')} | "
+                f"{row.get('condition', 'REVIEW_REQUIRED')} | "
+                f"{row.get('status', 'REVIEW_REQUIRED')} | "
+                f"{row.get('summary', '')} | "
+                f"{_refs_text(_evidence_refs(row))} |"
+            )
+        lines.append("")
     facts = _sequence(guide.get("sanitized_facts"))
     if not facts:
-        lines.append("- REVIEW_REQUIRED: no sanitized deterministic facts supplied.")
+        lines.append("- REVIEW_REQUIRED: sanitized deterministic fact가 제공되지 않았습니다.")
         return
     for fact in facts:
         if not isinstance(fact, Mapping):
             continue
         lines.append(
-            "- fact: "
-            f"{fact.get('id', 'unnamed_fact')} "
+            "<!-- "
+            f"fact:{fact.get('id', 'unnamed_fact')} "
             f"type={fact.get('fact_type', 'REVIEW_REQUIRED')} "
             f"evidenceRefs={_refs_text(_evidence_refs(fact))} "
-            f"summary={fact.get('summary', '')}"
+            "-->"
         )
+        lines.append(
+            "- 근거 사실: "
+            f"{fact.get('summary', '')} "
+            f"유형={fact.get('fact_type', 'REVIEW_REQUIRED')} "
+            f"근거={_refs_text(_evidence_refs(fact))}"
+        )
+
+
+def _fallback_feature_branch_rows(guide: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in _sequence(guide.get("dml_matrix")):
+        if not isinstance(item, Mapping):
+            continue
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        target_ref = str(item.get("target_ref") or "REVIEW_REQUIRED")
+        rows.append(
+            {
+                "feature": f"{operation} 영향",
+                "condition": str(item.get("phase") or "static DML/source-map evidence"),
+                "status": _normalized_review_status(item.get("status")),
+                "summary": str(item.get("impact") or f"{target_ref} 대상 {operation}"),
+                "evidence_refs": _evidence_refs(item),
+            }
+        )
+    if rows:
+        return rows
+
+    call_flow = _mapping(guide.get("call_flow"))
+    for branch in _sequence(call_flow.get("branches")):
+        if not isinstance(branch, Mapping):
+            continue
+        rows.append(
+            {
+                "feature": str(branch.get("id") or "branch_review_required"),
+                "condition": str(branch.get("condition_summary") or "REVIEW_REQUIRED"),
+                "status": "REVIEW_REQUIRED",
+                "summary": "분기 의미는 추가 근거 확인이 필요합니다.",
+                "evidence_refs": _evidence_refs(branch),
+            }
+        )
+    return rows
 
 
 def _append_dependency_inventory(lines: list[str], guide: Mapping[str, Any]) -> None:
     inventory = _sequence(guide.get("dependency_inventory"))
     if not inventory:
-        lines.append("- REVIEW_REQUIRED: dependency inventory unavailable.")
+        lines.append("- REVIEW_REQUIRED: 의존성 목록을 사용할 수 없습니다.")
         return
     confirmed = _sequence(guide.get("confirmed_dependency_inventory")) or [
         item
@@ -273,15 +443,15 @@ def _append_dependency_inventory(lines: list[str], guide: Mapping[str, Any]) -> 
     ]
     lines.extend(
         [
-            "### Confirmed",
-            "| Type | Name | How referenced | Evidence | Notes |",
+            "### 확인됨",
+            "| 유형 | 이름 | 참조 방식 | 근거 | 비고 |",
             "|---|---|---|---|---|",
         ]
     )
     if not confirmed:
         lines.append(
             "| REVIEW_REQUIRED | REVIEW_REQUIRED | REVIEW_REQUIRED | REVIEW_REQUIRED | "
-            "No confirmed dependency evidence. |"
+            "확인된 의존성 근거가 없습니다. |"
         )
     for item in confirmed:
         if not isinstance(item, Mapping):
@@ -298,13 +468,13 @@ def _append_dependency_inventory(lines: list[str], guide: Mapping[str, Any]) -> 
     lines.extend(
         [
             "",
-            "### Needs verification",
-            "| Type | Name/Candidate | Why uncertain | What to extract next | Notes |",
+            "### 근거 보강 필요",
+            "| 유형 | 이름/후보 | 불확실한 이유 | 다음 추출 항목 | 비고 |",
             "|---|---|---|---|---|",
         ]
     )
     if not needs_verification:
-        lines.append("| none | none | none | none | No review-required dependency candidates. |")
+        lines.append("| 없음 | 없음 | 없음 | 없음 | 근거 보강이 필요한 의존성 후보가 없습니다. |")
     for item in needs_verification:
         if not isinstance(item, Mapping):
             continue
@@ -325,13 +495,13 @@ def _append_dml_matrix(lines: list[str], guide: Mapping[str, Any]) -> None:
     matrix = _sequence(guide.get("dml_matrix"))
     table_matrix = _sequence(guide.get("table_dml_matrix"))
     if not matrix and not table_matrix:
-        lines.append("- REVIEW_REQUIRED: DML matrix unavailable.")
+        lines.append("- REVIEW_REQUIRED: DML 매트릭스를 사용할 수 없습니다.")
         return
     if table_matrix:
         lines.extend(
             [
-                "| Table | SELECT | INSERT | UPDATE | DELETE | MERGE | "
-                "Keys/Join/Where summary | Important columns/patterns | Evidence |",
+                "| 테이블 | SELECT | INSERT | UPDATE | DELETE | MERGE | "
+                "키/조인/조건 요약 | 중요 컬럼/패턴 | 근거 |",
                 "|---|---|---|---|---|---|---|---|---|",
             ]
         )
@@ -353,7 +523,7 @@ def _append_dml_matrix(lines: list[str], guide: Mapping[str, Any]) -> None:
         lines.append("")
     lines.extend(
         [
-            "| operation | target | phase | status | evidenceRefs | impact |",
+            "| 작업 | 대상 | 단계 | 상태 | evidenceRefs | 영향 |",
             "|---|---|---|---|---|---|",
         ]
     )
@@ -375,53 +545,117 @@ def _append_call_flow(lines: list[str], guide: Mapping[str, Any]) -> None:
     call_flow = _mapping(guide.get("call_flow"))
     inputs = _sequence(call_flow.get("inputs"))
     if inputs:
-        lines.append("- Inputs:")
+        lines.append("- 입력:")
         for item in inputs:
             lines.append(f"  - {item}")
     branches = _sequence(call_flow.get("branches"))
     if not branches:
-        lines.append("- REVIEW_REQUIRED: branch-level call flow unavailable.")
+        lines.append("- REVIEW_REQUIRED: 분기 단위 call flow를 사용할 수 없습니다.")
         return
     for branch in branches:
         if not isinstance(branch, Mapping):
             continue
         lines.append(
-            "- branch: "
+            "- 분기: "
             f"{branch.get('id', 'unnamed_branch')} "
             f"phase={branch.get('phase', 'REVIEW_REQUIRED')} "
             f"evidenceRefs={_refs_text(_evidence_refs(branch))} "
-            f"condition={branch.get('condition_summary', '')}"
+            f"조건={branch.get('condition_summary', '')}"
         )
         for action in _sequence(branch.get("actions")):
             if not isinstance(action, Mapping):
                 continue
             lines.append(
-                "  - action: "
+                "  - 동작: "
                 f"{action.get('operation', 'REVIEW_REQUIRED')} "
                 f"dependency={action.get('dependency_ref', 'REVIEW_REQUIRED')} "
                 f"evidenceRefs={_refs_text(_evidence_refs(action))}"
             )
     results = _sequence(call_flow.get("results"))
     if results:
-        lines.append("- Results / Output:")
+        lines.append("- 결과 / 출력:")
         for item in results:
             lines.append(f"  - {item}")
     if call_flow.get("error_handling"):
-        lines.append(f"- Error handling: {call_flow.get('error_handling')}")
+        lines.append(f"- 오류 처리: {call_flow.get('error_handling')}")
 
 
 def _append_critical_phase(lines: list[str], guide: Mapping[str, Any]) -> None:
     metrics = _mapping(guide.get("phase_risk_metrics"))
+    phase_rows = _sequence(guide.get("critical_phase_rows")) or (
+        _fallback_critical_phase_rows(guide)
+    )
     lines.extend(
         [
             f"- branchCount: `{metrics.get('branch_count', 'REVIEW_REQUIRED')}`",
             f"- dmlOperationCount: `{metrics.get('dml_operation_count', 'REVIEW_REQUIRED')}`",
-            (
-                "- REVIEW_REQUIRED: phase ordering and transaction semantics "
-                "require reviewer confirmation."
-            ),
         ]
     )
+    if phase_rows:
+        lines.extend(
+            [
+                "| Phase | 주요 읽기 | 주요 쓰기 | 위험/검토점 | 상태 | 근거 |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
+        for row in phase_rows:
+            if not isinstance(row, Mapping):
+                continue
+            lines.append(
+                "| "
+                f"{row.get('phase', 'REVIEW_REQUIRED')} | "
+                f"{_refs_text(_sequence(row.get('reads')))} | "
+                f"{_refs_text(_sequence(row.get('writes')))} | "
+                f"{row.get('risk', 'REVIEW_REQUIRED')} | "
+                f"{row.get('status', 'REVIEW_REQUIRED')} | "
+                f"{_refs_text(_evidence_refs(row))} |"
+            )
+    lines.append("- REVIEW_REQUIRED: 단계 순서와 트랜잭션 의미는 추가 근거 확인이 필요합니다.")
+
+
+def _fallback_critical_phase_rows(guide: Mapping[str, Any]) -> list[dict[str, Any]]:
+    risk_flags = [
+        str(item.get("code"))
+        for item in _sequence(_mapping(guide.get("phase_risk_metrics")).get("risk_flags"))
+        if isinstance(item, Mapping) and item.get("code")
+    ]
+    risk_text = (
+        ", ".join(risk_flags)
+        if risk_flags
+        else "REVIEW_REQUIRED: 업무 의미와 트랜잭션 영향은 추가 근거 확인이 필요합니다."
+    )
+    rows: list[dict[str, Any]] = []
+    for item in _sequence(guide.get("dml_matrix")):
+        if not isinstance(item, Mapping):
+            continue
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        target_ref = str(item.get("target_ref") or "REVIEW_REQUIRED")
+        rows.append(
+            {
+                "phase": str(item.get("phase") or "REVIEW_REQUIRED"),
+                "reads": [target_ref] if operation == "SELECT" else [],
+                "writes": [target_ref]
+                if operation in {"INSERT", "UPDATE", "DELETE", "MERGE"}
+                else [],
+                "risk": risk_text,
+                "status": _normalized_review_status(item.get("status")),
+                "evidence_refs": _evidence_refs(item),
+            }
+        )
+    if rows:
+        return rows
+
+    refs = _guide_evidence_ids(guide)
+    return [
+        {
+            "phase": "review_required",
+            "reads": [],
+            "writes": [],
+            "risk": "REVIEW_REQUIRED: phase 근거가 부족합니다.",
+            "status": "REVIEW_REQUIRED",
+            "evidence_refs": refs[:1] or ["REVIEW_REQUIRED"],
+        }
+    ]
 
 
 def _append_complexity_risk(lines: list[str], guide: Mapping[str, Any]) -> None:
@@ -437,7 +671,7 @@ def _append_complexity_risk(lines: list[str], guide: Mapping[str, Any]) -> None:
     if complexity_metrics:
         lines.extend(
             [
-                "| Metric | Count | Evidence/Rule | Notes | Evidence |",
+                "| 지표 | 건수 | 근거/규칙 | 비고 | 근거 |",
                 "|---|---:|---|---|---|",
             ]
         )
@@ -470,17 +704,16 @@ def _append_migration_strategy(lines: list[str], context: GenerationContext) -> 
             "- javaMyBatisReadiness: `draft_notes_only`",
             "- generated_source_application: `not_performed`",
             "- automatic_conversion_completion: `not_claimed`",
-            "- target_application_write: `forbidden_without_human_review`",
+            "- target_application_write: `not_performed`",
             (
-                "- REVIEW_REQUIRED: Java/MyBatis adoption requires manual review "
-                "of evidence and risks."
+                "- REVIEW_REQUIRED: Java/MyBatis 초안에는 근거 보강과 위험 caveat가 남아 있습니다."
             ),
         ]
     )
-    _append_llm_migration_strategy_insights(lines, context)
+    _append_llm_conversion_guidance(lines, context)
 
 
-def _append_llm_migration_strategy_insights(
+def _append_llm_conversion_guidance(
     lines: list[str],
     context: GenerationContext,
 ) -> None:
@@ -488,8 +721,7 @@ def _append_llm_migration_strategy_insights(
     if not isinstance(payload, Mapping):
         return
     guidance = _sequence(payload.get("conversionGuidance"))
-    insights = _sequence(payload.get("migrationGuideInsights"))
-    if not guidance and not insights:
+    if not guidance:
         return
     lines.append("- llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`")
     for item in guidance:
@@ -502,9 +734,27 @@ def _append_llm_migration_strategy_insights(
             f"evidenceRefs={_refs_text(_evidence_refs(item))} "
             f"summary={item.get('summary', '')}"
         )
+
+
+def _append_section_llm_insights(
+    lines: list[str],
+    context: GenerationContext,
+    section_id: str,
+) -> None:
+    payload = context.value("llmAnalysis", {}) or {}
+    if not isinstance(payload, Mapping):
+        return
+    section_title = P24_SECTION_TITLES.get(section_id, section_id)
+    insights = [
+        item
+        for item in _sequence(payload.get("migrationGuideInsights"))
+        if isinstance(item, Mapping)
+        and _insight_targets_section(item, section_id=section_id, section_title=section_title)
+    ]
+    if not insights:
+        return
+    lines.append("- llmInsightBoundary: `LLM_INFERENCE_REVIEW_REQUIRED`")
     for item in insights:
-        if not isinstance(item, Mapping):
-            continue
         lines.append(
             "- llmMigrationGuideInsight: "
             f"{item.get('section', 'REVIEW_REQUIRED')} "
@@ -513,6 +763,23 @@ def _append_llm_migration_strategy_insights(
             f"summary={item.get('summary', '')} "
             f"whatToExtractNext={item.get('whatToExtractNext', '')}"
         )
+
+
+def _insight_targets_section(
+    item: Mapping[str, Any],
+    *,
+    section_id: str,
+    section_title: str,
+) -> bool:
+    raw_section = str(item.get("section") or "").strip()
+    if not raw_section:
+        return False
+    normalized = raw_section.casefold()
+    return normalized in {
+        section_id.casefold(),
+        section_title.casefold(),
+        section_title.replace(" ", "_").casefold(),
+    }
 
 
 def _append_appendix_mappings(lines: list[str], guide: Mapping[str, Any]) -> None:
@@ -531,8 +798,8 @@ def _append_appendix_mappings(lines: list[str], guide: Mapping[str, Any]) -> Non
                 f"evidenceRefs={_refs_text(_evidence_refs(parameter))}"
             )
     else:
-        lines.append("  - REVIEW_REQUIRED: parameter mapping unavailable.")
-    lines.append("- resultFields:")
+        lines.append("  - REVIEW_REQUIRED: 파라미터 매핑을 사용할 수 없습니다.")
+    lines.append("- 결과 필드:")
     if result_fields:
         for field in result_fields:
             if not isinstance(field, Mapping):
@@ -543,31 +810,31 @@ def _append_appendix_mappings(lines: list[str], guide: Mapping[str, Any]) -> Non
                 f"evidenceRefs={_refs_text(_evidence_refs(field))}"
             )
     else:
-        lines.append("  - REVIEW_REQUIRED: no result fields supplied.")
+        lines.append("  - REVIEW_REQUIRED: 제공된 결과 필드가 없습니다.")
 
 
 def _append_metadata_extraction_appendix(lines: list[str], guide: Mapping[str, Any]) -> None:
     appendix = _mapping(guide.get("metadata_extraction_appendix"))
     if not appendix:
-        lines.append("- REVIEW_REQUIRED: manual metadata extraction appendix unavailable.")
+        lines.append("- REVIEW_REQUIRED: 수동 메타데이터 추출 부록을 사용할 수 없습니다.")
         return
-    lines.append(f"- policy: {appendix.get('policy', 'metadata-only manual reviewer aid')}")
+    lines.append(f"- 정책: {appendix.get('policy', 'metadata-only evidence aid')}")
     for query in _sequence(appendix.get("queries")):
         if not isinstance(query, Mapping):
             continue
         lines.extend(
             [
                 f"### {query.get('id', 'metadata_query')}",
-                f"- title: {query.get('title', 'Metadata query')}",
+                f"- 제목: {query.get('title', '메타데이터 조회')}",
                 "```sql",
                 str(query.get("sql", "-- REVIEW_REQUIRED")),
                 "```",
-                f"- resultPasteTemplate: {query.get('result_template', 'REVIEW_REQUIRED')}",
+                f"- 결과 붙여넣기 템플릿: {query.get('result_template', 'REVIEW_REQUIRED')}",
             ]
         )
     templates = _sequence(appendix.get("paste_templates"))
     if templates:
-        lines.append("- pasteTemplates:")
+        lines.append("- 붙여넣기 템플릿:")
         for template in templates:
             lines.append(f"  - {template}")
 
@@ -596,7 +863,7 @@ def _append_evidence_and_review(
                 "  - "
                 f"type={ref.type} objectRef={ref.object_ref} locator={ref.locator}"
             )
-    lines.append("- reviewRequiredFindings:")
+    lines.append("- knownCaveats:")
     unsupported_claims = _sequence(guide.get("unsupported_claim_expectations"))
     if unsupported_claims:
         for claim in unsupported_claims:
@@ -611,9 +878,29 @@ def _append_evidence_and_review(
                 f"evidenceRefs={_refs_text(_evidence_refs(claim))}"
             )
     else:
-        lines.append("  - REVIEW_REQUIRED: unsupported claim review set unavailable.")
+        lines.append("  - REVIEW_REQUIRED: 미지원 claim caveat 목록을 사용할 수 없습니다.")
     for assumption in context.evidence_assumptions:
-        lines.append(f"- assumption: REVIEW_REQUIRED {assumption}")
+        lines.append(f"- 가정: REVIEW_REQUIRED {assumption}")
+    lines.extend(
+        [
+            "",
+            "## quality_summary",
+            "- status: draft-quality evidence caveats tracked",
+            "- raw SQL text, row data, secrets, execution output은 포함하지 않습니다.",
+            "",
+            "## evidence_map",
+            "- claims are tied to evidenceRefs or REVIEW_REQUIRED caveats.",
+            "",
+            "## known_caveats",
+            "- REVIEW_REQUIRED는 근거 보강 필요 상태를 의미합니다.",
+            "",
+            "## next_evidence_to_collect",
+            "- DML matrix, branch call-flow, transaction boundary, Java/MyBatis mapping evidence를 보강합니다.",
+            "",
+            "## draft_readiness",
+            "- Ready as a migration-guide draft; no publish, deploy, DDL, DML, or source apply path is included.",
+        ]
+    )
 
 
 def _render_placeholder_sections(context: GenerationContext) -> list[str]:
@@ -621,9 +908,9 @@ def _render_placeholder_sections(context: GenerationContext) -> list[str]:
     for section_id in P24_REQUIRED_SECTION_IDS:
         lines.extend(
             [
-                f"## {section_id}",
-                f"- title: {P24_SECTION_TITLES[section_id]}",
-                "- REVIEW_REQUIRED: migrationGuide sanitized facts not supplied.",
+                f"<!-- section:{section_id} -->",
+                f"## {P24_SECTION_NUMBERS[section_id]}. {P24_SECTION_TITLES[section_id]}",
+                "- REVIEW_REQUIRED: migrationGuide sanitized fact가 제공되지 않았습니다.",
                 "- generated_source_application: `not_performed`",
             ]
         )
@@ -631,6 +918,71 @@ def _render_placeholder_sections(context: GenerationContext) -> list[str]:
             lines.append(f"- evidenceRef: {ref.type} `{ref.object_ref}` locator=`{ref.locator}`")
         lines.append("")
     return lines
+
+
+def _primary_evidence_id(
+    context: GenerationContext,
+    guide: Mapping[str, Any],
+) -> str:
+    guide_refs = _guide_evidence_ids(guide)
+    if guide_refs:
+        return guide_refs[0]
+    for source in context.evidence_sources:
+        if source.reason:
+            return source.reason
+        if source.locator:
+            return source.locator
+        if source.name:
+            return source.name
+    return "REVIEW_REQUIRED"
+
+
+def _static_evidence_id(
+    context: GenerationContext,
+    guide: Mapping[str, Any],
+) -> str:
+    guide_refs = _guide_evidence_ids(guide)
+    for ref in guide_refs:
+        lowered = ref.casefold()
+        if "static" in lowered or "flow" in lowered:
+            return ref
+    for fact in _sequence(guide.get("sanitized_facts")):
+        if not isinstance(fact, Mapping):
+            continue
+        fact_type = str(fact.get("fact_type") or "")
+        if "RESULT" in fact_type:
+            refs = _evidence_refs(fact)
+            if refs:
+                return refs[0]
+    if guide_refs:
+        return guide_refs[0]
+    return _primary_evidence_id(context, guide)
+
+
+def _guide_evidence_ids(guide: Mapping[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for ref in _sequence(guide.get("evidence_refs")):
+        if not isinstance(ref, Mapping):
+            continue
+        ref_id = ref.get("id")
+        if ref_id:
+            refs.append(str(ref_id))
+    return refs
+
+
+def _confirmed_or_review_required(value: object) -> str:
+    text = str(value or "")
+    return "REVIEW_REQUIRED" if not text or text == "REVIEW_REQUIRED" else "Confirmed"
+
+
+def _normalized_review_status(value: object) -> str:
+    text = str(value or "REVIEW_REQUIRED")
+    normalized = text.casefold()
+    if normalized in {"accepted", "confirmed"}:
+        return "Confirmed"
+    if "review_required" in normalized or "needs verification" in normalized:
+        return "REVIEW_REQUIRED"
+    return text
 
 
 def _normalize_thresholds(thresholds: Mapping[str, Any]) -> dict[str, float | int]:
@@ -654,7 +1006,10 @@ def _section_coverage(
         if isinstance(section, Mapping)
     ] or list(P24_REQUIRED_SECTION_IDS)
     return {
-        section_id: f"## {section_id}" in combined_text
+        section_id: (
+            f"<!-- section:{section_id} -->" in combined_text
+            or f"## {section_id}" in combined_text
+        )
         for section_id in required_sections
     }
 
@@ -762,7 +1117,7 @@ def _review_required_claim_is_rendered(
     return (
         str(claim.get("expected_status")) == "REVIEW_REQUIRED"
         and str(claim.get("claim_code")) in combined_text
-        and "REVIEW_REQUIRED" in combined_text
+        and any(marker in combined_text for marker in _EVIDENCE_CAVEAT_TEXT_MARKERS)
         and _evidence_item_is_rendered(claim, combined_text)
     )
 

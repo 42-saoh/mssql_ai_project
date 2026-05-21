@@ -3,7 +3,7 @@
 ## 공통 운영 철학
 
 - 현재 대화 요청과 첨부 ZIP의 실제 파일 구조를 최우선 기준으로 삼는다.
-- P00~P16의 worktree 병렬 개발, Docker 테스트 격리, read-only metadata, draft-only generation, validation/approval/audit 원칙을 유지한다.
+- P00~P16의 worktree 병렬 개발, Docker 테스트 격리, read-only metadata, draft-only generation, validation/evidence/audit 원칙을 유지한다.
 - `PLF` 는 platform DB, `PPM` 은 pilot analysis target DB 이다. PPM 이 없거나 접근 불가하면 PLF 로 대체하지 않고 blocker 로 보고한다.
 - 실제 row data 조회, procedure 실행, 자동 DDL/DML, 운영 DB 직접 변경, 승인 없는 배포 자동화는 금지한다.
 - 비밀값, 실제 비밀번호, 토큰, 실데이터, raw SQL definition text 는 코드/문서/fixture/test snapshot 에 넣지 않는다.
@@ -24,7 +24,7 @@ P17A/P17B/P17C 산출물을 검토하고 hard-live gate를 재실행한 뒤, P16
 - `fixtures/eval/pilot_release_readiness_p16_v1.yaml`
 - `fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml`
 - `fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml` 또는 P17B 산출물
-- `fixtures/eval/manual_approval_audit_p17_v1.yaml` 또는 P17C 산출물
+- `fixtures/eval/draft_quality_audit_p17_v1.yaml` 또는 P17C 산출물
 - `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml`
 - `tests/e2e/**`, `tests/eval/**`, `tests/contract/**`
 - `apps/**`, `services/**`, `packages/**`, `spec/**`, `db/schema/**` 는 읽기 전용 검토
@@ -73,6 +73,6 @@ P17A/P17B/P17C 산출물을 검토하고 hard-live gate를 재실행한 뒤, P16
 
 - P17A dependency evidence가 release-critical selected procedures에 대해 불완전함
 - P17B validation이 `PASSED`가 아니거나 release-critical `REVIEW_REQUIRED`가 남음
-- P17C human approval/audit binding이 없거나 최신 artifact/version에 연결되지 않음
+- P17C human draft-quality/audit binding이 없거나 최신 artifact/version에 연결되지 않음
 - hard-live gate가 실패하거나 현재 환경에서 재현 불가
 - GO로 바꾸려면 row data, procedure execution, raw definition text 저장, PLF fallback, auto publish/export가 필요함

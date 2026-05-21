@@ -150,7 +150,13 @@ const dependencyResolution = await api.invokeMetadataTool("resolve_dependency_re
 const metadataSearch = await api.searchMetadataObjects({
   dbProfileId: "master",
   query: "order",
-  objectTypes: ["PROCEDURE", "TABLE"],
+  objectTypes: ["PROCEDURE", "TABLE", "COLUMN"],
+  limit: 5,
+});
+const metadataColumnSearch = await api.searchMetadataObjects({
+  dbProfileId: "master",
+  query: "ORDER_DATE",
+  objectTypes: ["COLUMN"],
   limit: 5,
 });
 const metadataAnalysis = await api.analyzeMetadata({
@@ -164,6 +170,16 @@ const metadataAnalysis = await api.analyzeMetadata({
     maxTargets: 3,
   },
 });
+const metadataAnalysisRun = await api.submitMetadataAnalysisRun({
+  dbProfileId: "master",
+  target: { schema: "dbo", name: "TB_ORDER", type: "TABLE" },
+  options: {
+    useLlmAnalysis: false,
+    useAiToolOrchestration: true,
+    maxTargets: 1,
+  },
+});
+const metadataAnalysisRunStatus = await api.getMetadataAnalysisRun(metadataAnalysisRun.runId);
 const exportCandidate = knowledgeAssets.knowledgeAssets[0] ?? metadataAnalysis.knowledgeAssets[0];
 const knowledgeExport = exportCandidate
   ? await api.createKnowledgeExport({
@@ -185,12 +201,14 @@ assert(profiles.profiles.every((profile) => profile.readOnly === true), "Metadat
 assert(metadataTools.tools.some((tool) => tool.name === "get_dependency_closure" && tool.invokable === true), "Dependency closure tool must be invokable");
 assert(metadataTools.tools.every((tool) => !("input" in tool)), "Metadata tool summary must not expose input schema");
 assert(dependencyClosure.toolName === "get_dependency_closure", "Dependency closure invocation returned the wrong tool");
-assert(dependencyClosure.data.unresolved?.length > 0, "Dependency closure must preserve unresolved review-required evidence");
-assert(dependencyClosure.data.edges.every((edge) => edge.resolutionStatus === "CONFIRMED"), "Closure graph must hide review-required edges when requested");
+assert(dependencyClosure.data.unresolved?.length > 0, "Dependency closure must preserve unresolved evidence caveats");
+assert(dependencyClosure.data.edges.every((edge) => edge.resolutionStatus === "CONFIRMED"), "Closure graph must hide evidence-caveated edges when requested");
 assert(dependencyResolution.toolName === "resolve_dependency_reference", "Dependency resolver invocation returned the wrong tool");
 assert(dependencyResolution.data.selectedResolution?.name === "TB_ORDER", "Dependency resolver did not select the confirmed table");
 assert(metadataSearch.sourceProfile === "master", `Unexpected metadata source profile: ${metadataSearch.sourceProfile}`);
 assert(metadataSearch.sourceDatabase === "master", `Unexpected metadata source database: ${metadataSearch.sourceDatabase}`);
+assert(Array.isArray(metadataSearch.results), "Metadata search must return results");
+assert(metadataColumnSearch.results.some((result) => result.objectIdentity.type === "COLUMN"), "Metadata search must return column results");
 assert(metadataAnalysis.sourceProfile === "master", `Unexpected analysis source profile: ${metadataAnalysis.sourceProfile}`);
 assert(metadataAnalysis.deterministicFacts.length > 0, "Metadata analysis must include deterministic facts");
 assert(Array.isArray(metadataAnalysis.objectProfiles), "Metadata analysis must include objectProfiles");
@@ -200,6 +218,9 @@ assert(Array.isArray(metadataAnalysis.dtoReadiness), "Metadata analysis must inc
 assert(metadataAnalysis.aiToolEvidence?.plannerMetrics, "Metadata analysis must include planner metrics");
 assert(Array.isArray(metadataAnalysis.knowledgeAssets), "Metadata analysis must include knowledgeAssets");
 assert(metadataAnalysis.summary.length > 0, "Metadata analysis summary is empty");
+assert(metadataAnalysisRun.runId, "Metadata analysis run did not return a run id");
+assert(metadataAnalysisRunStatus.status === "SUCCEEDED", `Unexpected metadata analysis run status: ${metadataAnalysisRunStatus.status}`);
+assert(metadataAnalysisRunStatus.analysis?.mode === "TARGET", "Metadata analysis run did not return target analysis");
 assert(!knowledgeExport || knowledgeExport.format === "GRAPH_JSON", "Knowledge export must return GRAPH_JSON");
 assert(registry.versions.length > 0, "Registry versions response is empty");
 
@@ -217,10 +238,13 @@ for (const [label, payload] of Object.entries({
   latestValidation,
   profiles,
   metadataTools,
+  metadataColumnSearch,
   dependencyClosure,
   dependencyResolution,
   metadataSearch,
   metadataAnalysis,
+  metadataAnalysisRun,
+  metadataAnalysisRunStatus,
   knowledgeExport,
   registry,
 })) {
@@ -263,11 +287,20 @@ assertObserved("POST /api/v1/metadata/tools/get_dependency_closure/invoke", ({ m
 assertObserved("POST /api/v1/metadata/tools/resolve_dependency_reference/invoke", ({ method, path }) =>
   method === "POST" && path === "/api/v1/metadata/tools/resolve_dependency_reference/invoke",
 );
-assertObserved("GET /api/v1/metadata/search", ({ method, path }) =>
-  method === "GET" && path.startsWith("/api/v1/metadata/search?"),
-);
 assertObserved("POST /api/v1/metadata/analyze", ({ method, path }) =>
   method === "POST" && path === "/api/v1/metadata/analyze",
+);
+assertObserved("POST /api/v1/metadata/analysis-runs", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/analysis-runs",
+);
+assertObserved("GET /api/v1/metadata/analysis-runs/{runId}", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/metadata\/analysis-runs\/[^/]+$/.test(path),
+);
+assertObserved("POST /api/v1/metadata/design-runs", ({ method, path }) =>
+  method === "POST" && path === "/api/v1/metadata/design-runs",
+);
+assertObserved("GET /api/v1/metadata/design-runs/{runId}", ({ method, path }) =>
+  method === "GET" && /^\/api\/v1\/metadata\/design-runs\/[^/]+$/.test(path),
 );
 assertObserved("POST /api/v1/knowledge/exports", ({ method, path }) =>
   method === "POST" && path === "/api/v1/knowledge/exports",

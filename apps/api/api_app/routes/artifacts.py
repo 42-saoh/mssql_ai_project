@@ -4,9 +4,9 @@ from typing import Annotated
 
 from api_app.auth import Actor
 from api_app.dependencies import (
+    get_current_actor,
     get_repository,
     get_workflow_service,
-    require_artifact_review_actor,
 )
 from api_app.errors import api_http_exception
 from api_app.presenters import (
@@ -61,13 +61,13 @@ def validate_artifact(
     artifactId: str,
     request: Request,
     service: Annotated[WorkflowService, Depends(get_workflow_service)],
-    actor: Annotated[Actor | None, Depends(require_artifact_review_actor)],
+    actor: Annotated[Actor | None, Depends(get_current_actor)],
 ) -> ValidationReport:
     try:
         report = service.validate_artifact(
             artifactId,
             correlation_id=tracking_context_from_request(request).correlation_id,
-            actor=actor.reviewer_id if actor else None,
+            actor=actor.login if actor else None,
         )
     except KeyError as exc:
         raise api_http_exception(

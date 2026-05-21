@@ -1,0 +1,302 @@
+"use client";
+
+import Link from "next/link";
+import { StatusPill } from "@/components/status-pill";
+import type {
+  MetadataAnalysisResponse,
+  MetadataGeneratedDraft,
+} from "@/lib/api/types";
+import { displayCaveatText } from "@/lib/display-caveats";
+
+function knowledgeAssetHref(assetId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}`;
+}
+
+function knowledgeFactsHref(assetId: string, versionId: string): string {
+  return `/knowledge/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(
+    versionId,
+  )}/facts`;
+}
+
+export function MetadataAnalysisPanel({
+  analysis,
+}: Readonly<{ analysis: MetadataAnalysisResponse }>) {
+  const toolEvidence = analysis.aiToolEvidence;
+  const plannerMetrics = toolEvidence.plannerMetrics;
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">AI-MCP metadata analysis</p>
+          <h2>{analysis.sourceDatabase}.{analysis.query ?? analysis.target?.name ?? "target"}</h2>
+        </div>
+        <StatusPill
+          value={analysis.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+          label={analysis.reviewRequired ? "근거 보강 필요" : "Evidence linked"}
+        />
+      </div>
+
+      <dl className="metric-grid">
+        <div>
+          <dt>Facts</dt>
+          <dd>{analysis.deterministicFacts.length}</dd>
+        </div>
+        <div>
+          <dt>Tools</dt>
+          <dd>{toolEvidence.toolCallCount ?? 0}</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd>{toolEvidence.status ?? "SKIPPED"}</dd>
+        </div>
+        <div>
+          <dt>Evidence use</dt>
+          <dd>{formatRatio(plannerMetrics?.evidenceUtilization)}</dd>
+        </div>
+        <div>
+          <dt>Claim support</dt>
+          <dd>{formatRatio(plannerMetrics?.claimSupportRate)}</dd>
+        </div>
+        <div>
+          <dt>Objects</dt>
+          <dd>{analysis.objectProfiles.length}</dd>
+        </div>
+        <div>
+          <dt>Edges</dt>
+          <dd>{analysis.dependencyGraph.edges.length}</dd>
+        </div>
+      </dl>
+
+      {plannerMetrics ? (
+        <div className="callout">
+          <strong>Planner effectiveness</strong>
+          <p>
+            {plannerMetrics.status ?? "PENDING"} - {plannerMetrics.plannedRequestCount ?? 0}{" "}
+            planned - {plannerMetrics.executedToolCallCount ?? 0} executed -{" "}
+            {plannerMetrics.blockedRequestCount ?? 0} blocked -{" "}
+            {plannerMetrics.failedToolCallCount ?? 0} failed
+          </p>
+        </div>
+      ) : null}
+
+      <p>{analysis.summary}</p>
+
+      {analysis.knowledgeAssets.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.knowledgeAssets.map((asset) => (
+            <article className="metadata-result-row" key={asset.assetId}>
+              <div>
+                <p className="eyebrow">Knowledge {asset.assetKind}</p>
+                <h3>
+                  {asset.targetSchema}.{asset.targetName}
+                </h3>
+                <p>
+                  version {asset.currentVersionNo} - content {asset.contentHash ?? "pending"}
+                </p>
+                {asset.targetKey ? <code>{asset.targetKey}</code> : null}
+              </div>
+              <div className="metadata-result-detail">
+                <Link href={knowledgeAssetHref(asset.assetId)}>Asset</Link>
+                {asset.currentVersionId ? (
+                  <Link href={knowledgeFactsHref(asset.assetId, asset.currentVersionId)}>
+                    Facts
+                  </Link>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.objectProfiles.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.objectProfiles.map((profile) => (
+            <article className="metadata-result-row" key={profile.objectRef}>
+              <div>
+                <p className="eyebrow">{profile.objectType}</p>
+                <h3>{profile.objectRef}</h3>
+                <p>
+                  {profile.columnCount} columns - {profile.primaryKeyCount} PK -{" "}
+                  {profile.foreignKeyCount} FK - {profile.indexCount} indexes
+                </p>
+                {profile.targetKey ? <code>{profile.targetKey}</code> : null}
+              </div>
+              <div className="metadata-result-detail">
+                <StatusPill
+                  value={profile.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+                  label={`${Math.round(profile.descriptionCoverage * 100)}% docs`}
+                />
+                {profile.sourceFactIds.slice(0, 3).map((ref) => (
+                  <code key={`${profile.objectRef}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.dependencyGraph.nodes.length > 0 ? (
+        <div className="callout">
+          <strong>Dependency graph</strong>
+          <p>
+            {analysis.dependencyGraph.nodes.length} nodes -{" "}
+            {analysis.dependencyGraph.edges.length} edges -{" "}
+            {analysis.dependencyGraph.unresolved.length} unresolved
+          </p>
+          {analysis.dependencyGraph.nodes.slice(0, 3).map((node) => (
+            <code key={node.id}>{node.targetKey ?? node.objectRef}</code>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.dtoReadiness.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.dtoReadiness.map((item) => (
+            <article className="metadata-result-row" key={`dto-${item.objectRef}`}>
+              <div>
+                <p className="eyebrow">DTO {evidenceStatusLabel(item.status)}</p>
+                <h3>{item.objectRef}</h3>
+                <p>{item.fieldCount} candidate fields</p>
+                {item.targetKey ? <code>{item.targetKey}</code> : null}
+              </div>
+              <div className="metadata-result-detail">
+                {item.reviewReasons.slice(0, 3).map((reason) => (
+                  <small key={`${item.objectRef}-${reason}`}>{displayCaveatText(reason)}</small>
+                ))}
+                {item.evidenceRefs.slice(0, 2).map((ref) => (
+                  <code key={`dto-${item.objectRef}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.generatedDrafts.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.generatedDrafts.map((draft) => (
+            <article className="metadata-result-row" key={`draft-${draft.objectRef}`}>
+              <div>
+                <p className="eyebrow">{draft.artifactType}</p>
+                <h3>{draft.fileName}</h3>
+                <p>
+                  {draft.objectRef} - {draft.language}
+                </p>
+                {draft.targetKey ? <code>{draft.targetKey}</code> : null}
+                <div className="content-preview metadata-draft-preview">
+                  <pre>{draft.content}</pre>
+                </div>
+              </div>
+              <div className="metadata-result-detail">
+                <StatusPill
+                  value={draft.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
+                  label={draft.reviewRequired ? "draft caveat" : "metadata backed"}
+                />
+                <button type="button" onClick={() => downloadGeneratedDraft(draft)}>
+                  Download DTO draft
+                </button>
+                {draft.evidenceRefs.slice(0, 2).map((ref) => (
+                  <code key={`draft-${draft.objectRef}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.insightGroups.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.insightGroups.map((group) => (
+            <article className="metadata-result-row" key={group.category}>
+              <div>
+                <p className="eyebrow">{group.category}</p>
+                <h3>{group.insights.length} insights</h3>
+                {group.insights.slice(0, 3).map((insight, index) => (
+                  <p key={`${group.category}-${insight.code}-${insight.objectRef}-${index}`}>
+                    <strong>{insight.code}</strong> - {insight.summary}
+                  </p>
+                ))}
+              </div>
+              <div className="metadata-result-detail">
+                {group.insights
+                  .flatMap((insight) => insight.evidenceRefs)
+                  .slice(0, 4)
+                  .map((ref, index) => (
+                    <code key={`${group.category}-${ref}-${index}`}>{ref}</code>
+                  ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.objectInsights.length > 0 ? (
+        <div className="metadata-result-list">
+          {analysis.objectInsights.map((insight) => (
+            <article className="metadata-result-row" key={`${insight.code}-${insight.objectRef}`}>
+              <div>
+                <p className="eyebrow">{evidenceStatusLabel(insight.status)}</p>
+                <h3>{insight.code}</h3>
+                <p>{insight.summary}</p>
+              </div>
+              <div className="metadata-result-detail">
+                <code>{insight.objectRef}</code>
+                {insight.evidenceRefs.map((ref) => (
+                  <code key={`${insight.code}-${ref}`}>{ref}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.reviewMarkers.length > 0 ? (
+        <div className="blocker-list" aria-label="Evidence caveats">
+          <p className="eyebrow">Evidence caveats</p>
+          {analysis.reviewMarkers.map((marker) => (
+            <article className="blocker-row" key={marker.code}>
+              <strong>{marker.code}</strong>
+              <span>{displayCaveatText(marker.message)}</span>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {analysis.caveats.length > 0 ? (
+        <div className="callout">
+          <strong>Caveats</strong>
+          <ul>
+            {analysis.caveats.map((caveat) => (
+              <li key={caveat}>{displayCaveatText(caveat)}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function formatRatio(value: number | undefined): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
+function evidenceStatusLabel(status: string): string {
+  if (status === "REVIEW_REQUIRED") {
+    return "근거 보강 필요";
+  }
+  return status.replaceAll("_", " ");
+}
+
+function downloadGeneratedDraft(draft: MetadataGeneratedDraft) {
+  const blob = new Blob([draft.content], { type: "text/x-java-source;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = draft.fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

@@ -10,6 +10,10 @@ import type {
   KnowledgeFactGraph,
   MetadataAnalysisRequest,
   MetadataAnalysisResponse,
+  MetadataAnalysisRunStatus,
+  MetadataDesignConversation,
+  MetadataDesignRunRequest,
+  MetadataDesignRunStatus,
   MetadataProfile,
   MetadataSearchRequest,
   MetadataSearchResponse,
@@ -26,11 +30,14 @@ import type {
 } from "./types.ts";
 
 export interface PortalApi {
-  createSPAnalysisRequest(request: SPAnalysisRequest): Promise<SubmitRequestResponse>;
+  createSPAnalysisRequest(
+    request: SPAnalysisRequest,
+    options?: { runAsync?: boolean },
+  ): Promise<SubmitRequestResponse>;
   createSPAnalysisBatchRequest(
     request: SPAnalysisBatchRequest,
   ): Promise<SPAnalysisBatchResponse>;
-  listJobs(limit?: number): Promise<{ jobs: Job[] }>;
+  listJobs(limit?: number, targetKey?: string): Promise<{ jobs: Job[] }>;
   getJob(jobId: string): Promise<Job>;
   listJobAgentRuns(
     jobId: string,
@@ -55,7 +62,12 @@ export interface PortalApi {
     toolName: MetadataToolName,
     request: MetadataToolInvokeRequest,
   ): Promise<MetadataToolInvokeResponse>;
-  searchMetadataObjects(request: MetadataSearchRequest): Promise<MetadataSearchResponse>;
   analyzeMetadata(request: MetadataAnalysisRequest): Promise<MetadataAnalysisResponse>;
+  searchMetadataObjects(request: MetadataSearchRequest): Promise<MetadataSearchResponse>;
+  submitMetadataAnalysisRun(request: MetadataAnalysisRequest): Promise<MetadataAnalysisRunStatus>;
+  getMetadataAnalysisRun(runId: string): Promise<MetadataAnalysisRunStatus>;
+  submitMetadataDesignRun(request: MetadataDesignRunRequest): Promise<MetadataDesignRunStatus>;
+  getMetadataDesignRun(runId: string): Promise<MetadataDesignRunStatus>;
+  getMetadataDesignConversation(conversationId: string): Promise<MetadataDesignConversation>;
   listRegistryVersions(): Promise<{ versions: RegistryVersion[] }>;
 }

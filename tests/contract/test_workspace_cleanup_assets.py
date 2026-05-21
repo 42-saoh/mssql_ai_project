@@ -10,6 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCAL_ARTIFACT_PATHS = (
+    ".tmp/",
     ".codex-docker-localappdata",
     "buildx",
     ".token_seed",
@@ -31,18 +32,48 @@ def test_pytest_suite_aliases_expand_to_existing_test_files() -> None:
     runner = _load_pytest_selection_runner()
     suites = runner._load_suites()
 
-    assert set(suites) == {"core", "quality", "web", "live-confidence"}
+    assert set(suites) == {
+        "core",
+        "framework-contracts",
+        "framework-runtime",
+        "quality",
+        "web",
+        "live-confidence",
+    }
     assert "tests/eval/test_p35_knowledge_live_confidence_gate.py" in suites[
+        "live-confidence"
+    ]
+    assert "tests/eval/test_p42_live_ai_draft_pack_replay_gate.py" in suites[
         "live-confidence"
     ]
 
     web_targets = runner.expand_targets(["@web"])
     core_targets = runner.expand_targets(["@core"])
+    framework_targets = runner.expand_targets(["@framework-runtime"])
 
     assert "tests/unit/web/test_p14_product_ui_static.py" in web_targets
     assert "tests/e2e/test_web_http_adapter_smoke.py" in web_targets
     assert "tests/contract/test_workspace_cleanup_assets.py" in core_targets
+    assert "tests/contract/test_p49_framework_runtime_consolidation_cleanup_assets.py" in (
+        framework_targets
+    )
+    assert "tests/eval/test_p44_framework_runtime_replay.py" in framework_targets
+    assert "tests/eval/test_p43_framework_adapter_replay.py" not in framework_targets
     assert all((ROOT / target.partition("::")[0]).exists() for target in web_targets)
+
+
+def test_pytest_selection_runner_supports_passthrough_options() -> None:
+    runner = _load_pytest_selection_runner()
+
+    targets, pytest_args = runner.split_targets_and_pytest_args(
+        ["tests/eval/test_p45_openai_agents_live_gate.py", "--", "-vv", "-s", "-x"]
+    )
+
+    assert targets == ["tests/eval/test_p45_openai_agents_live_gate.py"]
+    assert pytest_args == ["-vv", "-s", "-x"]
+    assert runner.expand_targets(targets) == [
+        "tests/eval/test_p45_openai_agents_live_gate.py"
+    ]
 
 
 def test_makefile_exposes_safe_consolidated_test_gates() -> None:
@@ -65,6 +96,8 @@ def test_makefile_exposes_safe_consolidated_test_gates() -> None:
         "P21_LIVE_PORTAL_GATE=0",
         "P27_HARD_LIVE_GATE=0",
         "P35_KNOWLEDGE_LIVE_GATE=0",
+        "P42_LIVE_REPLAY_GATE=0",
+        "P44_OPENAI_AGENTS_LIVE_GATE=0",
         "AUTH_RBAC_LIVE_GATE=0",
         "LLM_ENABLE_REMOTE=0",
         "MSSQL_ENABLE_LIVE_METADATA=0",

@@ -187,7 +187,7 @@ class PlatformToolPolicy:
                 tool_name=normalized_tool,
                 arguments={},
                 code="PLATFORM_TOOL_NOT_ACTIVE_READ_ONLY",
-                message="Requested platform tool is not active, read-only, and internal-only.",
+                message="요청한 platform tool은 active/read-only/internal-only 조건을 만족하지 않습니다.",
             )
         normalized_arguments = _normalized_arguments(
             arguments,
@@ -242,7 +242,7 @@ class PlatformToolRegistry:
         arguments = request.get("arguments")
         if not isinstance(arguments, Mapping):
             raise PlatformToolError(
-                "Platform tool invocation requires structured arguments.",
+                "Platform tool invocation에는 structured arguments가 필요합니다.",
                 code="PLATFORM_TOOL_INVALID_ARGUMENTS",
             )
         try:
@@ -335,7 +335,7 @@ class PlatformToolRegistry:
             or asset.target_name != target["name"]
         ):
             raise PlatformToolError(
-                "Knowledge asset is outside the current request scope.",
+                "Knowledge asset이 현재 request scope 밖에 있습니다.",
                 code="PLATFORM_TOOL_SCOPE_SWITCH_BLOCKED",
             )
         graph = self.repository.list_knowledge_facts(asset_id, version_id)
@@ -455,10 +455,10 @@ def _argument_policy_violation(value: Any, *, path: str = "arguments") -> tuple[
             normalized_key = str(key).replace("-", "_").lower()
             nested_path = f"{path}.{key}"
             if normalized_key in FORBIDDEN_ARGUMENT_KEYS:
-                return (
-                    "PLATFORM_TOOL_FORBIDDEN_ARGUMENT",
-                    f"Forbidden platform tool argument key blocked at {nested_path}.",
-                )
+                    return (
+                        "PLATFORM_TOOL_FORBIDDEN_ARGUMENT",
+                        f"금지된 platform tool argument key를 {nested_path}에서 차단했습니다.",
+                    )
             violation = _argument_policy_violation(item, path=nested_path)
             if violation is not None:
                 return violation
@@ -472,7 +472,7 @@ def _argument_policy_violation(value: Any, *, path: str = "arguments") -> tuple[
     if isinstance(value, str) and _looks_like_freeform_sql(value):
         return (
             "PLATFORM_TOOL_FREEFORM_SQL_BLOCKED",
-            f"Free-form SQL-like platform tool argument blocked at {path}.",
+            f"free-form SQL처럼 보이는 platform tool argument를 {path}에서 차단했습니다.",
         )
     return None
 
@@ -488,12 +488,12 @@ def _scope_policy_violation(
     if requested_profile != request_record.db_profile_id:
         return (
             "PLATFORM_TOOL_SCOPE_SWITCH_BLOCKED",
-            "Platform tool orchestration cannot switch db profiles.",
+            "Platform tool orchestration은 db profile 전환을 허용하지 않습니다.",
         )
     if "jobId" in arguments and str(arguments.get("jobId") or "") != job_id:
         return (
             "PLATFORM_TOOL_SCOPE_SWITCH_BLOCKED",
-            "Platform tool orchestration cannot switch jobs.",
+            "Platform tool orchestration은 job 전환을 허용하지 않습니다.",
         )
     target_checks = {
         "targetType": target["type"],
@@ -506,7 +506,7 @@ def _scope_policy_violation(
         if actual is not None and str(actual).strip() != expected:
             return (
                 "PLATFORM_TOOL_SCOPE_SWITCH_BLOCKED",
-                f"Platform tool orchestration cannot switch request target via {key}.",
+                f"Platform tool orchestration은 {key}를 통한 request target 전환을 허용하지 않습니다.",
             )
     return None
 

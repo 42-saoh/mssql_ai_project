@@ -8,21 +8,24 @@
     "start": "next start",
     "lint": "eslint .",
     "smoke:http-adapter": "node --experimental-strip-types scripts/http-adapter-smoke.mjs",
+    "smoke:draft-download": "node --experimental-strip-types scripts/draft-download-helper-smoke.mjs",
     "test:smoke": "pnpm run build",
     "test": "pnpm run test:smoke"
   },
   "dependencies": {
     "next": "16.2.4",
     "react": "19.2.5",
-    "react-dom": "19.2.5"
+    "react-dom": "19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "22.15.3",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "typescript": "5.8.3",
     "eslint": "10.2.1",
-    "eslint-config-next": "16.2.4"
+    "eslint-config-next": "16.2.4",
+    "typescript": "5.8.3"
   },
   "packageManager": "pnpm@10.33.0"
 }

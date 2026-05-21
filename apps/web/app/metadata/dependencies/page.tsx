@@ -111,11 +111,15 @@ function statusValue(value: unknown): "PASSED" | "REVIEW_REQUIRED" {
   return text(value) === "CONFIRMED" ? "PASSED" : "REVIEW_REQUIRED";
 }
 
+function statusLabel(value: unknown, fallback = "근거 보강 필요"): string {
+  return text(value) === "CONFIRMED" ? "Confirmed" : fallback;
+}
+
 function invocationFor(
   mode: DependencyMode,
   params: Record<string, string | string[] | undefined>,
 ): { toolName: MetadataToolName; arguments: Record<string, unknown> } {
-  const dbProfileId = cleanParam(params, "dbProfileId", "master");
+  const dbProfileId = cleanParam(params, "dbProfileId", "ppm");
   if (mode === "resolver") {
     return {
       toolName: "resolve_dependency_reference",
@@ -123,11 +127,11 @@ function invocationFor(
         dbProfileId,
         sourceObject: {
           schema: cleanParam(params, "sourceSchema", "dbo"),
-          name: cleanParam(params, "sourceName", "usp_GetOrderSummary"),
+          name: cleanParam(params, "sourceName", "GetInspItemsCd"),
           objectType: sourceObjectTypeParam(params, "sourceObjectType"),
         },
         referencedSchema: optionalParam(params, "referencedSchema") ?? "dbo",
-        referencedName: cleanParam(params, "referencedName", "TB_ORDER"),
+        referencedName: cleanParam(params, "referencedName", "PEX_INSP_ITEMS"),
         referencedDatabase: optionalParam(params, "referencedDatabase"),
         referencedServer: optionalParam(params, "referencedServer"),
       },
@@ -138,7 +142,7 @@ function invocationFor(
     arguments: {
       dbProfileId,
       schema: cleanParam(params, "schema", "dbo"),
-      objectName: cleanParam(params, "objectName", "usp_ProcessOrderBatch"),
+      objectName: cleanParam(params, "objectName", "GetInspItemsCd"),
       objectType: sourceObjectTypeParam(params, "objectType"),
       maxDepth: numberParam(params, "maxDepth", 2),
       includeReviewRequired: booleanParam(params, "includeReviewRequired", false),
@@ -325,7 +329,7 @@ function ClosureForm({
   params: Record<string, string | string[] | undefined>;
   profiles: { id: string; database: string }[];
 }>) {
-  const dbProfileId = cleanParam(params, "dbProfileId", "master");
+  const dbProfileId = cleanParam(params, "dbProfileId", "ppm");
   const includeReviewRequired = booleanParam(params, "includeReviewRequired", false);
   return (
     <form className="metadata-search-form" method="get">
@@ -347,7 +351,7 @@ function ClosureForm({
           <span>Object name</span>
           <input
             name="objectName"
-            defaultValue={cleanParam(params, "objectName", "usp_ProcessOrderBatch")}
+            defaultValue={cleanParam(params, "objectName", "GetInspItemsCd")}
           />
         </label>
         <label>
@@ -369,7 +373,7 @@ function ClosureForm({
             value="true"
             defaultChecked={includeReviewRequired}
           />
-          Include review-required graph items
+          Include evidence-caveated graph items
         </label>
       </div>
       <div className="form-actions">
@@ -389,7 +393,7 @@ function ResolverForm({
   params: Record<string, string | string[] | undefined>;
   profiles: { id: string; database: string }[];
 }>) {
-  const dbProfileId = cleanParam(params, "dbProfileId", "master");
+  const dbProfileId = cleanParam(params, "dbProfileId", "ppm");
   return (
     <form className="metadata-search-form" method="get">
       <input type="hidden" name="mode" value="resolver" />
@@ -413,7 +417,7 @@ function ResolverForm({
           <span>Source name</span>
           <input
             name="sourceName"
-            defaultValue={cleanParam(params, "sourceName", "usp_GetOrderSummary")}
+            defaultValue={cleanParam(params, "sourceName", "GetInspItemsCd")}
           />
         </label>
         <label>
@@ -427,7 +431,7 @@ function ResolverForm({
           <span>Referenced name</span>
           <input
             name="referencedName"
-            defaultValue={cleanParam(params, "referencedName", "TB_ORDER")}
+            defaultValue={cleanParam(params, "referencedName", "PEX_INSP_ITEMS")}
           />
         </label>
         <label>
@@ -464,7 +468,7 @@ function InvocationResult({
         </div>
         <StatusPill
           value={data.reviewRequired ? "REVIEW_REQUIRED" : "PASSED"}
-          label={data.reviewRequired ? "Review required" : "Evidence only"}
+          label={data.reviewRequired ? "근거 보강 필요" : "Evidence only"}
         />
       </div>
       <dl className="metric-grid">
@@ -531,7 +535,7 @@ function ClosureResult({
             </div>
             <StatusPill
               value={statusValue(node.reviewStatus)}
-              label={text(node.reviewStatus, "REVIEW_REQUIRED")}
+              label={statusLabel(node.reviewStatus)}
             />
           </article>
         ))}
@@ -546,7 +550,7 @@ function ClosureResult({
             </div>
             <StatusPill
               value={statusValue(edge.resolutionStatus)}
-              label={text(edge.resolutionStatus, "REVIEW_REQUIRED")}
+              label={statusLabel(edge.resolutionStatus)}
             />
           </article>
         ))}
@@ -561,7 +565,7 @@ function ClosureResult({
             </div>
             <StatusPill
               value={statusValue(item.resolutionStatus)}
-              label={text(item.resolutionStatus, "REVIEW_REQUIRED")}
+              label={statusLabel(item.resolutionStatus)}
             />
           </article>
         ))}
@@ -587,7 +591,7 @@ function ResolverResult({
         <p>
           {selected
             ? `${objectLabel(selected)} - ${text(selected.resolutionStrategy, "CONFIRMED")}`
-            : text(data.resolutionStrategy, "REVIEW_REQUIRED")}
+            : statusLabel(data.resolutionStrategy)}
         </p>
       </div>
       <ResultList title="Candidates">

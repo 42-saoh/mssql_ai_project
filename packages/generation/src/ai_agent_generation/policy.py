@@ -65,16 +65,8 @@ class GenerationPolicyAssets:
     def template_ref(self, template_id: str) -> str:
         return f"template:{template_id}@{self.template_version(template_id)}"
 
-    def review_checklist(self) -> tuple[str, ...]:
-        value = _lookup_required(self.policy, "reviewChecklist")
-        return tuple(str(item) for item in value)
-
     def todo_markers(self) -> tuple[str, ...]:
         value = _lookup_required(self.policy, "todoRules.mustMarkUnknown")
-        return tuple(str(item) for item in value)
-
-    def manual_review_checklist(self, template_id: str) -> tuple[str, ...]:
-        value = self.template(template_id).get("manualReviewChecklist", ())
         return tuple(str(item) for item in value)
 
     def sql_risk_markers(self, template_id: str) -> tuple[Mapping[str, Any], ...]:
@@ -86,7 +78,7 @@ _REQUIRED_POLICY_PATHS = (
     "policyVersion",
     "mode.generation",
     "mode.evidence_required",
-    "mode.review_required",
+    "mode.quality_caveats_enabled",
     "naming.packagePattern",
     "classNames.dto",
     "classNames.vo",
@@ -104,7 +96,7 @@ _REQUIRED_POLICY_PATHS = (
     "mybatis.sqlCommentPattern",
     "fieldMapping.nameTransform.rule",
     "fieldMapping.typeMappingDefaults",
-    "reviewChecklist",
+    "draftQualityChecks",
     "todoRules.mustMarkUnknown",
 )
 
@@ -112,7 +104,7 @@ _REQUIRED_TEMPLATE_PATHS = (
     "version",
     "requestedOutputType",
     "outputRoles",
-    "reviewChecklistPolicyRef",
+    "draftQualityPolicyRef",
 )
 
 

@@ -9,6 +9,22 @@ suites:
   web:
     - tests/unit/web
     - tests/e2e/test_web_http_adapter_smoke.py
+  framework-contracts:
+    - tests/contract/test_p43_framework_adoption_prompt_assets.py
+    - tests/contract/test_p44_framework_runtime_adoption_assets.py
+    - tests/contract/test_p45_p46_framework_runtime_gates.py
+    - tests/contract/test_p47_generic_ai_draft_quality_uplift_assets.py
+    - tests/contract/test_p48_unified_framework_runtime_assets.py
+    - tests/contract/test_p49_framework_runtime_consolidation_cleanup_assets.py
+  framework-runtime:
+    - "@framework-contracts"
+    - tests/unit/agent_runtime/test_openai_agents_framework_adapter.py
+    - tests/unit/agent_runtime/test_langgraph_ai_draft_pack_orchestrator.py
+    - tests/unit/agent_runtime/test_openai_agents_structured_adapter.py
+    - tests/unit/agent_runtime/test_semantic_runtime.py
+    - tests/unit/agent_runtime/test_sp_operation_planner.py
+    - tests/unit/api/test_workflow_service.py
+    - tests/eval/test_p44_framework_runtime_replay.py
   live-confidence:
     - tests/eval/test_p15_eval_ops_gate.py
     - tests/eval/test_p20_auth_rbac_live_gate.py
@@ -18,3 +34,5 @@ suites:
     - tests/eval/test_p27_dependency_evidence_hard_live_gate.py
     - tests/eval/test_p32_live_confidence_planner_effectiveness.py
     - tests/eval/test_p35_knowledge_live_confidence_gate.py
+    - tests/eval/test_p42_live_ai_draft_pack_replay_gate.py
+    - tests/eval/test_p45_openai_agents_live_gate.py

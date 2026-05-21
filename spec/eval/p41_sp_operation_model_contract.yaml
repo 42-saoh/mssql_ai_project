@@ -1,0 +1,222 @@
+contract_id: p41_sp_operation_model@0.1.0
+phase: P41
+title: SP operation model and multi-DTO blueprint renewal contract
+status: p41f_quality_gate_ready
+production_ready: false
+
+depends_on:
+  - p24_sp_migration_guide_quality@0.3.0
+  - p36_output_renewal@0.1.0
+  - CanonicalAnalysisModel.v2
+  - template:java_mybatis_sp_wrapper@0.3.0
+
+objective: >
+  Define the P41 contract for separating stored-procedure business operation
+  analysis from Java/MyBatis generation. P41 proves that a complex guide such as
+  PCO_GU_ManageBond_PRC requires branch-level operation contracts and multiple
+  DTO blueprints rather than one merged DTO, then wires that model into draft
+  Java/MyBatis generation.
+
+execution_shape:
+  mode: sequential_only
+  parallel_execution_allowed: false
+  required_order:
+    - P41A
+    - P41B
+    - P41C
+    - P41D
+    - P41E
+    - P41F
+
+artifact_policy:
+  requested_output_groups_unchanged:
+    - JAVA_MYBATIS_DRAFT
+  persisted_artifact_types_unchanged:
+    - DTO_DRAFT
+    - SERVICE_DRAFT
+    - MAPPER_INTERFACE
+    - MAPPER_XML
+  dto_draft_internal_shape: multi_file_bundle_allowed
+  new_public_artifact_type_allowed: false
+  ui_change_allowed: false
+  production_ready: false
+
+operation_model_contract:
+  schema_ref: SpOperationModel.v0.1
+  contract_target: SpOperationModel
+  source_policy: sanitized_facts_only
+  runtime_hardening:
+    complex_sp_task_split:
+      enabled: true
+      sidecar_agent_types:
+        - LLM_SP_OPERATION_BRANCH_PLANNER
+        - LLM_SP_OPERATION_MODEL_REPAIR
+      final_agent_type: LLM_SP_OPERATION_PLANNER
+      modes:
+        - branch_plan
+        - final_model
+        - repair
+    validator_repair:
+      max_retries: 1
+      input_policy: sanitized_statement_evidence_branch_plan_and_validation_findings_only
+      raw_failed_payload_allowed: false
+      fallback_on_failure: P41_OPERATION_MODEL_REVIEW_REQUIRED
+  required_top_level_fields:
+    - schemaVersion
+    - targetRef
+    - operations
+    - statementEvidence
+    - dtoBlueprints
+    - evidenceRefs
+    - reviewMarkers
+  required_operation_fields:
+    - operationId
+    - crudFlag
+    - branchCondition
+    - statementRefs
+    - dtoBlueprintRefs
+    - evidenceRefs
+  required_statement_fields:
+    - statementId
+    - operation
+    - targetRef
+    - phase
+    - inputs
+    - outputs
+    - writes
+    - crossDatabase
+    - evidenceRefs
+    - reviewMarkers
+  required_dto_fields:
+    - name
+    - role
+    - operationIds
+    - fields
+    - evidenceRefs
+    - reviewMarkers
+  accepted_statement_operations:
+    - SELECT
+    - INSERT
+    - UPDATE
+    - DELETE
+    - EXECUTE
+    - COMPUTE
+    - VALIDATE
+  accepted_dto_roles:
+    - QUERY
+    - RESULT
+    - COMMAND
+    - BATCH_ITEM
+    - CALL_REQUEST
+    - CALL_RESULT
+    - REVIEW_REQUIRED
+
+p41a_reference_fixture:
+  fixture: fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml
+  source_reference_name: MIGRATION_GUIDE.md
+  source_reference_path_outside_repo: D:/migration/test_mcp_server_with_codex/MIGRATION_GUIDE.md
+  target_ref: PPM.dbo.PCO_GU_ManageBond_PRC
+  copy_user_reference_content_to_repo: false
+  copy_raw_sp_text_to_repo: false
+  required_crud_flags:
+    - R
+    - A
+    - C
+    - U
+    - D
+    - VENDOR_U
+    - ONLINE_U
+  required_branch_variables:
+    - "@CRUDFlag"
+    - "@BondKindCode"
+    - "@GUBUNFlag"
+    - "@SValue"
+  minimum_dto_blueprints: 9
+  must_include_dto_blueprints:
+    - ManageBondSearchCriteria
+    - ManageBondSearchRow
+    - ApproveAdvanceBondCommand
+    - CreateBondCommand
+    - CreateRetentionBondBatchItem
+    - UpdateBondCommand
+    - DeleteBondCommand
+    - VendorBondUpdateCommand
+    - OnlineBondUpdateCommand
+
+generator_gap_expectation:
+  current_renderer: JavaMyBatisSpWrapperRenderer
+  current_behavior: single_dto_file
+  expected_gap_marker: SINGLE_DTO_COLLAPSE_REVIEW_REQUIRED
+  acceptable_for_p41a: true
+  required_next_slice: P41B
+  resolved_when_operation_model_supplied_by: P41E
+
+p41e_generation_contract:
+  renderer: JavaMyBatisSpWrapperRenderer
+  input_contract: request.operationModel
+  operation_model_schema: SpOperationModel.v0.1
+  dto_draft_internal_shape: multi_file_bundle
+  service_draft_shape: single_file
+  mapper_interface_shape: single_file
+  mapper_xml_shape: single_file
+  legacy_without_operation_model: single_dto_file
+  production_ready: false
+  no_new_public_artifact_type: true
+
+mcp_tooling_design:
+  p41a_adds_live_tool: false
+  future_read_only_tool_candidates:
+    - get_procedure_statement_evidence
+    - get_statement_column_usage
+    - get_procedure_result_set_metadata
+  required_tool_fields_if_added:
+    - structured input only
+    - snapshotId
+    - collectedAt
+    - evidenceRefs
+    - no free-form SQL
+    - no row data
+    - no procedure execution
+
+quality_thresholds:
+  operation_crud_flag_coverage_min: 1.0
+  dto_blueprint_min: 9
+  statement_evidence_min: 10
+  review_required_uncertain_items_min: 2
+  current_generator_gap_must_be_visible: true
+  forbidden_storage_findings_max: 0
+
+forbidden_behavior:
+  row_data_query: true
+  procedure_execution: true
+  business_db_ddl_or_dml: true
+  automatic_ddl_apply: true
+  automatic_generated_source_apply: true
+  raw_prompt_storage: true
+  raw_sp_definition_storage: true
+  raw_openai_response_text_storage: true
+  secret_storage: true
+  ppm_to_plf_fallback: true
+
+storage_policy:
+  forbidden_payload_fields:
+    - raw_prompt
+    - raw_sp_definition
+    - raw_openai_response_text
+    - row_data
+    - secrets
+  allowed_reference_derivations:
+    - sanitized operation ids
+    - sanitized statement evidence ids
+    - branch condition summaries
+    - table/procedure/function target refs
+    - DTO blueprint names and field candidates
+    - REVIEW_REQUIRED markers
+
+verification:
+  contract_assets:
+    - tests/contract/test_p41_sp_operation_model_prompt_assets.py
+  fixture_eval:
+    - tests/eval/test_p41_sp_operation_model.py
+  targeted_command:
+    - make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"

@@ -1,0 +1,41 @@
+contract_id: p38_metadata_design_chat
+version: 0.1.0
+production_ready: false
+summary: >
+  P38 adds durable metadata design chat runs that use read-only metadata evidence
+  to draft non-executable table script previews and DTO_DRAFT previews.
+required_paths:
+  - /api/v1/metadata/design-runs
+  - /api/v1/metadata/design-runs/{runId}
+  - /api/v1/metadata/design-conversations/{conversationId}
+storage:
+  manual_sql: db/schema/ai_agent_platform_schema_v10_metadata_design_runs.sql
+  table: dbo.METADATA_DESIGN_RUNS
+  json_columns:
+    - REQUEST_JSON
+    - RESULT_JSON
+    - ERR_JSON
+outputs:
+  table_script_field: createTableScriptPreview
+  dto_preview_artifact_type: DTO_DRAFT
+  dto_preview_package: com.pec.metadata.design.dto
+  not_workflow_artifacts: true
+required_evidence:
+  - search_columns
+  - search_tables
+  - find_similar_tables
+  - platform_db_standardization_rules_for_ai
+review_required_when:
+  - no similar metadata was found
+  - name or type was inferred from policy only
+  - PK/FK/index structure is not confirmed
+  - description is missing or inferred
+forbidden:
+  - rowData
+  - rawPrompt
+  - rawProviderResponse
+  - fullSqlDefinition
+  - storedProcedureExecution
+  - automaticDdlApply
+  - workflowArtifactPersistence
+  - retiredArtifactTypeRevival

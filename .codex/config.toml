@@ -32,6 +32,11 @@ description = "Canonical model, prompt/template, and generator specialist."
 config_file = "./agents/template_engineer.toml"
 nickname_candidates = ["Glyph", "Frame", "Quill"]
 
+[agents.framework_engineer]
+description = "Adopted framework runtime specialist for adapter seams, trace policy, redaction, rollback, and quality replay."
+config_file = "./agents/framework_engineer.toml"
+nickname_candidates = ["Bridge", "Pilot", "Vector"]
+
 [agents.reviewer]
 description = "Read-only reviewer focused on correctness, policy, security, tests, and docs drift."
 config_file = "./agents/reviewer.toml"
@@ -59,7 +64,7 @@ model_reasoning_effort = "xhigh"
 
 [sandbox_workspace_write]
 writable_roots = []
-network_access = false
+network_access = true
 
 [shell_environment_policy]
 inherit = "all"

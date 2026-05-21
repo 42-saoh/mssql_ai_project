@@ -4,16 +4,16 @@
 - DB profiles
 - prompt / template / model versions
 - user roles
-- deferred approval policy
+- draft-quality validation policy
 - audit log
 
 ## 현재 구현 상태
 
-- implemented: API route surface, workflow state 기록, validation report 저장, deferred approval decision 기록, audit event 기록.
+- implemented: API route surface, workflow state 기록, validation report 저장, audit event 기록.
 - fixture-first: metadata collection 과 e2e/eval 기본 경로.
 - stub/skeleton: publish route, full registry admin.
 - optional live: MSSQL MCP readiness probe. live metadata query execution 은 아직 completed feature 가 아니다.
-- follow-up: published version 승격 UI/API, review/approval UI 재활성화 여부, live auth/RBAC wiring verification, live read-only metadata adapter.
+- follow-up: published version 승격 UI/API 여부, live auth/RBAC wiring verification, live read-only metadata adapter.
 - not production-ready: P17D live pilot release 와 P18/P19 opening posture 는 scoped/controlled CONDITIONAL_GO 이며, P20 live IdP/JWKS 와 운영 PLF role membership 검증 전까지 production-grade enterprise Auth/RBAC 또는 `production_ready: true` 로 보지 않는다.
 - auth/RBAC source: production actor identity 는 verified OIDC/JWT 이고 role source 는 PLF `AUTH_USERS`, `AUTH_ROLES`, `AUTH_USER_ROLES` 이다. 상세 기준은 `docs/admin-guide/auth-rbac-production-source.md` 를 따른다.
 
@@ -22,7 +22,7 @@
 2. `config/mssql/local_docker_profiles.yaml` 에서 metadata 기본 profile `master` 와 platform profile `plf` 을 확인한다.
 3. schema 변경이 필요하면 `db/schema/` 에 versioned SQL 만 추가하고 실제 DB 적용은 외부 운영자가 수동 수행한다.
 4. 검증은 `make test PYTEST_ARGS="tests/e2e tests/eval"` 과 필요한 경우 `make test`, `make test-web-smoke` 로 수행한다.
-5. P25 기준 기본 workflow 와 Web UI 는 validation 이후 `VALIDATION_COMPLETE` 에서 끝난다. Approval decision API 는 deferred compatibility 기능이며 publish 나 배포를 자동 수행하지 않는다.
+5. 기본 workflow 와 Web UI 는 validation 이후 `VALIDATION_COMPLETE` 에서 끝난다. 제품 표면에는 publish, deploy, apply action 이 없으며 자동 수행하지 않는다.
 6. Web HTTP adapter route smoke 는 `python3.14 tests/e2e/web_http_adapter_smoke.py` 로 실행한다. 이 검증은 fixture-backed local API route evidence 이며 production auth/RBAC evidence 가 아니다.
 7. Auth/RBAC route enforcement 검증은 `make test PYTEST_ARGS="tests/integration/api/test_api_auth_rbac.py"` 로 실행한다. 이 검증은 runtime-generated JWT 와 fixture PLF role repository 를 사용하며 운영 IdP/JWKS 검증을 대체하지 않는다.
 
@@ -33,7 +33,7 @@
 - PPM 접근 실패, metadata 권한 부족, live 연결 부재는 blocker 이며 PLF 로 대체하지 않는다.
 - read-only permission check 는 database 존재/접근성, procedure/table/view/function inventory, procedure dependency, table schema metadata 를 확인한다.
 - latency 는 PPM readiness, metadata inventory smoke, fixture workflow smoke 로 나누어 측정하며 현재 live gate 와 product target 을 구분한다.
-- correlation id 는 request/job/metadata/artifact/validation 과 deferred approval/audit 문맥에 전달되어야 한다.
+- correlation id 는 request/job/metadata/artifact/validation/audit 문맥에 전달되어야 한다.
 - 로그와 audit 에 connection string, credential, cookie, raw definition text, row data 를 남기지 않는다.
 
 ## P16/P17 pilot readiness 운영
@@ -42,7 +42,7 @@
 - 현재 PPM manifest 는 `live_metadata` 이므로 대표 object identity 를 문서와 fixture 에 참조할 수 있다.
 - P17A 는 selected stored procedure suite majority 기준으로 `DEPENDENCY_METADATA_INCOMPLETE` 를 닫았지만, selected table 은 confirmed `related_procedures` evidence 가 있을 때만 selected procedure dependency 로 주장한다.
 - P17D 이후 live pilot release 는 scoped draft-only candidate 에 한해 CONDITIONAL_GO 이며, fixture-first/demo handoff 는 계속 GO WITH LIMITATIONS 이다.
-- P17D live pilot evidence 의 human `APPROVE` 조건은 과거 scoped candidate 기준이다. P25 기본 제품 흐름은 human approval 을 요구하지 않고 validation-complete draft output 에서 멈춘다.
+- P17D live pilot evidence 는 scoped candidate 기준의 draft-quality evidence 로 정리되었다. 기본 제품 흐름은 별도 승인 없이 validation-complete draft output 에서 멈춘다.
 - P18/P19 productization readiness 는 `fixtures/eval/productization_gap_closure_p18_v1.yaml` 의 HTTP adapter smoke evidence, auth/RBAC source 문서화, fixture-backed enforcement 를 반영해 controlled conditional open 으로 해석한다. Live IdP/JWKS 와 PLF role lookup 검증은 production-grade enterprise Auth/RBAC claim 전 future hardening 이다.
 
 ## 스키마 변경 운영

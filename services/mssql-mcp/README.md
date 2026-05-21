@@ -85,6 +85,9 @@ dependency summary, caveats, and review flags without returning definition text.
 Direct definition tools (`get_procedure_definition`, `get_view_definition`,
 `get_function_definition`) may return definition text for downstream analysis and
 also return the same standardized hash/length/pattern/access/caveat fields.
+`get_procedure_definition` accepts optional internal `referencedDatabase` only for
+same-server cross-database procedure dependencies that were already confirmed by
+catalog evidence; this does not expand the public API allowlist.
 
 `get_procedure_dependencies` exposes structured dependency resolution evidence
 and is contractually extended for P27 with optional `resolutionConfidence`,
@@ -116,7 +119,7 @@ caller-dependent, dynamic SQL, cross-server, ambiguous, and unresolved reference
 remain `REVIEW_REQUIRED` until catalog metadata uniquely confirms them.
 
 `search_metadata_objects` is the query-aware metadata search capability for API
-and UI consumers. It searches procedure/table/view/function identities through
+and UI consumers. It searches procedure/table/column/view/function identities through
 the same read-only MCP boundary and returns only object identity, source
 profile/database, snapshot/evidence refs, caveats, review-required state, and
 blocker codes. It does not return row data, execute procedures, perform DDL/DML,

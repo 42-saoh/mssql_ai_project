@@ -2,30 +2,36 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PROMPT_VERSION = "prompt:sp_semantic_analysis@0.4.0"
-OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.4.0"
+PROMPT_VERSION = "prompt:sp_semantic_analysis@0.4.1"
+OUTPUT_SCHEMA_VERSION = "schema:llm_semantic_analysis@0.4.1"
 TOOL_PLANNER_PROMPT_VERSION = "prompt:mssql_metadata_tool_planner@0.1.0"
 TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_tool_plan@0.1.0"
 PLATFORM_TOOL_PLANNER_PROMPT_VERSION = "prompt:platform_tool_planner@0.1.0"
 PLATFORM_TOOL_PLANNER_OUTPUT_SCHEMA_VERSION = "schema:platform_tool_plan@0.1.0"
-METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.0"
-METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.0"
+METADATA_ANALYSIS_PROMPT_VERSION = "prompt:mssql_metadata_analysis@0.1.1"
+METADATA_ANALYSIS_OUTPUT_SCHEMA_VERSION = "schema:mssql_metadata_analysis@0.1.1"
 SEMANTIC_MODEL_PROFILE_ID = "openai_sp_semantic_analysis"
 FAST_TEST_MODEL_PROFILE_ID = "openai_fast_test"
+AI_DRAFT_PACK_MODEL_PROFILE_ID = "openai_ai_draft_pack"
 FAST_TEST_DEFAULT_MODEL = "gpt-5-nano"
 SEMANTIC_MODEL_REGISTRY_REF = "model:openai_sp_semantic_analysis@0.1.0"
 FAST_TEST_MODEL_REGISTRY_REF = f"model:openai_fast_test@{FAST_TEST_DEFAULT_MODEL}@0.1.0"
+AI_DRAFT_PACK_MODEL_REGISTRY_REF = "model:openai_ai_draft_pack@0.1.0"
 
 
 def fast_test_model_registry_ref(model: str) -> str:
     return f"model:openai_fast_test@{model}@0.1.0"
+
+
+def ai_draft_pack_model_registry_ref(model: str) -> str:
+    return f"model:openai_ai_draft_pack@{model}@0.1.0"
 
 
 class AgentRunStatus(StrEnum):
@@ -226,6 +232,8 @@ class ModelInvocationRecord:
     component_invocations: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     def to_storage_dict(self) -> dict[str, Any]:
+        source_context_summary = _model_source_context_summary(self.component_invocations)
+        analysis_coverage = dict(source_context_summary.get("analysisCoverage") or {})
         payload = {
             "provider": self.provider,
             "model": self.model,
@@ -240,6 +248,8 @@ class ModelInvocationRecord:
             "status": self.status.value,
             "tokenUsage": dict(self.token_usage),
             "latencyMs": self.latency_ms,
+            "analysisCoverage": analysis_coverage,
+            "sourceContextSummary": source_context_summary,
         }
         if self.component_invocations:
             payload["componentInvocations"] = [dict(item) for item in self.component_invocations]
@@ -274,6 +284,80 @@ def stable_json_hash(value: Any) -> str:
 
 def text_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _model_source_context_summary(
+    component_invocations: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    summaries = [
+        dict(item.get("sourceContextSummary") or {})
+        for item in component_invocations
+        if isinstance(item.get("sourceContextSummary"), Mapping)
+    ]
+    if not summaries:
+        return {
+            "mode": "NONE",
+            "budgetStatus": "NO_SOURCE_CONTEXT",
+            "selectedSpanCount": 0,
+            "skippedSpanCount": 0,
+            "reviewMarkers": [],
+        }
+    selected_count = sum(int(item.get("selectedSpanCount") or 0) for item in summaries)
+    skipped_count = sum(int(item.get("skippedSpanCount") or 0) for item in summaries)
+    budget_statuses = [str(item.get("budgetStatus") or "") for item in summaries]
+    budget_status = (
+        "REVIEW_REQUIRED"
+        if any(
+            status
+            in {
+                "PRE_PROVIDER_SHRINK",
+                "SHRUNK_RETRY",
+                "FALLBACK_NO_SOURCE",
+                "COMPACT_NO_SOURCE_TEXT",
+                "MINIMUM_EVIDENCE_DIGEST",
+            }
+            for status in budget_statuses
+        )
+        else (
+            "TRUNCATED_TO_BUDGET"
+            if "TRUNCATED_TO_BUDGET" in budget_statuses
+            else "WITHIN_BUDGET"
+        )
+    )
+    coverage = next(
+        (
+            dict(item.get("analysisCoverage") or {})
+            for item in summaries
+            if item.get("analysisCoverage")
+        ),
+        {},
+    )
+    markers: list[dict[str, Any]] = []
+    dependency_analysis: dict[str, Any] | None = None
+    prompt_compaction: dict[str, Any] | None = None
+    for item in summaries:
+        for marker in item.get("reviewMarkers", []):
+            if isinstance(marker, Mapping):
+                markers.append(dict(marker))
+        if isinstance(item.get("dependencyAnalysis"), Mapping):
+            dependency_analysis = dict(item["dependencyAnalysis"])
+        if isinstance(item.get("promptCompaction"), Mapping):
+            prompt_compaction = dict(item["promptCompaction"])
+    result = {
+        "mode": "RETRIEVED_SPANS"
+        if any(item.get("mode") == "RETRIEVED_SPANS" for item in summaries)
+        else "NONE",
+        "budgetStatus": budget_status,
+        "selectedSpanCount": selected_count,
+        "skippedSpanCount": skipped_count,
+        "analysisCoverage": coverage,
+        "reviewMarkers": markers,
+    }
+    if dependency_analysis is not None:
+        result["dependencyAnalysis"] = dependency_analysis
+    if prompt_compaction is not None:
+        result["promptCompaction"] = prompt_compaction
+    return result
 
 
 def semantic_output_schema(

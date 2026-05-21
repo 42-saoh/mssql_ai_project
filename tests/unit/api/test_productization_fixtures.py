@@ -103,21 +103,18 @@ def test_p13_validation_approval_audit_fixture_locks_gate_expectations() -> None
     scenario = fixture["sample_scenarios"][0]
     expected = scenario["expected"]
 
-    assert fixture["public_api_contract"]["approval_checklist_exposed_as_response_fields"] is False
+    assert fixture["public_api_contract"]["draft_quality_caveats_exposed_as_response_fields"] is True
     assert fixture["public_api_contract"]["audit_events_exposed_as_response_fields"] is False
-    assert expected["approval_decision_log"]["validation_report_binding"] == (
-        "auto_fill_latest_validation_report_id"
-    )
+    assert expected["draft_quality_gate"]["validation_report_binding"] == "latest_validation_report_id"
     assert expected["audit_event_shape"]["expected_stages"] == [
         "REQUEST",
         "JOB",
         "METADATA",
         "ARTIFACT",
         "VALIDATION",
-        "APPROVAL",
     ]
     assert "PUBLISHED" in expected["forbidden_artifact_statuses"]
-    assert "unapproved_publish_or_export" in fixture["forbidden_evidence"]
+    assert "unvalidated_publish_or_export" in fixture["forbidden_evidence"]
 
 
 def _walk_samples(fixture: dict[str, Any]) -> list[dict[str, Any]]:

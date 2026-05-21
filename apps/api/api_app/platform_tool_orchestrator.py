@@ -71,7 +71,7 @@ class PlatformToolOrchestrator:
         if max_tool_calls <= 0:
             marker = _review_marker(
                 "PLATFORM_TOOL_CALL_BUDGET_EXHAUSTED",
-                "Platform tool call budget was exhausted before planning could run.",
+                "planning 실행 전에 platform tool call budget을 소진했습니다.",
                 evidence_refs=_fallback_evidence_refs(metadata, []),
             )
             return PlatformToolOrchestrationResult(
@@ -96,7 +96,7 @@ class PlatformToolOrchestrator:
         if not callable(planner):
             marker = _review_marker(
                 "PLATFORM_TOOL_ORCHESTRATION_SKIPPED",
-                "Configured model gateway does not expose platform tool planning.",
+                "설정된 model gateway가 platform tool planning을 제공하지 않습니다.",
                 evidence_refs=_fallback_evidence_refs(metadata, []),
             )
             return PlatformToolOrchestrationResult(
@@ -214,7 +214,7 @@ class PlatformToolOrchestrator:
                 review_markers.append(
                     _review_marker(
                         "PLATFORM_TOOL_CALL_BUDGET_EXHAUSTED",
-                        "Platform tool call budget was exhausted before all planned requests ran.",
+                        "계획된 요청을 모두 실행하기 전에 platform tool call budget을 소진했습니다.",
                         evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                     )
                 )
@@ -234,7 +234,7 @@ class PlatformToolOrchestrator:
                 review_markers.append(
                     _review_marker(
                         "PLATFORM_TOOL_ORCHESTRATION_REVIEW_REQUIRED",
-                        str(decision.message or "Platform tool request was blocked."),
+                        str(decision.message or "Platform tool request가 차단되었습니다."),
                         evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                     )
                 )
@@ -263,7 +263,7 @@ class PlatformToolOrchestrator:
                 review_markers.append(
                     _review_marker(
                         "PLATFORM_TOOL_ORCHESTRATION_REVIEW_REQUIRED",
-                        f"Platform tool invocation failed: {exc.code}.",
+                        f"Platform tool invocation이 실패했습니다: {exc.code}.",
                         evidence_refs=_fallback_evidence_refs(metadata, deterministic_facts),
                     )
                 )
@@ -389,9 +389,9 @@ def _deterministic_fallback_tool_requests(
         {
             "toolName": "platform.list_registry_versions",
             "arguments": {},
-            "reason": "Fallback needs registry version evidence for reproducibility.",
+            "reason": "fallback에는 재현성을 위한 registry version 근거가 필요합니다.",
             "expectedEvidenceUse": (
-                "Anchor prompt, schema, model, generator, policy, and template version claims."
+                "prompt, schema, model, generator, policy, template version claim의 근거로 사용합니다."
             ),
         }
     ][:max_tool_calls]
@@ -408,16 +408,16 @@ def _fallback_tool_plan(
             "toolRequests": tool_requests,
             "assumptions": [
                 (
-                    "Deterministic read-only platform context requests were used because "
-                    "the platform tool planner was invalid or empty."
+                    "platform tool planner가 invalid 또는 empty 상태라 결정론적 read-only "
+                    "platform context request를 사용했습니다."
                 )
             ],
             "reviewMarkers": [
                 _review_marker(
                     PLATFORM_TOOL_PLANNER_DETERMINISTIC_FALLBACK,
                     (
-                        "Platform tool planner output was invalid or empty; deterministic "
-                        f"read-only fallback tool requests were used. code={detail_code}"
+                        "Platform tool planner output이 invalid 또는 empty 상태라 결정론적 "
+                        f"read-only fallback tool request를 사용했습니다. code={detail_code}"
                     ),
                     evidence_refs=evidence_refs,
                 )
@@ -466,7 +466,7 @@ def _metadata_with_platform_tool_evidence(
             _dedupe_strings(
                 [
                     *metadata.notes,
-                    "Platform tool orchestration used internal read-only platform registry.",
+                    "Platform tool orchestration은 internal read-only platform registry를 사용했습니다.",
                 ]
             )
         ),
@@ -510,22 +510,22 @@ def _deterministic_fact(
 def _fact_summary(tool_name: str, payload: Mapping[str, Any]) -> str:
     data = _safe_dict(payload.get("data"))
     if tool_name == "platform.search_knowledge_facts":
-        return f"Platform knowledge fact search returned {data.get('resultCount', 0)} facts."
+        return f"Platform knowledge fact search가 fact {data.get('resultCount', 0)}개를 반환했습니다."
     if tool_name == "platform.list_knowledge_assets":
-        return f"Platform knowledge asset listing returned {data.get('resultCount', 0)} assets."
+        return f"Platform knowledge asset listing이 asset {data.get('resultCount', 0)}개를 반환했습니다."
     if tool_name == "platform.get_knowledge_version_graph":
         facts = data.get("facts") if isinstance(data.get("facts"), list) else []
         edges = data.get("edges") if isinstance(data.get("edges"), list) else []
-        return f"Platform knowledge graph returned {len(facts)} facts and {len(edges)} edges."
+        return f"Platform knowledge graph가 fact {len(facts)}개와 edge {len(edges)}개를 반환했습니다."
     if tool_name == "platform.list_job_artifacts":
-        return f"Current job artifact listing returned {data.get('resultCount', 0)} artifacts."
+        return f"현재 job artifact listing이 artifact {data.get('resultCount', 0)}개를 반환했습니다."
     if tool_name == "platform.get_latest_validation_report":
-        return f"Latest validation report status is {data.get('status', 'UNKNOWN')}."
+        return f"최신 validation report status는 {data.get('status', 'UNKNOWN')}입니다."
     if tool_name == "platform.list_job_agent_runs":
-        return f"Current job agent run listing returned {data.get('resultCount', 0)} runs."
+        return f"현재 job agent run listing이 run {data.get('resultCount', 0)}개를 반환했습니다."
     if tool_name == "platform.list_registry_versions":
-        return f"Platform registry version listing returned {data.get('resultCount', 0)} bindings."
-    return f"{tool_name} returned sanitized read-only platform evidence."
+        return f"Platform registry version listing이 binding {data.get('resultCount', 0)}개를 반환했습니다."
+    return f"{tool_name}이 sanitized read-only platform evidence를 반환했습니다."
 
 
 def _tool_component(
@@ -580,7 +580,7 @@ def _blocked_request(decision: PlatformToolDecision) -> dict[str, Any]:
         "toolName": decision.tool_name,
         "argumentHash": stable_json_hash(decision.arguments),
         "code": str(decision.code or "PLATFORM_TOOL_REQUEST_BLOCKED"),
-        "message": str(decision.message or "Platform tool request was blocked."),
+        "message": str(decision.message or "Platform tool request가 차단되었습니다."),
     }
 
 

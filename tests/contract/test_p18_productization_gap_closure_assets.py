@@ -168,7 +168,7 @@ def test_p18b_auth_source_docs_match_role_seed_and_error_semantics() -> None:
     assert "PLF" in combined
     for table in ("AUTH_USERS", "AUTH_ROLES", "AUTH_USER_ROLES"):
         assert table in combined
-    for role in ("USER", "REVIEWER", "ADMIN", "AUDITOR"):
+    for role in ("USER", "ADMIN", "AUDITOR"):
         assert f"AUTH_GRP_NM = '{role}'" in ddl
         assert role in auth_doc
 

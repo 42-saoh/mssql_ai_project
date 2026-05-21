@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 
 def snake_to_lower_camel(value: str) -> str:
     parts = [part.lower() for part in value.split("_") if part]
@@ -72,3 +74,32 @@ def korean_entity_label(description: str, fallback: str) -> str:
 
 def ensure_trailing_newline(text: str) -> str:
     return text if text.endswith("\n") else f"{text}\n"
+
+
+def draft_quality_text(text: str) -> str:
+    """Render machine uncertainty markers as draft-quality caveat language."""
+    replacements = (
+        ("REVIEW_REQUIRED:", "근거 보강 필요:"),
+        ("REVIEW_REQUIRED는", "근거 보강 필요는"),
+        ("REVIEW_REQUIRED??", "근거 보강 필요는 "),
+        ("REVIEW_REQUIRED items", "Evidence caveat items"),
+        ("REVIEW_REQUIRED caveats", "evidence caveats"),
+        ("REVIEW_REQUIRED dependencies", "evidence-caveated dependencies"),
+        ("status=REVIEW_REQUIRED", "status=evidence_caveat"),
+        ("상태=REVIEW_REQUIRED", "상태=근거 보강 필요"),
+        ("상태 REVIEW_REQUIRED:", "품질 caveat:"),
+        ("- 가정: REVIEW_REQUIRED ", "- 가정: 근거 보강 필요 "),
+        ("LLM_INFERENCE_REVIEW_REQUIRED", "LLM_INFERENCE_EVIDENCE_CAVEAT"),
+        ("_REVIEW_REQUIRED", "_EVIDENCE_CAVEAT"),
+        ("review marker claim", "evidence caveat claim"),
+        ("review marker", "evidence caveat"),
+        ("Review marker", "Evidence caveat"),
+        ("reviewMarkers", "evidenceCaveats"),
+        ("검토 마커", "근거 caveat"),
+        ("검토 전까지", "근거 보강 전까지"),
+        ("검토합니다", "근거를 보강합니다"),
+    )
+    rendered = text
+    for old, new in replacements:
+        rendered = rendered.replace(old, new)
+    return re.sub(r"(?<![A-Za-z0-9_])REVIEW_REQUIRED(?![A-Za-z0-9_])", "근거 보강 필요", rendered)

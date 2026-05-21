@@ -148,10 +148,10 @@ def _validate_manifest_context(
 
     if "DEPENDENCY_METADATA_INCOMPLETE" in set(package.get("active_blockers_after_p17b", ())):
         issues.append("P17B package must not keep DEPENDENCY_METADATA_INCOMPLETE active")
-    if "MANUAL_APPROVAL_EVIDENCE_MISSING" not in set(
+    if "DRAFT_QUALITY_EVIDENCE_MISSING" not in set(
         package.get("active_blockers_after_p17b", ())
     ):
-        issues.append("P17B package must keep manual approval blocker active")
+        issues.append("P17B package must keep draft-quality evidence blocker active")
     if package.get("live_release_decision_after_p17b", {}).get("decision") != "NO_GO":
         issues.append("P17B package must keep the live release decision NO_GO")
     if package.get("source_generation_manifest") != generation_manifest.get("manifest_ref"):

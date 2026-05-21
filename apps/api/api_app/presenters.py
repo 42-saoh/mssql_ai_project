@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from ai_agent_domain import JobStatus, RequestedOutputType, WorkflowStepType
+
 from api_app.repositories import (
     AgentRunRecord,
-    ApprovalRecordData,
     ArtifactRecord,
     JobRecord,
     ValidationReportRecord,
 )
 from api_app.schemas import (
     AgentRunSummary,
-    ApprovalRecord,
     Artifact,
     ArtifactSummary,
     EvidenceRef,
@@ -29,14 +29,57 @@ def present_job(job: JobRecord) -> Job:
         jobId=job.job_id,
         requestId=job.request_id,
         status=job.status,
+        dbProfileId=job.db_profile_id,
+        target=_present_target(job.target),
+        targetKey=job.target_key,
+        outputs=_present_outputs(job.outputs),
         currentStep=job.current_step,
         createdAt=job.created_at,
         updatedAt=job.updated_at,
+        progress=estimated_job_progress(job),
         blockers=blockers,
         caveats=caveats,
         failureReason=job.error_message,
     )
 
+
+def estimated_job_progress(job: JobRecord) -> float:
+    status_progress = {
+        JobStatus.SUBMITTED: 0.05,
+        JobStatus.COLLECTING_METADATA: 0.20,
+        JobStatus.ANALYZING: 0.45,
+        JobStatus.GENERATING: 0.72,
+        JobStatus.VALIDATING: 0.90,
+        JobStatus.VALIDATION_COMPLETE: 1.0,
+    }
+    if job.status in status_progress:
+        return status_progress[job.status]
+    if job.status in {JobStatus.FAILED, JobStatus.CANCELED}:
+        if job.current_step is None:
+            return 1.0
+        return {
+            WorkflowStepType.COLLECT_METADATA: 0.20,
+            WorkflowStepType.ANALYZE: 0.45,
+            WorkflowStepType.GENERATE: 0.72,
+            WorkflowStepType.VALIDATE: 0.90,
+        }.get(job.current_step, 1.0)
+    return 1.0
+
+
+def _present_target(target: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(target, dict):
+        return None
+    target_type = str(target.get("type") or "").strip().upper()
+    schema = str(target.get("schema") or "").strip()
+    name = str(target.get("name") or "").strip()
+    if target_type not in {"PROCEDURE", "TABLE", "VIEW", "FUNCTION"} or not schema or not name:
+        return None
+    return {"type": target_type, "schema": schema, "name": name}
+
+
+def _present_outputs(outputs: tuple[str, ...]) -> list[str]:
+    allowed = {item.value for item in RequestedOutputType}
+    return [output for output in outputs if output in allowed]
 
 def present_artifact_summary(artifact: ArtifactRecord) -> ArtifactSummary:
     return ArtifactSummary(
@@ -45,6 +88,7 @@ def present_artifact_summary(artifact: ArtifactRecord) -> ArtifactSummary:
         type=artifact.type,
         status=artifact.status,
         title=artifact.title,
+        targetKey=artifact.target_key,
         evidenceCoverage=artifact.evidence_coverage,
     )
 
@@ -68,7 +112,7 @@ def present_validation_report(report: ValidationReportRecord) -> ValidationRepor
         status=report.status,
         checks=[ValidationCheck(**check) for check in report.checks],
         missingEvidence=report.missing_evidence,
-        manualReviewPoints=report.manual_review_points,
+        qualityCaveats=report.manual_review_points,
     )
 
 
@@ -79,19 +123,9 @@ def present_agent_run(record: AgentRunRecord) -> AgentRunSummary:
         agentType=record.agent_type,
         status=record.status,
         targetRef=record.target_ref,
+        targetKey=record.target_key,
         summary=record.summary,
         structuredOutput=record.structured_output,
         modelInvocation=record.model_invocation,
         createdAt=record.created_at,
-    )
-
-
-def present_approval_record(record: ApprovalRecordData) -> ApprovalRecord:
-    return ApprovalRecord(
-        approvalId=record.approval_id,
-        artifactId=record.artifact_id,
-        decision=record.decision,
-        reviewer=record.reviewer,
-        comment=record.comment,
-        decidedAt=record.decided_at,
     )

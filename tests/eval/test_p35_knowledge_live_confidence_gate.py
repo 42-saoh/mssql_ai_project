@@ -65,7 +65,7 @@ def test_p35_gate_disabled_does_not_initialize_live_access(
 def test_p35_gate_enabled_missing_prerequisites_returns_blocker_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for name in (*REQUIRED_ENV, "AUTH_RBAC_ENFORCEMENT", "OIDC_REVIEWER_BEARER_TOKEN"):
+    for name in (*REQUIRED_ENV, "AUTH_RBAC_ENFORCEMENT"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("P35_KNOWLEDGE_LIVE_GATE", "1")
 
@@ -116,5 +116,5 @@ def test_p35_knowledge_live_confidence_gate() -> None:
     assert result["blockerCode"] is None
     assert result["redaction"] == EXPECTED_REDACTION
     checks = {item["name"]: item for item in result["checks"]}
-    assert checks["knowledge_review"]["status"] == "pass"
+    assert checks["knowledge_search"]["status"] == "pass"
     assert checks["knowledge_export"]["status"] == "pass"

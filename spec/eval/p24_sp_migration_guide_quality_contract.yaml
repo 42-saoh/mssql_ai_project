@@ -1,4 +1,4 @@
-contract_id: p24_sp_migration_guide_quality@0.2.0
+contract_id: p24_sp_migration_guide_quality@0.3.0
 phase: P24
 title: SP migration guide quality contract
 status: contract_ready
@@ -6,8 +6,8 @@ production_ready: false
 depends_on:
   - P23 LLM SP Analysis Quality Eval
   - P12 Java/MyBatis Generation Factory
-  - prompt:sp_migration_guide_generation@0.2.0
-  - schema:sp_migration_guide_quality_report@0.2.0
+  - prompt:sp_migration_guide_generation@0.3.0
+  - schema:sp_migration_guide_quality_report@0.3.0
   - template:sp_migration_guide@0.1.0
 objective:
   Define the quality contract and prompt pack for generating an evidence-backed
@@ -21,7 +21,7 @@ reference_policy:
   allowed_reference_derivations:
     - required_section_taxonomy
     - quality_dimensions
-    - review_checklist_categories
+    - draft_quality_caveat_categories
 runtime_profiles:
   guide_generation:
     default_model: gpt-5.5
@@ -83,6 +83,25 @@ scope:
       title: Manual metadata extraction appendix
     - id: evidence_assumptions_review
       title: Evidence refs, assumptions, and REVIEW_REQUIRED markers
+guide_style_requirements:
+  user_facing_headings: korean_titles_with_stable_section_anchors
+  stable_section_anchor_format: "<!-- section:{section_id} -->"
+  internal_section_ids_visible_as_headings: false
+  required_rendered_elements:
+    - overview_table
+    - feature_branch_taxonomy_table
+    - confirmed_dependency_table
+    - needs_verification_dependency_table
+    - table_level_dml_matrix
+    - branch_call_flow
+    - critical_phase_table
+    - complexity_metric_table
+    - manual_metadata_query_appendix
+    - evidence_and_review_marker_list
+  llm_insight_policy:
+    place_insights_in_matching_sections: true
+    required_boundary_marker: LLM_INFERENCE_REVIEW_REQUIRED
+    can_confirm_new_dependency_facts: false
 dependency_inventory_requirements:
   status_tables:
     - Confirmed
@@ -111,7 +130,7 @@ dependency_inventory_requirements:
     - what_to_extract_next
 manual_metadata_extraction_appendix:
   required: true
-  execution_policy: reviewer_manual_metadata_only
+  execution_policy: metadata_only_evidence_collection
   forbidden:
     - row_data_select
     - procedure_execution

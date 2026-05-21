@@ -38,7 +38,7 @@ def test_p16_fixture_matches_live_manifest_and_conditional_go_decision() -> None
     assert "DEPENDENCY_METADATA_INCOMPLETE" not in {
         blocker["code"] for blocker in manifest["active_blockers"]
     }
-    assert "MANUAL_APPROVAL_EVIDENCE_MISSING" not in _blocker_codes(fixture)
+    assert "DRAFT_QUALITY_EVIDENCE_MISSING" not in _blocker_codes(fixture)
 
 
 def test_p16_representative_objects_are_manifest_backed_when_live() -> None:
@@ -94,14 +94,14 @@ def test_p16_quality_release_checklist_and_forbidden_boundaries() -> None:
         "ppm_access_and_read_only_metadata",
         "dependency_evidence",
         "validation_result",
-        "manual_approval",
+        "draft_quality_evidence",
         "audit_trace",
         "policy_forbidden_actions",
         "docs_status_taxonomy",
     } <= set(checklist)
     assert checklist["dependency_evidence"]["status"] == "PASS"
     assert checklist["validation_result"]["status"] == "PASS"
-    assert checklist["manual_approval"]["status"] == "PASS"
+    assert checklist["draft_quality_evidence"]["status"] == "PASS"
     assert checklist["audit_trace"]["status"] == "PASS"
     assert checklist["hard_live_verification"]["status"] == "PASS"
     assert checklist["policy_forbidden_actions"]["status"] == "PASS"
@@ -111,10 +111,10 @@ def test_p16_quality_release_checklist_and_forbidden_boundaries() -> None:
     assert quality["evidence_coverage"]["confirmed_procedure_dependency_suite_coverage"] > 0.5
     assert quality["validation"]["passed_validation_for_live_release"] is True
     assert quality["validation"]["live_release_validation_status"] == "PASSED"
-    assert quality["approval_audit"]["manual_approval_status"] == "HUMAN_APPROVED_BOUND"
-    assert quality["approval_audit"]["audit_status"] == "BOUND"
+    assert quality["draft_quality_audit"]["draft_quality_status"] == "EVIDENCE_BOUND"
+    assert quality["draft_quality_audit"]["audit_status"] == "BOUND"
     assert (
-        quality["approval_audit"]["publish_status"]
+        quality["draft_quality_audit"]["publish_status"]
         == "no_publish_export_draft_only_conditional_go"
     )
     assert fixture["p17d_hard_live_verification"]["status"] == "PASSED"
@@ -129,7 +129,7 @@ def test_p16_quality_release_checklist_and_forbidden_boundaries() -> None:
         "sql_definition_text",
         "auto_ddl_or_dml",
         "plf_fallback_for_ppm",
-        "unapproved_publish_or_export",
+        "publish_or_export_path",
     } <= set(fixture["forbidden_evidence"])
     assert fixture["profile_policy"]["row_data_allowed"] is False
     assert fixture["profile_policy"]["procedure_execution_allowed"] is False

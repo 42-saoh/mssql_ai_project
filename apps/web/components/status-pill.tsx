@@ -9,14 +9,8 @@ const statusToneByValue: Record<string, Tone> = {
   VALIDATING: "warning",
   VALIDATION_COMPLETE: "success",
   VALIDATED: "success",
-  REVIEW_PENDING: "warning",
   REVIEW_REQUIRED: "warning",
-  APPROVED: "success",
-  APPROVE: "success",
   PASSED: "success",
-  REJECTED: "danger",
-  REJECT: "danger",
-  REQUEST_CHANGES: "warning",
   FAILED: "danger",
   WARNING: "warning",
   INFO: "info",
@@ -24,7 +18,6 @@ const statusToneByValue: Record<string, Tone> = {
   FAIL: "danger",
   BLOCKER: "danger",
   CANCELED: "neutral",
-  PUBLISHED: "success",
   ARCHIVED: "neutral",
 };
 

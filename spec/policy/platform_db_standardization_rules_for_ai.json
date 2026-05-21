@@ -366,6 +366,7 @@
       "DOM": "domestic",
       "GUAR": "guarantee",
       "MGMT": "management",
+      "NTC": "notification",
       "DESC": "description",
       "CNTNT": "content"
     },
@@ -452,7 +453,7 @@
       "OBJECT_SCOPE",
       "STANDARD_NAME_MAPPING",
       "STANDARD_TYPE_MAPPING",
-      "DDL_DRAFT",
+      "MANUAL_SCHEMA_REVIEW_SQL",
       "METADATA_COMMENT_DRAFT",
       "REVIEW_REQUIRED"
     ],

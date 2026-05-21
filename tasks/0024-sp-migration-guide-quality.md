@@ -8,7 +8,7 @@
 
 ## Goal
 
-사용자가 제공한 migration guide 수준 이상의 SP 분석/이관 가이드 품질을 계약화한다. P24A 는 contract, prompt pack, manifest wiring, task brief, contract test 만 추가하며 renderer/eval runner/API/Web/DB behavior 는 바꾸지 않는다. P24B 는 sanitized fixture suite 를 추가했고, P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` renderer/evaluator 로 fixture-first scoring 을 구현했다. P24D 는 이 상태를 문서/readiness 관점에서 동기화한다.
+사용자가 제공한 migration guide 수준 이상의 SP 분석/이관 가이드 품질을 계약화한다. P24A 는 contract, prompt pack, manifest wiring, task brief, contract test 만 추가하며 renderer/eval runner/API/Web/DB behavior 는 바꾸지 않는다. P24B 는 sanitized fixture suite 를 추가했고, P24C 는 기존 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` renderer/evaluator 로 fixture-first scoring 을 구현했다. P24 v0.3 은 새 artifact type 없이 사용자-facing 한국어 heading, 안정 section anchor, 개요/기능/의존성/DML/phase 표를 보강한다. P24D 는 이 상태를 문서/readiness 관점에서 동기화한다.
 
 ## Context
 
@@ -38,6 +38,7 @@
 - P24A contract prompt asset test 추가
 - P24B sanitized simple/medium/complex fixture 와 expected quality report 작성
 - P24C 기존 artifact type renderer/evaluator scoring 검증
+- P24 v0.3 한국어 사용자-facing heading, 숨김 section anchor, overview/feature/critical phase 표 검증
 - P24D pass/hold/fail interpretation 과 docs readiness 동기화
 
 ## Out of Scope
@@ -54,9 +55,9 @@
 
 - 대상 객체: synthetic stored procedure migration guide fixtures only
 - 기존 계약:
-  - `p24_sp_migration_guide_quality@0.2.0`
-  - `prompt:sp_migration_guide_generation@0.2.0`
-  - `schema:sp_migration_guide_quality_report@0.2.0`
+  - `p24_sp_migration_guide_quality@0.3.0`
+  - `prompt:sp_migration_guide_generation@0.3.0`
+  - `schema:sp_migration_guide_quality_report@0.3.0`
   - `template:sp_migration_guide@0.1.0`
 - 참고 파일:
   - user-provided `MIGRATION_GUIDE.md` as quality/structure reference only
@@ -90,6 +91,7 @@
 - P24 task brief
 - P24 contract prompt asset test
 - P24 sanitized fixture suite and fixture-first quality evaluator coverage
+- P24 v0.3 guide-style renderer contract for Korean headings, hidden section anchors, and overview/phase tables
 - P24D docs readiness updates for pass/hold/fail boundaries
 
 ## Verification

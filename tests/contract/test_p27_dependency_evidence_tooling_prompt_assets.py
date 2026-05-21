@@ -94,7 +94,8 @@ def test_p27_manifest_declares_prompt_track_and_merge_order() -> None:
     }
 
     assert "spec/eval/p27_dependency_evidence_tooling_contract.yaml" in manifest["basis"]
-    assert manifest["merge_order"][-1] == "P27"
+    assert "P27" in manifest["merge_order"]
+    assert manifest["merge_order"].index("P27") < manifest["merge_order"].index("P36A")
     assert "P27" in tracks
     track = tracks["P27"]
     assert track["prompt"] == "prompts/27_dependency_evidence_tooling_design.md"

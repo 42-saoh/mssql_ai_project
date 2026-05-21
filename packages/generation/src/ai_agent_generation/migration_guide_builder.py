@@ -38,6 +38,7 @@ def build_migration_guide_payload(
         metadata_payload=metadata_payload,
         static_analysis=static_payload,
         static_ref=static_ref,
+        target_db=_target_db(db_profile_id),
     )
     dml_matrix, table_dml_matrix = _dml_matrices(static_payload, static_ref=static_ref)
     complexity_metrics = _complexity_metrics(static_payload, static_ref=static_ref)
@@ -54,6 +55,14 @@ def build_migration_guide_payload(
         },
         "artifacts_under_test": ["SP_ANALYSIS_DOC", "DEPENDENCY_REPORT"],
         "evidence_refs": evidence_refs,
+        "overview_rows": _overview_rows(
+            target_ref=target_ref,
+            db_profile_id=db_profile_id,
+            input_params=input_params,
+            result_shape=result_shape,
+            primary_ref=primary_ref,
+            static_ref=static_ref,
+        ),
         "sanitized_facts": _sanitized_facts(
             target_ref=target_ref,
             input_params=input_params,
@@ -61,6 +70,12 @@ def build_migration_guide_payload(
             primary_ref=primary_ref,
             static_ref=static_ref,
         ),
+        "feature_branch_rows": _feature_branch_rows(
+            static_analysis=static_payload,
+            llm_analysis=llm_analysis or {},
+            static_ref=static_ref,
+        ),
+        "branch_predicates": _branch_predicates(static_payload, static_ref=static_ref),
         "section_expectations": _section_expectations(primary_ref, static_ref),
         "dependency_inventory": dependency_inventory,
         "confirmed_dependency_inventory": [
@@ -78,6 +93,11 @@ def build_migration_guide_payload(
         "dml_matrix": dml_matrix,
         "table_dml_matrix": table_dml_matrix,
         "call_flow": _call_flow(dml_matrix, static_ref=static_ref),
+        "critical_phase_rows": _critical_phase_rows(
+            dml_matrix=dml_matrix,
+            risk_flags=risk_flags,
+            static_ref=static_ref,
+        ),
         "phase_risk_metrics": {
             "branch_count": max(1, len(dml_matrix)),
             "dml_operation_count": len(dml_matrix),
@@ -105,6 +125,43 @@ def build_migration_guide_payload(
             static_ref=static_ref,
         ),
     }
+
+
+def _overview_rows(
+    *,
+    target_ref: str,
+    db_profile_id: str,
+    input_params: Sequence[Mapping[str, Any]],
+    result_shape: Sequence[str],
+    primary_ref: str,
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "label": "대상 SP",
+            "value": target_ref,
+            "status": "Confirmed",
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "메타데이터 프로필",
+            "value": db_profile_id,
+            "status": "Confirmed",
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "입력 파라미터 수",
+            "value": str(len(input_params)),
+            "status": "Confirmed",
+            "evidence_refs": [primary_ref],
+        },
+        {
+            "label": "결과 필드 후보 수",
+            "value": str(len(result_shape)),
+            "status": "REVIEW_REQUIRED",
+            "evidence_refs": [static_ref],
+        },
+    ]
 
 
 def _evidence_refs(metadata: Mapping[str, Any], *, target_ref: str) -> list[dict[str, str]]:
@@ -144,19 +201,19 @@ def _sanitized_facts(
         {
             "id": "fact_target_identity",
             "fact_type": "PROCEDURE_IDENTITY",
-            "summary": f"Migration guide target is {target_ref}.",
+            "summary": f"전환 가이드 대상은 {target_ref}입니다.",
             "evidence_refs": [primary_ref],
         },
         {
             "id": "fact_parameter_inventory",
             "fact_type": "PROCEDURE_PARAMETERS",
-            "summary": f"{len(input_params)} parameter(s) available from metadata.",
+            "summary": f"메타데이터에서 파라미터 {len(input_params)}개를 확인했습니다.",
             "evidence_refs": [primary_ref],
         },
         {
             "id": "fact_result_shape",
             "fact_type": "RESULT_SHAPE",
-            "summary": f"{len(result_shape)} result field candidate(s) available.",
+            "summary": f"결과 필드 후보 {len(result_shape)}개를 사용할 수 있습니다.",
             "evidence_refs": [static_ref],
         },
     ]
@@ -171,7 +228,7 @@ def _section_expectations(primary_ref: str, static_ref: str) -> list[dict[str, A
             if section_id not in {"sp_overview", "appendix_mappings"}
             else [primary_ref]
         )
-        summary = f"{section_id} is rendered from sanitized metadata/static facts."
+        summary = f"{section_id} section은 sanitized metadata/static fact를 근거로 렌더링됩니다."
         sections.append(
             {
                 "id": section_id,
@@ -189,13 +246,95 @@ def _section_expectations(primary_ref: str, static_ref: str) -> list[dict[str, A
     return sections
 
 
+def _feature_branch_rows(
+    *,
+    static_analysis: Mapping[str, Any],
+    llm_analysis: Mapping[str, Any],
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    dml_operations = _sequence(
+        _mapping(static_analysis.get("migrationGuideStaticMetrics")).get("dmlOperations")
+    )
+    for item in dml_operations:
+        if not isinstance(item, Mapping):
+            continue
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        target = str(item.get("targetRef") or "REVIEW_REQUIRED")
+        rows.append(
+            {
+                "feature": f"{operation} 영향",
+                "condition": "static DML scan",
+                "status": "Confirmed",
+                "summary": f"{target}에 대한 {operation} 영향이 감지되었습니다.",
+                "evidence_refs": [str(item.get("evidenceRef") or static_ref)],
+            }
+        )
+    for insight in _sequence(llm_analysis.get("migrationGuideInsights")):
+        if not isinstance(insight, Mapping):
+            continue
+        rows.append(
+            {
+                "feature": str(insight.get("section") or "LLM guide insight"),
+                "condition": "LLM_INFERENCE_REVIEW_REQUIRED",
+                "status": "REVIEW_REQUIRED",
+                "summary": str(insight.get("summary") or ""),
+                "evidence_refs": [
+                    str(ref) for ref in _sequence(insight.get("evidenceRefs"))
+                ]
+                or [static_ref],
+            }
+        )
+    if rows:
+        return rows
+    return [
+        {
+            "feature": "분기/기능 분류",
+            "condition": "결정론적 DML 또는 LLM guide insight 없음",
+            "status": "REVIEW_REQUIRED",
+            "summary": "업무 기능 분류는 추가 metadata 확인이 필요합니다.",
+            "evidence_refs": [static_ref],
+        }
+    ]
+
+
+def _branch_predicates(
+    static_analysis: Mapping[str, Any],
+    *,
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    predicates = _sequence(
+        _mapping(static_analysis.get("migrationGuideStaticMetrics")).get("branchPredicates")
+    )
+    for item in predicates:
+        if not isinstance(item, Mapping):
+            continue
+        parameter = str(item.get("parameter") or "").strip()
+        values = [str(value) for value in _sequence(item.get("values")) if str(value)]
+        if not parameter or not values:
+            continue
+        rows.append(
+            {
+                "parameter": parameter,
+                "operator": str(item.get("operator") or "="),
+                "values": values,
+                "line": item.get("line"),
+                "status": str(item.get("status") or "OBSERVED"),
+                "evidence_refs": [str(item.get("evidenceRef") or static_ref)],
+            }
+        )
+    return rows
+
+
 def _dependency_inventory(
     *,
     metadata_payload: Mapping[str, Any],
     static_analysis: Mapping[str, Any],
     static_ref: str,
+    target_db: str,
 ) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
+    items_by_key: dict[str, dict[str, Any]] = {}
     for edge in _sequence(_mapping(metadata_payload.get("dependencyEvidence")).get("edges")):
         if not isinstance(edge, Mapping):
             continue
@@ -204,7 +343,8 @@ def _dependency_inventory(
             if str(edge.get("resolutionStatus")) == "CONFIRMED"
             else "Needs verification"
         )
-        items.append(
+        _merge_dependency_item(
+            items_by_key,
             {
                 "object_kind": str(edge.get("dependencyType") or "dependency").lower(),
                 "object_ref": str(edge.get("to") or "REVIEW_REQUIRED"),
@@ -217,12 +357,12 @@ def _dependency_inventory(
                 "how_referenced": str(edge.get("resolutionStrategy") or "dependency closure"),
                 "why_uncertain": ""
                 if status == "Confirmed"
-                else str(edge.get("unresolvedReason") or "Dependency was not catalog-confirmed."),
+                else str(edge.get("unresolvedReason") or "카탈로그에서 확정된 의존성이 아닙니다."),
                 "what_to_extract_next": ""
                 if status == "Confirmed"
                 else (
-                    "Run dependency closure/reference resolution metadata tools "
-                    "or manual catalog queries."
+                    "dependency closure/reference resolution 메타데이터 도구 또는 수동 카탈로그 "
+                    "쿼리로 확인합니다."
                 ),
             }
         )
@@ -236,7 +376,8 @@ def _dependency_inventory(
             for part in ("schema", "name")
             if unresolved.get(part)
         )
-        items.append(
+        _merge_dependency_item(
+            items_by_key,
             {
                 "object_kind": str(unresolved.get("dependencyType") or "dependency").lower(),
                 "object_ref": name or "REVIEW_REQUIRED",
@@ -247,36 +388,40 @@ def _dependency_inventory(
                 "evidence_refs": _edge_refs(unresolved) or [static_ref],
                 "status": "Needs verification",
                 "how_referenced": "unresolved dependency evidence",
-                "why_uncertain": str(unresolved.get("unresolvedReason") or "Unresolved reference."),
+                "why_uncertain": str(unresolved.get("unresolvedReason") or "해결되지 않은 참조입니다."),
                 "what_to_extract_next": (
-                    "Resolve candidates with catalog metadata; do not infer from LLM text."
+                    "카탈로그 메타데이터로 후보를 확인하고 LLM 텍스트만으로 추론하지 않습니다."
                 ),
             }
         )
     for reference in _static_dependency_refs(static_analysis):
-        if not any(item.get("object_ref") == reference["object_ref"] for item in items):
-            items.append(reference)
+        _merge_dependency_item(items_by_key, reference)
+    for reference in _static_dml_dependency_refs(static_analysis, static_ref=static_ref):
+        _merge_dependency_item(items_by_key, reference)
     if _dynamic_sql_detected(static_analysis):
-        items.append(
+        _merge_dependency_item(
+            items_by_key,
             {
                 "object_kind": "dynamic_sql",
                 "object_ref": "sp_executesql/EXEC dynamic candidate",
                 "operations": ["REVIEW_REQUIRED"],
                 "key_columns": [],
-                "join_or_where_summary": "Dynamic SQL may hide object dependencies.",
+                "join_or_where_summary": "Dynamic SQL 안에 객체 의존성이 숨을 수 있습니다.",
                 "value_or_state_patterns": (
-                    "Generated SQL text is not promoted as deterministic dependency evidence."
+                    "생성된 SQL text는 결정론적 의존성 근거로 승격하지 않습니다."
                 ),
                 "evidence_refs": [static_ref],
                 "status": "Needs verification",
                 "how_referenced": "dynamic SQL signal",
-                "why_uncertain": "Static parser cannot confirm dependencies inside generated SQL.",
+                "why_uncertain": "정적 parser는 생성 SQL 내부 의존성을 확정할 수 없습니다.",
                 "what_to_extract_next": (
-                    "Capture catalog-confirmed dependency closure or reviewer-supplied "
-                    "sanitized metadata."
+                    "카탈로그로 확인된 dependency closure 또는 사용자가 제공한 sanitized "
+                    "metadata를 확보합니다."
                 ),
             }
         )
+    items = list(items_by_key.values())
+    _attach_table_descriptions(items, metadata_payload, target_db=target_db)
     return items
 
 
@@ -309,17 +454,17 @@ def _static_dependency_refs(static_analysis: Mapping[str, Any]) -> list[dict[str
                     ),
                     "operations": [operation],
                     "key_columns": [],
-                    "join_or_where_summary": "Static parser reference.",
+                    "join_or_where_summary": "정적 parser에서 확인한 참조입니다.",
                     "value_or_state_patterns": "",
                     "evidence_refs": ["static.analysis.migration_guide"],
                     "status": status,
                     "how_referenced": "static parser",
                     "why_uncertain": ""
                     if status == "Confirmed"
-                    else "Static reference requires catalog confirmation.",
+                    else "정적 참조는 카탈로그 확인이 필요합니다.",
                     "what_to_extract_next": ""
                     if status == "Confirmed"
-                    else "Confirm object type and database with MCP metadata.",
+                    else "MCP 메타데이터로 객체 유형과 데이터베이스를 확인합니다.",
                 }
             )
     for call in _sequence(dependencies.get("called_procedures")):
@@ -334,20 +479,207 @@ def _static_dependency_refs(static_analysis: Mapping[str, Any]) -> list[dict[str
                 ),
                 "operations": ["EXECUTE"],
                 "key_columns": [],
-                "join_or_where_summary": "EXEC call parsed from static SQL.",
+                "join_or_where_summary": "정적 SQL에서 EXEC 호출을 파싱했습니다.",
                 "value_or_state_patterns": "",
                 "evidence_refs": ["static.analysis.migration_guide"],
                 "status": status,
                 "how_referenced": "static EXEC parser",
                 "why_uncertain": ""
                 if status == "Confirmed"
-                else "Dynamic or system procedure call.",
+                else "동적 또는 시스템 procedure 호출입니다.",
                 "what_to_extract_next": ""
                 if status == "Confirmed"
-                else "Confirm executed target through metadata or review.",
+                else "메타데이터 또는 검토로 실행 대상을 확인합니다.",
             }
         )
     return refs
+
+
+def _static_dml_dependency_refs(
+    static_analysis: Mapping[str, Any],
+    *,
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    operations_by_target: dict[str, dict[str, Any]] = {}
+    for item in _sequence(
+        _mapping(static_analysis.get("migrationGuideStaticMetrics")).get("dmlOperations")
+    ):
+        if not isinstance(item, Mapping):
+            continue
+        target = str(item.get("targetRef") or "").strip()
+        if not target:
+            continue
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        evidence_ref = str(item.get("evidenceRef") or static_ref)
+        entry = operations_by_target.setdefault(
+            target,
+            {
+                "object_kind": "temp_table" if target.startswith("#") else "table",
+                "object_ref": target,
+                "operations": [],
+                "key_columns": [],
+                "join_or_where_summary": "static DML scan",
+                "value_or_state_patterns": "",
+                "evidence_refs": [],
+                "status": "Confirmed",
+                "how_referenced": "static DML scan",
+                "why_uncertain": "",
+                "what_to_extract_next": "",
+            },
+        )
+        entry["operations"].append(operation)
+        entry["evidence_refs"].append(evidence_ref)
+    for entry in operations_by_target.values():
+        entry["operations"] = _ordered_unique_operations(entry["operations"])
+        entry["evidence_refs"] = _ordered_unique(entry["evidence_refs"])
+    return [operations_by_target[target] for target in sorted(operations_by_target)]
+
+
+def _merge_dependency_item(
+    items_by_key: dict[str, dict[str, Any]],
+    item: Mapping[str, Any],
+) -> None:
+    key = _dependency_key(item)
+    if key not in items_by_key:
+        copied = dict(item)
+        copied["operations"] = _ordered_unique_operations(_sequence(copied.get("operations")))
+        copied["evidence_refs"] = _ordered_unique(_sequence(copied.get("evidence_refs")))
+        items_by_key[key] = copied
+        return
+
+    existing = items_by_key[key]
+    existing["operations"] = _ordered_unique_operations(
+        [*_sequence(existing.get("operations")), *_sequence(item.get("operations"))]
+    )
+    existing["evidence_refs"] = _ordered_unique(
+        [*_sequence(existing.get("evidence_refs")), *_sequence(item.get("evidence_refs"))]
+    )
+    if str(item.get("status") or "") == "Confirmed":
+        existing["status"] = "Confirmed"
+    for field in (
+        "how_referenced",
+        "join_or_where_summary",
+        "value_or_state_patterns",
+        "why_uncertain",
+        "what_to_extract_next",
+    ):
+        merged = _join_unique_text(existing.get(field), item.get(field))
+        if merged:
+            existing[field] = merged
+    if len(_identifier_parts(str(item.get("object_ref") or ""))) > len(
+        _identifier_parts(str(existing.get("object_ref") or ""))
+    ):
+        existing["object_ref"] = str(item.get("object_ref"))
+
+
+def _dependency_key(item: Mapping[str, Any]) -> str:
+    kind = str(item.get("object_kind") or "dependency").lower()
+    object_ref = _normalized_identifier(str(item.get("object_ref") or "REVIEW_REQUIRED"))
+    return f"{kind}:{object_ref or 'review_required'}"
+
+
+def _attach_table_descriptions(
+    items: list[dict[str, Any]],
+    metadata_payload: Mapping[str, Any],
+    *,
+    target_db: str,
+) -> None:
+    descriptions = _table_description_map(metadata_payload)
+    for item in items:
+        kind = str(item.get("object_kind") or "").lower()
+        if "table" not in kind and "view" not in kind:
+            continue
+        object_ref = str(item.get("object_ref") or "")
+        if not _same_profile_table_ref(object_ref, target_db=target_db):
+            item["description"] = "REVIEW_REQUIRED"
+            item["description_status"] = "REVIEW_REQUIRED"
+            continue
+        schema_key = _normalized_schema_table_key(object_ref)
+        metadata = descriptions.get(schema_key, {}) if schema_key else {}
+        description = str(metadata.get("description") or "").strip()
+        status = str(metadata.get("description_status") or "").strip()
+        if description and status.upper() == "CONFIRMED":
+            item["description"] = description
+            item["description_status"] = status
+        else:
+            item["description"] = "REVIEW_REQUIRED"
+            item["description_status"] = status or "REVIEW_REQUIRED"
+
+
+def _same_profile_table_ref(object_ref: str, *, target_db: str) -> bool:
+    parts = _identifier_parts(object_ref)
+    if len(parts) < 3:
+        return True
+    return parts[-3].casefold() == target_db.casefold()
+
+
+def _table_description_map(metadata_payload: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    descriptions: dict[str, dict[str, str]] = {}
+    for table in _sequence(metadata_payload.get("tableSchemas")):
+        if not isinstance(table, Mapping):
+            continue
+        schema = str(table.get("schema") or "").strip()
+        table_name = str(table.get("tableName") or table.get("name") or "").strip()
+        if not schema or not table_name:
+            continue
+        description = str(table.get("description") or "").strip()
+        status = str(table.get("descriptionStatus") or table.get("description_status") or "").strip()
+        key = _normalized_schema_table_key(f"{schema}.{table_name}")
+        if key:
+            descriptions[key] = {
+                "description": description,
+                "description_status": status or "REVIEW_REQUIRED",
+            }
+    return descriptions
+
+
+def _normalized_schema_table_key(value: str) -> str:
+    parts = _identifier_parts(value)
+    if len(parts) < 2:
+        return ""
+    return ".".join(part.casefold() for part in parts[-2:])
+
+
+def _normalized_identifier(value: str) -> str:
+    return ".".join(part.casefold() for part in _identifier_parts(value))
+
+
+def _identifier_parts(value: str) -> list[str]:
+    return [
+        _strip_identifier_quotes(part)
+        for part in str(value).strip().split(".")
+        if _strip_identifier_quotes(part)
+    ]
+
+
+def _strip_identifier_quotes(value: str) -> str:
+    stripped = value.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        return stripped[1:-1].strip()
+    return stripped
+
+
+def _ordered_unique_operations(values: Sequence[Any]) -> list[str]:
+    return sorted(
+        _ordered_unique(values),
+        key=lambda value: _DML_ORDER.index(value) if value in _DML_ORDER else 99,
+    )
+
+
+def _ordered_unique(values: Sequence[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _join_unique_text(left: object, right: object) -> str:
+    return " / ".join(_ordered_unique([left, right]))
 
 
 def _dml_matrices(
@@ -373,10 +705,10 @@ def _dml_matrices(
                 "operation": operation,
                 "target_ref": target,
                 "phase": "static_dml_scan",
-                "impact": f"{operation} reference detected for {target}.",
-                "keys_join_where_summary": "REVIEW_REQUIRED: inspect predicates and join keys.",
+                "impact": f"{target}에 대한 {operation} 참조를 감지했습니다.",
+                "keys_join_where_summary": "REVIEW_REQUIRED: predicate와 join key를 검토합니다.",
                 "important_columns_or_patterns": (
-                    "REVIEW_REQUIRED: column-level write/read pattern extraction pending."
+                    "REVIEW_REQUIRED: column-level write/read 패턴 추출이 남아 있습니다."
                 ),
                 "evidence_refs": [str(item.get("evidenceRef") or static_ref)],
                 "status": "Confirmed",
@@ -391,10 +723,10 @@ def _dml_matrices(
             "delete": "Y" if "DELETE" in operations else "",
             "merge": "Y" if "MERGE" in operations else "",
             "keys_join_where_summary": (
-                "REVIEW_REQUIRED: predicate/key extraction requires reviewer confirmation."
+                "REVIEW_REQUIRED: predicate/key 추출은 추가 근거 확인이 필요합니다."
             ),
             "important_columns_or_patterns": (
-                "REVIEW_REQUIRED: important column patterns are not inferred from LLM output."
+                "REVIEW_REQUIRED: 중요 컬럼 패턴은 LLM 출력만으로 추론하지 않습니다."
             ),
             "evidence_refs": [
                 str(item.get("evidenceRef") or static_ref)
@@ -467,12 +799,12 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
     branches = []
     if not dml_matrix:
         return {
-            "inputs": ["Procedure parameters from metadata."],
+            "inputs": ["메타데이터에서 확인한 procedure 파라미터입니다."],
             "branches": [
                 {
                     "id": "branch_review_required_flow",
                     "phase": "review_required",
-                    "condition_summary": "No deterministic DML operation sequence was extracted.",
+                    "condition_summary": "결정론적 DML 작업 순서를 추출하지 못했습니다.",
                     "evidence_refs": [static_ref],
                     "actions": [
                         {
@@ -483,8 +815,8 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
                     ],
                 }
             ],
-            "results": ["REVIEW_REQUIRED: result shape must be validated."],
-            "error_handling": "REVIEW_REQUIRED: error handling requires reviewer confirmation.",
+            "results": ["REVIEW_REQUIRED: result shape 검증이 필요합니다."],
+            "error_handling": "REVIEW_REQUIRED: 오류 처리는 추가 근거 확인이 필요합니다.",
         }
     for index, item in enumerate(dml_matrix, start=1):
         refs = [str(ref) for ref in _sequence(item.get("evidence_refs"))] or [static_ref]
@@ -504,11 +836,49 @@ def _call_flow(dml_matrix: Sequence[Mapping[str, Any]], *, static_ref: str) -> d
             }
         )
     return {
-        "inputs": ["Procedure parameters from metadata."],
+        "inputs": ["메타데이터에서 확인한 procedure 파라미터입니다."],
         "branches": branches,
-        "results": ["Result shape candidates are rendered in appendix mappings."],
-        "error_handling": "REVIEW_REQUIRED: confirm normal/exception/resource cleanup branches.",
+        "results": ["결과 shape 후보는 appendix mappings에 렌더링됩니다."],
+        "error_handling": "REVIEW_REQUIRED: 정상/예외/resource cleanup 분기를 확인합니다.",
     }
+
+
+def _critical_phase_rows(
+    *,
+    dml_matrix: Sequence[Mapping[str, Any]],
+    risk_flags: Sequence[Mapping[str, Any]],
+    static_ref: str,
+) -> list[dict[str, Any]]:
+    risk_text = ", ".join(str(item.get("code")) for item in risk_flags if item.get("code"))
+    rows = []
+    for item in dml_matrix:
+        operation = str(item.get("operation") or "REVIEW_REQUIRED")
+        target = str(item.get("target_ref") or "REVIEW_REQUIRED")
+        rows.append(
+            {
+                "phase": str(item.get("phase") or "static_dml_scan"),
+                "reads": [target] if operation == "SELECT" else [],
+                "writes": [target] if operation in {"INSERT", "UPDATE", "DELETE", "MERGE"} else [],
+                "risk": risk_text or "REVIEW_REQUIRED: 업무 의미와 트랜잭션 영향을 확인합니다.",
+                "status": str(item.get("status") or "REVIEW_REQUIRED"),
+                "evidence_refs": [
+                    str(ref) for ref in _sequence(item.get("evidence_refs"))
+                ]
+                or [static_ref],
+            }
+        )
+    if rows:
+        return rows
+    return [
+        {
+            "phase": "review_required",
+            "reads": [],
+            "writes": [],
+            "risk": "REVIEW_REQUIRED: 결정론적 phase 추출 정보가 부족합니다.",
+            "status": "REVIEW_REQUIRED",
+            "evidence_refs": [static_ref],
+        }
+    ]
 
 
 def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
@@ -520,13 +890,13 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
     )
     return {
         "policy": (
-            "Manual reviewer aid only. Run in SSMS against the source metadata DB; "
-            "do not execute procedures, select row data, apply DDL/DML, or paste raw definitions."
+            "수동 메타데이터 보강용입니다. 원천 메타데이터 DB에 대해 SSMS에서 실행하되, "
+            "procedure 실행, row data 조회, DDL/DML 적용, raw definition 붙여넣기는 금지합니다."
         ),
         "queries": [
             {
                 "id": "definition_hash_length",
-                "title": "SP definition hash/length",
+                "title": "SP definition hash/length 확인",
                 "sql": (
                     prelude
                     + "\nSELECT DB_NAME() AS database_name, s.name AS schema_name,"
@@ -546,7 +916,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "parameters",
-                "title": "Procedure parameters",
+                "title": "Procedure parameters 확인",
                 "sql": (
                     prelude
                     + "\nSELECT p.parameter_id, p.name, TYPE_NAME(p.user_type_id) AS data_type,"
@@ -562,7 +932,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "static_dependencies",
-                "title": "Static catalog dependencies",
+                "title": "Static catalog dependencies 확인",
                 "sql": (
                     prelude
                     + "\nSELECT referenced_server_name, referenced_database_name,"
@@ -579,7 +949,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "referenced_entities",
-                "title": "Referenced entities DMV",
+                "title": "Referenced entities DMV 확인",
                 "sql": (
                     prelude
                     + "\nSELECT referenced_schema_name, referenced_entity_name,"
@@ -594,7 +964,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "dynamic_sql_indicators",
-                "title": "Dynamic SQL and external reference indicators",
+                "title": "Dynamic SQL 및 외부 참조 indicator 확인",
                 "sql": (
                     prelude
                     + "\nSELECT CASE WHEN sm.definition LIKE '%sp_executesql%'"
@@ -614,7 +984,7 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
             {
                 "id": "temp_table_review",
-                "title": "Temp table/table variable review indicators",
+                "title": "Temp table/table variable 검토 indicator 확인",
                 "sql": (
                     prelude
                     + "\nSELECT CASE WHEN sm.definition LIKE '%CREATE TABLE #%'"
@@ -630,8 +1000,8 @@ def _manual_metadata_extraction_appendix(target_ref: str) -> dict[str, Any]:
             },
         ],
         "paste_templates": [
-            "| Type | Name | How referenced | Evidence | Notes |",
-            "| Type | Name/Candidate | Why uncertain | What to extract next | Notes |",
+            "| 유형 | 이름 | 참조 방식 | 근거 | 비고 |",
+            "| 유형 | 이름/후보 | 불확실한 이유 | 다음 추출 항목 | 비고 |",
         ],
     }
 

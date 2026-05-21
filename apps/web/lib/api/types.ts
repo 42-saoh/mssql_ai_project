@@ -4,9 +4,7 @@ export type RequestedOutputType =
   | "SP_ANALYSIS_DOCUMENT"
   | "DEPENDENCY_REPORT"
   | "TABLE_COLUMN_METADATA"
-  | "JAVA_MYBATIS_DRAFT"
-  | "DTO_MODEL_DRAFT"
-  | "DDL_DRAFT";
+  | "JAVA_MYBATIS_DRAFT";
 
 export type JobStatus =
   | "SUBMITTED"
@@ -15,10 +13,6 @@ export type JobStatus =
   | "GENERATING"
   | "VALIDATING"
   | "VALIDATION_COMPLETE"
-  | "REVIEW_PENDING"
-  | "APPROVED"
-  | "REJECTED"
-  | "PUBLISHED"
   | "FAILED"
   | "CANCELED";
 
@@ -26,9 +20,7 @@ export type WorkflowStepType =
   | "COLLECT_METADATA"
   | "ANALYZE"
   | "GENERATE"
-  | "VALIDATE"
-  | "REVIEW"
-  | "PUBLISH";
+  | "VALIDATE";
 
 export type ArtifactType =
   | "SP_ANALYSIS_DOC"
@@ -39,19 +31,11 @@ export type ArtifactType =
   | "MAPPER_INTERFACE"
   | "SERVICE_DRAFT"
   | "DTO_DRAFT"
-  | "VO_DRAFT"
-  | "MODEL_DRAFT"
-  | "DDL_DRAFT"
-  | "VALIDATION_REPORT"
-  | "APPROVAL_LOG";
+  | "VALIDATION_REPORT";
 
 export type ArtifactStatus =
   | "DRAFT"
   | "VALIDATED"
-  | "REVIEW_PENDING"
-  | "APPROVED"
-  | "REJECTED"
-  | "PUBLISHED"
   | "ARCHIVED";
 
 export type EvidenceRefType =
@@ -65,7 +49,6 @@ export type EvidenceRefType =
 export type ValidationStatus = "PASSED" | "FAILED" | "REVIEW_REQUIRED";
 export type ValidationSeverity = "INFO" | "WARNING" | "ERROR" | "BLOCKER";
 export type ValidationResult = "PASS" | "FAIL" | "REVIEW_REQUIRED";
-export type ApprovalDecision = "APPROVE" | "REJECT" | "REQUEST_CHANGES";
 
 export type RegistryType =
   | "PROMPT"
@@ -76,7 +59,7 @@ export type RegistryType =
   | "MODEL"
   | "SCHEMA";
 
-export type MetadataSearchObjectType = TargetObjectType;
+export type MetadataSearchObjectType = TargetObjectType | "COLUMN";
 
 export interface TargetObject {
   type: TargetObjectType;
@@ -104,6 +87,8 @@ export interface SPAnalysisOptions {
   useLlmAnalysis?: boolean;
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   allowSpDefinitionToModel?: boolean;
+  sourceContextMode?: "NONE" | "RETRIEVED_SPANS";
+  sourceDependencyMode?: "NONE" | "CONFIRMED_PROCEDURES";
   useAiToolOrchestration?: boolean;
   usePlatformToolOrchestration?: boolean;
   persistKnowledge?: boolean;
@@ -141,6 +126,10 @@ export interface Job {
   jobId: string;
   requestId: string;
   status: JobStatus;
+  dbProfileId?: string;
+  target?: TargetObject;
+  targetKey?: string | null;
+  outputs?: RequestedOutputType[];
   currentStep?: WorkflowStepType | null;
   createdAt?: string;
   updatedAt?: string;
@@ -164,6 +153,8 @@ export interface ModelInvocationSummary {
   status: "SUCCEEDED" | "FAILED" | "SKIPPED";
   tokenUsage?: Record<string, number>;
   latencyMs?: number | null;
+  analysisCoverage?: Record<string, unknown>;
+  sourceContextSummary?: Record<string, unknown>;
   componentInvocations?: Record<string, unknown>[];
 }
 
@@ -173,6 +164,7 @@ export interface AgentRunSummary {
   agentType: string;
   status: "SUCCEEDED" | "FAILED" | "SKIPPED";
   targetRef: string;
+  targetKey?: string | null;
   summary: string;
   structuredOutput: Record<string, unknown>;
   modelInvocation: ModelInvocationSummary;
@@ -185,6 +177,7 @@ export interface ArtifactSummary {
   type: ArtifactType;
   status: ArtifactStatus;
   title?: string;
+  targetKey?: string | null;
   evidenceCoverage?: number;
   reviewRequired?: boolean;
   blockers?: MetadataSearchBlocker[];
@@ -220,7 +213,7 @@ export interface ValidationReport {
   status: ValidationStatus;
   checks: ValidationCheck[];
   missingEvidence?: string[];
-  manualReviewPoints?: string[];
+  qualityCaveats?: string[];
 }
 
 export interface MetadataProfile {
@@ -261,21 +254,39 @@ export interface MetadataSearchBlocker {
 export interface MetadataObjectIdentity {
   schema: string;
   name: string;
+  type: TargetObjectType;
+}
+
+export interface MetadataSearchObjectIdentity {
+  schema: string;
+  name: string;
   type: MetadataSearchObjectType;
 }
 
-export interface MetadataSearchRequest {
-  dbProfileId: string;
-  query: string;
-  objectTypes?: MetadataSearchObjectType[];
-  limit?: number;
+export interface MetadataSearchTableSummary {
+  schema: string;
+  name: string;
+  description?: string | null;
+}
+
+export interface MetadataSearchColumnSummary {
+  name: string;
+  description?: string | null;
+  dataType?: string | null;
 }
 
 export interface MetadataSearchResult {
-  objectIdentity: MetadataObjectIdentity;
+  objectIdentity: MetadataSearchObjectIdentity;
+  targetKey?: string | null;
   sourceProfile: string;
   sourceDatabase: string;
   snapshotId?: string;
+  description?: string | null;
+  logicalName?: string | null;
+  dataType?: string | null;
+  table?: MetadataSearchTableSummary | null;
+  column?: MetadataSearchColumnSummary | null;
+  columns?: MetadataSearchColumnSummary[];
   evidenceRefs: EvidenceRef[];
   caveats: string[];
   reviewRequired: boolean;
@@ -297,19 +308,27 @@ export interface MetadataSearchResponse {
   blockers: MetadataSearchBlocker[];
 }
 
+export interface MetadataSearchRequest {
+  dbProfileId: string;
+  query: string;
+  objectTypes?: MetadataSearchObjectType[];
+  limit?: number;
+}
+
 export interface MetadataAnalysisOptions {
   useLlmAnalysis?: boolean;
   useAiToolOrchestration?: boolean;
   llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
   maxTargets?: number;
   persistKnowledge?: boolean;
+  generateDtoDrafts?: boolean;
 }
 
 export interface MetadataAnalysisRequest {
   dbProfileId: string;
   query?: string;
   target?: MetadataObjectIdentity;
-  objectTypes?: MetadataSearchObjectType[];
+  objectTypes?: TargetObjectType[];
   options?: MetadataAnalysisOptions;
 }
 
@@ -332,6 +351,7 @@ export type MetadataInsightCategory =
 
 export interface MetadataObjectProfile {
   objectRef: string;
+  targetKey?: string | null;
   objectType: string;
   columnCount: number;
   primaryKeyCount: number;
@@ -352,6 +372,7 @@ export interface MetadataInsightGroup {
 export interface MetadataDependencyGraphNode {
   id: string;
   objectRef: string;
+  targetKey?: string | null;
   objectType: string;
   status: "CONFIRMED" | "REVIEW_REQUIRED";
   evidenceRefs: string[];
@@ -373,10 +394,23 @@ export interface MetadataDependencyGraph {
 
 export interface MetadataDtoReadiness {
   objectRef: string;
+  targetKey?: string | null;
   status: "READY" | "PARTIAL" | "REVIEW_REQUIRED";
   fieldCount: number;
   reviewReasons: string[];
   evidenceRefs: string[];
+}
+
+export interface MetadataGeneratedDraft {
+  artifactType: "DTO_DRAFT";
+  objectRef: string;
+  targetKey?: string | null;
+  fileName: string;
+  language: "java";
+  content: string;
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
 }
 
 export interface MetadataAnalysisReviewMarker {
@@ -400,6 +434,7 @@ export interface KnowledgeAssetSummary {
   targetType: string;
   targetSchema: string;
   targetName: string;
+  targetKey?: string | null;
   logicalKey: string;
   currentVersionId?: string | null;
   currentVersionNo: number;
@@ -513,7 +548,7 @@ export interface MetadataAnalysisResponse {
   mode: "QUERY" | "TARGET";
   query?: string;
   target?: MetadataObjectIdentity;
-  objectTypes: MetadataSearchObjectType[];
+  objectTypes: TargetObjectType[];
   sourceProfile: string;
   sourceDatabase: string;
   snapshotId?: string;
@@ -525,6 +560,7 @@ export interface MetadataAnalysisResponse {
   insightGroups: MetadataInsightGroup[];
   dependencyGraph: MetadataDependencyGraph;
   dtoReadiness: MetadataDtoReadiness[];
+  generatedDrafts: MetadataGeneratedDraft[];
   aiToolEvidence: AiToolEvidenceSummary;
   deterministicFacts: Record<string, unknown>[];
   reviewMarkers: MetadataAnalysisReviewMarker[];
@@ -537,24 +573,176 @@ export interface MetadataAnalysisResponse {
   knowledgeAssets: KnowledgeAssetSummary[];
 }
 
+export type MetadataAnalysisRunStatusValue = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+
+export interface MetadataAnalysisRunError {
+  code: string;
+  message: string;
+  statusCode: number;
+}
+
+export interface MetadataAnalysisRunStatus {
+  runId: string;
+  status: MetadataAnalysisRunStatusValue;
+  submittedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  request: MetadataAnalysisRequest;
+  analysis?: MetadataAnalysisResponse | null;
+  error?: MetadataAnalysisRunError | null;
+}
+
+export interface MetadataDesignFieldInput {
+  name?: string | null;
+  description?: string | null;
+  dbType?: string | null;
+  nullable?: boolean | null;
+}
+
+export interface MetadataDesignInputs {
+  tableNameHint?: string | null;
+  tableDescription?: string | null;
+  fields?: MetadataDesignFieldInput[];
+}
+
+export interface MetadataDesignOptions {
+  useLlmAnalysis?: boolean;
+  useAiToolOrchestration?: boolean;
+  llmProfileId?: "openai_sp_semantic_analysis" | "openai_fast_test";
+  maxCandidates?: number;
+  generateDtoDraft?: boolean;
+  conversationMode?: "NEW_DESIGN" | "REFINE_CURRENT";
+}
+
+export interface MetadataDesignRunRequest {
+  dbProfileId: string;
+  message: string;
+  conversationId?: string | null;
+  designInputs?: MetadataDesignInputs;
+  options?: MetadataDesignOptions;
+}
+
+export interface MetadataRelatedMetadata {
+  kind: "TABLE" | "COLUMN" | "SIMILAR_TABLE" | "TABLE_SCHEMA";
+  objectRef: string;
+  score: number;
+  summary: string;
+  evidenceRefs: string[];
+  payload: Record<string, unknown>;
+}
+
+export interface MetadataStandardizationMapping {
+  inputName?: string | null;
+  inputDescription?: string | null;
+  proposedDescription?: string | null;
+  proposedName: string;
+  proposedType: string;
+  source: "METADATA" | "STANDARD_POLICY" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataTableProposalColumn {
+  name: string;
+  dataType: string;
+  nullable: boolean;
+  description?: string | null;
+  source: "METADATA" | "STANDARD_POLICY" | "USER_INPUT" | "REVIEW_REQUIRED";
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataTableProposal {
+  schema: string;
+  tableName: string;
+  tableDescription?: string | null;
+  columns: MetadataTableProposalColumn[];
+  createTableScriptPreview: string;
+  evidenceRefs: string[];
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataDesignIntentChange {
+  action:
+    | "ADD_FIELD"
+    | "REMOVE_FIELD"
+    | "RENAME_FIELD"
+    | "CHANGE_TYPE"
+    | "CHANGE_NULLABILITY"
+    | "SET_TABLE_NAME"
+    | "SET_TABLE_DESCRIPTION"
+    | "REVIEW_REQUIRED";
+  target?: string | null;
+  value?: string | null;
+  summary: string;
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataDesignInterpretedIntent {
+  intent: "CREATE_TABLE" | "REFINE_TABLE" | "UNKNOWN";
+  tableNameCandidate?: string | null;
+  tableDescription?: string | null;
+  fields: MetadataDesignFieldInput[];
+  modifications: MetadataDesignIntentChange[];
+  confidence: number;
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataDesignAppliedChange {
+  action: string;
+  target?: string | null;
+  summary: string;
+  reviewRequired: boolean;
+  reviewReasons: string[];
+}
+
+export interface MetadataDesignResult {
+  assistantMessage: string;
+  interpretedIntent: MetadataDesignInterpretedIntent;
+  appliedChanges: MetadataDesignAppliedChange[];
+  relatedMetadata: MetadataRelatedMetadata[];
+  standardizationMappings: MetadataStandardizationMapping[];
+  tableProposal: MetadataTableProposal;
+  dtoDraft?: MetadataGeneratedDraft | null;
+  aiToolEvidence: Record<string, unknown>;
+  deterministicFacts: Record<string, unknown>[];
+  reviewMarkers: MetadataAnalysisReviewMarker[];
+  caveats: string[];
+  reviewRequired: boolean;
+  modelInvocation?: ModelInvocationSummary | null;
+  componentInvocations: Record<string, unknown>[];
+}
+
+export interface MetadataDesignRunError {
+  code: string;
+  message: string;
+  statusCode: number;
+}
+
+export interface MetadataDesignRunStatus {
+  runId: string;
+  conversationId: string;
+  status: MetadataAnalysisRunStatusValue;
+  submittedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  request: MetadataDesignRunRequest;
+  result?: MetadataDesignResult | null;
+  error?: MetadataDesignRunError | null;
+}
+
+export interface MetadataDesignConversation {
+  conversationId: string;
+  runs: MetadataDesignRunStatus[];
+}
+
 export interface RegistryVersion {
   registryType: RegistryType;
   version: string;
   active?: boolean;
-}
-
-export interface ApprovalDecisionRequest {
-  decision: ApprovalDecision;
-  reviewer: string;
-  comment: string;
-  validationReportId?: string;
-}
-
-export interface ApprovalRecord {
-  approvalId: string;
-  artifactId: string;
-  decision: ApprovalDecision;
-  reviewer: string;
-  comment?: string;
-  decidedAt: string;
 }

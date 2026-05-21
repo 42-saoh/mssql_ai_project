@@ -237,7 +237,7 @@ class StoredProcedureAnalysisResult(BaseModel):
         default_factory=lambda: ConfidenceScore(
             score=0.0,
             status=EvidenceStatus.REVIEW_REQUIRED,
-            rationale="Analysis confidence has not been calculated.",
+            rationale="분석 confidence가 아직 계산되지 않았습니다.",
         )
     )
     metadata_enrichment: list[MetadataEnrichmentCandidate] = Field(default_factory=list)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -65,6 +66,9 @@ def test_sample_canonical_payload_marks_review_boundaries() -> None:
 def test_generated_workflow_summary_matches_eval_fixture(monkeypatch) -> None:
     monkeypatch.setenv("P21_LIVE_PORTAL_GATE", "0")
     monkeypatch.setenv("MSSQL_ENABLE_LIVE_METADATA", "0")
+    monkeypatch.setenv("LLM_ENABLE_REMOTE", "0")
+    monkeypatch.setenv("LLM_LIVE_GATE", "0")
+    monkeypatch.setenv("LLM_ALLOW_SP_TEXT", "0")
     request_fixture = _json_fixture("request.json")
     expected = _json_fixture("artifact_payloads.json")
     repository = MemoryWorkflowRepository()
@@ -79,29 +83,33 @@ def test_generated_workflow_summary_matches_eval_fixture(monkeypatch) -> None:
     assert job.current_step.value == expected["workflow"]["currentStep"]
 
     artifacts = list(repository.artifacts.values())
-    assert [artifact.type.value for artifact in artifacts] == expected["workflow"][
-        "artifactTypes"
-    ]
+    _assert_artifact_counts(
+        [artifact.type.value for artifact in artifacts],
+        expected["workflow"]["artifactCounts"],
+    )
     assert "PUBLISHED" not in {artifact.status.value for artifact in artifacts}
 
-    by_type = {artifact.type.value: artifact for artifact in artifacts}
+    by_type: dict[str, list[Any]] = {}
+    for artifact in artifacts:
+        by_type.setdefault(artifact.type.value, []).append(artifact)
     for artifact_expectation in expected["artifactExpectations"]:
-        artifact = by_type[artifact_expectation["type"]]
-        assert artifact.status.value == artifact_expectation["status"]
-        assert artifact.latest_validation_status == artifact_expectation[
-            "latestValidationStatus"
-        ]
-        assert len(artifact.evidence_refs) >= artifact_expectation["minimumEvidenceRefs"]
-        assert artifact.generator_version
-        assert artifact.registry_refs
-        assert artifact.review_required is True
+        matching_artifacts = by_type[artifact_expectation["type"]]
+        for artifact in matching_artifacts:
+            assert artifact.status.value == artifact_expectation["status"]
+            assert artifact.latest_validation_status == artifact_expectation[
+                "latestValidationStatus"
+            ]
+            assert len(artifact.evidence_refs) >= artifact_expectation["minimumEvidenceRefs"]
+            assert artifact.generator_version
+            assert artifact.registry_refs
+            assert artifact.review_required is True
 
-        for required_content in artifact_expectation.get("requiredContent", []):
-            assert required_content in artifact.content
+            for required_content in artifact_expectation.get("requiredContent", []):
+                assert required_content in artifact.content
 
-        marker = artifact_expectation.get("requiredAssumptionMarker")
-        if marker:
-            assert any(marker in assumption for assumption in artifact.assumptions)
+            marker = artifact_expectation.get("requiredAssumptionMarker")
+            if marker:
+                assert any(marker in assumption for assumption in artifact.assumptions)
 
     assert any(event.action == "METADATA_COLLECTED" for event in repository.audit_events)
     assert "PUBLISH_GATE_EVALUATED" not in {event.action for event in repository.audit_events}
@@ -113,6 +121,22 @@ def _json_fixture(name: str) -> dict[str, Any]:
 
 def _yaml_fixture(name: str) -> dict[str, Any]:
     return yaml.safe_load((EVAL_DIR / name).read_text(encoding="utf-8"))
+
+
+def _assert_artifact_counts(
+    artifact_types: list[str],
+    expectations: dict[str, dict[str, int]],
+) -> None:
+    counts = Counter(artifact_types)
+    exact = expectations.get("exact", {})
+    minimum = expectations.get("minimum", {})
+    expected_types = set(exact) | set(minimum)
+
+    assert set(counts) == expected_types
+    for artifact_type, expected_count in exact.items():
+        assert counts[artifact_type] == expected_count
+    for artifact_type, minimum_count in minimum.items():
+        assert counts[artifact_type] >= minimum_count
 
 
 def _secret_like_values(payload: Any, path: str = "$") -> Iterator[str]:

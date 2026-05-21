@@ -13,6 +13,12 @@ basis:
   - spec/eval/p23_llm_sp_analysis_quality_contract.yaml
   - spec/eval/p24_sp_migration_guide_quality_contract.yaml
   - spec/eval/p27_dependency_evidence_tooling_contract.yaml
+  - spec/eval/p36_output_renewal_contract.yaml
+  - spec/eval/p38_metadata_design_chat_contract.yaml
+  - spec/eval/p40_metadata_design_natural_language_chat_contract.yaml
+  - spec/eval/p41_sp_operation_model_contract.yaml
+  - spec/eval/p42_ai_draft_pack_contract.yaml
+  - spec/eval/p43_framework_adoption_contract.yaml
   - spec/validation/validation_rules.yaml
   - spec/policy/project_ai_java_mybatis_generation_policy.yaml
   - spec/policy/platform_db_standardization_rules_for_ai.json
@@ -21,6 +27,9 @@ basis:
   - config/mssql/local_docker_profiles.yaml
   - fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml
   - fixtures/eval/llm_sp_analysis_quality_p23_v1.yaml
+  - fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml
+  - fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml
+  - fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml
 profiles:
   coordinator: safe-explore
   worker: dev-edit
@@ -579,15 +588,15 @@ waves:
           - make test PYTEST_ARGS="tests/unit/analysis tests/unit/generation tests/unit/validation tests/eval"
           - python3.14 -m compileall packages/analysis packages/generation packages/validation tests
       - id: P17C
-        branch: feat/p17c-approval-audit-binding
-        worktree: ../wt/p17c-approval-audit-binding
-        prompt: prompts/17c_manual_approval_audit_binding.md
+        branch: feat/p17c-draft-quality-audit-binding
+        worktree: ../wt/p17c-draft-quality-audit-binding
+        prompt: prompts/17c_draft_quality_audit_binding.md
         role: platform_worker
         skills: [contract-to-code, quality-gate-review, eval-fixture-authoring]
         depends_on: [P17B]
         target_paths:
           - apps/api/
-          - fixtures/eval/manual_approval_audit_p17_v1.yaml
+          - fixtures/eval/draft_quality_audit_p17_v1.yaml
           - fixtures/eval/live_pilot_blocker_closure_p17_v1.yaml
           - tests/unit/api/
           - tests/integration/api/
@@ -1112,4 +1121,567 @@ waves:
           - git diff --check
         optional_verify:
           - P27_HARD_LIVE_GATE=1 MSSQL_ENABLE_LIVE_METADATA=1 make test PYTEST_ARGS="tests/eval/test_p27_dependency_evidence_hard_live_gate.py"
-merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27]
+  - wave: W15_P36_output_renewal
+    description: P36 output renewal sequential breaking-contract implementation
+    tracks:
+      - id: P36A
+        branch: feat/p36a-output-renewal-contract-assets
+        worktree: ../wt/p36a-output-renewal-contract-assets
+        prompt: prompts/36a_output_renewal_contract_assets.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: []
+        target_paths:
+          - spec/eval/p36_output_renewal_contract.yaml
+          - tasks/0036-output-renewal.md
+          - ops/codex-parallel/REQUEST_MANIFEST.yaml
+          - ops/codex-parallel/prompts/36a_output_renewal_contract_assets.md
+          - ops/codex-parallel/prompts/36b_output_contract_cleanup.md
+          - ops/codex-parallel/prompts/36c_migration_guide_evidence_renderer.md
+          - ops/codex-parallel/prompts/36d_java_mybatis_business_logic_renderer.md
+          - ops/codex-parallel/prompts/36e_output_renewal_docs_readiness.md
+          - tests/contract/test_p36_output_renewal_contract_prompt_assets.py
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p36_output_renewal_contract_prompt_assets.py"
+      - id: P36B
+        branch: feat/p36b-output-contract-cleanup
+        worktree: ../wt/p36b-output-contract-cleanup
+        prompt: prompts/36b_output_contract_cleanup.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P36A]
+        target_paths:
+          - packages/domain/
+          - packages/generation/
+          - packages/validation/
+          - apps/api/
+          - apps/web/
+          - spec/openapi/
+          - spec/validation/
+          - db/schema/
+          - tests/contract/
+          - tests/unit/api/
+          - tests/integration/api/
+          - tests/unit/web/
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_openapi_and_env_sample_assets.py tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/unit/web/test_p14_product_ui_static.py"
+      - id: P36C
+        branch: feat/p36c-migration-guide-evidence-renderer
+        worktree: ../wt/p36c-migration-guide-evidence-renderer
+        prompt: prompts/36c_migration_guide_evidence_renderer.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P36B]
+        target_paths:
+          - packages/generation/
+          - packages/validation/
+          - fixtures/eval/
+          - tests/eval/
+          - tests/unit/generation/
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p36_output_renewal_quality.py tests/unit/generation"
+      - id: P36D
+        branch: feat/p36d-java-mybatis-business-logic-renderer
+        worktree: ../wt/p36d-java-mybatis-business-logic-renderer
+        prompt: prompts/36d_java_mybatis_business_logic_renderer.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P36C]
+        target_paths:
+          - packages/generation/
+          - fixtures/generation/
+          - tests/unit/generation/
+          - tests/contract/test_generation_goldens_and_repro_assets.py
+        verify:
+          - make test PYTEST_ARGS="tests/unit/generation tests/contract/test_generation_goldens_and_repro_assets.py"
+      - id: P36E
+        branch: feat/p36e-output-renewal-docs-readiness
+        worktree: ../wt/p36e-output-renewal-docs-readiness
+        prompt: prompts/36e_output_renewal_docs_readiness.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P36D]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - EVAL_SPEC.md
+          - TOOLS.md
+          - docs/
+          - fixtures/eval/README.md
+          - fixtures/generation/README.md
+          - tests/eval/README.md
+        verify:
+          - make test-core
+          - make test-quality
+          - make test-web-smoke
+  - wave: W16_P38_metadata_design_chat
+    description: P38 metadata design chat sequential implementation
+    tracks:
+      - id: P38A
+        branch: feat/p38a-metadata-design-contract-assets
+        worktree: ../wt/p38a-metadata-design-contract-assets
+        prompt: prompts/38a_metadata_design_contract_assets.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P36E]
+        target_paths:
+          - tasks/0038-metadata-design-chat.md
+          - spec/eval/p38_metadata_design_chat_contract.yaml
+          - spec/openapi/
+          - db/schema/
+          - ops/codex-parallel/
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_openapi_and_env_sample_assets.py"
+      - id: P38B
+        branch: feat/p38b-metadata-design-backend-runs
+        worktree: ../wt/p38b-metadata-design-backend-runs
+        prompt: prompts/38b_metadata_design_backend_runs.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P38A]
+        target_paths:
+          - apps/api/
+          - tests/unit/api/
+          - tests/integration/api/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/api tests/integration/api/test_api_workflow_routes.py"
+      - id: P38C
+        branch: feat/p38c-metadata-design-generation-service
+        worktree: ../wt/p38c-metadata-design-generation-service
+        prompt: prompts/38c_metadata_design_generation_service.md
+        role: template_engineer
+        skills: [mcp-tooling-design, contract-to-code, eval-fixture-authoring]
+        depends_on: [P38B]
+        target_paths:
+          - apps/api/
+          - fixtures/eval/
+          - tests/unit/api/
+          - tests/eval/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/api/test_metadata_design_service.py tests/eval"
+      - id: P38D
+        branch: feat/p38d-metadata-design-web-ui
+        worktree: ../wt/p38d-metadata-design-web-ui
+        prompt: prompts/38d_metadata_design_web_ui.md
+        role: platform_worker
+        skills: [contract-to-code, browser-automation-smoke]
+        depends_on: [P38C]
+        target_paths:
+          - apps/web/
+          - tests/unit/web/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/web/test_p14_product_ui_static.py"
+          - make test-web-smoke
+      - id: P38E
+        branch: feat/p38e-metadata-design-eval-docs-readiness
+        worktree: ../wt/p38e-metadata-design-eval-docs-readiness
+        prompt: prompts/38e_metadata_design_eval_docs_readiness.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P38D]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - EVAL_SPEC.md
+          - apps/api/README.md
+          - apps/web/README.md
+          - tests/
+        verify:
+          - make test-core
+          - make test-web-smoke
+  - wave: W17_P40_metadata_design_natural_language_chat
+    description: P40 metadata design natural-language chat sequential implementation
+    tracks:
+      - id: P40A
+        branch: feat/p40a-metadata-design-nl-contract-assets
+        worktree: ../wt/p40a-metadata-design-nl-contract-assets
+        prompt: prompts/40a_metadata_design_nl_contract_assets.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P38E]
+        target_paths:
+          - tasks/0040-metadata-design-natural-language-chat.md
+          - spec/eval/p40_metadata_design_natural_language_chat_contract.yaml
+          - spec/openapi/
+          - ops/codex-parallel/
+          - tests/contract/
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_openapi_and_env_sample_assets.py tests/contract/test_p40_metadata_design_natural_language_chat_prompt_assets.py"
+      - id: P40B
+        branch: feat/p40b-metadata-design-intent-refine
+        worktree: ../wt/p40b-metadata-design-intent-refine
+        prompt: prompts/40b_metadata_design_backend_intent_refine.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P40A]
+        target_paths:
+          - apps/api/
+          - tests/unit/api/
+          - tests/integration/api/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/api/test_metadata_design_service.py tests/integration/api/test_api_workflow_routes.py"
+      - id: P40C
+        branch: feat/p40c-metadata-design-eval-generation
+        worktree: ../wt/p40c-metadata-design-eval-generation
+        prompt: prompts/40c_metadata_design_eval_generation.md
+        role: template_engineer
+        skills: [mcp-tooling-design, contract-to-code, eval-fixture-authoring]
+        depends_on: [P40B]
+        target_paths:
+          - apps/api/
+          - fixtures/eval/
+          - tests/eval/
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p40_metadata_design_natural_language_chat.py"
+      - id: P40D
+        branch: feat/p40d-metadata-design-chat-ui
+        worktree: ../wt/p40d-metadata-design-chat-ui
+        prompt: prompts/40d_metadata_design_web_chat_ui.md
+        role: platform_worker
+        skills: [contract-to-code, browser-automation-smoke]
+        depends_on: [P40C]
+        target_paths:
+          - apps/web/
+          - tests/unit/web/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/web/test_p14_product_ui_static.py"
+          - make test-web-smoke
+      - id: P40E
+        branch: feat/p40e-metadata-design-docs-readiness
+        worktree: ../wt/p40e-metadata-design-docs-readiness
+        prompt: prompts/40e_metadata_design_docs_readiness.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P40D]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - EVAL_SPEC.md
+          - apps/api/README.md
+          - apps/web/README.md
+          - tests/
+        verify:
+          - make test-core
+          - make test-web-smoke
+  - wave: W18_P41_sp_operation_model_renewal
+    description: P41 SP operation model and multi-DTO generation renewal, sequential only
+    tracks:
+      - id: P41A
+        branch: feat/p41a-sp-operation-model-contract-assets
+        worktree: ../wt/p41a-sp-operation-model-contract-assets
+        prompt: prompts/41a_sp_operation_model_contract_assets.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, docs-sync]
+        depends_on: [P40E]
+        target_paths:
+          - packages/domain/
+          - spec/eval/p41_sp_operation_model_contract.yaml
+          - fixtures/eval/sp_operation_model_p41_manage_bond_v1.yaml
+          - tasks/0041-sp-operation-model-renewal.md
+          - ops/codex-parallel/
+          - tests/contract/test_p41_sp_operation_model_prompt_assets.py
+          - tests/eval/test_p41_sp_operation_model.py
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py"
+          - git diff --check
+      - id: P41B
+        branch: feat/p41b-sp-operation-schema-prompt
+        worktree: ../wt/p41b-sp-operation-schema-prompt
+        prompt: prompts/41b_sp_operation_schema_prompt.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P41A]
+        target_paths:
+          - packages/agent-runtime/
+          - packages/domain/
+          - tests/unit/agent_runtime/
+          - tests/eval/
+          - spec/eval/p41_sp_operation_model_contract.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p41_sp_operation_model.py tests/unit/agent_runtime"
+          - git diff --check
+      - id: P41C
+        branch: feat/p41c-statement-evidence-extractor
+        worktree: ../wt/p41c-statement-evidence-extractor
+        prompt: prompts/41c_statement_evidence_extractor.md
+        role: mcp_engineer
+        skills: [contract-to-code, mcp-tooling-design, eval-fixture-authoring]
+        depends_on: [P41B]
+        target_paths:
+          - packages/analysis/
+          - services/mssql-mcp/
+          - spec/mcp/
+          - tests/unit/analysis/
+          - tests/contract/mcp/
+          - tests/unit/mcp/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/analysis tests/contract/mcp tests/unit/mcp"
+          - git diff --check
+      - id: P41D
+        branch: feat/p41d-structured-semantic-planner
+        worktree: ../wt/p41d-structured-semantic-planner
+        prompt: prompts/41d_structured_semantic_planner.md
+        role: platform_worker
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P41C]
+        target_paths:
+          - packages/agent-runtime/
+          - apps/api/
+          - tests/unit/agent_runtime/
+          - tests/unit/api/
+          - tests/eval/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/api tests/eval/test_p41_sp_operation_model.py"
+          - git diff --check
+      - id: P41E
+        branch: feat/p41e-multi-dto-java-mybatis-generator
+        worktree: ../wt/p41e-multi-dto-java-mybatis-generator
+        prompt: prompts/41e_multi_dto_java_mybatis_generator.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P41D]
+        target_paths:
+          - packages/generation/
+          - fixtures/generation/
+          - tests/unit/generation/
+          - tests/eval/test_p41_sp_operation_model.py
+        verify:
+          - make test PYTEST_ARGS="tests/unit/generation tests/eval/test_p41_sp_operation_model.py"
+          - git diff --check
+      - id: P41F
+        branch: feat/p41f-docs-quality-gate
+        worktree: ../wt/p41f-docs-quality-gate
+        prompt: prompts/41f_docs_quality_gate.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P41E]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+          - docs/
+          - fixtures/eval/README.md
+          - tests/eval/README.md
+          - tasks/0041-sp-operation-model-renewal.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/unit/generation/test_java_mybatis_sp_wrapper_renderer.py tests/eval/test_p36_output_renewal_quality.py"
+          - git diff --check
+  - wave: W19_P42_ai_draft_pack_renewal
+    description: P42 AI Draft Pack Java/MyBatis renewal, sequential only
+    tracks:
+      - id: P42A
+        branch: feat/p42a-ai-draft-pack-contract-assets
+        worktree: ../wt/p42a-ai-draft-pack-contract-assets
+        prompt: prompts/42a_ai_draft_pack_contract_assets.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, docs-sync]
+        depends_on: [P41F]
+        target_paths:
+          - spec/eval/p42_ai_draft_pack_contract.yaml
+          - fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml
+          - tasks/0042-ai-draft-pack-renewal.md
+          - ops/codex-parallel/
+          - tests/contract/test_p42_ai_draft_pack_prompt_assets.py
+          - tests/eval/test_p42_manage_bond_ai_draft_quality.py
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"
+          - git diff --check
+      - id: P42B
+        branch: feat/p42b-ai-draft-pack-schema-gateway
+        worktree: ../wt/p42b-ai-draft-pack-schema-gateway
+        prompt: prompts/42b_ai_draft_pack_schema_gateway.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring]
+        depends_on: [P42A]
+        target_paths:
+          - packages/agent-runtime/
+          - tests/unit/agent_runtime/
+          - spec/eval/p42_ai_draft_pack_contract.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime/test_ai_draft_pack_planner.py tests/contract/test_p42_ai_draft_pack_prompt_assets.py"
+          - git diff --check
+      - id: P42C
+        branch: feat/p42c-ai-code-validator-quality-eval
+        worktree: ../wt/p42c-ai-code-validator-quality-eval
+        prompt: prompts/42c_ai_code_validator_quality_eval.md
+        role: template_engineer
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P42B]
+        target_paths:
+          - packages/generation/
+          - tests/unit/generation/test_ai_draft_pack_validator.py
+          - tests/eval/test_p42_manage_bond_ai_draft_quality.py
+          - fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/generation/test_ai_draft_pack_validator.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"
+          - git diff --check
+      - id: P42D
+        branch: feat/p42d-workflow-wiring-artifact-storage
+        worktree: ../wt/p42d-workflow-wiring-artifact-storage
+        prompt: prompts/42d_workflow_wiring_artifact_storage.md
+        role: platform_worker
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P42C]
+        target_paths:
+          - apps/api/
+          - packages/agent-runtime/
+          - packages/generation/
+          - tests/unit/api/test_workflow_service.py
+          - tests/integration/api/test_api_workflow_routes.py
+        verify:
+          - make test PYTEST_ARGS="tests/unit/api/test_workflow_service.py tests/integration/api/test_api_workflow_routes.py tests/unit/generation/test_ai_draft_pack_validator.py"
+          - git diff --check
+      - id: P42E
+        branch: feat/p42e-manage-bond-replay-gate
+        worktree: ../wt/p42e-manage-bond-replay-gate
+        prompt: prompts/42e_manage_bond_live_probe_replay.md
+        role: platform_worker
+        skills: [contract-to-code, eval-fixture-authoring, quality-gate-review]
+        depends_on: [P42D]
+        target_paths:
+          - apps/api/
+          - tests/integration/api/
+          - tests/eval/test_p42_manage_bond_ai_draft_quality.py
+          - fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/integration/api/test_api_workflow_routes.py tests/eval/test_p42_manage_bond_ai_draft_quality.py"
+          - git diff --check
+      - id: P42F
+        branch: feat/p42f-docs-quality-gate
+        worktree: ../wt/p42f-docs-quality-gate
+        prompt: prompts/42f_docs_quality_gate.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P42E]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+          - docs/
+          - fixtures/eval/README.md
+          - tests/eval/README.md
+          - tasks/0042-ai-draft-pack-renewal.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p42_ai_draft_pack_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/contract/test_p41_sp_operation_model_prompt_assets.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+          - git diff --check
+  - wave: W20_P43_framework_adoption_readiness
+    description: P43 framework adoption readiness, adapter-first and sequential only
+    tracks:
+      - id: P43A
+        branch: feat/p43a-framework-adoption-contract-assets
+        worktree: ../wt/p43a-framework-adoption-contract-assets
+        prompt: prompts/43a_framework_adoption_contract_assets.md
+        role: architect
+        skills: [contract-to-code, eval-fixture-authoring, docs-sync]
+        depends_on: [P42F]
+        target_paths:
+          - spec/eval/p43_framework_adoption_contract.yaml
+          - fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml
+          - tasks/0043-framework-adoption-readiness.md
+          - ops/codex-parallel/
+          - tests/contract/test_p43_framework_adoption_prompt_assets.py
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py"
+          - git diff --check
+      - id: P43B
+        branch: feat/p43b-framework-adapter-contract
+        worktree: ../wt/p43b-framework-adapter-contract
+        prompt: prompts/43b_framework_adapter_contract.md
+        role: architect
+        skills: [contract-to-code, quality-gate-review]
+        depends_on: [P43A]
+        target_paths:
+          - packages/agent-runtime/
+          - tests/unit/agent_runtime/
+          - spec/eval/p43_framework_adoption_contract.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/contract/test_p43_framework_adoption_prompt_assets.py"
+          - git diff --check
+      - id: P43C
+        branch: feat/p43c-ai-draft-pack-framework-spike
+        worktree: ../wt/p43c-ai-draft-pack-framework-spike
+        prompt: prompts/43c_ai_draft_pack_framework_spike.md
+        role: template_engineer
+        skills: [contract-to-code, ai-draft-pack-authoring, java-mybatis-draft-validator]
+        depends_on: [P43B]
+        target_paths:
+          - packages/agent-runtime/
+          - packages/validation/
+          - tests/unit/agent_runtime/
+          - tests/unit/validation/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/validation/test_ai_draft_pack_validator.py"
+          - git diff --check
+      - id: P43D
+        branch: feat/p43d-tool-trace-policy-gate
+        worktree: ../wt/p43d-tool-trace-policy-gate
+        prompt: prompts/43d_tool_trace_policy_gate.md
+        role: reviewer
+        skills: [quality-gate-review, mcp-tooling-design, docs-sync]
+        depends_on: [P43C]
+        target_paths:
+          - packages/agent-runtime/
+          - packages/validation/
+          - POLICY.md
+          - ARCHITECTURE.md
+          - tests/unit/agent_runtime/
+          - tests/unit/validation/
+        verify:
+          - make test PYTEST_ARGS="tests/unit/agent_runtime tests/unit/validation/test_ai_draft_pack_validator.py"
+          - git diff --check
+      - id: P43E
+        branch: feat/p43e-framework-replay-comparison
+        worktree: ../wt/p43e-framework-replay-comparison
+        prompt: prompts/43e_manage_bond_framework_replay_gate.md
+        role: platform_worker
+        skills: [eval-fixture-authoring, sp-business-logic-migration-eval, quality-gate-review]
+        depends_on: [P43D]
+        target_paths:
+          - tests/eval/
+          - tests/integration/api/
+          - fixtures/eval/framework_adoption_p43_manage_bond_v1.yaml
+          - fixtures/eval/ai_draft_pack_p42_manage_bond_v1.yaml
+        verify:
+          - make test PYTEST_ARGS="tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/integration/api/test_api_workflow_routes.py"
+          - git diff --check
+      - id: P43F
+        branch: feat/p43f-docs-decision-gate
+        worktree: ../wt/p43f-docs-decision-gate
+        prompt: prompts/43f_docs_decision_gate.md
+        role: docs_curator
+        skills: [docs-sync, quality-gate-review, eval-fixture-authoring]
+        depends_on: [P43E]
+        target_paths:
+          - PROJECT.md
+          - ARCHITECTURE.md
+          - POLICY.md
+          - TOOLS.md
+          - EVAL_SPEC.md
+          - docs/
+          - tasks/0043-framework-adoption-readiness.md
+        verify:
+          - make test PYTEST_ARGS="tests/contract/test_p43_framework_adoption_prompt_assets.py tests/eval/test_p42_manage_bond_ai_draft_quality.py tests/eval/test_p41_sp_operation_model.py tests/eval/test_p36_output_renewal_quality.py"
+          - git diff --check
+merge_order: [P00, P01, P02, P03, P04, P05, P06, P07, P08A, P08, P09, P10, P11, P12, P13, P14, P15, P16, P17A, P17B, P17C, P17D, P18A, P18B, P20, P21A, P21B, P21C, P21D, P23A, P23B, P23C, P23D, P24A, P24B, P24C, P24D, P27, P36A, P36B, P36C, P36D, P36E, P38A, P38B, P38C, P38D, P38E, P40A, P40B, P40C, P40D, P40E, P41A, P41B, P41C, P41D, P41E, P41F, P42A, P42B, P42C, P42D, P42E, P42F, P43A, P43B, P43C, P43D, P43E, P43F]

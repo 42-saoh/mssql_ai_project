@@ -19,11 +19,6 @@ ARTIFACT_TYPE_ALIASES: dict[str, tuple[str, ...]] = {
         ArtifactType.MAPPER_INTERFACE.value,
         ArtifactType.MAPPER_XML.value,
     ),
-    "DTO_MODEL_DRAFT": (
-        ArtifactType.DTO_DRAFT.value,
-        ArtifactType.VO_DRAFT.value,
-        ArtifactType.MODEL_DRAFT.value,
-    ),
 }
 
 

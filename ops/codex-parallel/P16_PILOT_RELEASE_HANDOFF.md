@@ -10,7 +10,7 @@ This handoff is based on `docs/pilot-release-readiness.md` and
 `fixtures/eval/pilot_release_readiness_p16_v1.yaml`. The PPM manifest is `live_metadata`, so
 selected object identities may be referenced. P17A has closed `DEPENDENCY_METADATA_INCOMPLETE`
 under the selected stored procedure suite majority gate. P17B passed live pilot artifact
-validation, P17C bound human approval/audit evidence, and P17D hard-live gates passed, so the
+validation, P17C bound draft-quality audit evidence, and P17D hard-live gates passed, so the
 scoped draft-only live pilot candidate is now `CONDITIONAL_GO`.
 
 ## Evidence Package
@@ -20,13 +20,13 @@ scoped draft-only live pilot candidate is now `CONDITIONAL_GO`.
 - Pilot object manifest: `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml`
 - P15 eval/ops gate: `fixtures/eval/eval_observability_security_ops_p15_v1.yaml`
 - P17B validation package: `fixtures/eval/live_pilot_artifact_validation_p17_v1.yaml`
-- P17C approval/audit package: `fixtures/eval/manual_approval_audit_p17_v1.yaml`
-- P13 validation/approval/audit fixture: `fixtures/eval/validation_approval_audit_p13_v1.yaml`
+- P17C draft-quality audit package: `fixtures/eval/draft_quality_audit_p17_v1.yaml`
+- P13 validation/evidence/audit fixture: `fixtures/eval/validation_approval_audit_p13_v1.yaml`
 - Productization backlog: `ops/codex-parallel/PRODUCTIZATION_RELEASE_BACKLOG.md`
 
 ## Active Blockers
 
-None for the scoped draft-only live pilot candidate. If P17B validation, P17C approval/audit
+None for the scoped draft-only live pilot candidate. If P17B validation, P17C draft-quality audit
 binding, or P17D hard-live verification cannot be reproduced, the decision returns to `NO_GO`.
 
 ## Verification Commands
@@ -56,7 +56,7 @@ switch the analysis profile to PLF.
 - Do not query row data.
 - Do not execute stored procedures.
 - Do not auto-apply DDL/DML.
-- Do not publish/export without passed validation and human approval.
+- Do not publish/export from this draft-generation product surface.
 - Do not commit credentials or raw definition text.
 - Do not change `fixtures/pilot/ppm_object_selection_v1/selected_objects.yaml` in P16.
 

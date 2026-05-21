@@ -1,5 +1,230 @@
 # POLICY.md
 
+## P36 Output Renewal Policy
+
+- P36 deliverables stay `production_ready: false`.
+- SQL evidence in generated artifacts must be bounded sanitized statement evidence, never a full SP definition.
+- `DEPENDENCY_REPORT` is an evidence dossier and must keep caveats and next-evidence items visible.
+- Java/MyBatis drafts are review-required reconstruction aids, not deployable source.
+- `DTO_MODEL_DRAFT`, `VO_DRAFT`, `MODEL_DRAFT`, and `DDL_DRAFT` are retired public outputs for new requests.
+- Row-data queries, procedure execution, business DB DDL/DML, automatic DDL apply, automatic source deployment, raw prompt/provider response storage, and secret storage remain forbidden.
+
+## P38 Metadata Design Chat Policy
+
+- Metadata design chat runs may store sanitized request/result/error JSON only in `METADATA_DESIGN_RUNS`.
+- `createTableScriptPreview` is a non-executable manual-review preview, not an artifact and not an apply path.
+- `DTO_DRAFT` in a design result is a preview inside run JSON only; it is not workflow artifact persistence.
+- Metadata lookup remains read-only through MCP tools; row data, procedure execution, business DB DDL/DML, automatic DDL apply, publish/deploy/source apply, raw prompt/provider response storage, and secret storage remain forbidden.
+- Missing or inferred names, types, descriptions, PK/FK, index, or relationship decisions must stay `REVIEW_REQUIRED`.
+
+## P41 SP Operation Model Renewal Policy
+
+- `SpOperationModel.v0.1` is an internal draft planning contract, not production-ready conversion evidence.
+- P41 operation fixtures may store sanitized branch, statement, target, field-candidate, evidence-ref,
+  and DTO-blueprint facts only.
+- Deterministic statement evidence and strict structured planner output may feed Java/MyBatis draft
+  generation, but LLM-inferred operation/DTO semantics must not be promoted to metadata facts.
+- `DTO_DRAFT` may be represented internally as a multi-file bundle when an `operationModel` is
+  supplied. This is not a new public artifact type; `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+  `MAPPER_XML` remain single-file draft artifacts.
+- Workflow operation-model planning must store only sanitized `SpOperationModel.v0.1` payloads
+  and sanitized extractor summaries. If planning cannot produce a branch-level model, generated
+  Java/MyBatis output must carry `P41_OPERATION_MODEL_REVIEW_REQUIRED` rather than presenting the
+  legacy single DTO as adequate for a complex SP.
+- Complex-SP operation-model hardening may store `LLM_SP_OPERATION_BRANCH_PLANNER` and
+  `LLM_SP_OPERATION_MODEL_REPAIR` sidecar AgentRuns. Those records may contain only sanitized
+  branch summaries, schema-valid models, validator finding counts/codes, hashes, and
+  `REVIEW_REQUIRED` markers; raw failed provider payloads, raw prompts, raw SP text, row data,
+  and secrets remain forbidden.
+- User-provided guide files may be used as quality references, but raw SP definitions, raw guide body
+  copies, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets must not
+  be persisted in repo fixtures or platform storage.
+- Cross-database writes, uncertain TVF/procedure kind, called procedure I/O, and branch-specific
+  result-shape uncertainty must remain `REVIEW_REQUIRED`.
+- P41 does not authorize UI changes, public artifact type expansion, public API expansion, DB schema
+  changes, live MCP public tool expansion,
+  procedure execution, row-data access, automatic DDL/DML apply, or generated-source deployment.
+
+## P42 AI Draft Pack Renewal Policy
+
+- `AiJavaMyBatisDraftPack.v0.1` is an internal draft contract for Java/MyBatis file bundles, not
+  production-ready conversion evidence.
+- P42 fixtures may store sanitized target refs, branch names, DTO file names, method names,
+  evidence refs, quality gates, and `REVIEW_REQUIRED` markers only.
+- Public artifact types remain unchanged: `DTO_DRAFT`, `SERVICE_DRAFT`, `MAPPER_INTERFACE`, and
+  `MAPPER_XML`.
+- `DTO_DRAFT` must not collapse a complex SP into a single procedure-wide DTO. Branch/use-case
+  DTO files must be derived from sanitized operation contracts, DTO blueprints, statement
+  evidence, and review markers. `ManageBondDTO` is blocked only by the ManageBond benchmark
+  fixture policy, not by production-runtime target-specific branching.
+- `OperationModelReviewRequired*` fallback skeletons, blank content, missing DTO references, raw SP
+  dumps, row-data wording, and source apply/deploy claims are blockers for P42 Java/MyBatis drafts.
+- AI Draft Pack failure must be explicit with `P42_AI_DRAFT_PACK_FAILED` or
+  `P42_AI_DRAFT_PACK_REVIEW_REQUIRED`; misleading Java fallback skeleton persistence is not an
+  acceptable success result.
+- If the deterministic draft inventory contract is incomplete for a complex SP, the workflow must
+  fail with `P42_INVENTORY_CONTRACT_INCOMPLETE` and persist no Java/MyBatis draft files.
+- P42 acceptance is based on a new sanitized workflow replay, not on historical failed jobs such as
+  `job_6864d2734e`. The replay must keep generated files draft-only and must not write them into
+  application source trees.
+- P42G live replay is opt-in confidence evidence only. The preferred
+  `P42_LIVE_REPLAY_MODE=sanitized_fixture` path uses sanitized fixture facts and does not require
+  live PPM metadata or raw SP external export. The explicit `live_ppm` path may use transient SP
+  definition/source context only through the existing read-only metadata and LLM gates, but
+  persisted probe output must stay sanitized and must not store raw SP definitions, raw prompts,
+  raw provider responses, row data, secrets, or generated-source writes.
+- User-provided guide files may be used as quality references, but raw guide bodies, raw SP
+  definitions, raw prompts, raw provider responses, row data, secrets, and executable SQL snippets
+  must not be persisted in repo fixtures or platform storage.
+- Cross-database writes, uncertain TVF/procedure kind, called procedure I/O, result-shape variants,
+  and transaction boundary uncertainty must remain `REVIEW_REQUIRED`.
+- P42 does not authorize UI changes, public artifact type expansion, public API expansion, DB schema
+  changes, live MCP public tool expansion, procedure execution, row-data access, automatic DDL/DML
+  apply, or generated-source deployment.
+
+## P43 Framework Adoption Policy
+
+- P43 is an adoption-readiness track, not a runtime migration or production-readiness claim.
+- Framework candidates must be evaluated behind `AiGenerationFrameworkAdapter.v0.1`; the current
+  Responses/httpx gateway remains the rollback baseline.
+- P43A must not install OpenAI Agents SDK, LangGraph, or another framework dependency. Later slices
+  may propose a dependency only with adapter tests, trace policy gates, and rollback evidence.
+- Framework adoption must improve general complex-SP branch/use-case DTO inventory quality. It must
+  not hardcode `PCO_GU_ManageBond_PRC` or any target-specific DTO answer key into production
+  workflow logic.
+- Framework traces and tool calls may store only sanitized stage names, counts, hashes, failure
+  codes, and policy-safe metrics. Raw prompts, raw provider responses, raw SP definitions, raw guide
+  body, row data, secrets, and failed generated Java/XML content remain forbidden.
+- P43D makes framework adoption a blocker until `P43_FRAMEWORK_TOOL_CONTEXT_BLOCKED` and
+  `P43_FRAMEWORK_RAW_TRACE_BLOCKED` gates prove candidates receive only sanitized tool context and
+  store only hash/count/code trace summaries.
+- OpenAI Agents SDK tracing must be disabled or configured to exclude sensitive data before any
+  adoption because its tracing is enabled by default and spans can include LLM/tool inputs and
+  outputs. LangGraph persistence/checkpointers must use a proven redacted state boundary before any
+  adoption because graph state can be persisted.
+- Stored procedure execution, row-data access, business DB DDL/DML apply, generated-source apply,
+  deploy, UI changes, public API expansion, public MCP route expansion, DB schema changes, and public
+  artifact type changes remain out of scope.
+- A P43 decision may be `adopt`, `pilot`, or `defer`; all three must keep `production_ready: false`
+  until a separate production readiness gate exists.
+- P43F records the current decision as `pilot`. This allows only future internal, policy-gated
+  framework adapter evidence gathering after dependency approval and redaction proof. It does not
+  approve automatic conversion, generated-source apply, deploy, row-data access, procedure execution,
+  or a production runtime switch.
+
+## P44 Real Framework Runtime Adoption Policy
+
+- P44 supersedes P43 as the active framework direction and adopts OpenAI Agents SDK for OpenAI
+  remote AI Draft Pack generation plus LangGraph for in-process draft-pack orchestration.
+- `FrameworkRuntimeConfig.v0.1` is internal only. It adds no public request flag, public API, DB
+  schema, UI, public MCP route, or public artifact type.
+- Generated artifacts remain draft-only: `generated_artifacts_production_ready: false` and
+  `productionReady=false` are mandatory for `AiJavaMyBatisDraftPack.v0.1`.
+- OpenAI Agents SDK tracing must be disabled by default, sensitive-data capture must stay off, and
+  stored adapter summaries may contain only hashes, counts, stage names, model/profile ids, token
+  counts, component ids, blocker ids, and sanitized failure codes.
+- LangGraph must compile without a persistent checkpointer in P44. LangGraph persistence,
+  checkpointer state, tool I/O, raw prompts, raw provider responses, raw SP definitions, raw guide
+  body, row data, secrets, and failed Java/XML payloads must not be stored.
+- P45 live OpenAI Agents evidence is optional and must require `P44_OPENAI_AGENTS_LIVE_GATE=1`,
+  `LLM_ENABLE_REMOTE=1`, `LLM_REMOTE_PROVIDER=openai` or `pgpt`, `OPENAI_API_KEY`, and trace
+  redaction env locks. Official OpenAI evidence uses `OPENAI_BASE_URL` empty or
+  `https://api.openai.com/v1`; approved P-GPT-compatible evidence additionally requires explicit
+  `AI_GENERATION_RUNTIME=openai_agents` and `OPENAI_BASE_URL` or `OPENAI_RESPONSES_URL`.
+  It must use sanitized fixture inputs only and must not query row data, execute procedures, apply
+  source, deploy, or store raw prompts/provider responses. Unknown custom endpoints remain blocked
+  until explicitly classified and covered by the same post-validation policy.
+- P46 does not delete rollback code. It records that `responses_httpx` is not the active OpenAI
+  default and is retained for P-GPT default compatibility plus emergency rollback until a separate
+  cleanup gate approves removal.
+- P-GPT AI Draft Pack generation remains on `responses_httpx` by default; compatible SDK evidence is
+  allowed only through explicit internal generation runtime selection and immediate P42/P44
+  validation. `responses_httpx` is retained for emergency rollback until a later removal decision.
+- Procedure execution, row-data access, business DB DDL/DML apply, source apply, deploy, automatic
+  conversion approval, production readiness claims, and ManageBond-specific production hardcoding
+  remain forbidden.
+
+## P47 Generic AI Draft Quality Uplift Policy
+
+- P47 quality improvements must be generic: operation ids, statement evidence refs, DTO
+  responsibilities, mapper coverage, and `REVIEW_REQUIRED` contracts are pass/fail evidence.
+  Benchmark DTO/method names are comparison metrics only and must not become production-runtime
+  answer keys.
+- `DraftPackEvidenceBundle.v0.1` is internal-only and transient. It may contain sanitized ids,
+  counts, roles, evidence refs, blocker ids, quality gates, and review marker contracts only.
+- The AI Draft Pack live profile is `openai_ai_draft_pack`, with
+  `OPENAI_MODEL_AI_DRAFT_PACK` and `OPENAI_REASONING_EFFORT_AI_DRAFT_PACK` selecting the
+  high-quality model path. It must not use the fast-test profile as the default live quality gate.
+- P47 does not weaken P42/P44 schema, inventory, static Java/MyBatis, trace, or storage policies.
+  Raw prompts, raw provider responses, raw SP definitions, raw guide bodies, row data, secrets,
+  failed Java/XML payloads, source apply, deploy, procedure execution, and row-data access remain
+  forbidden.
+- P47 closes the P42 live replay risk with the sanitized fixture live mode and records `live_ppm`
+  as separate confidence evidence only. P45 remains blocked until an official OpenAI-valid key and
+  official endpoint pass the OpenAI Agents SDK live gate with sanitized diagnostics.
+- Generated Java/MyBatis artifacts remain draft-only with `production_ready: false`.
+
+## P48 Unified Structured Framework Runtime Policy
+
+- `AiStructuredFrameworkAdapter.v0.1` is an internal runtime contract for structured LLM
+  calls. It does not add a public request flag, public API, DB schema, UI, public MCP route,
+  or public artifact type.
+- OpenAI remote structured LLM calls use `OpenAIAgentsStructuredAdapter` behind
+  `FrameworkModelGateway` by default for official OpenAI and P-GPT-compatible endpoints.
+  `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` remains an explicit emergency rollback path only.
+- AI Draft Pack routing remains on the existing P44 `OpenAIAgentsFrameworkAdapter` and
+  LangGraph orchestrator in `WorkflowService`.
+- P48 must preserve deterministic safeguards: evidence-ref repair, planner fallback, tool
+  allowlists, complex-SP operation-model task split, validator-guided repair without
+  `responses_httpx` fallback, SP source text gates, metadata/design sanitization, knowledge
+  persistence sanitization, and `REVIEW_REQUIRED` behavior.
+- Metadata design planner prompts must include the bounded allowed tool names in prompt metadata
+  as `toolNames`; model-generated tools outside the allowlist remain invalid.
+- Framework traces may store only sanitized stage names, adapter ids, framework ids, counts,
+  hashes, model/profile ids, token counts, component ids, and failure codes. Raw prompts, raw
+  provider responses, raw SP definitions, raw guide bodies, row data, secrets, failed Java/XML
+  payloads, source apply, deploy, and procedure execution remain forbidden.
+- P48 keeps `production_ready: false`; automatic conversion approval, row-data query,
+  procedure execution, source apply, deploy, and business DB DDL/DML apply remain forbidden.
+
+## P49 Framework Runtime Cleanup Policy
+
+- P49 cleanup must be contract-backed: remove only framework-readiness scaffolding proven unused
+  by P44/P48 active runtime paths.
+- P43 assets are historical evidence only. They may remain as docs/contracts/fixtures, but they
+  must not drive active runtime or quality gates after P49.
+- Production runtime exports must not expose P43 baseline/fake framework adapter symbols. Test
+  fakes may exist only under test helper modules.
+- `responses_httpx`, `OpenAIModelGateway`, and the P-GPT AI Draft Pack compatibility path remain
+  retained. Emergency rollback through `AI_STRUCTURED_LLM_RUNTIME=responses_httpx` or the
+  existing generation rollback selection remains allowed.
+- P49 does not authorize public API, DB schema, UI, public MCP route, public artifact type,
+  source apply, deploy, row-data query, procedure execution, automatic conversion approval, or
+  production readiness changes.
+- Raw prompts, raw provider responses, raw SP definitions, raw guide bodies, row data, secrets,
+  failed Java/XML payloads, source apply, deploy, and procedure execution remain forbidden in
+  framework traces and persisted payloads.
+
+## P35 Source Context Policy
+
+- Full stored procedure definitions must not be sent to the model by default. The semantic runtime
+  uses `ProcedureSourceMap` plus bounded retrieved spans as transient source context.
+- Retrieved span text is allowed only when `allowSpDefinitionToModel=true`,
+  `sourceContextMode=RETRIEVED_SPANS`, `LLM_ENABLE_REMOTE=1`, and `LLM_ALLOW_SP_TEXT=1` are
+  explicitly satisfied for remote model use.
+- Stored platform data, artifacts, knowledge assets, exports, audit logs, and API responses may keep
+  sanitized `analysisCoverage`, `sourceContextSummary`, span ids, line ranges, risk tags, object refs,
+  and evidence refs. They must not keep selected span text, full SP definitions, raw prompt text,
+  provider responses, row data, or snippets derived from source text.
+- Context budget fallback is an evidence caveat. `LLM_CONTEXT_BUDGET_REVIEW_REQUIRED` is not production
+  approval or automatic conversion evidence.
+- Dependency procedure semantic fan-out is allowed only for confirmed same-profile PROCEDURE
+  dependencies and confirmed same-server cross-database PROCEDURE dependencies selected from MCP
+  dependency closure evidence with catalog-backed `SAME_SERVER_CROSS_DATABASE_CATALOG` resolution.
+  Child AgentRuns may store sanitized analysis output and source context summaries, but never raw
+  dependency definitions, selected span text, prompt bodies, provider responses, row data, or
+  snippets.
+
 ## 절대 금지
 
 다음은 저장소와 Codex 운영에서 금지한다.
@@ -65,7 +290,7 @@
   남긴다.
 - LLM claim 의 `evidenceRefs` 는 deterministic fact id 만 사용할 수 있다. prompt/input/output hash,
   provider response id, raw SQL snippet 같은 trace 값은 claim evidence 로 사용할 수 없다.
-- Dynamic SQL, cross-database, unsupported dependency/table/function/procedure claim 은 LLM 출력에
+- Dynamic SQL, unsafe cross-database, unsupported dependency/table/function/procedure claim 은 LLM 출력에
   marker 가 없더라도 deterministic guard 가 `REVIEW_REQUIRED` 로 보강해야 한다.
 - AI metadata tool orchestration 은 bounded planner 방식만 허용한다. LLM 은 tool request plan 을
   strict schema 로 제안할 수 있지만 실제 MCP 실행은 workflow 의 allowlisted active/read-only catalog,
@@ -77,6 +302,10 @@
   digest, deterministic fact id, object profile/graph/dto readiness 요약만 포함하고 raw definition,
   row data, free-form SQL, procedure execution, DDL/DML, secrets, raw prompt/provider response text 는
   포함하지 않는다.
+- `POST /api/v1/metadata/analysis-runs` and polling storage use the same sanitized metadata
+  analysis payloads. Durable run storage may keep request/result/error JSON only; it must not keep
+  row data, raw SQL/SP definitions, procedure execution output, DDL/DML controls, secrets, raw
+  prompts, raw provider responses, approval decisions, reviewer identity, or human review records.
 - AI platform context tool orchestration 은 bounded planner 방식만 허용한다. LLM 은
   `spec/agent-tools/platform_ai_tool_catalog.yaml` 의 internal/read-only tool request plan 을 제안할 수
   있지만 실제 실행은 current job/db profile/target scope gate 와 내부 platform registry 가 수행한다.
@@ -84,15 +313,14 @@
   `platform.<toolName>.<hash>` fact, component summary 로 제한하며 artifact full content, raw SQL/SP
   definition, row data, procedure execution, DDL/DML, approval/review write, export creation, secrets,
   raw prompt/provider response text 는 금지한다.
-- Knowledge assetization 은 조직 지식 축적 경로이지만 draft/reviewable knowledge 로만 해석한다.
+- Knowledge assetization 은 조직 지식 축적 경로이지만 draft/evidence-caveated knowledge 로만 해석한다.
   `SP_ANALYSIS`, `DEPENDENCY_EVIDENCE`, `METADATA_PROFILE`, `DTO_READINESS`,
   `CANONICAL_ANALYSIS` asset 과 JSONL/GRAPH_JSON export 는 sanitized facts/edges 만 포함해야 하며,
   자동 전환 승인, production readiness, publish/deploy/apply 근거로 사용할 수 없다.
-- Knowledge lifecycle `REVIEWED` is a human curation marker only. It does not approve publish,
-  deploy, DDL apply, production readiness, or automatic conversion. `ARCHIVED` is terminal, and
-  lifecycle review events must be append-only audit/curation records.
-- Knowledge review comments must be sanitized before storage; raw SQL/SP text, row data, secrets,
-  and raw-derived hash, length, or snippet values are forbidden in review payloads.
+- Knowledge lifecycle uses `DRAFT`, `REVIEW_REQUIRED`, and `ARCHIVED`. `REVIEW_REQUIRED` is an
+  evidence caveat, not a human review workflow. `ARCHIVED` is terminal.
+- Human knowledge review comments, reviewer identity writes, and approval decisions are absent
+  from the current product/API/DB surface.
 - Knowledge redaction marker 는 원문에서 파생된 hash, length, snippet 을 남기지 않으며,
   fact graph edge 는 같은 asset version 의 fact id 를 참조하거나 `REVIEW_REQUIRED` endpoint fact 로 남긴다.
 
@@ -104,8 +332,8 @@
 - artifact 는 버전, 생성기 버전, snapshot, registry refs 를 추적 가능해야 한다.
 - P25 기본 product flow 는 validation 이후 `VALIDATION_COMPLETE` 에서 멈추며 review UI 를 노출하지 않는다. Approval API/server code 는 deferred capability 로 남기되 기본 workflow 완료 조건이나 production readiness 근거로 사용하지 않는다.
 - SP migration guide quality gate 는 `SP_ANALYSIS_DOC` 와 `DEPENDENCY_REPORT` 초안 품질 평가로만 해석한다. 통과 결과도 production-ready, 자동 전환 완료, 자동 적용 승인으로 표현하지 않는다.
-- Unsupported dependency/table/function/cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
-- Ambiguous dependency, unresolved synonym target, dynamic SQL marker, cross-server target without catalog confirmation, caller-dependent reference 는 deterministic fact 로 승격하지 않고 `REVIEW_REQUIRED` 로 유지한다.
+- Unsupported dependency/table/function/unsafe cross-DB claim 과 low-evidence business-rule claim 은 `REVIEW_REQUIRED` 로 유지한다.
+- Ambiguous dependency, unresolved synonym target, dynamic SQL marker, unsafe cross-database target, cross-server target without catalog confirmation, caller-dependent reference 는 deterministic fact 로 승격하지 않고 `REVIEW_REQUIRED` 로 유지한다.
 
 ## 코드 변경 정책
 

@@ -5,14 +5,18 @@
     "jobStatus": "VALIDATION_COMPLETE",
     "currentStep": "VALIDATE",
     "latestValidationStatus": "REVIEW_REQUIRED",
-    "artifactTypes": [
-      "SP_ANALYSIS_DOC",
-      "DEPENDENCY_REPORT",
-      "DTO_DRAFT",
-      "SERVICE_DRAFT",
-      "MAPPER_INTERFACE",
-      "MAPPER_XML"
-    ]
+    "artifactCounts": {
+      "exact": {
+        "SP_ANALYSIS_DOC": 1,
+        "DEPENDENCY_REPORT": 1,
+        "SERVICE_DRAFT": 1,
+        "MAPPER_INTERFACE": 1,
+        "MAPPER_XML": 1
+      },
+      "minimum": {
+        "DTO_DRAFT": 1
+      }
+    }
   },
   "artifactExpectations": [
     {
@@ -21,7 +25,7 @@
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 2,
       "requiredContent": [
-        "## evidence_summary",
+        "## 1. SP 개요 (Overview)",
         "dbo.usp_GetOrderSummary",
         "dbo.TB_ORDER",
         "REVIEW_REQUIRED"
@@ -33,7 +37,7 @@
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 2,
       "requiredContent": [
-        "## dependency_table",
+        "## dependency_closure_evidence",
         "dbo.usp_GetOrderSummary",
         "dbo.TB_ORDER",
         "REVIEW_REQUIRED"
@@ -44,28 +48,36 @@
       "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
-      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+      "requiredContent": [
+        "REVIEW_REQUIRED"
+      ]
     },
     {
       "type": "SERVICE_DRAFT",
       "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
-      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+      "requiredContent": [
+        "REVIEW_REQUIRED"
+      ]
     },
     {
       "type": "MAPPER_INTERFACE",
       "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
-      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+      "requiredContent": [
+        "REVIEW_REQUIRED"
+      ]
     },
     {
       "type": "MAPPER_XML",
       "status": "DRAFT",
       "latestValidationStatus": "REVIEW_REQUIRED",
       "minimumEvidenceRefs": 0,
-      "requiredAssumptionMarker": "REVIEW_REQUIRED"
+      "requiredContent": [
+        "REVIEW_REQUIRED"
+      ]
     }
   ],
   "forbiddenStates": [

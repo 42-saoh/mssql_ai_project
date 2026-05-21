@@ -58,7 +58,7 @@ Constraints:
 - packages/domain, packages/analysis, packages/generation, packages/validation 는 읽기 전용 참조
 - spec/openapi, db/schema 변경이 필요하면 blocker 로 보고
 - 실제 데이터 접근 금지
-- approval gate 없는 publish 경로 금지
+- validation gate 없는 publish 경로 금지
 - 비밀값, DB connection string, row-data 를 API 응답으로 노출하지 않음
 - 상태/enum 명칭이 domain/OpenAPI/DDL 사이에서 불일치하면 조용히 새 enum 을 만들지 말고 alias, TODO, blocker 중 하나로 명확히 처리
 

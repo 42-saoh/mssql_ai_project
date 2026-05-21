@@ -102,7 +102,7 @@ def test_p23_fixture_keeps_no_raw_trace_and_fast_test_contract() -> None:
     )
     assert fixture["prompt_contract"]["required_evidence_type"] == "LLM_INFERENCE"
     assert fixture["prompt_contract"]["unsupported_fact_status"] == "REVIEW_REQUIRED"
-    assert fixture["prompt_contract"]["schema_ref"] == "schema:llm_semantic_analysis@0.4.0"
+    assert fixture["prompt_contract"]["schema_ref"] == "schema:llm_semantic_analysis@0.4.1"
     assert fixture["prompt_contract"]["staged_runtime"]["sp_fan_out"] is True
     assert fixture["prompt_contract"]["staged_runtime"]["high_quality_default"] is True
     assert fixture["prompt_contract"]["allowed_output_fields"] == [

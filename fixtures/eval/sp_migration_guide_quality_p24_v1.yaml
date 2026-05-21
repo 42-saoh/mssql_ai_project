@@ -1,5 +1,5 @@
 fixture_suite_id: sp_migration_guide_quality_p24_v1
-contract_ref: p24_sp_migration_guide_quality@0.2.0
+contract_ref: p24_sp_migration_guide_quality@0.3.0
 phase: P24
 status: authored_p24b
 production_ready: false
@@ -51,6 +51,22 @@ report_contract:
     - sectionCoverage
     - reviewRequiredFindings
     - storageSafetyFindings
+reference_quality_expectations:
+  heading_policy: korean_titles_with_stable_section_anchors
+  stable_section_anchor_format: "<!-- section:{section_id} -->"
+  internal_section_ids_visible_as_headings: false
+  required_rendered_elements:
+    - overview_table
+    - feature_branch_taxonomy_table
+    - confirmed_dependency_table
+    - needs_verification_dependency_table
+    - table_level_dml_matrix
+    - branch_call_flow
+    - critical_phase_table
+    - complexity_metric_table
+    - manual_metadata_query_appendix
+    - evidence_and_review_marker_list
+  llm_insight_boundary: LLM_INFERENCE_REVIEW_REQUIRED
 quality_thresholds:
   required_section_coverage_min: 1.0
   evidence_linked_claim_coverage_min: 0.9
@@ -223,7 +239,7 @@ scenarios:
         claims:
           - id: claim_p24_simple_review
             status: REVIEW_REQUIRED
-            summary: Business label wording stays review-required without row data.
+            summary: Business label wording stays evidence-caveated without row data.
             evidence_refs:
               - ev_p24_simple_proc
     dependency_inventory:
@@ -245,7 +261,7 @@ scenarios:
         key_columns:
           - StatusCode
         join_or_where_summary: Status code lookup is joined for display label shaping.
-        value_or_state_patterns: Status display label is informational and requires reviewer confirmation.
+        value_or_state_patterns: Status display label is informational and needs stronger metadata evidence.
         evidence_refs:
           - ev_p24_simple_status_table
         status: ACCEPTED
@@ -334,7 +350,7 @@ scenarios:
           evidence_refs:
             - ev_p24_simple_status_table
     metadata_extraction_appendix: &p24_metadata_extraction_appendix
-      policy: Metadata-only manual reviewer aid; do not execute procedures, select row data, apply DDL/DML, or paste raw definitions.
+      policy: Metadata-only evidence aid; do not execute procedures, select row data, apply DDL/DML, or paste raw definitions.
       queries:
         - id: definition_hash_length
           title: SP definition hash/length
@@ -357,7 +373,7 @@ scenarios:
           sql: SELECT CASE WHEN sm.definition LIKE '%sp_executesql%' THEN 1 ELSE 0 END AS has_sp_executesql, CASE WHEN sm.definition LIKE '%OPENQUERY%' THEN 1 ELSE 0 END AS has_openquery FROM sys.sql_modules sm WHERE sm.object_id = OBJECT_ID(@FullName);
           result_template: "| has_sp_executesql | has_openquery | status | what_to_extract_next |"
         - id: temp_table_review
-          title: Temp table/table variable review indicators
+          title: Temp table/table variable evidence caveats
           sql: SELECT CASE WHEN sm.definition LIKE '%CREATE TABLE #%' THEN 1 ELSE 0 END AS has_temp_table, CASE WHEN sm.definition LIKE '%DECLARE @% TABLE%' THEN 1 ELSE 0 END AS has_table_variable FROM sys.sql_modules sm WHERE sm.object_id = OBJECT_ID(@FullName);
           result_template: "| has_temp_table | has_table_variable | status | what_to_extract_next |"
       paste_templates:
@@ -525,7 +541,7 @@ scenarios:
         claims:
           - id: claim_p24_medium_phase
             status: REVIEW_REQUIRED
-            summary: Transaction ordering must be reviewed before any Java/MyBatis draft adoption.
+            summary: Transaction ordering needs stronger evidence before any Java/MyBatis draft adoption.
             evidence_refs:
               - ev_p24_medium_static_flow
       - id: complexity_risk_metrics
@@ -545,7 +561,7 @@ scenarios:
         claims:
           - id: claim_p24_medium_strategy
             status: REVIEW_REQUIRED
-            summary: Migration readiness is limited to draft notes until transaction semantics are reviewed.
+            summary: Migration readiness is limited to draft notes until transaction semantics are evidenced.
             evidence_refs:
               - ev_p24_medium_proc
               - ev_p24_medium_static_flow
@@ -556,7 +572,7 @@ scenarios:
         claims:
           - id: claim_p24_medium_appendix
             status: ACCEPTED
-            summary: Decision code and reviewer parameters are mapped without row data.
+            summary: Decision code and operator parameters are mapped without row data.
             evidence_refs:
               - ev_p24_medium_proc
       - id: metadata_extraction_appendix
@@ -576,7 +592,7 @@ scenarios:
         claims:
           - id: claim_p24_medium_review
             status: REVIEW_REQUIRED
-            summary: Business meaning of decision codes remains review-required.
+            summary: Business meaning of decision codes remains evidence-caveated.
             evidence_refs:
               - ev_p24_medium_static_flow
     dependency_inventory:
@@ -587,7 +603,7 @@ scenarios:
         key_columns:
           - ShipmentId
         join_or_where_summary: Shipment row is targeted by ShipmentId during RELEASE branch.
-        value_or_state_patterns: HoldState and ReleasedAt update semantics require reviewer confirmation.
+        value_or_state_patterns: HoldState and ReleasedAt update semantics need stronger metadata evidence.
         evidence_refs:
           - ev_p24_medium_shipment_table
         status: ACCEPTED
@@ -611,7 +627,7 @@ scenarios:
           - AuditId
           - ShipmentId
         join_or_where_summary: Audit write follows branch-specific decision action.
-        value_or_state_patterns: Decision code and reviewer attribution are draft-only guide details.
+        value_or_state_patterns: Decision code and operator attribution are draft-only guide details.
         evidence_refs:
           - ev_p24_medium_audit_table
         status: ACCEPTED
@@ -670,7 +686,7 @@ scenarios:
         delete: ""
         merge: ""
         keys_join_where_summary: Decision audit insert.
-        important_columns_or_patterns: Decision code and reviewer attribution.
+        important_columns_or_patterns: Decision code and operator attribution.
         evidence_refs:
           - ev_p24_medium_audit_table
         status: REVIEW_REQUIRED
@@ -882,7 +898,7 @@ scenarios:
         claims:
           - id: claim_p24_complex_dependency_inventory
             status: REVIEW_REQUIRED
-            summary: Dynamic SQL and cross-database dependencies remain review-required.
+            summary: Dynamic SQL and cross-database dependencies remain evidence-caveated.
             evidence_refs:
               - ev_p24_complex_dynamic_sql
               - ev_p24_complex_cross_db
@@ -894,7 +910,7 @@ scenarios:
         claims:
           - id: claim_p24_complex_dml_matrix
             status: REVIEW_REQUIRED
-            summary: SELECT, DELETE, and INSERT impacts are represented as review-required draft guidance.
+            summary: SELECT, DELETE, and INSERT impacts are represented as evidence-caveated draft guidance.
             evidence_refs:
               - ev_p24_complex_dynamic_sql
               - ev_p24_complex_staging_table
@@ -917,7 +933,7 @@ scenarios:
         claims:
           - id: claim_p24_complex_phase
             status: REVIEW_REQUIRED
-            summary: Dynamic cross-database phase cannot be confirmed without reviewed PPM metadata.
+            summary: Dynamic cross-database phase cannot be confirmed without stronger PPM metadata.
             evidence_refs:
               - ev_p24_complex_cross_db
       - id: complexity_risk_metrics
@@ -938,7 +954,7 @@ scenarios:
         claims:
           - id: claim_p24_complex_strategy
             status: REVIEW_REQUIRED
-            summary: Migration strategy recommends reviewed access pattern notes only, with no source application.
+            summary: Migration strategy recommends evidence-backed access pattern notes only, with no source application.
             evidence_refs:
               - ev_p24_complex_proc
               - ev_p24_complex_dynamic_sql
@@ -949,7 +965,7 @@ scenarios:
         claims:
           - id: claim_p24_complex_appendix
             status: REVIEW_REQUIRED
-            summary: Tenant database and schema parameters stay review-required.
+            summary: Tenant database and schema parameters stay evidence-caveated.
             evidence_refs:
               - ev_p24_complex_proc
               - ev_p24_complex_cross_db
@@ -982,7 +998,7 @@ scenarios:
           - TenantDb
           - SchemaName
         join_or_where_summary: Dynamic statement shape is sanitized and not stored as executable text.
-        value_or_state_patterns: Tenant-scoped extract semantics require reviewer confirmation.
+        value_or_state_patterns: Tenant-scoped extract semantics need stronger metadata evidence.
         evidence_refs:
           - ev_p24_complex_dynamic_sql
         status: REVIEW_REQUIRED
@@ -993,7 +1009,7 @@ scenarios:
         key_columns:
           - TenantDb
         join_or_where_summary: Cross-database target is parameterized and not accepted as fixed dependency.
-        value_or_state_patterns: PPM metadata review is required; PLF fallback is forbidden.
+        value_or_state_patterns: PPM metadata evidence is required; PLF fallback is forbidden.
         evidence_refs:
           - ev_p24_complex_cross_db
         status: REVIEW_REQUIRED
@@ -1015,7 +1031,7 @@ scenarios:
         key_columns:
           - function_name
         join_or_where_summary: No deterministic function dependency is confirmed.
-        value_or_state_patterns: Any helper function claim is a review marker only.
+        value_or_state_patterns: Any helper function claim is an evidence caveat only.
         evidence_refs:
           - ev_p24_complex_dynamic_sql
         status: REVIEW_REQUIRED
@@ -1025,8 +1041,8 @@ scenarios:
           - INSERT
         key_columns:
           - ExtractBatchId
-        join_or_where_summary: Temp table schema is only a static review candidate.
-        value_or_state_patterns: Temp table columns require reviewer confirmation.
+        join_or_where_summary: Temp table schema is only a static evidence candidate.
+        value_or_state_patterns: Temp table columns need stronger metadata evidence.
         evidence_refs:
           - ev_p24_complex_dynamic_sql
         status: REVIEW_REQUIRED
@@ -1036,8 +1052,8 @@ scenarios:
           - INSERT
         key_columns:
           - ExtractBatchId
-        join_or_where_summary: Table variable schema is only a static review candidate.
-        value_or_state_patterns: Table variable columns require reviewer confirmation.
+        join_or_where_summary: Table variable schema is only a static evidence candidate.
+        value_or_state_patterns: Table variable columns need stronger metadata evidence.
         evidence_refs:
           - ev_p24_complex_dynamic_sql
         status: REVIEW_REQUIRED
@@ -1048,7 +1064,7 @@ scenarios:
         key_columns:
           - ExtractBatchId
         join_or_where_summary: Staging cleanup is keyed by extract batch identity.
-        value_or_state_patterns: Cleanup impact remains draft-only until reviewed.
+        value_or_state_patterns: Cleanup impact remains draft-only until evidenced.
         evidence_refs:
           - ev_p24_complex_staging_table
         status: REVIEW_REQUIRED
@@ -1094,7 +1110,7 @@ scenarios:
       - operation: MERGE
         target_ref: PPM.dbo.P24_ExtractStaging
         phase: staging_upsert_review
-        impact: Merge/upsert behavior is a review-required synthetic fixture expectation.
+        impact: Merge/upsert behavior is an evidence-caveated synthetic fixture expectation.
         evidence_refs:
           - ev_p24_complex_staging_table
         status: REVIEW_REQUIRED

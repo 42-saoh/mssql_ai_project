@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -9,11 +10,14 @@ from ai_agent_runtime import (
     build_semantic_analysis_run,
     build_semantic_analysis_runs,
 )
-from ai_agent_runtime.gateway import model_profile_from_env
+from ai_agent_runtime.gateway import ModelGatewayError, model_profile_from_env
 from ai_agent_runtime.models import (
+    AgentRunStatus,
+    ModelInvocationRecord,
     metadata_analysis_output_schema,
     metadata_tool_planning_output_schema,
     semantic_output_schema,
+    stable_json_hash,
 )
 from ai_agent_runtime.prompts import (
     render_metadata_analysis_prompt,
@@ -49,6 +53,8 @@ def test_prompt_renderer_hashes_inputs_and_sanitizes_metadata_copy() -> None:
     assert '"definitionHash": "abc"' in prompt.user_prompt
     assert "businessRules, modernizationPoints" in prompt.system_prompt
     assert "CONFIRMED, SUPPORTED, DONE, OK" in prompt.system_prompt
+    assert "Korean (ko-KR)" in prompt.system_prompt
+    assert '"languageContract":' in prompt.user_prompt
     assert '"qualityHints":' in prompt.user_prompt
 
 
@@ -79,6 +85,45 @@ def test_semantic_prompt_includes_quality_hints_for_fact_coverage() -> None:
     assert "fixture-specific" in prompt.user_prompt
 
 
+def test_semantic_prompt_uses_source_context_without_full_definition() -> None:
+    prompt = render_semantic_analysis_prompt(
+        target_ref="dbo.usp_Demo",
+        metadata={"procedureDefinition": {"definitionHash": "abc"}},
+        static_analysis=None,
+        procedure_definition="CREATE PROCEDURE dbo.usp_Demo AS SELECT * FROM dbo.SecretOrders",
+        source_context={
+            "version": "procedure_context_pack@0.1.0",
+            "targetRef": "dbo.usp_Demo",
+            "stage": "conversion_readiness",
+            "mode": "RETRIEVED_SPANS",
+            "budgetStatus": "WITHIN_BUDGET",
+            "selectedSpans": [
+                {
+                    "spanId": "spn007",
+                    "kind": "DML",
+                    "startLine": 12,
+                    "endLine": 15,
+                    "referencedObjects": ["dbo.SafeOrders"],
+                    "riskTags": ["DML_WRITE"],
+                    "evidenceRefs": ["source.span.spn007"],
+                    "text": "UPDATE dbo.SafeOrders SET StatusCode = @StatusCode;",
+                }
+            ],
+            "skippedSpanCount": 4,
+            "analysisCoverage": {"spanCount": 10},
+            "reviewMarkers": [],
+        },
+        allowed_evidence_refs=["source.span.spn007"],
+    )
+
+    assert "UPDATE dbo.SafeOrders" in prompt.user_prompt
+    assert "CREATE PROCEDURE dbo.usp_Demo" not in prompt.user_prompt
+    assert "dbo.SecretOrders" not in prompt.user_prompt
+    assert prompt.metadata["procedureDefinitionIncluded"] is False
+    assert prompt.metadata["sourceContextIncluded"] is True
+    assert prompt.metadata["sourceContextSummary"]["selectedSpanCount"] == 1
+
+
 def test_fake_gateway_returns_schema_valid_sanitized_invocation(monkeypatch: Any) -> None:
     monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
     prompt = render_semantic_analysis_prompt(
@@ -94,7 +139,381 @@ def test_fake_gateway_returns_schema_valid_sanitized_invocation(monkeypatch: Any
     assert result.model_profile_id == "openai_fast_test"
     assert result.status == "SUCCEEDED"
     assert "businessRules" in result.structured_output
+    assert "초안 의미 요약" in result.structured_output["businessRules"][0]["summary"]
     assert "CREATE PROCEDURE" not in str(result.to_storage_dict())
+
+
+def test_context_length_error_retries_with_shrunk_context_marker() -> None:
+    class ContextRetryGateway:
+        provider = "spy"
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.prompt_payloads: list[str] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            self.calls += 1
+            self.prompt_payloads.append(prompt.user_prompt)
+            if self.calls == 1:
+                raise ModelGatewayError(
+                    "Input exceeded provider limit.",
+                    code="OPENAI_STRUCTURED_OUTPUT_INVALID",
+                    provider_error={"code": "context_length_exceeded"},
+                )
+            evidence_ref = (prompt.metadata.get("allowedEvidenceRefs") or ["source.span.spn001"])[0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "CONTEXT_RETRY_RULE",
+                        "summary": "Reduced context still supports a draft claim.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [evidence_ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return ModelInvocationRecord(
+                provider=self.provider,
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+                token_usage={"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+                latency_ms=1,
+            )
+
+    gateway = ContextRetryGateway()
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.usp_Demo",
+        metadata={
+            "deterministicFacts": [
+                {"id": "source.span.spn001", "fact_type": "SOURCE_SPAN"}
+            ]
+        },
+        static_analysis=None,
+        procedure_definition="CREATE PROCEDURE dbo.usp_Demo AS SELECT 1",
+        source_context_packs={
+            "deterministic_evidence_digest": {
+                "version": "procedure_context_pack@0.1.0",
+                "targetRef": "dbo.usp_Demo",
+                "stage": "deterministic_evidence_digest",
+                "mode": "RETRIEVED_SPANS",
+                "budgetStatus": "WITHIN_BUDGET",
+                "selectedSpans": [
+                    {
+                        "spanId": "spn001",
+                        "kind": "RESULT_SET",
+                        "startLine": 1,
+                        "endLine": 1,
+                        "referencedObjects": [],
+                        "riskTags": ["RESULT_SHAPE"],
+                        "evidenceRefs": ["source.span.spn001"],
+                        "text": "SELECT 1;",
+                    },
+                    {
+                        "spanId": "spn002",
+                        "kind": "DML",
+                        "startLine": 2,
+                        "endLine": 2,
+                        "referencedObjects": ["dbo.T"],
+                        "riskTags": ["DML_WRITE"],
+                        "evidenceRefs": ["source.span.spn001"],
+                        "text": "UPDATE dbo.T SET C = 1;",
+                    },
+                ],
+                "skippedSpanCount": 0,
+                "analysisCoverage": {"spanCount": 2},
+                "reviewMarkers": [],
+            }
+        },
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    storage = payload.model_invocation.to_storage_dict()
+
+    assert gateway.calls >= 2
+    assert '"budgetStatus": "SHRUNK_RETRY"' in gateway.prompt_payloads[1]
+    assert any(
+        marker["code"] == "LLM_CONTEXT_BUDGET_REVIEW_REQUIRED"
+        for marker in payload.structured_output["reviewMarkers"]
+    )
+    assert storage["sourceContextSummary"]["budgetStatus"] == "REVIEW_REQUIRED"
+    assert storage["analysisCoverage"]["spanCount"] == 2
+
+
+def test_oversized_semantic_metadata_is_compacted_before_provider(monkeypatch: Any) -> None:
+    monkeypatch.setenv("LLM_SEMANTIC_INPUT_TOKEN_BUDGET", "1400")
+
+    class CompactSpyGateway:
+        provider = "spy"
+
+        def __init__(self) -> None:
+            self.payloads: list[dict[str, Any]] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.payloads.append(payload)
+            assert payload["metadata"]["promptCompaction"]["applied"] is True
+            assert len(payload["metadata"]["dependencyEvidence"]["nodes"]) < 500
+            assert len(payload["evidenceRefContract"]["allowedFactIds"]) <= 96
+            assert "raw_openai_response_text" not in prompt.user_prompt
+            assert "SELECT * FROM dbo.SecretInvoiceRows" not in prompt.user_prompt
+            ref = payload["evidenceRefContract"]["allowedFactIds"][0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "COMPACTED_CONTEXT_RULE",
+                        "summary": "Compacted evidence still supports the draft insight.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return ModelInvocationRecord(
+                provider=self.provider,
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+                token_usage={"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+                latency_ms=1,
+            )
+
+    metadata = _large_semantic_metadata()
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        metadata=metadata,
+        static_analysis=None,
+        procedure_definition=None,
+        model_gateway=CompactSpyGateway(),
+        profile_id="openai_fast_test",
+    )
+
+    assert payload.status == AgentRunStatus.SUCCEEDED
+    assert any(
+        marker["code"] == "LLM_PROMPT_COMPACTED_FOR_CONTEXT"
+        for marker in payload.structured_output["reviewMarkers"]
+    )
+    assert (
+        payload.model_invocation.to_storage_dict()["sourceContextSummary"]["promptCompaction"][
+            "applied"
+        ]
+        is True
+    )
+
+
+def test_context_length_error_retries_with_compacted_metadata() -> None:
+    class ContextCompactGateway:
+        provider = "spy"
+
+        def __init__(self) -> None:
+            self.payloads: list[dict[str, Any]] = []
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            payload = json.loads(prompt.user_prompt)
+            self.payloads.append(payload)
+            if not payload["metadata"].get("promptCompaction"):
+                raise ModelGatewayError(
+                    "OpenAI Responses API returned an error.",
+                    code="OPENAI_HTTP_400",
+                    provider_error={
+                        "code": "context_length_exceeded",
+                        "message": "input too large",
+                    },
+                )
+            ref = payload["evidenceRefContract"]["allowedFactIds"][0]
+            structured_output = {
+                "businessRules": [
+                    {
+                        "category": "COMPACT_RETRY_RULE",
+                        "summary": "Context retry used compacted deterministic evidence.",
+                        "status": "INFERRED_DESCRIPTION",
+                        "evidenceRefs": [ref],
+                    }
+                ],
+                "modernizationPoints": [],
+                "riskFlags": [],
+                "reviewMarkers": [],
+                "conversionGuidance": [],
+                "migrationGuideInsights": [],
+                "assumptions": [],
+            }
+            return ModelInvocationRecord(
+                provider=self.provider,
+                model=profile.model,
+                model_profile_id=profile.profile_id,
+                model_registry_ref=profile.registry_ref,
+                reasoning_effort=profile.reasoning_effort,
+                prompt_version=prompt.prompt_version,
+                output_schema_version=prompt.output_schema_version,
+                input_hash=prompt.input_hash,
+                prompt_hash=prompt.prompt_hash,
+                output_hash=stable_json_hash(structured_output),
+                status=AgentRunStatus.SUCCEEDED,
+                structured_output=structured_output,
+                token_usage={"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+                latency_ms=1,
+            )
+
+    gateway = ContextCompactGateway()
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        metadata=_large_semantic_metadata(),
+        static_analysis=None,
+        procedure_definition=None,
+        model_gateway=gateway,
+        profile_id="openai_fast_test",
+    )
+
+    assert len(gateway.payloads) >= 4
+    assert any(item["metadata"].get("promptCompaction") for item in gateway.payloads)
+    assert any(
+        marker["code"] == "LLM_PROMPT_COMPACTED_FOR_CONTEXT"
+        for marker in payload.structured_output["reviewMarkers"]
+    )
+
+
+def test_context_length_final_failure_reports_sanitized_compaction_summary() -> None:
+    class AlwaysTooLargeGateway:
+        provider = "spy"
+
+        def invoke_semantic_analysis(self, *, prompt, profile) -> ModelInvocationRecord:
+            raise ModelGatewayError(
+                "OpenAI Responses API returned an error.",
+                code="OPENAI_HTTP_400",
+                provider_error={
+                    "code": "context_length_exceeded",
+                    "message": "Bearer secret-token-123 input too large",
+                },
+            )
+
+    with pytest.raises(ModelGatewayError) as exc_info:
+        build_semantic_analysis_run(
+            target_ref="dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+            metadata=_large_semantic_metadata(),
+            static_analysis=None,
+            procedure_definition=None,
+            model_gateway=AlwaysTooLargeGateway(),
+            profile_id="openai_fast_test",
+        )
+
+    provider_error = exc_info.value.provider_error
+    assert provider_error["semanticCompactionApplied"] == "true"
+    assert provider_error["semanticCompactionLevel"] == "minimum"
+    serialized = str(provider_error)
+    assert "SELECT * FROM dbo.SecretInvoiceRows" not in serialized
+    assert "raw_openai_response_text" not in serialized
+
+
+def _large_semantic_metadata() -> dict[str, Any]:
+    return {
+        "dbProfileId": "ppm",
+        "objectRef": "dbo.PCS_PY_ManageInvoiceFldSchd_PRC",
+        "snapshotId": "snapshot-large",
+        "procedureDefinition": {
+            "definitionHash": "hash-large",
+            "definition": "CREATE PROCEDURE dbo.PCS AS SELECT * FROM dbo.SecretInvoiceRows;",
+        },
+        "evidenceRefs": [
+            {
+                "type": "MSSQL_METADATA",
+                "objectRef": f"dbo.Invoice{i}",
+                "locator": f"mssql-mcp#/dependency/{i}",
+            }
+            for i in range(180)
+        ],
+        "deterministicFacts": [
+            {
+                "id": f"fact.invoice.{i}",
+                "fact_type": "TABLE_READ" if i % 2 else "TABLE_WRITE",
+                "summary": f"Invoice schedule deterministic fact {i}",
+            }
+            for i in range(300)
+        ],
+        "dependencyEvidence": {
+            "toolName": "get_dependency_closure",
+            "rootObject": {
+                "database": "ppm",
+                "schema": "dbo",
+                "name": "PCS_PY_ManageInvoiceFldSchd_PRC",
+                "objectType": "PROCEDURE",
+            },
+            "summary": {"maxDepth": 2, "nodeCount": 500, "edgeCount": 800},
+            "nodes": [
+                {
+                    "id": f"ppm.dbo.InvoiceNode{i}:TABLE",
+                    "schema": "dbo",
+                    "name": f"InvoiceNode{i}",
+                    "objectType": "TABLE",
+                    "evidenceRefs": [
+                        {
+                            "objectRef": f"dbo.InvoiceNode{i}",
+                            "locator": f"mssql-mcp#/nodes/{i}",
+                        }
+                    ],
+                }
+                for i in range(500)
+            ],
+            "edges": [
+                {
+                    "from": "ppm.dbo.PCS_PY_ManageInvoiceFldSchd_PRC:PROCEDURE",
+                    "to": f"ppm.dbo.InvoiceNode{i}:TABLE",
+                    "dependencyType": "REFERENCE",
+                    "resolutionStatus": "CONFIRMED",
+                    "evidenceRefs": [
+                        {
+                            "objectRef": f"dbo.InvoiceNode{i}",
+                            "locator": f"mssql-mcp#/edges/{i}",
+                        }
+                    ],
+                }
+                for i in range(800)
+            ],
+            "unresolved": [],
+            "evidenceRefs": [],
+        },
+        "tableSchemas": [
+            {
+                "schema": "dbo",
+                "tableName": f"InvoiceTable{table}",
+                "columns": [
+                    {
+                        "name": f"Column{column}",
+                        "dataType": "nvarchar(200)",
+                        "description": f"Invoice schedule column description {column}" * 8,
+                    }
+                    for column in range(80)
+                ],
+            }
+            for table in range(20)
+        ],
+    }
 
 
 def test_fast_test_profile_defaults_to_gpt_5_nano(monkeypatch: Any) -> None:
@@ -325,7 +744,8 @@ def test_fake_gateway_can_return_metadata_analysis(monkeypatch: Any) -> None:
         profile=model_profile_from_env("openai_fast_test"),
     )
 
-    assert result.output_schema_version == "schema:mssql_metadata_analysis@0.1.0"
+    assert result.output_schema_version == "schema:mssql_metadata_analysis@0.1.1"
+    assert "초안 메타데이터 분석" in result.structured_output["summary"]
     assert result.structured_output["objectInsights"][0]["evidenceRefs"] == [
         "mcp.get_table_schema.abc123"
     ]
@@ -399,6 +819,47 @@ def test_staged_semantic_run_repairs_invalid_evidence_refs(monkeypatch: Any) -> 
         "migration_guide_insights",
         "evidence_critic",
     ]
+
+
+def test_staged_semantic_run_marks_non_korean_human_text_for_review(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("OPENAI_MODEL_FAST_TEST", raising=False)
+    payload = build_semantic_analysis_run(
+        target_ref="dbo.usp_English",
+        metadata={"deterministicFacts": [{"id": "fact_demo", "summary": "확인된 근거"}]},
+        static_analysis={"fact_ids": ["fact_demo"]},
+        procedure_definition=None,
+        model_gateway=FakeModelGateway(
+            output_by_target_ref={
+                "dbo.usp_English": {
+                    "businessRules": [
+                        {
+                            "category": "DEMO_RULE",
+                            "summary": "Review customer status before conversion.",
+                            "status": "INFERRED_DESCRIPTION",
+                            "evidenceRefs": ["fact_demo"],
+                        }
+                    ],
+                    "modernizationPoints": [],
+                    "riskFlags": [],
+                    "reviewMarkers": [],
+                    "conversionGuidance": [],
+                    "migrationGuideInsights": [],
+                    "assumptions": [],
+                }
+            }
+        ),
+        profile_id="openai_fast_test",
+    )
+
+    markers = {
+        marker["code"]: marker
+        for marker in payload.structured_output["reviewMarkers"]
+    }
+    assert "LLM_OUTPUT_LANGUAGE_REVIEW_REQUIRED" in markers
+    assert markers["LLM_OUTPUT_LANGUAGE_REVIEW_REQUIRED"]["evidenceRefs"] == ["fact_demo"]
+    assert payload.structured_output["businessRules"][0]["evidenceRefs"] == ["fact_demo"]
 
 
 def test_complex_staged_run_injects_required_review_markers(monkeypatch: Any) -> None:

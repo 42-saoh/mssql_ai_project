@@ -138,6 +138,31 @@ def test_migration_guide_dml_operations_keep_exact_verbs_and_ignore_string_liter
     assert all("HiddenTable" not in item["targetRef"] for item in operations)
 
 
+def test_static_dependency_parser_preserves_mssql_three_part_table_names() -> None:
+    sql = """
+    CREATE PROCEDURE dbo.usp_FullTableRefs
+    AS
+    BEGIN
+        SELECT c.ContractNum
+        FROM PPM.dbo.PCS_CTRT c
+        JOIN [ERP].[dbo].[XXEAI_TRX_HEADER_II] h ON h.ContractNum = c.ContractNum
+        JOIN dbo.LocalLookup l ON l.ContractNum = c.ContractNum;
+
+        UPDATE dbo.LocalTarget SET StatusCode = 'DONE';
+    END
+    """
+
+    result = analyze_stored_procedure(sql, source_name="full-table-refs.sql")
+    references = {
+        (item["fullName"], item["operation"]) for item in _table_references(result)
+    }
+
+    assert ("PPM.dbo.PCS_CTRT", "READ") in references
+    assert ("ERP.dbo.XXEAI_TRX_HEADER_II", "READ") in references
+    assert ("dbo.LocalLookup", "READ") in references
+    assert ("dbo.LocalTarget", "WRITE") in references
+
+
 def test_migration_guide_complexity_metrics_are_deterministic_counts() -> None:
     sql = """
     CREATE PROCEDURE dbo.usp_GuideMetrics
